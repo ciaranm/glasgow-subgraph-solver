@@ -10,9 +10,10 @@ following paper:
 
     https://dblp.org/rec/html/conf/cp/McCreeshP15
 
-and / or providing the following URL in your paper:
-
-    https://github.com/ciaranm/glasgow-subgraph-solver
+If you use this solver in a non-research setting, please get in touch if you
+can. This software is an output of taxpayer funded research, and it is very
+helpful for us if we can demonstrate real-world impact when we write grant
+applications.
 
 If you have queries, please contact:
 
