@@ -35,7 +35,6 @@ struct GraphSizes<n_>
 };
 
 template <template <typename, typename> class Algorithm_, typename Result_, typename Graph_, unsigned... sizes_, typename... Params_>
-
 auto select_graph_size(const GraphSizes<sizes_...> &, const Graph_ & graph, Params_ && ... params) -> Result_
 {
     if (graph.size() < GraphSizes<sizes_...>::n * bits_per_word) {

@@ -12,7 +12,6 @@
 #include <map>
 #include <numeric>
 #include <random>
-#include <tuple>
 #include <utility>
 
 #include <boost/dynamic_bitset.hpp>
@@ -21,7 +20,6 @@ using std::array;
 using std::iota;
 using std::fill;
 using std::find_if;
-using std::get;
 using std::greater;
 using std::list;
 using std::max;
@@ -35,9 +33,7 @@ using std::sort;
 using std::string;
 using std::swap;
 using std::to_string;
-using std::tuple;
 using std::uniform_int_distribution;
-using std::uniform_real_distribution;
 using std::vector;
 
 using std::chrono::duration_cast;
@@ -76,17 +72,38 @@ namespace
                 [&] (int a, int b) { return (! reverse) ^ (degrees[a] < degrees[b] || (degrees[a] == degrees[b] && a > b)); });
     }
 
-    using Assignment = pair<unsigned, unsigned>;
+    struct Assignment
+    {
+        unsigned pattern_vertex;
+        unsigned target_vertex;
+
+        auto operator== (const Assignment & other) const -> bool
+        {
+            return pattern_vertex == other.pattern_vertex && target_vertex == other.target_vertex;
+        }
+
+        auto operator!= (const Assignment & other) const -> bool
+        {
+            return ! (*this == other);
+        }
+    };
+
+    struct AssignmentInformation
+    {
+        Assignment assignment;
+        bool is_decision;
+        int discrepancy_count;
+    };
 
     struct Assignments
     {
-        vector<tuple<Assignment, bool, int> > values;
+        vector<AssignmentInformation> values;
 
         bool contains(const Assignment & assignment) const
         {
             // this should not be a linear scan...
             return values.end() != find_if(values.begin(), values.end(), [&] (const auto & a) {
-                    return get<0>(a) == assignment;
+                    return a.assignment == assignment;
                     });
         }
     };
@@ -127,7 +144,7 @@ namespace
 
         WatchList & operator[] (const Assignment & a)
         {
-            return data[target_size * a.first + a.second];
+            return data[target_size * a.pattern_vertex + a.target_vertex];
         }
     };
 
@@ -318,8 +335,8 @@ namespace
                     if (d.fixed)
                         continue;
 
-                    if (d.v == nogood.literals[1].first) {
-                        d.values.reset(nogood.literals[1].second);
+                    if (d.v == nogood.literals[1].pattern_vertex) {
+                        d.values.reset(nogood.literals[1].target_vertex);
                         break;
                     }
                 }
@@ -338,14 +355,14 @@ namespace
         template <int max_graphs_>
         auto propagate_adjacency_constraints(Domain & d, const Assignment & current_assignment) -> void
         {
-            auto pattern_adjacency_bits = pattern_adjacencies_bits[pattern_size * current_assignment.first + d.v];
+            auto pattern_adjacency_bits = pattern_adjacencies_bits[pattern_size * current_assignment.pattern_vertex + d.v];
 
             // for each graph pair...
             for (int g = 0 ; g < max_graphs_ ; ++g) {
                 // if we're adjacent...
                 if (pattern_adjacency_bits & (1u << g)) {
                     // ...then we can only be mapped to adjacent vertices
-                    d.values &= target_graph_rows[current_assignment.second * max_graphs_ + g];
+                    d.values &= target_graph_rows[current_assignment.target_vertex * max_graphs_ + g];
                 }
             }
         }
@@ -358,7 +375,7 @@ namespace
                     continue;
 
                 // all different
-                d.values.reset(current_assignment.second);
+                d.values.reset(current_assignment.target_vertex);
 
                 // adjacency
                 switch (max_graphs) {
@@ -385,11 +402,11 @@ namespace
                     branch_domain != new_domains.end() ;
                     branch_domain = find_unit_domain(new_domains)) {
                 // what are we assigning?
-                Assignment current_assignment = { branch_domain->v, branch_domain->values.find_first() };
+                Assignment current_assignment = { branch_domain->v, unsigned(branch_domain->values.find_first()) };
 
                 // ok, make the assignment
                 branch_domain->fixed = true;
-                assignments.values.push_back({ { current_assignment.first, current_assignment.second }, false, -1 });
+                assignments.values.push_back({ current_assignment, false, -1 });
 
                 // propagate watches
                 if (params.restarts && ! params.goods)
@@ -450,8 +467,8 @@ namespace
             Nogood nogood;
 
             for (auto & a : assignments.values)
-                if (get<1>(a))
-                    nogood.literals.emplace_back(get<0>(a));
+                if (a.is_decision)
+                    nogood.literals.emplace_back(a.assignment);
 
             nogoods.emplace_back(move(nogood));
             need_to_watch.emplace_back(prev(nogoods.end()));
@@ -540,7 +557,7 @@ namespace
                 auto assignments_size = assignments.values.size();
 
                 // make the assignment
-                assignments.values.push_back({ { branch_domain->v, *f_v }, true, discrepancy_count });
+                assignments.values.push_back({ { branch_domain->v, unsigned(*f_v) }, true, discrepancy_count });
 
                 // set up new domains
                 Domains new_domains = prepare_domains(domains, branch_domain->v, *f_v);
@@ -568,7 +585,7 @@ namespace
 
                         // post nogoods for everything we've done so far
                         for (auto l = branch_v.begin() ; l != f_v ; ++l) {
-                            assignments.values.push_back({ { branch_domain->v, *l }, true, -2 });
+                            assignments.values.push_back({ { branch_domain->v, unsigned(*l) }, true, -2 });
                             post_nogood(assignments);
                             assignments.values.pop_back();
                         }
@@ -736,7 +753,7 @@ namespace
         auto save_result(const Assignments & assignments, Result & result) -> void
         {
             for (auto & a : assignments.values)
-                result.isomorphism.emplace(pattern_permutation.at(get<0>(a).first), target_permutation.at(get<0>(a).second));
+                result.isomorphism.emplace(pattern_permutation.at(a.assignment.pattern_vertex), target_permutation.at(a.assignment.target_vertex));
 
             // re-add isolated vertices
             int t = 0;
@@ -749,7 +766,7 @@ namespace
 
             string where = "where =";
             for (auto & a : assignments.values)
-                where.append(" " + to_string(get<2>(a)));
+                where.append(" " + to_string(a.discrepancy_count));
             result.extra_stats.push_back(where);
         }
 
@@ -843,8 +860,8 @@ namespace
                         }
                         else if (1 == n->literals.size()) {
                             for (auto & d : domains)
-                                if (d.v == n->literals[0].first) {
-                                    d.values.reset(n->literals[0].second);
+                                if (d.v == n->literals[0].pattern_vertex) {
+                                    d.values.reset(n->literals[0].target_vertex);
                                     d.count = d.values.count();
                                     break;
                                 }
