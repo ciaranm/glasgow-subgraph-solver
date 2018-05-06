@@ -3,8 +3,10 @@
 #include "graph.hh"
 
 #include <algorithm>
+#include <limits>
 
-using std::count_if;
+using std::distance;
+using std::numeric_limits;
 
 Graph::Graph(int size)
 {
@@ -12,26 +14,20 @@ Graph::Graph(int size)
         resize(size);
 }
 
-auto Graph::_position(int a, int b) const -> AdjacencyMatrix::size_type
-{
-    return (a * _size) + b;
-}
-
 auto Graph::resize(int size) -> void
 {
     _size = size;
-    _adjacency.resize(size * size);
 }
 
 auto Graph::add_edge(int a, int b) -> void
 {
-    _adjacency[_position(a, b)] = 1;
-    _adjacency[_position(b, a)] = 1;
+    _edges.emplace(a, b);
+    _edges.emplace(b, a);
 }
 
 auto Graph::adjacent(int a, int b) const -> bool
 {
-    return _adjacency[_position(a, b)];
+    return _edges.count({ a, b });
 }
 
 auto Graph::size() const -> int
@@ -41,9 +37,8 @@ auto Graph::size() const -> int
 
 auto Graph::degree(int a) const -> int
 {
-    return count_if(
-            _adjacency.begin() + a * _size,
-            _adjacency.begin() + (a + 1) * _size,
-            [] (int x) { return !!x; });
+    auto lower = _edges.lower_bound({ a, 0 });
+    auto upper = _edges.upper_bound({ a, numeric_limits<int>::max() });
+    return distance(lower, upper);
 }
 

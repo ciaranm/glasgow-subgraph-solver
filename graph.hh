@@ -3,36 +3,24 @@
 #ifndef GUARD_GRAPH_HH
 #define GUARD_GRAPH_HH 1
 
-#include <vector>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <cstdint>
 
 /**
- * A graph, with an adjaceny matrix representation. We only provide the
- * operations we actually need.
+ * A graph, in a convenient format for reading in from files. We don't do any
+ * performance critical operations on this: the algorithms re-encode as
+ * necessary.
  *
  * Indices start at 0.
  */
 class Graph
 {
-    public:
-        /**
-         * The adjaceny matrix type. Shouldn't really be public, but we
-         * snoop around inside it when doing message passing.
-         */
-        using AdjacencyMatrix = std::vector<std::uint8_t>;
-
     private:
         int _size = 0;
-        AdjacencyMatrix _adjacency;
-        bool _add_one_for_output;
+        std::set<std::pair<int, int> > _edges;
 
-        /**
-         * Return the appropriate offset into _adjacency for the edge (a,
-         * b).
-         */
-        auto _position(int a, int b) const -> AdjacencyMatrix::size_type;
 
     public:
         /**
@@ -50,8 +38,7 @@ class Graph
         auto size() const -> int;
 
         /**
-         * Change our size. Must be called before adding an edge, and must
-         * not be called afterwards.
+         * Change our size. Must be called before adding an edge.
          */
         auto resize(int size) -> void;
 
