@@ -44,14 +44,7 @@ using boost::dynamic_bitset;
 
 namespace
 {
-    enum class Search
-    {
-        Aborted,
-        Unsatisfiable,
-        Satisfiable
-    };
-
-    enum class RestartingSearch
+    enum class SearchResult
     {
         Aborted,
         Unsatisfiable,
@@ -480,10 +473,10 @@ namespace
                 unsigned long long & nodes,
                 unsigned long long & solution_count,
                 int depth,
-                long long & backtracks_until_restart) -> RestartingSearch
+                long long & backtracks_until_restart) -> SearchResult
         {
             if (params.abort->load())
-                return RestartingSearch::Aborted;
+                return SearchResult::Aborted;
 
             ++nodes;
 
@@ -492,10 +485,10 @@ namespace
             if (! branch_domain) {
                 if (params.enumerate) {
                     ++solution_count;
-                    return RestartingSearch::Unsatisfiable;
+                    return SearchResult::Unsatisfiable;
                 }
                 else
-                    return RestartingSearch::Satisfiable;
+                    return SearchResult::Satisfiable;
             }
 
             // pull out the remaining values in this domain for branching
@@ -573,13 +566,13 @@ namespace
                 auto search_result = restarting_search(assignments, new_domains, nodes, solution_count, depth + 1, backtracks_until_restart);
 
                 switch (search_result) {
-                    case RestartingSearch::Satisfiable:
-                        return RestartingSearch::Satisfiable;
+                    case SearchResult::Satisfiable:
+                        return SearchResult::Satisfiable;
 
-                    case RestartingSearch::Aborted:
-                        return RestartingSearch::Aborted;
+                    case SearchResult::Aborted:
+                        return SearchResult::Aborted;
 
-                    case RestartingSearch::Restart:
+                    case SearchResult::Restart:
                         // restore assignments before posting nogoods, it's easier
                         assignments.values.resize(assignments_size);
 
@@ -590,9 +583,9 @@ namespace
                             assignments.values.pop_back();
                         }
 
-                        return RestartingSearch::Restart;
+                        return SearchResult::Restart;
 
-                    case RestartingSearch::Unsatisfiable:
+                    case SearchResult::Unsatisfiable:
                         // restore assignments
                         assignments.values.resize(assignments_size);
                         break;
@@ -604,10 +597,10 @@ namespace
             // no values remaining, backtrack, or possibly kick off a restart
             if (backtracks_until_restart > 0 && 0 == --backtracks_until_restart) {
                 post_nogood(assignments);
-                return RestartingSearch::Restart;
+                return SearchResult::Restart;
             }
             else
-                return RestartingSearch::Unsatisfiable;
+                return SearchResult::Unsatisfiable;
         }
 
         auto initialise_domains(Domains & domains) -> bool
@@ -880,17 +873,17 @@ namespace
                         auto assignments_copy = assignments;
 
                         switch (restarting_search(assignments_copy, domains, result.nodes, result.solution_count, 0, backtracks_until_restart)) {
-                            case RestartingSearch::Satisfiable:
+                            case SearchResult::Satisfiable:
                                 save_result(assignments_copy, result);
                                 done = true;
                                 break;
 
-                            case RestartingSearch::Unsatisfiable:
-                            case RestartingSearch::Aborted:
+                            case SearchResult::Unsatisfiable:
+                            case SearchResult::Aborted:
                                 done = true;
                                 break;
 
-                            case RestartingSearch::Restart:
+                            case SearchResult::Restart:
                                 break;
                         }
                     }
@@ -905,13 +898,13 @@ namespace
                     // still need to use the restarts variant
                     long long backtracks_until_restart = -1;
                     switch (restarting_search(assignments, domains, result.nodes, result.solution_count, 0, backtracks_until_restart)) {
-                        case RestartingSearch::Satisfiable:
+                        case SearchResult::Satisfiable:
                             save_result(assignments, result);
                             break;
 
-                        case RestartingSearch::Unsatisfiable:
-                        case RestartingSearch::Aborted:
-                        case RestartingSearch::Restart:
+                        case SearchResult::Unsatisfiable:
+                        case SearchResult::Aborted:
+                        case SearchResult::Restart:
                             break;
                     }
                 }
