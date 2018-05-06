@@ -2,5 +2,3 @@
 
 #include "fixed_bit_set.hh"
 
-GraphTooBig::GraphTooBig() throw () = default;
-

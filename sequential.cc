@@ -15,6 +15,8 @@
 #include <tuple>
 #include <utility>
 
+#include <boost/dynamic_bitset.hpp>
+
 using std::array;
 using std::iota;
 using std::fill;
@@ -41,6 +43,8 @@ using std::vector;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
+
+using boost::dynamic_bitset;
 
 namespace
 {
@@ -127,15 +131,34 @@ namespace
         }
     };
 
-    template <unsigned n_words_>
+    template <typename T_, typename array<T_, 1>::size_type n_words_>
+    auto ensure_array_is_big_enough(array<T_, n_words_> &, unsigned) -> void
+    {
+    }
+
+    template <typename T_>
+    auto ensure_array_is_big_enough(vector<T_> & v, unsigned s) -> void
+    {
+        v.resize(s);
+    }
+
+    template <typename BitSetType_, typename ArrayType_>
     struct SIP
     {
         struct Domain
         {
             unsigned v;
-            unsigned popcount;
+            unsigned count;
             bool fixed = false;
-            FixedBitSet<n_words_> values;
+            BitSetType_ values;
+
+            explicit Domain(unsigned s) :
+                values(s, 0)
+            {
+            }
+
+            Domain(const Domain &) = default;
+            Domain(Domain &&) = default;
         };
 
         using Domains = vector<Domain>;
@@ -146,8 +169,8 @@ namespace
         unsigned pattern_size, full_pattern_size, target_size;
 
         vector<uint8_t> pattern_adjacencies_bits;
-        vector<FixedBitSet<n_words_> > pattern_graph_rows;
-        vector<FixedBitSet<n_words_> > target_graph_rows;
+        vector<dynamic_bitset<> > pattern_graph_rows;
+        vector<BitSetType_> target_graph_rows;
 
         vector<int> pattern_permutation, target_permutation, isolated_vertices;
         vector<vector<int> > patterns_degrees, targets_degrees;
@@ -183,7 +206,7 @@ namespace
                     pattern_permutation.push_back(v);
 
             // recode pattern to a bit graph
-            pattern_graph_rows.resize(pattern_size * max_graphs);
+            pattern_graph_rows.resize(pattern_size * max_graphs, dynamic_bitset<>(pattern_size));
             for (unsigned i = 0 ; i < pattern_size ; ++i)
                 for (unsigned j = 0 ; j < pattern_size ; ++j)
                     if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
@@ -200,27 +223,26 @@ namespace
                 degree_sort(target, target_permutation, params.antiheuristic);
 
             // recode target to a bit graph
-            target_graph_rows.resize(target_size * max_graphs);
+            target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
             for (unsigned i = 0 ; i < target_size ; ++i)
                 for (unsigned j = 0 ; j < target_size ; ++j)
                     if (target.adjacent(target_permutation.at(i), target_permutation.at(j)))
                         target_graph_rows[i * max_graphs + 0].set(j);
         }
 
-        auto build_supplemental_graphs(vector<FixedBitSet<n_words_> > & graph_rows, unsigned size) -> void
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_supplemental_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
         {
             vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
             // count number of paths from w to v (only w >= v, so not v to w)
             for (unsigned v = 0 ; v < size ; ++v) {
                 auto nv = graph_rows[v * max_graphs + 0];
-                unsigned cp = 0;
-                for (int c = nv.first_set_bit_from(cp) ; c != -1 ; c = nv.first_set_bit_from(cp)) {
-                    nv.unset(c);
+                for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
+                    nv.reset(c);
                     auto nc = graph_rows[c * max_graphs + 0];
-                    unsigned wp = 0;
-                    for (int w = nc.first_set_bit_from(wp) ; w != -1 && w <= int(v) ; w = nc.first_set_bit_from(wp)) {
-                        nc.unset(w);
+                    for (auto w = nc.find_first() ; w != decltype(nc)::npos && w <= v ; w = nc.find_first()) {
+                        nc.reset(w);
                         ++path_counts[v][w];
                     }
                 }
@@ -240,7 +262,8 @@ namespace
             }
         }
 
-        auto build_complement_graphs(vector<FixedBitSet<n_words_> > & graph_rows, unsigned size) -> void
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v)
                 for (unsigned w = 0 ; w < size ; ++w)
@@ -251,7 +274,7 @@ namespace
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
         {
             return find_if(domains.begin(), domains.end(), [] (Domain & d) {
-                    return (! d.fixed) && 1 == d.popcount;
+                    return (! d.fixed) && 1 == d.count;
                     });
         }
 
@@ -296,7 +319,7 @@ namespace
                         continue;
 
                     if (d.v == nogood.literals[1].first) {
-                        d.values.unset(nogood.literals[1].second);
+                        d.values.reset(nogood.literals[1].second);
                         break;
                     }
                 }
@@ -322,7 +345,7 @@ namespace
                 // if we're adjacent...
                 if (pattern_adjacency_bits & (1u << g)) {
                     // ...then we can only be mapped to adjacent vertices
-                    d.values.intersect_with(target_graph_rows[current_assignment.second * max_graphs_ + g]);
+                    d.values &= target_graph_rows[current_assignment.second * max_graphs_ + g];
                 }
             }
         }
@@ -335,7 +358,7 @@ namespace
                     continue;
 
                 // all different
-                d.values.unset(current_assignment.second);
+                d.values.reset(current_assignment.second);
 
                 // adjacency
                 switch (max_graphs) {
@@ -347,8 +370,8 @@ namespace
                 }
 
                 // we might have removed values
-                d.popcount = d.values.popcount();
-                if (0 == d.popcount)
+                d.count = d.values.count();
+                if (0 == d.count)
                     return false;
             }
 
@@ -362,7 +385,7 @@ namespace
                     branch_domain != new_domains.end() ;
                     branch_domain = find_unit_domain(new_domains)) {
                 // what are we assigning?
-                Assignment current_assignment = { branch_domain->v, branch_domain->values.first_set_bit() };
+                Assignment current_assignment = { branch_domain->v, branch_domain->values.find_first() };
 
                 // ok, make the assignment
                 branch_domain->fixed = true;
@@ -391,8 +414,8 @@ namespace
             for (auto & d : domains)
                 if (! d.fixed)
                     if ((! result) ||
-                            (d.popcount < result->popcount) ||
-                            (d.popcount == result->popcount && patterns_degrees[0][d.v] > patterns_degrees[0][result->v]))
+                            (d.count < result->count) ||
+                            (d.count == result->count && patterns_degrees[0][d.v] > patterns_degrees[0][result->v]))
                         result = &d;
             return result;
         }
@@ -410,9 +433,9 @@ namespace
 
                 new_domains.push_back(d);
                 if (d.v == branch_v) {
-                    new_domains.back().values.unset_all();
+                    new_domains.back().values.reset();
                     new_domains.back().values.set(f_v);
-                    new_domains.back().popcount = 1;
+                    new_domains.back().count = 1;
                 }
             }
             return new_domains;
@@ -461,10 +484,12 @@ namespace
             // pull out the remaining values in this domain for branching
             auto remaining = branch_domain->values;
 
-            array<unsigned, n_words_ * bits_per_word + 1> branch_v;
+            ArrayType_ branch_v;
+            ensure_array_is_big_enough(branch_v, target_size);
+
             unsigned branch_v_end = 0;
-            for (int f_v = remaining.first_set_bit() ; f_v != -1 ; f_v = remaining.first_set_bit()) {
-                remaining.unset(f_v);
+            for (auto f_v = remaining.find_first() ; f_v != decltype(remaining)::npos ; f_v = remaining.find_first()) {
+                remaining.reset(f_v);
                 branch_v[branch_v_end++] = f_v;
             }
 
@@ -582,9 +607,8 @@ namespace
             for (int g = 0 ; g < max_graphs ; ++g) {
                 for (unsigned i = 0 ; i < pattern_size ; ++i) {
                     auto ni = pattern_graph_rows[i * max_graphs + g];
-                    unsigned np = 0;
-                    for (int j = ni.first_set_bit_from(np) ; j != -1 ; j = ni.first_set_bit_from(np)) {
-                        ni.unset(j);
+                    for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
+                        ni.reset(j);
                         patterns_ndss.at(g).at(i).push_back(patterns_degrees.at(g).at(j));
                     }
                     sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
@@ -592,9 +616,8 @@ namespace
 
                 for (unsigned i = 0 ; i < target_size ; ++i) {
                     auto ni = target_graph_rows[i * max_graphs + g];
-                    unsigned np = 0;
-                    for (int j = ni.first_set_bit_from(np) ; j != -1 ; j = ni.first_set_bit_from(np)) {
-                        ni.unset(j);
+                    for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
+                        ni.reset(j);
                         targets_ndss.at(g).at(i).push_back(targets_degrees.at(g).at(j));
                     }
                     sort(targets_ndss.at(g).at(i).begin(), targets_ndss.at(g).at(i).end(), greater<int>());
@@ -603,7 +626,7 @@ namespace
 
             for (unsigned i = 0 ; i < pattern_size ; ++i) {
                 domains.at(i).v = i;
-                domains.at(i).values.unset_all();
+                domains.at(i).values.reset();
 
                 for (unsigned j = 0 ; j < target_size ; ++j) {
                     bool ok = true;
@@ -633,19 +656,19 @@ namespace
                         domains.at(i).values.set(j);
                 }
 
-                domains.at(i).popcount = domains.at(i).values.popcount();
+                domains.at(i).count = domains.at(i).values.count();
             }
 
-            FixedBitSet<n_words_> domains_union;
+            BitSetType_ domains_union{ target_size, 0 };
             for (auto & d : domains)
-                domains_union.union_with(d.values);
+                domains_union |= d.values;
 
-            unsigned domains_union_popcount = domains_union.popcount();
+            unsigned domains_union_popcount = domains_union.count();
             if (domains_union_popcount < unsigned(pattern_size))
                 return false;
 
             for (auto & d : domains)
-                d.popcount = d.values.popcount();
+                d.count = d.values.count();
 
             return true;
         }
@@ -653,28 +676,31 @@ namespace
         auto cheap_all_different(Domains & domains) -> bool
         {
             // Pick domains smallest first; ties are broken by smallest .v first.
-            // For each popcount p we have a linked list, whose first member is
+            // For each count p we have a linked list, whose first member is
             // first[p].  The element following x in one of these lists is next[x].
-            // Any domain with a popcount greater than domains.size() is put
-            // int the "popcount==domains.size()" bucket.
+            // Any domain with a count greater than domains.size() is put
+            // int the "count==domains.size()" bucket.
             // The "first" array is sized to be able to hold domains.size()+1
             // elements
-            array<int, n_words_ * bits_per_word + 1> first;
-            array<int, n_words_ * bits_per_word> next;
+            ArrayType_ first, next;
+
+            ensure_array_is_big_enough(first, target_size + 1);
             fill(first.begin(), first.begin() + domains.size() + 1, -1);
+
+            ensure_array_is_big_enough(next, target_size);
             fill(next.begin(), next.begin() + domains.size(), -1);
             // Iterate backwards, because we insert elements at the head of
             // lists and we want the sort to be stable
             for (int i = int(domains.size()) - 1 ; i >= 0; --i) {
-                unsigned popcount = domains.at(i).popcount;
-                if (popcount > domains.size())
-                    popcount = domains.size();
-                next.at(i) = first.at(popcount);
-                first.at(popcount) = i;
+                unsigned count = domains.at(i).count;
+                if (count > domains.size())
+                    count = domains.size();
+                next.at(i) = first.at(count);
+                first.at(count) = i;
             }
 
             // counting all-different
-            FixedBitSet<n_words_> domains_so_far, hall;
+            BitSetType_ domains_so_far{ target_size, 0 }, hall{ target_size, 0 };
             unsigned neighbours_so_far = 0;
 
             for (unsigned i = 0 ; i <= domains.size() ; ++i) {
@@ -683,22 +709,22 @@ namespace
                 while (domain_index != -1) {
                     auto & d = domains.at(domain_index);
 
-                    d.values.intersect_with_complement(hall);
-                    d.popcount = d.values.popcount();
+                    d.values &= ~hall;
+                    d.count = d.values.count();
 
-                    if (0 == d.popcount)
+                    if (0 == d.count)
                         return false;
 
-                    domains_so_far.union_with(d.values);
+                    domains_so_far |= d.values;
                     ++neighbours_so_far;
 
-                    unsigned domains_so_far_popcount = domains_so_far.popcount();
+                    unsigned domains_so_far_popcount = domains_so_far.count();
                     if (domains_so_far_popcount < neighbours_so_far) {
                         return false;
                     }
                     else if (domains_so_far_popcount == neighbours_so_far) {
                         // equivalent to hall=domains_so_far
-                        hall.union_with(domains_so_far);
+                        hall |= domains_so_far;
                     }
                     domain_index = next[domain_index];
                 }
@@ -754,10 +780,10 @@ namespace
 
             for (int g = 0 ; g < max_graphs ; ++g) {
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].popcount();
+                    patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
 
                 for (unsigned i = 0 ; i < target_size ; ++i)
-                    targets_degrees.at(g).at(i) = target_graph_rows[i * max_graphs + g].popcount();
+                    targets_degrees.at(g).at(i) = target_graph_rows[i * max_graphs + g].count();
             }
 
             for (unsigned i = 0 ; i < target_size ; ++i)
@@ -772,7 +798,7 @@ namespace
                             pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
 
             // domains
-            Domains domains(pattern_size);
+            Domains domains(pattern_size, Domain{ target_size });
             if (! initialise_domains(domains))
                 return result;
 
@@ -818,8 +844,8 @@ namespace
                         else if (1 == n->literals.size()) {
                             for (auto & d : domains)
                                 if (d.v == n->literals[0].first) {
-                                    d.values.unset(n->literals[0].second);
-                                    d.popcount = d.values.popcount();
+                                    d.values.reset(n->literals[0].second);
+                                    d.count = d.values.count();
                                     break;
                                 }
                         }
