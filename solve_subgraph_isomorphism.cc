@@ -123,7 +123,6 @@ auto main(int argc, char * argv[]) -> int
         po::options_description custom_options{ "Options for customisable algorithms (not all combinations make sense)" };
         custom_options.add_options()
             ("restarts",                                     "Use restarts")
-            ("dds",                                          "Use dds")
             ("shuffle",                                      "Use shuffling")
             ("softmax-shuffle",                              "Use softmax shuffling")
             ("antiheuristic",                                "Use antiheuristic")
@@ -196,7 +195,6 @@ auto main(int argc, char * argv[]) -> int
 
         if (0 == options_vars["algorithm"].as<std::string>().compare(0, 13, "customisable-", 0, 13)) {
             params.restarts = options_vars.count("restarts");
-            params.dds = options_vars.count("dds");
             params.shuffle = options_vars.count("shuffle");
             params.softmax_shuffle = options_vars.count("softmax-shuffle");
             params.antiheuristic = options_vars.count("antiheuristic");

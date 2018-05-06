@@ -15,9 +15,6 @@ struct Params
     /// The start time of the algorithm.
     std::chrono::time_point<std::chrono::steady_clock> start_time;
 
-    /// Use dds?
-    bool dds = false;
-
     /// Use restarts?
     bool restarts = false;
 

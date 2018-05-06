@@ -418,121 +418,6 @@ namespace
             return new_domains;
         }
 
-        auto search(
-                Assignments & assignments,
-                const Domains & domains,
-                unsigned long long & nodes,
-                unsigned long long & solution_count,
-                int depth) -> Search
-        {
-            if (params.abort->load())
-                return Search::Aborted;
-
-            ++nodes;
-
-            const Domain * branch_domain = find_branch_domain(domains);
-            if (! branch_domain) {
-                if (params.enumerate) {
-                    ++solution_count;
-                    return Search::Unsatisfiable;
-                }
-                else
-                    return Search::Satisfiable;
-            }
-
-            auto remaining = branch_domain->values;
-
-            int discrepancy_count = 0;
-            for (int f_v = remaining.first_set_bit() ; f_v != -1 ; f_v = remaining.first_set_bit()) {
-                remaining.unset(f_v);
-
-                auto assignments_size = assignments.values.size();
-                assignments.values.push_back({ { branch_domain->v, f_v }, true, discrepancy_count });
-
-                /* set up new domains */
-                Domains new_domains = prepare_domains(domains, branch_domain->v, f_v);
-
-                if (propagate(new_domains, assignments)) {
-                    auto search_result = search(assignments, new_domains, nodes, solution_count, depth + 1);
-
-                    switch (search_result) {
-                        case Search::Satisfiable:    return Search::Satisfiable;
-                        case Search::Aborted:        return Search::Aborted;
-                        case Search::Unsatisfiable:  break;
-                    }
-                }
-
-                assignments.values.resize(assignments_size);
-                ++discrepancy_count;
-            }
-
-            return Search::Unsatisfiable;
-        }
-
-        auto dds_search(
-                Assignments & assignments,
-                const Domains & domains,
-                unsigned long long & nodes,
-                unsigned long long & solution_count,
-                int depth,
-                int discrepancy_k,
-                bool & used_all_discrepancies) -> Search
-        {
-            if (params.abort->load())
-                return Search::Aborted;
-
-            ++nodes;
-
-            const Domain * branch_domain = find_branch_domain(domains);
-            if (! branch_domain) {
-                if (params.enumerate) {
-                    if (discrepancy_k == 0)
-                        ++solution_count;
-                    return Search::Unsatisfiable;
-                }
-                else
-                    return Search::Satisfiable;
-            }
-
-            auto remaining = branch_domain->values;
-
-            int discrepancy_count = 0;
-            for (int f_v = remaining.first_set_bit() ; f_v != -1 ; f_v = remaining.first_set_bit()) {
-                remaining.unset(f_v);
-
-                if (discrepancy_k != 1) {
-                    auto assignments_size = assignments.values.size();
-                    assignments.values.push_back({ { branch_domain->v, f_v }, true, discrepancy_count });
-
-                    /* set up new domains */
-                    Domains new_domains = prepare_domains(domains, branch_domain->v, f_v);
-
-                    if (propagate(new_domains, assignments)) {
-                        auto search_result = dds_search(assignments, new_domains, nodes, solution_count,
-                                depth + 1, max(0, discrepancy_k - 1), used_all_discrepancies);
-
-                        switch (search_result) {
-                            case Search::Satisfiable:    return Search::Satisfiable;
-                            case Search::Aborted:        return Search::Aborted;
-                            case Search::Unsatisfiable:  break;
-                        }
-                    }
-
-                    assignments.values.resize(assignments_size);
-                }
-
-                if (0 == discrepancy_k) {
-                    used_all_discrepancies = true;
-                    break;
-                }
-                --discrepancy_k;
-
-                ++discrepancy_count;
-            }
-
-            return Search::Unsatisfiable;
-        }
-
         auto post_nogood(
                 const Assignments & assignments)
         {
@@ -972,7 +857,7 @@ namespace
 
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
             }
-            else if (params.shuffle || params.softmax_shuffle) {
+            else {
                 if (propagate(domains, assignments)) {
                     // still need to use the restarts variant
                     long long backtracks_until_restart = -1;
@@ -984,42 +869,6 @@ namespace
                         case RestartingSearch::Unsatisfiable:
                         case RestartingSearch::Aborted:
                         case RestartingSearch::Restart:
-                            break;
-                    }
-                }
-            }
-            else if (params.dds) {
-                bool done = false;
-                for (int discrepancy_k = 0 ; ! done ; ++discrepancy_k) {
-                    bool used_all_discrepancies = false;
-                    switch (dds_search(assignments, domains, result.nodes, result.solution_count, 0, discrepancy_k, used_all_discrepancies)) {
-                        case Search::Satisfiable:
-                            save_result(assignments, result);
-                            done = true;
-                            break;
-
-                        case Search::Unsatisfiable:
-                            if (! used_all_discrepancies) {
-                                result.extra_stats.emplace_back("last_discrepancy = " + to_string(discrepancy_k));
-                                done = true;
-                            }
-                            break;
-
-                        case Search::Aborted:
-                            done = true;
-                            break;
-                    }
-                }
-            }
-            else {
-                if (propagate(domains, assignments)) {
-                    switch (search(assignments, domains, result.nodes, result.solution_count, 0)) {
-                        case Search::Satisfiable:
-                            save_result(assignments, result);
-                            break;
-
-                        case Search::Unsatisfiable:
-                        case Search::Aborted:
                             break;
                     }
                 }
