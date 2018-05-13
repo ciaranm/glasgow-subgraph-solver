@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#ifndef GUARD_GRAPH_HH
-#define GUARD_GRAPH_HH 1
+#ifndef GLASGOW_SUBGRAPH_SOLVER_SOLVER_FORMATS_INPUT_GRAPH_HH
+#define GLASGOW_SUBGRAPH_SOLVER_SOLVER_FORMATS_INPUT_GRAPH_HH 1
 
 #include <set>
 #include <string>
@@ -15,7 +15,7 @@
  *
  * Indices start at 0.
  */
-class Graph
+class InputGraph
 {
     private:
         int _size = 0;
@@ -26,11 +26,11 @@ class Graph
         /**
          * \param initial_size can be 0, if resize() is called afterwards.
          */
-        Graph(int initial_size);
+        InputGraph(int initial_size);
 
-        Graph(const Graph &) = default;
+        InputGraph(const InputGraph &) = default;
 
-        explicit Graph() = default;
+        explicit InputGraph() = default;
 
         /**
          * Number of vertices.

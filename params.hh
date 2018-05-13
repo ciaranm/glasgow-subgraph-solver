@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#ifndef CODE_GUARD_PARAMS_HH
-#define CODE_GUARD_PARAMS_HH 1
+#ifndef GLASGOW_SUBGRAPH_SOLVER_PARAMS_HH
+#define GLASGOW_SUBGRAPH_SOLVER_PARAMS_HH 1
 
 #include <chrono>
 #include <atomic>

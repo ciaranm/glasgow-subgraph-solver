@@ -1,8 +1,8 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "lad.hh"
-#include "dimacs.hh"
-#include "sequential.hh"
+#include "formats/lad.hh"
+#include "formats/dimacs.hh"
+#include "solver.hh"
 
 #include <boost/program_options.hpp>
 

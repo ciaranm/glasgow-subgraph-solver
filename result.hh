@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#ifndef CODE_GUARD_RESULT_HH
-#define CODE_GUARD_RESULT_HH 1
+#ifndef GLASGOW_SUBGRAPH_SOLVER_RESULT_HH
+#define GLASGOW_SUBGRAPH_SOLVER_RESULT_HH 1
 
 #include <map>
 #include <list>

@@ -1,8 +1,8 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "dimacs.hh"
-#include "graph.hh"
-#include "graph_file_error.hh"
+#include "formats/dimacs.hh"
+#include "formats/input_graph.hh"
+#include "formats/graph_file_error.hh"
 
 #include <boost/regex.hpp>
 #include <fstream>
@@ -15,9 +15,9 @@ using std::string;
 using boost::regex;
 using boost::smatch;
 
-auto read_dimacs(const string & filename) -> Graph
+auto read_dimacs(const string & filename) -> InputGraph
 {
-    Graph result{ 0 };
+    InputGraph result{ 0 };
 
     ifstream infile{ filename };
     if (! infile)

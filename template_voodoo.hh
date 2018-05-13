@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#ifndef CODE_GUARD_TEMPLATE_VOODOO_HH
-#define CODE_GUARD_TEMPLATE_VOODOO_HH 1
+#ifndef GLASGOW_SUBGRAPH_SOLVER_TEMPLATE_VOODOO_HH
+#define GLASGOW_SUBGRAPH_SOLVER_TEMPLATE_VOODOO_HH 1
 
 #include "fixed_bit_set.hh"
 

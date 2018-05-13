@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "lad.hh"
-#include "graph.hh"
+#include "formats/lad.hh"
+#include "formats/input_graph.hh"
 
 #include <fstream>
 
@@ -18,9 +18,9 @@ namespace
     }
 }
 
-auto read_lad(const string & filename) -> Graph
+auto read_lad(const string & filename) -> InputGraph
 {
-    Graph result(0);
+    InputGraph result(0);
 
     ifstream infile{ filename };
     if (! infile)

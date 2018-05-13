@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "graph_file_error.hh"
-#include "graph.hh"
+#include "formats/graph_file_error.hh"
+#include "formats/input_graph.hh"
 
 #include <fstream>
 

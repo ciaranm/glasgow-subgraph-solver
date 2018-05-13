@@ -1,6 +1,6 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "sequential.hh"
+#include "solver.hh"
 #include "fixed_bit_set.hh"
 #include "template_voodoo.hh"
 
@@ -52,7 +52,7 @@ namespace
         Restart
     };
 
-    auto degree_sort(const Graph & graph, vector<int> & p, bool reverse) -> void
+    auto degree_sort(const InputGraph & graph, vector<int> & p, bool reverse) -> void
     {
         // pre-calculate degrees
         vector<int> degrees;
@@ -192,7 +192,7 @@ namespace
 
         mt19937 global_rand;
 
-        SIP(const Graph & target, const Graph & pattern, const Params & a) :
+        SIP(const InputGraph & target, const InputGraph & pattern, const Params & a) :
             params(a),
             max_graphs(5 + (params.induced ? 1 : 0)),
             pattern_size(pattern.size()),
@@ -938,7 +938,7 @@ namespace
     };
 }
 
-auto sequential_subgraph_isomorphism(const pair<Graph, Graph> & graphs, const Params & params) -> Result
+auto sequential_subgraph_isomorphism(const pair<InputGraph, InputGraph> & graphs, const Params & params) -> Result
 {
     if (graphs.first.size() > graphs.second.size())
         return Result{ };
