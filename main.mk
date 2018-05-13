@@ -1,7 +1,7 @@
 BUILD_DIR := intermediate
 TARGET_DIR := ./
 
-SUBMAKEFILES := solve.mk random.mk
+SUBMAKEFILES := solve.mk
 
 boost_ldlibs := -lboost_regex -lboost_thread -lboost_system -lboost_program_options
 
