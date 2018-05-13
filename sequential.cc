@@ -467,6 +467,46 @@ namespace
             need_to_watch.emplace_back(prev(nogoods.end()));
         }
 
+        auto softmax_shuffle(
+                ArrayType_ & branch_v,
+                unsigned branch_v_end
+                ) -> void
+        {
+            // repeatedly pick a softmax-biased vertex, move it to the front of branch_v,
+            // and then only consider items further to the right in the next iteration.
+
+            // Using floating point here turned out to be way too slow. Fortunately the base
+            // of softmax doesn't seem to matter, so we use 2 instead of e, and do everything
+            // using bit voodoo.
+            auto expish = [largest_target_degree = this->largest_target_degree] (int degree) {
+                constexpr int sufficient_space_for_adding_up = numeric_limits<long long>::digits - 18;
+                auto shift = max<int>(degree - largest_target_degree + sufficient_space_for_adding_up, 0);
+                return 1ll << shift;
+            };
+
+            long long total = 0;
+            for (unsigned v = 0 ; v < branch_v_end ; ++v)
+                total += expish(targets_degrees[0][branch_v[v]]);
+
+            for (unsigned start = 0 ; start < branch_v_end ; ++start) {
+                // pick a random number between 1 and total inclusive
+                uniform_int_distribution<long long> dist(1, total);
+                long long select_score = dist(global_rand);
+
+                // go over the list until we hit the score
+                unsigned select_element = start;
+                for ( ; select_element + 1 < branch_v_end ; ++select_element) {
+                    select_score -= expish(targets_degrees[0][branch_v[select_element]]);
+                    if (select_score <= 0)
+                        break;
+                }
+
+                // move to front
+                total -= expish(targets_degrees[0][branch_v[select_element]]);
+                swap(branch_v[select_element], branch_v[start]);
+            }
+        }
+
         auto restarting_search(
                 Assignments & assignments,
                 const Domains & domains,
@@ -507,39 +547,7 @@ namespace
                 shuffle(branch_v.begin(), branch_v.begin() + branch_v_end, global_rand);
             }
             else if (params.softmax_shuffle) {
-                // repeatedly pick a softmax-biased vertex, move it to the front of branch_v,
-                // and then only consider items further to the right in the next iteration.
-
-                // Using floating point here turned out to be way too slow. Fortunately the base
-                // of softmax doesn't seem to matter, so we use 2 instead of e, and do everything
-                // using bit voodoo.
-                auto expish = [largest_target_degree = this->largest_target_degree] (int degree) {
-                    constexpr int sufficient_space_for_adding_up = numeric_limits<long long>::digits - 18;
-                    auto shift = max<int>(degree - largest_target_degree + sufficient_space_for_adding_up, 0);
-                    return 1ll << shift;
-                };
-
-                long long total = 0;
-                for (unsigned v = 0 ; v < branch_v_end ; ++v)
-                    total += expish(targets_degrees[0][branch_v[v]]);
-
-                for (unsigned start = 0 ; start < branch_v_end ; ++start) {
-                    // pick a random number between 1 and total inclusive
-                    uniform_int_distribution<long long> dist(1, total);
-                    long long select_score = dist(global_rand);
-
-                    // go over the list until we hit the score
-                    unsigned select_element = start;
-                    for ( ; select_element + 1 < branch_v_end ; ++select_element) {
-                        select_score -= expish(targets_degrees[0][branch_v[select_element]]);
-                        if (select_score <= 0)
-                            break;
-                    }
-
-                    // move to front
-                    total -= expish(targets_degrees[0][branch_v[select_element]]);
-                    swap(branch_v[select_element], branch_v[start]);
-                }
+                softmax_shuffle(branch_v, branch_v_end);
             }
 
             int discrepancy_count = 0;
