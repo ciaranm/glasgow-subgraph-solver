@@ -52,19 +52,6 @@ namespace
         Restart
     };
 
-    auto degree_sort(const InputGraph & graph, vector<int> & p, bool reverse) -> void
-    {
-        // pre-calculate degrees
-        vector<int> degrees;
-
-        for (int v = 0 ; v < graph.size() ; ++v)
-            degrees.push_back(graph.degree(v));
-
-        // sort on degree
-        sort(p.begin(), p.end(),
-                [&] (int a, int b) { return (! reverse) ^ (degrees[a] < degrees[b] || (degrees[a] == degrees[b] && a > b)); });
-    }
-
     struct Assignment
     {
         unsigned pattern_vertex;
@@ -182,7 +169,7 @@ namespace
         vector<dynamic_bitset<> > pattern_graph_rows;
         vector<BitSetType_> target_graph_rows;
 
-        vector<int> pattern_permutation, target_permutation, isolated_vertices;
+        vector<int> pattern_permutation, isolated_vertices;
         vector<vector<int> > patterns_degrees, targets_degrees;
         int largest_target_degree;
 
@@ -198,14 +185,10 @@ namespace
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
             target_size(target.size()),
-            target_permutation(target.size()),
             patterns_degrees(max_graphs),
             targets_degrees(max_graphs),
             largest_target_degree(0)
         {
-            if (0 != params.seed)
-                global_rand.seed(params.seed);
-
             // strip out isolated vertices in the pattern, and build pattern_permutation
             for (unsigned v = 0 ; v < full_pattern_size ; ++v)
                 if ((! params.induced) && (! params.enumerate) && (0 == pattern.degree(v))) {
@@ -222,21 +205,14 @@ namespace
                     if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
                         pattern_graph_rows[i * max_graphs + 0].set(j);
 
-            // determine ordering for target graph vertices
-            iota(target_permutation.begin(), target_permutation.end(), 0);
-
             // set up space for watches
-            if (params.restarts && ! params.goods)
-                watches.initialise(pattern_size, target_size);
-
-            if (! params.input_order)
-                degree_sort(target, target_permutation, params.antiheuristic);
+            watches.initialise(pattern_size, target_size);
 
             // recode target to a bit graph
             target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
             for (unsigned i = 0 ; i < target_size ; ++i)
                 for (unsigned j = 0 ; j < target_size ; ++j)
-                    if (target.adjacent(target_permutation.at(i), target_permutation.at(j)))
+                    if (target.adjacent(i, j))
                         target_graph_rows[i * max_graphs + 0].set(j);
         }
 
@@ -402,9 +378,8 @@ namespace
                 assignments.values.push_back({ current_assignment, false, -1 });
 
                 // propagate watches
-                if (params.restarts && ! params.goods)
-                    if (! propagate_watches(new_domains, assignments, current_assignment))
-                        return false;
+                if (! propagate_watches(new_domains, assignments, current_assignment))
+                    return false;
 
                 // propagate simple all different and adjacency
                 if (! propagate_simple_constraints(new_domains, current_assignment))
@@ -454,9 +429,6 @@ namespace
         auto post_nogood(
                 const Assignments & assignments)
         {
-            if (params.goods)
-                return;
-
             Nogood nogood;
 
             for (auto & a : assignments.values)
@@ -543,12 +515,7 @@ namespace
                 branch_v[branch_v_end++] = f_v;
             }
 
-            if (params.shuffle) {
-                shuffle(branch_v.begin(), branch_v.begin() + branch_v_end, global_rand);
-            }
-            else if (params.softmax_shuffle) {
-                softmax_shuffle(branch_v, branch_v_end);
-            }
+            softmax_shuffle(branch_v, branch_v_end);
 
             int discrepancy_count = 0;
 
@@ -754,7 +721,7 @@ namespace
         auto save_result(const Assignments & assignments, Result & result) -> void
         {
             for (auto & a : assignments.values)
-                result.isomorphism.emplace(pattern_permutation.at(a.assignment.pattern_vertex), target_permutation.at(a.assignment.target_vertex));
+                result.isomorphism.emplace(pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
 
             // re-add isolated vertices
             int t = 0;
@@ -828,96 +795,74 @@ namespace
             auto search_start_time = steady_clock::now();
 
             // do the appropriate search variant
-            if (params.restarts) {
-                bool done = false;
-                list<long long> luby = {{ 1 }};
-                auto current_luby = luby.begin();
-                double current_geometric = params.geometric_start;
-                unsigned number_of_restarts = 0;
+            bool done = false;
+            list<long long> luby = {{ 1 }};
+            auto current_luby = luby.begin();
+            unsigned number_of_restarts = 0;
 
-                while (! done) {
-                    long long backtracks_until_restart;
+            while (! done) {
+                long long backtracks_until_restart;
 
-                    if (0.0 != params.geometric_multiplier) {
-                        backtracks_until_restart = current_geometric;
-                        current_geometric *= params.geometric_multiplier;
+                if (params.enumerate)
+                    backtracks_until_restart = -1;
+                else {
+                    backtracks_until_restart = *current_luby * params.luby_multiplier;
+                    if (next(current_luby) == luby.end()) {
+                        luby.insert(luby.end(), luby.begin(), luby.end());
+                        luby.push_back(*luby.rbegin() * 2);
                     }
-                    else {
-                        backtracks_until_restart = *current_luby * params.luby_multiplier;
-                        if (next(current_luby) == luby.end()) {
-                            luby.insert(luby.end(), luby.begin(), luby.end());
-                            luby.push_back(*luby.rbegin() * 2);
-                        }
-                        ++current_luby;
-                    }
-
-                    ++number_of_restarts;
-
-                    // start watching new nogoods. we're not backjumping so this is a bit icky.
-                    for (auto & n : need_to_watch) {
-                        if (n->literals.empty()) {
-                            done = true;
-                            break;
-                        }
-                        else if (1 == n->literals.size()) {
-                            for (auto & d : domains)
-                                if (d.v == n->literals[0].pattern_vertex) {
-                                    d.values.reset(n->literals[0].target_vertex);
-                                    d.count = d.values.count();
-                                    break;
-                                }
-                        }
-                        else {
-                            watches[n->literals[0]].push_back(n);
-                            watches[n->literals[1]].push_back(n);
-                        }
-                    }
-                    need_to_watch.clear();
-
-                    if (done)
-                        break;
-
-                    if (propagate(domains, assignments)) {
-                        auto assignments_copy = assignments;
-
-                        switch (restarting_search(assignments_copy, domains, result.nodes, result.solution_count, 0, backtracks_until_restart)) {
-                            case SearchResult::Satisfiable:
-                                save_result(assignments_copy, result);
-                                done = true;
-                                break;
-
-                            case SearchResult::Unsatisfiable:
-                            case SearchResult::Aborted:
-                                done = true;
-                                break;
-
-                            case SearchResult::Restart:
-                                break;
-                        }
-                    }
-                    else
-                        done = true;
+                    ++current_luby;
                 }
 
-                result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
-            }
-            else {
+                ++number_of_restarts;
+
+                // start watching new nogoods. we're not backjumping so this is a bit icky.
+                for (auto & n : need_to_watch) {
+                    if (n->literals.empty()) {
+                        done = true;
+                        break;
+                    }
+                    else if (1 == n->literals.size()) {
+                        for (auto & d : domains)
+                            if (d.v == n->literals[0].pattern_vertex) {
+                                d.values.reset(n->literals[0].target_vertex);
+                                d.count = d.values.count();
+                                break;
+                            }
+                    }
+                    else {
+                        watches[n->literals[0]].push_back(n);
+                        watches[n->literals[1]].push_back(n);
+                    }
+                }
+                need_to_watch.clear();
+
+                if (done)
+                    break;
+
                 if (propagate(domains, assignments)) {
-                    // still need to use the restarts variant
-                    long long backtracks_until_restart = -1;
-                    switch (restarting_search(assignments, domains, result.nodes, result.solution_count, 0, backtracks_until_restart)) {
+                    auto assignments_copy = assignments;
+
+                    switch (restarting_search(assignments_copy, domains, result.nodes, result.solution_count, 0, backtracks_until_restart)) {
                         case SearchResult::Satisfiable:
-                            save_result(assignments, result);
+                            save_result(assignments_copy, result);
+                            done = true;
                             break;
 
                         case SearchResult::Unsatisfiable:
                         case SearchResult::Aborted:
+                            done = true;
+                            break;
+
                         case SearchResult::Restart:
                             break;
                     }
                 }
+                else
+                    done = true;
             }
 
+            result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
             result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
             result.extra_stats.emplace_back("nogoods_size = " + to_string(nogoods.size()));

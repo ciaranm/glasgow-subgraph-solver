@@ -105,48 +105,25 @@ auto run_this(Result_ func(const Data_ &, const Params_ &)) -> function<Result_ 
 
 auto main(int argc, char * argv[]) -> int
 {
-    auto subgraph_isomorphism_algorithms = {
-        make_pair( string{ "simple" },                       sequential_subgraph_isomorphism ),
-        make_pair( string{ "restarting" },                   sequential_subgraph_isomorphism ),
-        make_pair( string{ "customisable-sequential" },      sequential_subgraph_isomorphism )
-    };
-
     try {
         po::options_description display_options{ "Program options" };
         display_options.add_options()
             ("help",                                         "Display help information")
             ("timeout",            po::value<int>(),         "Abort after this many seconds")
-            ("dimacs",                                       "Read DIMACS format instead of LAD")
+            ("format",             po::value<std::string>(), "Specify input file format (auto, lad, labelledlad, dimacs)")
             ("induced",                                      "Solve the induced version")
             ("enumerate",                                    "Count the number of solutions");
 
-        po::options_description custom_options{ "Options for customisable algorithms (not all combinations make sense)" };
-        custom_options.add_options()
-            ("restarts",                                     "Use restarts")
-            ("shuffle",                                      "Use shuffling")
-            ("softmax-shuffle",                              "Use softmax shuffling")
-            ("antiheuristic",                                "Use antiheuristic")
-            ("input-order",                                  "Use input order")
-            ("luby-multiplier",      po::value<unsigned>(),  "Specify a Luby multiplier")
-            ("geometric-multiplier", po::value<double>(),    "Specify a Geometric multiplier")
-            ("geometric-start",      po::value<unsigned>(),  "Specify geometric start value")
-            ("goods",                                        "No nogoods")
-            ("seed",                 po::value<unsigned>(),  "Specify a random seed")
-            ;
-
         po::options_description all_options{ "All options" };
         all_options.add_options()
-            ("algorithm",    "Specify which algorithm to use (start with \"restarting\" or \"simple\")")
-            ("pattern-file", "Specify the pattern file (LAD format)")
-            ("target-file",  "Specify the target file (LAD format)")
+            ("pattern-file", "Specify the pattern file")
+            ("target-file",  "Specify the target file")
             ;
 
         all_options.add(display_options);
-        all_options.add(custom_options);
 
         po::positional_options_description positional_options;
         positional_options
-            .add("algorithm", 1)
             .add("pattern-file", 1)
             .add("target-file", 1)
             ;
@@ -160,65 +137,25 @@ auto main(int argc, char * argv[]) -> int
 
         /* --help? Show a message, and exit. */
         if (options_vars.count("help")) {
-            cout << "Usage: " << argv[0] << " [options] algorithm pattern target" << endl;
+            cout << "Usage: " << argv[0] << " [options] pattern target" << endl;
             cout << endl;
             cout << display_options << endl;
             return EXIT_SUCCESS;
         }
 
         /* No algorithm or no input file specified? Show a message and exit. */
-        if (! options_vars.count("algorithm") || ! options_vars.count("pattern-file") || ! options_vars.count("target-file")) {
-            cout << "Usage: " << argv[0] << " [options] algorithm pattern target" << endl;
+        if (! options_vars.count("pattern-file") || ! options_vars.count("target-file")) {
+            cout << "Usage: " << argv[0] << " [options] pattern target" << endl;
             return EXIT_FAILURE;
         }
 
-        /* Turn an algorithm string name into a runnable function. */
-        auto algorithm = subgraph_isomorphism_algorithms.begin(), algorithm_end = subgraph_isomorphism_algorithms.end();
-        for ( ; algorithm != algorithm_end ; ++algorithm)
-            if (algorithm->first == options_vars["algorithm"].as<string>())
-                break;
-
-        /* Unknown algorithm? Show a message and exit. */
-        if (algorithm == algorithm_end) {
-            cerr << "Unknown algorithm " << options_vars["algorithm"].as<string>() << ", choose from:";
-            for (auto a : subgraph_isomorphism_algorithms)
-                cerr << " " << a.first;
-            cerr << endl;
-            return EXIT_FAILURE;
-        }
+        auto algorithm = sequential_subgraph_isomorphism;
 
         /* Figure out what our options should be. */
         Params params;
 
         params.induced = options_vars.count("induced");
         params.enumerate = options_vars.count("enumerate");
-
-        if (0 == options_vars["algorithm"].as<std::string>().compare(0, 13, "customisable-", 0, 13)) {
-            params.restarts = options_vars.count("restarts");
-            params.shuffle = options_vars.count("shuffle");
-            params.softmax_shuffle = options_vars.count("softmax-shuffle");
-            params.antiheuristic = options_vars.count("antiheuristic");
-            params.input_order = options_vars.count("input-order");
-            params.goods = options_vars.count("goods");
-
-            if (options_vars.count("luby-multiplier"))
-                params.luby_multiplier = options_vars["luby-multiplier"].as<unsigned>();
-            if (options_vars.count("geometric-multiplier"))
-                params.geometric_multiplier = options_vars["geometric-multiplier"].as<double>();
-            if (options_vars.count("geometric-start"))
-                params.geometric_start = options_vars["geometric-start"].as<unsigned>();
-        }
-        else if (options_vars["algorithm"].as<std::string>() == "restarting") {
-            params.restarts = true;
-            params.softmax_shuffle = true;
-            params.input_order = true;
-        }
-        else {
-            params.input_order = false;
-        }
-
-        if (options_vars.count("seed"))
-            params.seed = options_vars["seed"].as<unsigned>();
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
@@ -233,15 +170,15 @@ auto main(int argc, char * argv[]) -> int
 
         /* Read in the graphs */
         auto graphs = make_pair(
-            (options_vars.count("dimacs") ? read_dimacs : read_lad)(options_vars["pattern-file"].as<string>()),
-            (options_vars.count("dimacs") ? read_dimacs : read_lad)(options_vars["target-file"].as<string>()));
+            read_lad(options_vars["pattern-file"].as<string>()),
+            read_lad(options_vars["target-file"].as<string>()));
 
         cout << "pattern_file = " << options_vars["pattern-file"].as<std::string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<std::string>() << endl;
 
         /* Do the actual run. */
         bool aborted = false;
-        auto result = run_this(algorithm->second)(
+        auto result = run_this(algorithm)(
                 graphs,
                 params,
                 aborted,

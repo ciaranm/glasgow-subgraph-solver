@@ -15,24 +15,6 @@ struct Params
     /// The start time of the algorithm.
     std::chrono::time_point<std::chrono::steady_clock> start_time;
 
-    /// Use restarts?
-    bool restarts = false;
-
-    /// Use no heuristic?
-    bool input_order = false;
-
-    /// Use shuffles? (For science purposes, not real use)
-    bool shuffle = false;
-
-    /// Use softmax shuffles?
-    bool softmax_shuffle = false;
-
-    /// Use antiheuristic? (For science purposes)
-    bool antiheuristic = false;
-
-    /// Don't use nogoods?
-    bool goods = false;
-
     /// Induced?
     bool induced = false;
 
@@ -44,15 +26,6 @@ struct Params
 
     /// Multiplier for Luby sequence
     unsigned long long luby_multiplier = dodgy_default_magic_luby_multiplier;
-
-    /// Multiplier for geometric sequence (set to 0 for luby)
-    unsigned long long geometric_multiplier = 0.0;
-
-    /// Initial geometric sequence value
-    unsigned long long geometric_start = 10;
-
-    /// Specify a random seed.
-    unsigned seed = 0;
 };
 
 #endif
