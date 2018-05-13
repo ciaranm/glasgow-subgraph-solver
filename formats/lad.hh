@@ -5,7 +5,9 @@
 
 #include "formats/input_graph.hh"
 #include "formats/graph_file_error.hh"
+#include "formats/labels_map.hh"
 
+#include <iosfwd>
 #include <string>
 
 /**
@@ -13,6 +15,13 @@
  *
  * \throw GraphFileError
  */
-auto read_lad(const std::string & filename) -> InputGraph;
+auto read_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
+
+/**
+ * Read a Labelled LAD format file into an InputGraph.
+ *
+ * \throw GraphFileError
+ */
+auto read_labelled_lad(std::ifstream && infile, const std::string & filename, LabelsMap & labels_map) -> InputGraph;
 
 #endif

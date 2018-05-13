@@ -30,22 +30,15 @@ Running
 
 To run:
 
-    ./solve_subgraph_isomorphism [ --induced ] algorithm-name pattern-file target-file
+    ./solve_subgraph_isomorphism [ --induced ] pattern-file target-file
 
 You may need to increase the stack space, for larger graphs. In bash this is
 done as follows:
 
     ulimit -s 1048576
 
-The algorithm variations are:
-
-    simple
-    restarting
-
-There is also a customisable-sequential algorithm which has lots of parameters
-for you to tune.
-
-The input files should be in the format described here:
+We try to auto-detect the input format. We can read LAD, Labelled LAD, and
+DIMACS 2 formatted graphs. If in doubt, it's best to use the format described here:
 
     https://perso.liris.cnrs.fr/christine.solnon/SIP.html
 

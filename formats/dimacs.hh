@@ -6,6 +6,7 @@
 #include "formats/input_graph.hh"
 #include "formats/graph_file_error.hh"
 
+#include <iosfwd>
 #include <string>
 
 /**
@@ -13,6 +14,6 @@
  *
  * \throw GraphFileError
  */
-auto read_dimacs(const std::string & filename) -> InputGraph;
+auto read_dimacs(std::ifstream && infile, const std::string & filename) -> InputGraph;
 
 #endif

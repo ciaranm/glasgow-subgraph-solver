@@ -15,13 +15,9 @@ using std::string;
 using boost::regex;
 using boost::smatch;
 
-auto read_dimacs(const string & filename) -> InputGraph
+auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
 {
     InputGraph result{ 0 };
-
-    ifstream infile{ filename };
-    if (! infile)
-        throw GraphFileError{ filename, "unable to open file" };
 
     string line;
     while (getline(infile, line)) {

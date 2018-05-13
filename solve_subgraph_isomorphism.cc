@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "formats/lad.hh"
-#include "formats/dimacs.hh"
+#include "formats/read_file_format.hh"
+#include "formats/labels_map.hh"
 #include "solver.hh"
 
 #include <boost/program_options.hpp>
@@ -169,9 +169,11 @@ auto main(int argc, char * argv[]) -> int
         cout << "started_at = " << put_time(localtime(&started_at), "%F %T") << endl;
 
         /* Read in the graphs */
+        LabelsMap labels_map;
+        string format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
         auto graphs = make_pair(
-            read_lad(options_vars["pattern-file"].as<string>()),
-            read_lad(options_vars["target-file"].as<string>()));
+            read_file_format(format_name, options_vars["pattern-file"].as<string>(), labels_map),
+            read_file_format(format_name, options_vars["target-file"].as<string>(), labels_map));
 
         cout << "pattern_file = " << options_vars["pattern-file"].as<std::string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<std::string>() << endl;
