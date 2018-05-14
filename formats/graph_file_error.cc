@@ -5,7 +5,6 @@
 
 #include <fstream>
 
-using std::ifstream;
 using std::string;
 
 GraphFileError::GraphFileError(const string & filename, const string & message) throw () :
@@ -17,5 +16,4 @@ auto GraphFileError::what() const throw () -> const char *
 {
     return _what.c_str();
 }
-
 
