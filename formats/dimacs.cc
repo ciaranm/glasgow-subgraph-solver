@@ -4,16 +4,15 @@
 #include "formats/input_graph.hh"
 #include "formats/graph_file_error.hh"
 
-#include <boost/regex.hpp>
 #include <fstream>
+#include <regex>
 
 using std::getline;
 using std::ifstream;
+using std::regex;
+using std::smatch;
 using std::stoi;
 using std::string;
-
-using boost::regex;
-using boost::smatch;
 
 auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
 {

@@ -4,22 +4,21 @@
 #include "formats/dimacs.hh"
 #include "formats/lad.hh"
 
-#include <boost/regex.hpp>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <vector>
 
 using std::ifstream;
 using std::ios;
 using std::move;
+using std::regex;
+using std::smatch;
 using std::stoi;
 using std::string;
 using std::stringstream;
 using std::to_string;
 using std::vector;
-
-using boost::regex;
-using boost::smatch;
 
 auto detect_format(ifstream & infile, const string & filename) -> string
 {
