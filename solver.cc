@@ -238,7 +238,8 @@ namespace
             }
 
             // set up space for watches
-            watches.initialise(pattern_size, target_size);
+            if (! params.enumerate)
+                watches.initialise(pattern_size, target_size);
 
             // recode target to a bit graph
             target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
@@ -320,6 +321,9 @@ namespace
 
         auto propagate_watches(Domains & new_domains, Assignments & assignments, const Assignment & current_assignment) -> bool
         {
+            if (params.enumerate)
+                return true;
+
             auto & watches_to_update = watches[current_assignment];
             for (auto watch_to_update = watches_to_update.begin() ; watch_to_update != watches_to_update.end() ; ) {
                 Nogood & nogood = **watch_to_update;
@@ -957,7 +961,9 @@ namespace
                     done = true;
             }
 
-            result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
+            if (! params.enumerate)
+                result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
+
             result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
             result.extra_stats.emplace_back("nogoods_size = " + to_string(nogoods.size()));
