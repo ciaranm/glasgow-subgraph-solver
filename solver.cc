@@ -1056,9 +1056,10 @@ namespace
 
             for (int pass = 0 ; pass < (params.enumerate ? 1 : 100) && ! done ; ++pass) {
                 auto assignments_copy = assignments;
+                auto domains_copy = domains;
                 long long backtracks_until_give_up = (params.enumerate ? 1000 : 10);
-                if (propagate(domains, assignments_copy)) {
-                    switch (restarting_search(assignments_copy, domains, result.nodes, result.solution_count, 0, backtracks_until_give_up)) {
+                if (propagate(domains_copy, assignments_copy)) {
+                    switch (restarting_search(assignments_copy, domains_copy, result.nodes, result.solution_count, 0, backtracks_until_give_up)) {
                         case SearchResult::Satisfiable:
                             save_result(assignments_copy, result);
                             result.complete = true;
