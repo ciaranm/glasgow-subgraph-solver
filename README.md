@@ -22,7 +22,7 @@ If you have queries, please contact:
 Compiling
 ---------
 
-To build, type 'make'. You will need a C++14 compiler (we use GCC 7.3) and
+To build, type 'make'. You will need a C++17 compiler (we use GCC 7.3) and
 Boost (built with threads enabled).
 
 Running
