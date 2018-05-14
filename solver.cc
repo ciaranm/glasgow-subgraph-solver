@@ -16,8 +16,6 @@
 #include <type_traits>
 #include <utility>
 
-#include <iostream>
-
 #include <boost/dynamic_bitset.hpp>
 
 using std::array;
@@ -45,9 +43,6 @@ using std::vector;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
-
-using std::cerr;
-using std::endl;
 
 using boost::dynamic_bitset;
 
@@ -684,17 +679,31 @@ namespace
 
         auto initialise_domains(Domains & domains, bool presolve) -> bool
         {
+            int graphs_to_consider = presolve ? 1 : max_graphs;
+            if ((! presolve) && params.induced) {
+                // when looking at the complement graph, if the largest degree
+                // in the pattern is smaller than the smallest degree in the
+                // target, then we're going to spend a lot of time doing
+                // nothing useful
+                auto largest_pattern_c_degree = max_element(patterns_degrees[max_graphs - 1].begin(), patterns_degrees[max_graphs - 1].end());
+                auto smallest_target_c_degree = min_element(targets_degrees[max_graphs - 1].begin(), targets_degrees[max_graphs - 1].end());
+                if (largest_pattern_c_degree != patterns_degrees[max_graphs - 1].end() &&
+                        smallest_target_c_degree != targets_degrees[max_graphs - 1].end() &&
+                        *largest_pattern_c_degree < *smallest_target_c_degree)
+                    --graphs_to_consider;
+            }
+
             /* pattern and target neighbourhood degree sequences */
-            vector<vector<vector<int> > > patterns_ndss(presolve ? 1 : max_graphs);
-            vector<vector<optional<vector<int> > > > targets_ndss(presolve ? 1 : max_graphs);
+            vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
+            vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
 
             if (! presolve) {
-                for (int g = 0 ; g < (presolve ? 1 : max_graphs) ; ++g) {
+                for (int g = 0 ; g < graphs_to_consider ; ++g) {
                     patterns_ndss.at(g).resize(pattern_size);
                     targets_ndss.at(g).resize(target_size);
                 }
 
-                for (int g = 0 ; g < (presolve ? 1 : max_graphs) ; ++g) {
+                for (int g = 0 ; g < graphs_to_consider ; ++g) {
                     for (unsigned i = 0 ; i < pattern_size ; ++i) {
                         auto ni = pattern_graph_rows[i * max_graphs + g];
                         for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
@@ -708,7 +717,7 @@ namespace
 
             auto need_nds = [&] (int i) {
                 if (! targets_ndss.at(0).at(i)) {
-                    for (int g = 0 ; g < (presolve ? 1 : max_graphs) ; ++g) {
+                    for (int g = 0 ; g < graphs_to_consider ; ++g) {
                         targets_ndss.at(g).at(i) = vector<int>{};
                         auto ni = target_graph_rows[i * max_graphs + g];
                         for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
@@ -731,7 +740,7 @@ namespace
                         if (pattern_vertex_labels[i] != target_vertex_labels[j])
                             ok = false;
 
-                    for (int g = 0 ; g < (presolve ? 1 : max_graphs) && ok ; ++g) {
+                    for (int g = 0 ; g < graphs_to_consider && ok ; ++g) {
                         if (pattern_graph_rows[i * max_graphs + g].test(i) && ! target_graph_rows[j * max_graphs + g].test(j)) {
                             // not ok, loops
                             ok = false;
