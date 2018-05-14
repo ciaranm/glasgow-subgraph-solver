@@ -24,7 +24,7 @@ namespace
 
 auto read_lad(ifstream && infile, const string & filename) -> InputGraph
 {
-    InputGraph result(0);
+    InputGraph result{ 0, false, false };
 
     result.resize(read_word(infile));
     if (! infile)
@@ -56,8 +56,7 @@ auto read_lad(ifstream && infile, const string & filename) -> InputGraph
 
 auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGraph
 {
-    InputGraph result(0);
-    map<pair<int, int>, int> edge_labels;
+    InputGraph result{ 0, true, true };
 
     result.resize(read_word(infile));
     if (! infile)
@@ -84,7 +83,7 @@ auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGrap
             if (l < 0)
                 throw GraphFileError{ filename, "edge label invalid" };
 
-            edge_labels[{ r, e }] = l;
+            result.add_directed_edge(r, e, to_string(l));
         }
     }
 
@@ -93,15 +92,6 @@ auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGrap
         throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"" };
     if (! infile.eof())
         throw GraphFileError{ filename, "EOF not reached" };
-
-    for (int r = 0 ; r < result.size() ; ++r)
-        for (int s = 0 ; s <= r ; ++s)
-            if (edge_labels.count({ r, s }) || edge_labels.count({ s, r })) {
-                string label = edge_labels.count({ r, s }) ? to_string(edge_labels[{ r, s }]) : "x";
-                label += "/";
-                label += edge_labels.count({ s, r }) ? to_string(edge_labels[{ s, r }]) : "x";
-                result.add_edge(r, s, label);
-            }
 
     return result;
 }

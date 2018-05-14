@@ -164,7 +164,7 @@ namespace
         vector<vector<int> > patterns_degrees, targets_degrees;
         int largest_target_degree;
 
-        vector<int> pattern_vertex_labels, target_vertex_labels;
+        vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
         Nogoods nogoods;
         Watches watches;
@@ -182,6 +182,9 @@ namespace
             targets_degrees(max_graphs),
             largest_target_degree(0)
         {
+            if (pattern.has_edge_labels() && ! params.induced)
+                throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
+
             // strip out isolated vertices in the pattern, and build pattern_permutation
             for (unsigned v = 0 ; v < full_pattern_size ; ++v)
                 if ((! params.induced) && (! params.enumerate) && (0 == pattern.degree(v))) {
@@ -201,15 +204,35 @@ namespace
             // re-encode and store pattern labels
             map<string, int> vertex_labels_map;
             int next_vertex_label = 0;
-            for (unsigned i = 0 ; i < pattern_size ; ++i) {
-                if (vertex_labels_map.emplace(pattern.vertex_label(i), next_vertex_label).second)
-                    ++next_vertex_label;
-            }
+            if (pattern.has_vertex_labels()) {
+                for (unsigned i = 0 ; i < pattern_size ; ++i) {
+                    if (vertex_labels_map.emplace(pattern.vertex_label(pattern_permutation.at(i)), next_vertex_label).second)
+                        ++next_vertex_label;
+                }
 
-            if (vertex_labels_map.size() > 1) {
                 pattern_vertex_labels.resize(pattern_size);
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    pattern_vertex_labels[i] = vertex_labels_map.find(string{ pattern.vertex_label(i) })->second;
+                    pattern_vertex_labels[pattern_permutation[i]] = vertex_labels_map.find(string{ pattern.vertex_label(pattern_permutation[i]) })->second;
+            }
+
+            // re-encode and store edge labels
+            map<string, int> edge_labels_map;
+            int next_edge_label = 0;
+            if (pattern.has_edge_labels()) {
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    for (unsigned j = 0 ; j < pattern_size ; ++j)
+                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j))) {
+                            if (edge_labels_map.emplace(pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)), next_edge_label).second)
+                                ++next_edge_label;
+                        }
+
+                pattern_edge_labels.resize(pattern_size * pattern_size);
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    for (unsigned j = 0 ; j < pattern_size ; ++j)
+                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j))) {
+                            pattern_edge_labels[pattern_permutation.at(i) * pattern_size + pattern_permutation.at(j)] = edge_labels_map.find(
+                                    string{ pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)) })->second;
+                        }
             }
 
             // set up space for watches
@@ -217,12 +240,12 @@ namespace
 
             // recode target to a bit graph
             target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                for (unsigned j = 0 ; j < target_size ; ++j)
-                    if (target.adjacent(i, j))
-                        target_graph_rows[i * max_graphs + 0].set(j);
+            for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
+                if (target.adjacent(e->first.first, e->first.second))
+                    target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
 
-            if (! pattern_vertex_labels.empty()) {
+            // target vertex labels
+            if (pattern.has_vertex_labels()) {
                 for (unsigned i = 0 ; i < target_size ; ++i) {
                     if (vertex_labels_map.emplace(target.vertex_label(i), next_vertex_label).second)
                         ++next_vertex_label;
@@ -231,6 +254,17 @@ namespace
                 target_vertex_labels.resize(target_size);
                 for (unsigned i = 0 ; i < target_size ; ++i)
                     target_vertex_labels[i] = vertex_labels_map.find(string{ target.vertex_label(i) })->second;
+            }
+
+            // target edge labels
+            if (pattern.has_edge_labels()) {
+                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
+                    if (edge_labels_map.emplace(e->second, next_edge_label).second)
+                        ++next_edge_label;
+
+                target_edge_labels.resize(target_size * target_size);
+                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
+                    target_edge_labels[e->first.first * target_size + e->first.second] = edge_labels_map.find(string{ e->second })->second;
             }
         }
 
@@ -339,7 +373,7 @@ namespace
         // pair loop gets unrolled, which makes an annoyingly large difference
         // to performance. Note that for larger target graphs, half of the
         // total runtime is spent in this function.
-        template <int max_graphs_>
+        template <int max_graphs_, bool has_edge_labels_>
         auto propagate_adjacency_constraints(Domain & d, const Assignment & current_assignment) -> void
         {
             auto pattern_adjacency_bits = pattern_adjacencies_bits[pattern_size * current_assignment.pattern_vertex + d.v];
@@ -350,6 +384,25 @@ namespace
                 if (pattern_adjacency_bits & (1u << g)) {
                     // ...then we can only be mapped to adjacent vertices
                     d.values &= target_graph_rows[current_assignment.target_vertex * max_graphs_ + g];
+                }
+            }
+
+            if constexpr (has_edge_labels_) {
+                // if we're adjacent in the original graph, additionally the edge labels need to match up
+                if (pattern_adjacency_bits & (1u << 0)) {
+                    auto check_d_values = d.values;
+
+                    auto want_forward_label = pattern_edge_labels.at(pattern_size * d.v + current_assignment.pattern_vertex);
+                    auto want_reverse_label = pattern_edge_labels.at(pattern_size * current_assignment.pattern_vertex + d.v);
+                    for (auto c = check_d_values.find_first() ; c != decltype(check_d_values)::npos ; c = check_d_values.find_first()) {
+                        check_d_values.reset(c);
+
+                        auto got_forward_label = target_edge_labels.at(target_size * c + current_assignment.target_vertex);
+                        auto got_reverse_label = target_edge_labels.at(target_size * current_assignment.target_vertex + c);
+
+                        if (got_forward_label != want_forward_label || got_reverse_label != want_reverse_label)
+                            d.values.reset(c);
+                    }
                 }
             }
         }
@@ -365,12 +418,23 @@ namespace
                 d.values.reset(current_assignment.target_vertex);
 
                 // adjacency
-                switch (max_graphs) {
-                    case 5: propagate_adjacency_constraints<5>(d, current_assignment); break;
-                    case 6: propagate_adjacency_constraints<6>(d, current_assignment); break;
+                if (pattern_edge_labels.empty()) {
+                    switch (max_graphs) {
+                        case 5: propagate_adjacency_constraints<5, false>(d, current_assignment); break;
+                        case 6: propagate_adjacency_constraints<6, false>(d, current_assignment); break;
 
-                    default:
-                        throw "you forgot to update the ugly max_graphs hack";
+                        default:
+                            throw "you forgot to update the ugly max_graphs hack";
+                    }
+                }
+                else {
+                    switch (max_graphs) {
+                        case 5: propagate_adjacency_constraints<5, true>(d, current_assignment); break;
+                        case 6: propagate_adjacency_constraints<6, true>(d, current_assignment); break;
+
+                        default:
+                            throw "you forgot to update the ugly max_graphs hack";
+                    }
                 }
 
                 // we might have removed values
@@ -912,5 +976,15 @@ auto sequential_subgraph_isomorphism(const pair<InputGraph, InputGraph> & graphs
         return Result{ };
 
     return select_graph_size<SIP, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
+}
+
+UnsupportedConfiguration::UnsupportedConfiguration(const string & message) throw () :
+    _what(message)
+{
+}
+
+auto UnsupportedConfiguration::what() const throw () -> const char *
+{
+    return _what.c_str();
 }
 

@@ -69,14 +69,17 @@ auto detect_format(ifstream & infile, const string & filename) -> string
             if (words.size() < 2)
                 throw GraphFileError{ filename, "unable to auto-detect file format (not enough words in a lad line)" };
 
-            unsigned items = stoi(words.at(1));
-            if (words.size() == items + 1)
+            unsigned items_if_lad = stoi(words.at(0)), items_if_labelledlad = stoi(words.at(1));
+            if (words.size() == items_if_lad + 1 && ! (words.size() == (2 * items_if_labelledlad) + 2))
                 return "lad";
-            else if (words.size() == (2 * items) + 2)
+            else if (! (words.size() == items_if_lad + 1) && (words.size() == (2 * items_if_labelledlad) + 2))
                 return "labelledlad";
+            else if ((words.size() == items_if_lad + 1) && (words.size() == (2 * items_if_labelledlad) + 2))
+                throw GraphFileError{ filename, "unable to auto-detect between lad or labelledlad" };
             else
                 throw GraphFileError{ filename, "unable to auto-detect file format (looks like lad, but got " +
-                    to_string(words.size()) + " items on a line with degree " + to_string(items) + ")" };
+                    to_string(words.size()) + " items on a line with first two elements " + to_string(items_if_lad)
+                       + " and " + to_string(items_if_labelledlad) + ")" };
         }
         else
             throw GraphFileError{ filename, "unable to auto-detect file format (looks like lad, but no edge line found)" };

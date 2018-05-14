@@ -17,7 +17,7 @@ using boost::smatch;
 
 auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
 {
-    InputGraph result{ 0 };
+    InputGraph result{ 0, false, false };
 
     string line;
     while (getline(infile, line)) {
