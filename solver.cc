@@ -12,6 +12,7 @@
 #include <map>
 #include <numeric>
 #include <random>
+#include <type_traits>
 #include <utility>
 
 #include <boost/dynamic_bitset.hpp>
@@ -21,6 +22,7 @@ using std::iota;
 using std::fill;
 using std::find_if;
 using std::greater;
+using std::is_same;
 using std::list;
 using std::max;
 using std::map;
@@ -127,17 +129,6 @@ namespace
             return data[target_size * a.pattern_vertex + a.target_vertex];
         }
     };
-
-    template <typename T_, typename array<T_, 1>::size_type n_words_>
-    auto ensure_array_is_big_enough(array<T_, n_words_> &, unsigned) -> void
-    {
-    }
-
-    template <typename T_>
-    auto ensure_array_is_big_enough(vector<T_> & v, unsigned s) -> void
-    {
-        v.resize(s);
-    }
 
     template <typename BitSetType_, typename ArrayType_>
     struct SIP
@@ -507,7 +498,8 @@ namespace
             auto remaining = branch_domain->values;
 
             ArrayType_ branch_v;
-            ensure_array_is_big_enough(branch_v, target_size);
+            if constexpr (is_same<ArrayType_, vector<int> >::value)
+                branch_v.resize(target_size);
 
             unsigned branch_v_end = 0;
             for (auto f_v = remaining.find_first() ; f_v != decltype(remaining)::npos ; f_v = remaining.find_first()) {
@@ -669,11 +661,14 @@ namespace
             // elements
             ArrayType_ first, next;
 
-            ensure_array_is_big_enough(first, target_size + 1);
+            if constexpr (is_same<ArrayType_, vector<int> >::value)
+                first.resize(target_size + 1);
             fill(first.begin(), first.begin() + domains.size() + 1, -1);
 
-            ensure_array_is_big_enough(next, target_size);
+            if constexpr (is_same<ArrayType_, vector<int> >::value)
+                next.resize(target_size);
             fill(next.begin(), next.begin() + domains.size(), -1);
+
             // Iterate backwards, because we insert elements at the head of
             // lists and we want the sort to be stable
             for (int i = int(domains.size()) - 1 ; i >= 0; --i) {
