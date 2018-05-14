@@ -16,6 +16,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <iostream>
+
 #include <boost/dynamic_bitset.hpp>
 
 using std::array;
@@ -44,6 +46,9 @@ using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
+using std::cerr;
+using std::endl;
+
 using boost::dynamic_bitset;
 
 namespace
@@ -53,6 +58,7 @@ namespace
         Aborted,
         Unsatisfiable,
         Satisfiable,
+        SatisfiableButKeepGoing,
         Restart
     };
 
@@ -221,19 +227,14 @@ namespace
             map<string, int> edge_labels_map;
             int next_edge_label = 0;
             if (pattern.has_edge_labels()) {
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    for (unsigned j = 0 ; j < pattern_size ; ++j)
-                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j))) {
-                            if (edge_labels_map.emplace(pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)), next_edge_label).second)
-                                ++next_edge_label;
-                        }
-
                 pattern_edge_labels.resize(pattern_size * pattern_size);
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
                     for (unsigned j = 0 ; j < pattern_size ; ++j)
                         if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j))) {
-                            pattern_edge_labels[pattern_permutation.at(i) * pattern_size + pattern_permutation.at(j)] = edge_labels_map.find(
-                                    string{ pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)) })->second;
+                            auto r = edge_labels_map.emplace(pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)), next_edge_label);
+                            if (r.second)
+                                ++next_edge_label;
+                            pattern_edge_labels[pattern_permutation.at(i) * pattern_size + pattern_permutation.at(j)] = r.first->second;
                         }
             }
 
@@ -261,13 +262,14 @@ namespace
 
             // target edge labels
             if (pattern.has_edge_labels()) {
-                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
-                    if (edge_labels_map.emplace(e->second, next_edge_label).second)
+                target_edge_labels.resize(target_size * target_size);
+                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
+                    auto r = edge_labels_map.emplace(e->second, next_edge_label);
+                    if (r.second)
                         ++next_edge_label;
 
-                target_edge_labels.resize(target_size * target_size);
-                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
-                    target_edge_labels[e->first.first * target_size + e->first.second] = edge_labels_map.find(string{ e->second })->second;
+                    target_edge_labels[e->first.first * target_size + e->first.second] = r.first->second;
+                }
             }
         }
 
@@ -585,7 +587,7 @@ namespace
             if (! branch_domain) {
                 if (params.enumerate) {
                     ++solution_count;
-                    return SearchResult::Unsatisfiable;
+                    return SearchResult::SatisfiableButKeepGoing;
                 }
                 else
                     return SearchResult::Satisfiable;
@@ -607,6 +609,7 @@ namespace
             softmax_shuffle(branch_v, branch_v_end);
 
             int discrepancy_count = 0;
+            bool actually_hit_a_success = false, actually_hit_a_failure = true;
 
             // for each value remaining...
             for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end ; f_v != f_end ; ++f_v) {
@@ -649,9 +652,16 @@ namespace
 
                         return SearchResult::Restart;
 
+                    case SearchResult::SatisfiableButKeepGoing:
+                        // restore assignments
+                        assignments.values.resize(assignments_size);
+                        actually_hit_a_success = true;
+                        break;
+
                     case SearchResult::Unsatisfiable:
                         // restore assignments
                         assignments.values.resize(assignments_size);
+                        actually_hit_a_failure = true;
                         break;
                 }
 
@@ -659,39 +669,43 @@ namespace
             }
 
             // no values remaining, backtrack, or possibly kick off a restart
-            if (backtracks_until_restart > 0 && 0 == --backtracks_until_restart) {
+            if (actually_hit_a_failure && backtracks_until_restart > 0 && 0 == --backtracks_until_restart) {
                 post_nogood(assignments);
                 return SearchResult::Restart;
             }
+            else if (actually_hit_a_success)
+                return SearchResult::SatisfiableButKeepGoing;
             else
                 return SearchResult::Unsatisfiable;
         }
 
-        auto initialise_domains(Domains & domains) -> bool
+        auto initialise_domains(Domains & domains, bool presolve) -> bool
         {
             /* pattern and target neighbourhood degree sequences */
-            vector<vector<vector<int> > > patterns_ndss(max_graphs);
-            vector<vector<optional<vector<int> > > > targets_ndss(max_graphs);
+            vector<vector<vector<int> > > patterns_ndss(presolve ? 1 : max_graphs);
+            vector<vector<optional<vector<int> > > > targets_ndss(presolve ? 1 : max_graphs);
 
-            for (int g = 0 ; g < max_graphs ; ++g) {
-                patterns_ndss.at(g).resize(pattern_size);
-                targets_ndss.at(g).resize(target_size);
-            }
+            if (! presolve) {
+                for (int g = 0 ; g < (presolve ? 1 : max_graphs) ; ++g) {
+                    patterns_ndss.at(g).resize(pattern_size);
+                    targets_ndss.at(g).resize(target_size);
+                }
 
-            for (int g = 0 ; g < max_graphs ; ++g) {
-                for (unsigned i = 0 ; i < pattern_size ; ++i) {
-                    auto ni = pattern_graph_rows[i * max_graphs + g];
-                    for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                        ni.reset(j);
-                        patterns_ndss.at(g).at(i).push_back(patterns_degrees.at(g).at(j));
+                for (int g = 0 ; g < (presolve ? 1 : max_graphs) ; ++g) {
+                    for (unsigned i = 0 ; i < pattern_size ; ++i) {
+                        auto ni = pattern_graph_rows[i * max_graphs + g];
+                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
+                            ni.reset(j);
+                            patterns_ndss.at(g).at(i).push_back(patterns_degrees.at(g).at(j));
+                        }
+                        sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
                     }
-                    sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
                 }
             }
 
             auto need_nds = [&] (int i) {
                 if (! targets_ndss.at(0).at(i)) {
-                    for (int g = 0 ; g < max_graphs ; ++g) {
+                    for (int g = 0 ; g < (presolve ? 1 : max_graphs) ; ++g) {
                         targets_ndss.at(g).at(i) = vector<int>{};
                         auto ni = target_graph_rows[i * max_graphs + g];
                         for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
@@ -714,16 +728,16 @@ namespace
                         if (pattern_vertex_labels[i] != target_vertex_labels[j])
                             ok = false;
 
-                    for (int g = 0 ; g < max_graphs && ok ; ++g) {
+                    for (int g = 0 ; g < (presolve ? 1 : max_graphs) && ok ; ++g) {
                         if (pattern_graph_rows[i * max_graphs + g].test(i) && ! target_graph_rows[j * max_graphs + g].test(j)) {
                             // not ok, loops
                             ok = false;
                         }
-                        else if (unsigned(targets_degrees.at(g).at(j)) < unsigned(patterns_ndss.at(g).at(i).size())) {
+                        else if (targets_degrees.at(g).at(j) < patterns_degrees.at(g).at(i)) {
                             // not ok, degrees differ
                             ok = false;
                         }
-                        else {
+                        else if (! presolve) {
                             // full compare of neighbourhood degree sequences
                             need_nds(j);
                             for (unsigned x = 0 ; ok && x < patterns_ndss.at(g).at(i).size() ; ++x) {
@@ -837,15 +851,9 @@ namespace
             result.extra_stats.push_back(where);
         }
 
-        auto run() -> Result
+        auto solve() -> Result
         {
             Result result;
-
-            if (full_pattern_size > target_size) {
-                /* some of our fixed size data structures will throw a hissy
-                 * fit. check this early. */
-                return result;
-            }
 
             build_supplemental_graphs(pattern_graph_rows, pattern_size);
             build_supplemental_graphs(target_graph_rows, target_size);
@@ -883,8 +891,10 @@ namespace
 
             // domains
             Domains domains(pattern_size, Domain{ target_size });
-            if (! initialise_domains(domains))
+            if (! initialise_domains(domains, false)) {
+                result.complete = true;
                 return result;
+            }
 
             // assignments
             Assignments assignments;
@@ -945,10 +955,20 @@ namespace
                     switch (restarting_search(assignments_copy, domains, result.nodes, result.solution_count, 0, backtracks_until_restart)) {
                         case SearchResult::Satisfiable:
                             save_result(assignments_copy, result);
+                            result.complete = true;
+                            done = true;
+                            break;
+
+                        case SearchResult::SatisfiableButKeepGoing:
+                            result.complete = true;
                             done = true;
                             break;
 
                         case SearchResult::Unsatisfiable:
+                            result.complete = true;
+                            done = true;
+                            break;
+
                         case SearchResult::Aborted:
                             done = true;
                             break;
@@ -957,8 +977,10 @@ namespace
                             break;
                     }
                 }
-                else
+                else {
+                    result.complete = true;
                     done = true;
+                }
             }
 
             if (! params.enumerate)
@@ -978,6 +1000,130 @@ namespace
                 nogoods_lengths_str += to_string(n.first) + ":" + to_string(n.second);
             }
             result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
+
+            return result;
+        }
+
+        auto presolve() -> Result
+        {
+            Result result;
+
+            // build complement graphs
+            if (params.induced) {
+                build_complement_graphs(pattern_graph_rows, pattern_size);
+                build_complement_graphs(target_graph_rows, target_size);
+            }
+
+            // pattern and target degrees, not including supplemental graphs
+            patterns_degrees.at(0).resize(pattern_size);
+            targets_degrees.at(0).resize(target_size);
+
+            for (unsigned i = 0 ; i < pattern_size ; ++i)
+                patterns_degrees.at(0).at(i) = pattern_graph_rows[i * max_graphs + 0].count();
+
+            for (unsigned i = 0 ; i < target_size ; ++i)
+                targets_degrees.at(0).at(i) = target_graph_rows[i * max_graphs + 0].count();
+
+            for (unsigned i = 0 ; i < target_size ; ++i)
+                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
+
+            // pattern adjacencies, compressed
+            pattern_adjacencies_bits.resize(pattern_size * pattern_size);
+            for (unsigned i = 0 ; i < pattern_size ; ++i)
+                for (unsigned j = 0 ; j < pattern_size ; ++j)
+                    if (pattern_graph_rows[i * max_graphs + 0].test(j))
+                        pattern_adjacencies_bits[i * pattern_size + j] |= (1u << 0);
+
+            // domains
+            Domains domains(pattern_size, Domain{ target_size });
+            if (! initialise_domains(domains, true)) {
+                result.complete = true;
+                return result;
+            }
+
+            // assignments
+            Assignments assignments;
+            assignments.values.reserve(pattern_size);
+
+            // start search timer
+            auto search_start_time = steady_clock::now();
+
+            // do just a little bit of search
+            bool done = false;
+
+            for (int pass = 0 ; pass < (params.enumerate ? 1 : 100) && ! done ; ++pass) {
+                auto assignments_copy = assignments;
+                long long backtracks_until_give_up = (params.enumerate ? 1000 : 10);
+                if (propagate(domains, assignments_copy)) {
+                    switch (restarting_search(assignments_copy, domains, result.nodes, result.solution_count, 0, backtracks_until_give_up)) {
+                        case SearchResult::Satisfiable:
+                            save_result(assignments_copy, result);
+                            result.complete = true;
+                            done = true;
+                            break;
+
+                        case SearchResult::SatisfiableButKeepGoing:
+                            result.complete = true;
+                            done = true;
+                            break;
+
+                        case SearchResult::Unsatisfiable:
+                            result.complete = true;
+                            done = true;
+                            break;
+
+                        case SearchResult::Aborted:
+                            done = true;
+                            break;
+
+                        case SearchResult::Restart:
+                            break;
+                    }
+                }
+                else {
+                    result.complete = true;
+                    done = true;
+                }
+            }
+
+            result.extra_stats.emplace_back("search_time = " + to_string(
+                        duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+
+            return result;
+        }
+
+        auto run() -> Result
+        {
+            if (full_pattern_size > target_size) {
+                /* some of our fixed size data structures will throw a hissy
+                 * fit. check this early. */
+                Result result;
+                result.extra_stats.emplace_back("prepresolved = true");
+                return result;
+            }
+
+            Result presolve_result;
+            auto presolve_start_time = steady_clock::now();
+
+            if (params.presolve) {
+                presolve_result = presolve();
+                if (presolve_result.complete)
+                    presolve_result.extra_stats.emplace_back("presolved = true");
+            }
+
+            auto presolve_time = duration_cast<milliseconds>(steady_clock::now() - presolve_start_time).count();
+
+            if (presolve_result.complete)
+                return presolve_result;
+
+            Result result = solve();
+
+            if (params.presolve) {
+                for (auto & s : presolve_result.extra_stats)
+                    result.extra_stats.emplace_back("presolve_" + s);
+                result.extra_stats.emplace_back("presolved = false");
+                result.extra_stats.emplace_back("presolve_time = " + to_string(presolve_time));
+            }
 
             return result;
         }

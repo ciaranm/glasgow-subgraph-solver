@@ -111,7 +111,8 @@ auto main(int argc, char * argv[]) -> int
             ("timeout",            po::value<int>(),         "Abort after this many seconds")
             ("format",             po::value<std::string>(), "Specify input file format (auto, lad, labelledlad, dimacs)")
             ("induced",                                      "Solve the induced version")
-            ("enumerate",                                    "Count the number of solutions");
+            ("enumerate",                                    "Count the number of solutions")
+            ("presolve",                                     "Try presolving (hacky, experimental, possibly useful for easy instances");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -155,6 +156,7 @@ auto main(int argc, char * argv[]) -> int
 
         params.induced = options_vars.count("induced");
         params.enumerate = options_vars.count("enumerate");
+        params.presolve = options_vars.count("presolve");
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))

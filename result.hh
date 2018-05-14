@@ -20,6 +20,9 @@ struct Result
 
     /// Number of solutions, only if enumerating
     unsigned long long solution_count = 0;
+
+    /// Did we perform a complete search?
+    bool complete = false;
 };
 
 #endif

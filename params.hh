@@ -21,6 +21,9 @@ struct Params
     /// Enumerate?
     bool enumerate = false;
 
+    /// Presolve?
+    bool presolve = false;
+
     /// Default chosen by SMAC
     static constexpr unsigned long long dodgy_default_magic_luby_multiplier = 660;
 
