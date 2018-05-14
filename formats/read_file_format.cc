@@ -33,7 +33,7 @@ auto detect_format(ifstream & infile, const string & filename) -> string
         lad_header{ R"(\d+)" },
         lad_zero_labelled_line{ R"(0 \d+)" },
         lad_zero_unlabelled_line{ R"(0)" },
-        lad_line{ R"([1-9]\d*\s+(\d+\s+)*\d+\s*)" };
+        lad_line{ R"(\d+\s+(\d+\s+)*\d+\s*)" };
 
     smatch match;
     if (regex_match(line, match, dimacs_comment)) {
