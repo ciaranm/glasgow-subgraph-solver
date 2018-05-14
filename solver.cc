@@ -11,6 +11,7 @@
 #include <list>
 #include <map>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <type_traits>
 #include <utility>
@@ -30,6 +31,7 @@ using std::move;
 using std::mt19937;
 using std::next;
 using std::numeric_limits;
+using std::optional;
 using std::pair;
 using std::sort;
 using std::string;
@@ -665,7 +667,7 @@ namespace
         {
             /* pattern and target neighbourhood degree sequences */
             vector<vector<vector<int> > > patterns_ndss(max_graphs);
-            vector<vector<vector<int> > > targets_ndss(max_graphs);
+            vector<vector<optional<vector<int> > > > targets_ndss(max_graphs);
 
             for (int g = 0 ; g < max_graphs ; ++g) {
                 patterns_ndss.at(g).resize(pattern_size);
@@ -681,16 +683,21 @@ namespace
                     }
                     sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
                 }
-
-                for (unsigned i = 0 ; i < target_size ; ++i) {
-                    auto ni = target_graph_rows[i * max_graphs + g];
-                    for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                        ni.reset(j);
-                        targets_ndss.at(g).at(i).push_back(targets_degrees.at(g).at(j));
-                    }
-                    sort(targets_ndss.at(g).at(i).begin(), targets_ndss.at(g).at(i).end(), greater<int>());
-                }
             }
+
+            auto need_nds = [&] (int i) {
+                if (! targets_ndss.at(0).at(i)) {
+                    for (int g = 0 ; g < max_graphs ; ++g) {
+                        targets_ndss.at(g).at(i) = vector<int>{};
+                        auto ni = target_graph_rows[i * max_graphs + g];
+                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
+                            ni.reset(j);
+                            targets_ndss.at(g).at(i)->push_back(targets_degrees.at(g).at(j));
+                        }
+                        sort(targets_ndss.at(g).at(i)->begin(), targets_ndss.at(g).at(i)->end(), greater<int>());
+                    }
+                }
+            };
 
             for (unsigned i = 0 ; i < pattern_size ; ++i) {
                 domains.at(i).v = i;
@@ -708,14 +715,15 @@ namespace
                             // not ok, loops
                             ok = false;
                         }
-                        else if (targets_ndss.at(g).at(j).size() < patterns_ndss.at(g).at(i).size()) {
+                        else if (unsigned(targets_degrees.at(g).at(j)) < unsigned(patterns_ndss.at(g).at(i).size())) {
                             // not ok, degrees differ
                             ok = false;
                         }
                         else {
                             // full compare of neighbourhood degree sequences
+                            need_nds(j);
                             for (unsigned x = 0 ; ok && x < patterns_ndss.at(g).at(i).size() ; ++x) {
-                                if (targets_ndss.at(g).at(j).at(x) < patterns_ndss.at(g).at(i).at(x))
+                                if (targets_ndss.at(g).at(j)->at(x) < patterns_ndss.at(g).at(i).at(x))
                                     ok = false;
                             }
                         }
