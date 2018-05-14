@@ -5,7 +5,6 @@
 
 #include "formats/input_graph.hh"
 #include "formats/graph_file_error.hh"
-#include "formats/labels_map.hh"
 
 #include <string>
 
@@ -21,6 +20,6 @@ auto detect_file_format(std::ifstream & infile, const std::string & filename) ->
  *
  * \throw GraphFileError
  */
-auto read_file_format(const std::string & format, const std::string & filename, LabelsMap & labels_map) -> InputGraph;
+auto read_file_format(const std::string & format, const std::string & filename) -> InputGraph;
 
 #endif

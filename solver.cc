@@ -164,6 +164,8 @@ namespace
         vector<vector<int> > patterns_degrees, targets_degrees;
         int largest_target_degree;
 
+        vector<int> pattern_vertex_labels, target_vertex_labels;
+
         Nogoods nogoods;
         Watches watches;
         list<typename Nogoods::iterator> need_to_watch;
@@ -196,6 +198,20 @@ namespace
                     if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
                         pattern_graph_rows[i * max_graphs + 0].set(j);
 
+            // re-encode and store pattern labels
+            map<string, int> vertex_labels_map;
+            int next_vertex_label = 0;
+            for (unsigned i = 0 ; i < pattern_size ; ++i) {
+                if (vertex_labels_map.emplace(pattern.vertex_label(i), next_vertex_label).second)
+                    ++next_vertex_label;
+            }
+
+            if (vertex_labels_map.size() > 1) {
+                pattern_vertex_labels.resize(pattern_size);
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    pattern_vertex_labels[i] = vertex_labels_map.find(string{ pattern.vertex_label(i) })->second;
+            }
+
             // set up space for watches
             watches.initialise(pattern_size, target_size);
 
@@ -205,6 +221,17 @@ namespace
                 for (unsigned j = 0 ; j < target_size ; ++j)
                     if (target.adjacent(i, j))
                         target_graph_rows[i * max_graphs + 0].set(j);
+
+            if (! pattern_vertex_labels.empty()) {
+                for (unsigned i = 0 ; i < target_size ; ++i) {
+                    if (vertex_labels_map.emplace(target.vertex_label(i), next_vertex_label).second)
+                        ++next_vertex_label;
+                }
+
+                target_vertex_labels.resize(target_size);
+                for (unsigned i = 0 ; i < target_size ; ++i)
+                    target_vertex_labels[i] = vertex_labels_map.find(string{ target.vertex_label(i) })->second;
+            }
         }
 
         template <typename PossiblySomeOtherBitSetType_>
@@ -608,7 +635,11 @@ namespace
                 for (unsigned j = 0 ; j < target_size ; ++j) {
                     bool ok = true;
 
-                    for (int g = 0 ; g < max_graphs ; ++g) {
+                    if (! pattern_vertex_labels.empty())
+                        if (pattern_vertex_labels[i] != target_vertex_labels[j])
+                            ok = false;
+
+                    for (int g = 0 ; g < max_graphs && ok ; ++g) {
                         if (pattern_graph_rows[i * max_graphs + g].test(i) && ! target_graph_rows[j * max_graphs + g].test(j)) {
                             // not ok, loops
                             ok = false;
@@ -624,9 +655,6 @@ namespace
                                     ok = false;
                             }
                         }
-
-                        if (! ok)
-                            break;
                     }
 
                     if (ok)

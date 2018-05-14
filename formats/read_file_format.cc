@@ -85,7 +85,7 @@ auto detect_format(ifstream & infile, const string & filename) -> string
     throw GraphFileError{ filename, "unable to auto-detect file format (no recognisable header found)" };
 }
 
-auto read_file_format(const string & format, const string & filename, LabelsMap & labels_map) -> InputGraph
+auto read_file_format(const string & format, const string & filename) -> InputGraph
 {
     ifstream infile{ filename };
     if (! infile)
@@ -104,7 +104,7 @@ auto read_file_format(const string & format, const string & filename, LabelsMap 
     else if (actual_format == "lad")
         return read_lad(move(infile), filename);
     else if (actual_format == "labelledlad")
-        return read_labelled_lad(move(infile), filename, labels_map);
+        return read_labelled_lad(move(infile), filename);
     else
         throw GraphFileError{ filename, "Unknown file format '" + format + "'" };
 }

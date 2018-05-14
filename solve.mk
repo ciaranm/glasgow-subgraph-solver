@@ -6,7 +6,6 @@ SOURCES := \
     formats/lad.cc \
     formats/dimacs.cc \
     formats/read_file_format.cc \
-    formats/labels_map.cc \
     solver.cc \
     fixed_bit_set.cc \
     solve_subgraph_isomorphism.cc

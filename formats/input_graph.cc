@@ -4,11 +4,13 @@
 
 #include <algorithm>
 #include <limits>
+#include <string_view>
 
 using std::distance;
 using std::numeric_limits;
 using std::make_pair;
 using std::max;
+using std::string_view;
 
 InputGraph::InputGraph(int size)
 {
@@ -22,7 +24,7 @@ auto InputGraph::resize(int size) -> void
     _vertex_labels.resize(size);
 }
 
-auto InputGraph::add_edge(int a, int b, int label) -> void
+auto InputGraph::add_edge(int a, int b, string_view label) -> void
 {
     _edges.emplace(make_pair(a, b), label);
     _edges.emplace(make_pair(b, a), label);
@@ -45,9 +47,13 @@ auto InputGraph::degree(int a) const -> int
     return distance(lower, upper);
 }
 
-auto InputGraph::set_vertex_label(int v, int l) -> void
+auto InputGraph::set_vertex_label(int v, string_view l) -> void
 {
     _vertex_labels[v] = l;
-    _last_vertex_label = max(_last_vertex_label, l);
+}
+
+auto InputGraph::vertex_label(int v) const -> string_view
+{
+    return _vertex_labels[v];
 }
 
