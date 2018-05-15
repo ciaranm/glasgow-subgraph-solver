@@ -202,6 +202,7 @@ auto main(int argc, char * argv[]) -> int
             cout << "solution_count = " << result.solution_count << endl;
 
         cout << "nodes = " << result.nodes << endl;
+        cout << "propagations = " << result.propagations << endl;
 
         if (! result.isomorphism.empty()) {
             cout << "mapping = ";

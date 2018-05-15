@@ -78,6 +78,7 @@ namespace
         Assignment assignment;
         bool is_decision;
         int discrepancy_count;
+        int choice_count;
     };
 
     struct Assignments
@@ -460,7 +461,7 @@ namespace
 
                 // ok, make the assignment
                 branch_domain->fixed = true;
-                assignments.values.push_back({ current_assignment, false, -1 });
+                assignments.values.push_back({ current_assignment, false, -1, -1 });
 
                 // propagate watches
                 if (! propagate_watches(new_domains, assignments, current_assignment))
@@ -571,6 +572,7 @@ namespace
                 Assignments & assignments,
                 const Domains & domains,
                 unsigned long long & nodes,
+                unsigned long long & propagations,
                 unsigned long long & solution_count,
                 int depth,
                 long long & backtracks_until_restart) -> SearchResult
@@ -615,12 +617,13 @@ namespace
                 auto assignments_size = assignments.values.size();
 
                 // make the assignment
-                assignments.values.push_back({ { branch_domain->v, unsigned(*f_v) }, true, discrepancy_count });
+                assignments.values.push_back({ { branch_domain->v, unsigned(*f_v) }, true, discrepancy_count, int(branch_v_end) });
 
                 // set up new domains
                 Domains new_domains = prepare_domains(domains, branch_domain->v, *f_v);
 
                 // propagate
+                ++propagations;
                 if (! propagate(new_domains, assignments)) {
                     // failure? restore assignments and go on to the next thing
                     assignments.values.resize(assignments_size);
@@ -628,7 +631,8 @@ namespace
                 }
 
                 // recursive search
-                auto search_result = restarting_search(assignments, new_domains, nodes, solution_count, depth + 1, backtracks_until_restart);
+                auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
+                        solution_count, depth + 1, backtracks_until_restart);
 
                 switch (search_result) {
                     case SearchResult::Satisfiable:
@@ -643,7 +647,7 @@ namespace
 
                         // post nogoods for everything we've done so far
                         for (auto l = branch_v.begin() ; l != f_v ; ++l) {
-                            assignments.values.push_back({ { branch_domain->v, unsigned(*l) }, true, -2 });
+                            assignments.values.push_back({ { branch_domain->v, unsigned(*l) }, true, -2, -2 });
                             post_nogood(assignments);
                             assignments.values.pop_back();
                         }
@@ -859,7 +863,7 @@ namespace
 
             string where = "where =";
             for (auto & a : assignments.values)
-                where.append(" " + to_string(a.discrepancy_count));
+                where.append(" " + to_string(a.discrepancy_count) + "/" + to_string(a.choice_count));
             result.extra_stats.push_back(where);
         }
 
@@ -961,10 +965,12 @@ namespace
                 if (done)
                     break;
 
+                ++result.propagations;
                 if (propagate(domains, assignments)) {
                     auto assignments_copy = assignments;
 
-                    switch (restarting_search(assignments_copy, domains, result.nodes, result.solution_count, 0, backtracks_until_restart)) {
+                    switch (restarting_search(assignments_copy, domains, result.nodes, result.propagations,
+                                result.solution_count, 0, backtracks_until_restart)) {
                         case SearchResult::Satisfiable:
                             save_result(assignments_copy, result);
                             result.complete = true;
@@ -1067,8 +1073,10 @@ namespace
                 auto assignments_copy = assignments;
                 auto domains_copy = domains;
                 long long backtracks_until_give_up = (params.enumerate ? 1000 : 10);
+                ++result.propagations;
                 if (propagate(domains_copy, assignments_copy)) {
-                    switch (restarting_search(assignments_copy, domains_copy, result.nodes, result.solution_count, 0, backtracks_until_give_up)) {
+                    switch (restarting_search(assignments_copy, domains_copy, result.nodes, result.propagations,
+                                result.solution_count, 0, backtracks_until_give_up)) {
                         case SearchResult::Satisfiable:
                             save_result(assignments_copy, result);
                             result.complete = true;

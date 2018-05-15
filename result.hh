@@ -12,8 +12,11 @@ struct Result
     /// The isomorphism, empty if none found.
     std::map<int, int> isomorphism;
 
-    /// Total number of nodes processed.
+    /// Total number of nodes processed (recursive calls).
     unsigned long long nodes = 0;
+
+    /// Number of times propagate called.
+    unsigned long long propagations;
 
     /// Extra stats, to output
     std::list<std::string> extra_stats;
