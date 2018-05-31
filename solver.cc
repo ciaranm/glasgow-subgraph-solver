@@ -491,7 +491,7 @@ namespace
             return result;
         }
 
-        auto prepare_domains(
+        auto copy_nonfixed_domains_and_make_assignment(
                 const Domains & domains,
                 unsigned branch_v,
                 unsigned f_v) -> Domains
@@ -620,7 +620,7 @@ namespace
                 assignments.values.push_back({ { branch_domain->v, unsigned(*f_v) }, true, discrepancy_count, int(branch_v_end) });
 
                 // set up new domains
-                Domains new_domains = prepare_domains(domains, branch_domain->v, *f_v);
+                Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
 
                 // propagate
                 ++propagations;
