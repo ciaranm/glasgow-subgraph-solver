@@ -1048,9 +1048,12 @@ namespace
             // pattern adjacencies, compressed
             pattern_adjacencies_bits.resize(pattern_size * pattern_size);
             for (unsigned i = 0 ; i < pattern_size ; ++i)
-                for (unsigned j = 0 ; j < pattern_size ; ++j)
+                for (unsigned j = 0 ; j < pattern_size ; ++j) {
                     if (pattern_graph_rows[i * max_graphs + 0].test(j))
                         pattern_adjacencies_bits[i * pattern_size + j] |= (1u << 0);
+                    if (params.induced && pattern_graph_rows[i * max_graphs + 5].test(j))
+                        pattern_adjacencies_bits[i * pattern_size + j] |= (1u << (max_graphs - 1));
+                }
 
             // domains
             Domains domains(pattern_size, Domain{ target_size });
