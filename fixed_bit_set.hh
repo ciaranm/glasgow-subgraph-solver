@@ -128,9 +128,10 @@ class FixedBitSet
         auto find_first() const -> unsigned
         {
             for (typename Bits::size_type i = 0 ; i < _bits.size() ; ++i) {
-                int b = __builtin_ffsll(_bits[i]);
-                if (0 != b)
-                    return i * bits_per_word + b - 1;
+                if (_bits[i]) {
+                    int b = __builtin_ctzll(_bits[i]);
+                    return i * bits_per_word + b;
+                }
             }
             return npos;
         }
