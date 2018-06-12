@@ -612,10 +612,9 @@ namespace
                 branch_v.resize(target_size);
 
             unsigned branch_v_end = 0;
-            for (auto f_v = remaining.find_first() ; f_v != decltype(remaining)::npos ; f_v = remaining.find_first()) {
-                remaining.reset(f_v);
+            for_each_in_bitset(remaining, [&branch_v,&branch_v_end](auto f_v){
                 branch_v[branch_v_end++] = f_v;
-            }
+            });
 
             softmax_shuffle(branch_v, branch_v_end);
 
