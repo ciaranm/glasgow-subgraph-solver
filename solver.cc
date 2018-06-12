@@ -304,21 +304,16 @@ namespace
                         }
                     });
                 });
-                for (int p=1; p<=max_p; p++) {
-                    graph_rows[v * max_graphs + p].reset(v);  // zeros on main diagonal
-                }
             }
         }
 
         template <typename PossiblySomeOtherBitSetType_>
         auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
         {
-            for (unsigned v = 0 ; v < size ; ++v) {
+            for (unsigned v = 0 ; v < size ; ++v)
                 for (unsigned w = 0 ; w < size ; ++w)
                     if (! graph_rows[v * max_graphs + 0].test(w))
                         graph_rows[v * max_graphs + 5].set(w);
-                graph_rows[v * max_graphs + 5].reset(v);     // zeros on main diagonal
-            }
         }
 
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
@@ -728,7 +723,7 @@ namespace
                 }
             }
 
-            vector<int> target_deg_counts(target_size);
+            vector<int> target_deg_counts(target_size + 1);
             auto need_nds = [&] (int i) {
                 if (! targets_ndss.at(0).at(i)) {
                     for (int g = 0 ; g < graphs_to_consider ; ++g) {
