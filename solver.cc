@@ -313,10 +313,12 @@ namespace
         template <typename PossiblySomeOtherBitSetType_>
         auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
         {
-            for (unsigned v = 0 ; v < size ; ++v)
+            for (unsigned v = 0 ; v < size ; ++v) {
                 for (unsigned w = 0 ; w < size ; ++w)
                     if (! graph_rows[v * max_graphs + 0].test(w))
                         graph_rows[v * max_graphs + 5].set(w);
+                graph_rows[v * max_graphs + 5].reset(v);     // zeros on main diagonal
+            }
         }
 
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
@@ -719,25 +721,33 @@ namespace
                 for (int g = 0 ; g < graphs_to_consider ; ++g) {
                     for (unsigned i = 0 ; i < pattern_size ; ++i) {
                         auto ni = pattern_graph_rows[i * max_graphs + g];
-                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                            ni.reset(j);
+                        for_each_in_bitset(ni, [this,i,g,&patterns_ndss](auto j){
                             patterns_ndss.at(g).at(i).push_back(patterns_degrees.at(g).at(j));
-                        }
+                        });
                         sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
                     }
                 }
             }
 
+            vector<int> target_deg_counts(target_size);
             auto need_nds = [&] (int i) {
                 if (! targets_ndss.at(0).at(i)) {
                     for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                        // do a counting sort of the degrees
+                        std::fill(target_deg_counts.begin(), target_deg_counts.end(), 0);
+                        int largest_deg_seen = -1;
+                        auto & ni = target_graph_rows[i * max_graphs + g];
+                        for_each_in_bitset(ni, [this,&g,&target_deg_counts,&largest_deg_seen](unsigned j){
+                            int deg = targets_degrees.at(g).at(j);
+                            if (deg > largest_deg_seen)
+                                largest_deg_seen = deg;
+                            ++target_deg_counts.at(deg);
+                        });
                         targets_ndss.at(g).at(i) = vector<int>{};
-                        auto ni = target_graph_rows[i * max_graphs + g];
-                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                            ni.reset(j);
-                            targets_ndss.at(g).at(i)->push_back(targets_degrees.at(g).at(j));
-                        }
-                        sort(targets_ndss.at(g).at(i)->begin(), targets_ndss.at(g).at(i)->end(), greater<int>());
+                        targets_ndss.at(g).at(i)->reserve(ni.count());
+                        for (int j=largest_deg_seen; j>=0; j--)
+                            for (int k=0; k<target_deg_counts[j]; k++)
+                                targets_ndss.at(g).at(i)->push_back(j);
                     }
                 }
             };
