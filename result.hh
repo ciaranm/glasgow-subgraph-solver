@@ -16,7 +16,7 @@ struct Result
     unsigned long long nodes = 0;
 
     /// Number of times propagate called.
-    unsigned long long propagations;
+    unsigned long long propagations = 0;
 
     /// Extra stats, to output
     std::list<std::string> extra_stats;

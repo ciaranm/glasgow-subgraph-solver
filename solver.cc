@@ -502,7 +502,7 @@ namespace
             return result;
         }
 
-        auto prepare_domains(
+        auto copy_nonfixed_domains_and_make_assignment(
                 const Domains & domains,
                 unsigned branch_v,
                 unsigned f_v) -> Domains
@@ -630,7 +630,7 @@ namespace
                 assignments.values.push_back({ { branch_domain->v, unsigned(*f_v) }, true, discrepancy_count, int(branch_v_end) });
 
                 // set up new domains
-                Domains new_domains = prepare_domains(domains, branch_domain->v, *f_v);
+                Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
 
                 // propagate
                 ++propagations;
@@ -762,12 +762,16 @@ namespace
                         if (pattern_vertex_labels[i] != target_vertex_labels[j])
                             ok = false;
 
-                    for (int g = 0 ; g < graphs_to_consider && ok ; ++g) {
+                    // check for loops
+                    for (int g = 0 ; g < max_graphs && ok ; ++g) {
                         if (pattern_graph_rows[i * max_graphs + g].test(i) && ! target_graph_rows[j * max_graphs + g].test(j)) {
-                            // not ok, loops
                             ok = false;
                         }
-                        else if (targets_degrees.at(g).at(j) < patterns_degrees.at(g).at(i)) {
+                    }
+
+                    // check degree-like things
+                    for (int g = 0 ; g < graphs_to_consider && ok ; ++g) {
+                        if (targets_degrees.at(g).at(j) < patterns_degrees.at(g).at(i)) {
                             // not ok, degrees differ
                             ok = false;
                         }
@@ -1066,9 +1070,12 @@ namespace
             // pattern adjacencies, compressed
             pattern_adjacencies_bits.resize(pattern_size * pattern_size);
             for (unsigned i = 0 ; i < pattern_size ; ++i)
-                for (unsigned j = 0 ; j < pattern_size ; ++j)
+                for (unsigned j = 0 ; j < pattern_size ; ++j) {
                     if (pattern_graph_rows[i * max_graphs + 0].test(j))
                         pattern_adjacencies_bits[i * pattern_size + j] |= (1u << 0);
+                    if (params.induced && pattern_graph_rows[i * max_graphs + 5].test(j))
+                        pattern_adjacencies_bits[i * pattern_size + j] |= (1u << 5);
+                }
 
             // domains
             Domains domains(pattern_size, Domain{ target_size });
