@@ -287,31 +287,25 @@ namespace
         template <typename PossiblySomeOtherBitSetType_>
         auto build_supplemental_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
         {
-            vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
+            ArrayType_ path_counts;
 
-            // count number of paths from w to v (only w >= v, so not v to w)
-            for (unsigned v = 0 ; v < size ; ++v) {
-                auto nv = graph_rows[v * max_graphs + 0];
-                for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
-                    nv.reset(c);
-                    auto nc = graph_rows[c * max_graphs + 0];
-                    for (auto w = nc.find_first() ; w != decltype(nc)::npos && w <= v ; w = nc.find_first()) {
-                        nc.reset(w);
-                        ++path_counts[v][w];
-                    }
-                }
-            }
+            const constexpr int max_p = 4;
 
+            // count number of two-edge paths from v to w
             for (unsigned v = 0 ; v < size ; ++v) {
-                for (unsigned w = v ; w < size ; ++w) {
-                    // w to v, not v to w, see above
-                    unsigned path_count = path_counts[w][v];
-                    for (unsigned p = 1 ; p <= 4 ; ++p) {
-                        if (path_count >= p) {
-                            graph_rows[v * max_graphs + p].set(w);
-                            graph_rows[w * max_graphs + p].set(v);
+                std::fill(path_counts.begin(), std::next(path_counts.begin(), size), 0);
+                const auto & nv = graph_rows[v * max_graphs + 0];
+                for_each_in_bitset(nv, [this,&path_counts,&graph_rows,v](unsigned c){
+                    const auto & nc = graph_rows[c * max_graphs + 0];
+                    for_each_in_bitset(nc, [this,&path_counts,&graph_rows,v](unsigned w){
+                        if (path_counts[w] < max_p) {
+                            ++path_counts[w];
+                            graph_rows[v * max_graphs + path_counts[w]].set(w);
                         }
-                    }
+                    });
+                });
+                for (int p=1; p<=max_p; p++) {
+                    graph_rows[v * max_graphs + p].reset(v);  // zeros on main diagonal
                 }
             }
         }
