@@ -176,6 +176,21 @@ namespace
 
         mt19937 global_rand;
 
+        template <typename B, typename F>
+        auto for_each_in_bitset(B& bitset, F f) -> void
+        {
+            bitset.for_each(f);
+        }
+
+        template <typename F>
+        auto for_each_in_bitset(dynamic_bitset<> bitset, F f) -> void
+        {
+            for (auto v = bitset.find_first() ; v != decltype(bitset)::npos ; v = bitset.find_first()) {
+                bitset.reset(v);
+                f(v);
+            }
+        }
+
         SIP(const InputGraph & target, const InputGraph & pattern, const Params & a) :
             params(a),
             max_graphs(5 + (params.induced ? 1 : 0)),

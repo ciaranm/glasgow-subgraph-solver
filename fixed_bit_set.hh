@@ -135,6 +135,20 @@ class FixedBitSet
             }
             return npos;
         }
+
+        template<typename F>
+        auto for_each(F f) const -> void
+        {
+            for (typename Bits::size_type i = 0 ; i < _bits.size() ; ++i) {
+                auto word = _bits[i];
+                while (word) {
+                    int b = __builtin_ctzll(word);
+                    word ^= BitWord(1) << b;
+                    unsigned v = i * bits_per_word + b;
+                    f(v);
+                }
+            }
+        }
 };
 
 #endif
