@@ -5,6 +5,7 @@ SOURCES := \
     formats/graph_file_error.cc \
     formats/lad.cc \
     formats/dimacs.cc \
+    formats/csv.cc \
     formats/read_file_format.cc \
     solver.cc \
     fixed_bit_set.cc \
