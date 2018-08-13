@@ -110,6 +110,8 @@ auto main(int argc, char * argv[]) -> int
             ("help",                                         "Display help information")
             ("timeout",            po::value<int>(),         "Abort after this many seconds")
             ("format",             po::value<std::string>(), "Specify input file format (auto, lad, labelledlad, dimacs)")
+            ("pattern-format",     po::value<std::string>(), "Specify input file format just for the pattern graph")
+            ("target-format",      po::value<std::string>(), "Specify input file format just for the target graph")
             ("induced",                                      "Solve the induced version")
             ("enumerate",                                    "Count the number of solutions")
             ("presolve",                                     "Try presolving (hacky, experimental, possibly useful for easy instances");
@@ -170,10 +172,12 @@ auto main(int argc, char * argv[]) -> int
         cout << "started_at = " << put_time(localtime(&started_at), "%F %T") << endl;
 
         /* Read in the graphs */
-        string format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
+        string default_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
+        string pattern_format_name = options_vars.count("pattern-format") ? options_vars["pattern-format"].as<string>() : default_format_name;
+        string target_format_name = options_vars.count("target-format") ? options_vars["target-format"].as<string>() : default_format_name;
         auto graphs = make_pair(
-            read_file_format(format_name, options_vars["pattern-file"].as<string>()),
-            read_file_format(format_name, options_vars["target-file"].as<string>()));
+            read_file_format(pattern_format_name, options_vars["pattern-file"].as<string>()),
+            read_file_format(target_format_name, options_vars["target-file"].as<string>()));
 
         cout << "pattern_file = " << options_vars["pattern-file"].as<std::string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<std::string>() << endl;
