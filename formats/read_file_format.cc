@@ -33,7 +33,8 @@ auto detect_format(ifstream & infile, const string & filename) -> string
         lad_header{ R"(\d+)" },
         lad_zero_labelled_line{ R"(0 \d+)" },
         lad_zero_unlabelled_line{ R"(0)" },
-        lad_line{ R"(\d+\s+(\d+\s+)*\d+\s*)" };
+        lad_line{ R"(\d+\s+(\d+\s+)*\d+\s*)" },
+        csv_problem{ R"(\S+,\S+)" };
 
     smatch match;
     if (regex_match(line, match, dimacs_comment)) {
@@ -84,6 +85,8 @@ auto detect_format(ifstream & infile, const string & filename) -> string
         else
             throw GraphFileError{ filename, "unable to auto-detect file format (looks like lad, but no edge line found)" };
     }
+    else if (regex_match(line, match, csv_problem))
+        return "csv";
 
     throw GraphFileError{ filename, "unable to auto-detect file format (no recognisable header found)" };
 }
