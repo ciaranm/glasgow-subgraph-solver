@@ -13,6 +13,7 @@ using std::regex;
 using std::smatch;
 using std::stoi;
 using std::string;
+using std::to_string;
 
 auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
 {
@@ -55,6 +56,9 @@ auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
 
     if (! infile.eof())
         throw GraphFileError{ filename, "error reading file" };
+
+    for (int v = 0 ; v < result.size() ; ++v)
+        result.set_vertex_label(v, to_string(v + 1));
 
     return result;
 }
