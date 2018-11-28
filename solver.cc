@@ -52,6 +52,226 @@ using boost::dynamic_bitset;
 
 namespace
 {
+    template <typename BitSetType_, typename ArrayType_>
+    struct SIPModel
+    {
+        const int max_graphs;
+        unsigned pattern_size, full_pattern_size, target_size;
+
+        vector<uint8_t> pattern_adjacencies_bits;
+        vector<dynamic_bitset<> > pattern_graph_rows;
+        vector<BitSetType_> target_graph_rows;
+
+        vector<int> pattern_permutation, isolated_vertices;
+        vector<vector<int> > patterns_degrees, targets_degrees;
+        int largest_target_degree;
+
+        vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
+
+        SIPModel(const InputGraph & target, const InputGraph & pattern, const Params & params) :
+            max_graphs(5 + (params.induced ? 1 : 0)),
+            pattern_size(pattern.size()),
+            full_pattern_size(pattern.size()),
+            target_size(target.size()),
+            patterns_degrees(max_graphs),
+            targets_degrees(max_graphs),
+            largest_target_degree(0)
+        {
+            if (pattern.has_edge_labels() && ! params.induced)
+                throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
+
+            // strip out isolated vertices in the pattern, and build pattern_permutation
+            for (unsigned v = 0 ; v < full_pattern_size ; ++v)
+                if ((! params.induced) && (! params.enumerate) && (0 == pattern.degree(v))) {
+                    isolated_vertices.push_back(v);
+                    --pattern_size;
+                }
+                else
+                    pattern_permutation.push_back(v);
+
+            // recode pattern to a bit graph
+            pattern_graph_rows.resize(pattern_size * max_graphs, dynamic_bitset<>(pattern_size));
+            for (unsigned i = 0 ; i < pattern_size ; ++i)
+                for (unsigned j = 0 ; j < pattern_size ; ++j)
+                    if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
+                        pattern_graph_rows[i * max_graphs + 0].set(j);
+
+            // re-encode and store pattern labels
+            map<string, int> vertex_labels_map;
+            int next_vertex_label = 0;
+            if (pattern.has_vertex_labels()) {
+                for (unsigned i = 0 ; i < pattern_size ; ++i) {
+                    if (vertex_labels_map.emplace(pattern.vertex_label(pattern_permutation.at(i)), next_vertex_label).second)
+                        ++next_vertex_label;
+                }
+
+                pattern_vertex_labels.resize(pattern_size);
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    pattern_vertex_labels[pattern_permutation[i]] = vertex_labels_map.find(string{ pattern.vertex_label(pattern_permutation[i]) })->second;
+            }
+
+            // re-encode and store edge labels
+            map<string, int> edge_labels_map;
+            int next_edge_label = 0;
+            if (pattern.has_edge_labels()) {
+                pattern_edge_labels.resize(pattern_size * pattern_size);
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    for (unsigned j = 0 ; j < pattern_size ; ++j)
+                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j))) {
+                            auto r = edge_labels_map.emplace(pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)), next_edge_label);
+                            if (r.second)
+                                ++next_edge_label;
+                            pattern_edge_labels[pattern_permutation.at(i) * pattern_size + pattern_permutation.at(j)] = r.first->second;
+                        }
+            }
+
+            // recode target to a bit graph
+            target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
+            for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
+                if (target.adjacent(e->first.first, e->first.second))
+                    target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
+
+            // target vertex labels
+            if (pattern.has_vertex_labels()) {
+                for (unsigned i = 0 ; i < target_size ; ++i) {
+                    if (vertex_labels_map.emplace(target.vertex_label(i), next_vertex_label).second)
+                        ++next_vertex_label;
+                }
+
+                target_vertex_labels.resize(target_size);
+                for (unsigned i = 0 ; i < target_size ; ++i)
+                    target_vertex_labels[i] = vertex_labels_map.find(string{ target.vertex_label(i) })->second;
+            }
+
+            // target edge labels
+            if (pattern.has_edge_labels()) {
+                target_edge_labels.resize(target_size * target_size);
+                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
+                    auto r = edge_labels_map.emplace(e->second, next_edge_label);
+                    if (r.second)
+                        ++next_edge_label;
+
+                    target_edge_labels[e->first.first * target_size + e->first.second] = r.first->second;
+                }
+            }
+        }
+
+        auto prepare(bool induced) -> void
+        {
+            build_supplemental_graphs(pattern_graph_rows, pattern_size);
+            build_supplemental_graphs(target_graph_rows, target_size);
+
+            // build complement graphs
+            if (induced) {
+                build_complement_graphs(pattern_graph_rows, pattern_size);
+                build_complement_graphs(target_graph_rows, target_size);
+            }
+
+            // pattern and target degrees, including supplemental graphs
+            for (int g = 0 ; g < max_graphs ; ++g) {
+                patterns_degrees.at(g).resize(pattern_size);
+                targets_degrees.at(g).resize(target_size);
+            }
+
+            for (int g = 0 ; g < max_graphs ; ++g) {
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
+
+                for (unsigned i = 0 ; i < target_size ; ++i)
+                    targets_degrees.at(g).at(i) = target_graph_rows[i * max_graphs + g].count();
+            }
+
+            for (unsigned i = 0 ; i < target_size ; ++i)
+                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
+
+            // pattern adjacencies, compressed
+            pattern_adjacencies_bits.resize(pattern_size * pattern_size);
+            for (int g = 0 ; g < max_graphs ; ++g)
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    for (unsigned j = 0 ; j < pattern_size ; ++j)
+                        if (pattern_graph_rows[i * max_graphs + g].test(j))
+                            pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
+        }
+
+        auto prepare_presolve(bool induced) -> void
+        {
+            build_supplemental_graphs(pattern_graph_rows, pattern_size);
+            build_supplemental_graphs(target_graph_rows, target_size);
+
+            // build complement graphs
+            if (induced) {
+                build_complement_graphs(pattern_graph_rows, pattern_size);
+                build_complement_graphs(target_graph_rows, target_size);
+            }
+
+            // pattern and target degrees, including supplemental graphs
+            for (int g = 0 ; g < max_graphs ; ++g) {
+                patterns_degrees.at(g).resize(pattern_size);
+                targets_degrees.at(g).resize(target_size);
+            }
+
+            for (int g = 0 ; g < max_graphs ; ++g) {
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
+
+                for (unsigned i = 0 ; i < target_size ; ++i)
+                    targets_degrees.at(g).at(i) = target_graph_rows[i * max_graphs + g].count();
+            }
+
+            for (unsigned i = 0 ; i < target_size ; ++i)
+                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
+
+            // pattern adjacencies, compressed
+            pattern_adjacencies_bits.resize(pattern_size * pattern_size);
+            for (int g = 0 ; g < max_graphs ; ++g)
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    for (unsigned j = 0 ; j < pattern_size ; ++j)
+                        if (pattern_graph_rows[i * max_graphs + g].test(j))
+                            pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
+        }
+
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_supplemental_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
+        {
+            vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
+
+            // count number of paths from w to v (only w >= v, so not v to w)
+            for (unsigned v = 0 ; v < size ; ++v) {
+                auto nv = graph_rows[v * max_graphs + 0];
+                for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
+                    nv.reset(c);
+                    auto nc = graph_rows[c * max_graphs + 0];
+                    for (auto w = nc.find_first() ; w != decltype(nc)::npos && w <= v ; w = nc.find_first()) {
+                        nc.reset(w);
+                        ++path_counts[v][w];
+                    }
+                }
+            }
+
+            for (unsigned v = 0 ; v < size ; ++v) {
+                for (unsigned w = v ; w < size ; ++w) {
+                    // w to v, not v to w, see above
+                    unsigned path_count = path_counts[w][v];
+                    for (unsigned p = 1 ; p <= 4 ; ++p) {
+                        if (path_count >= p) {
+                            graph_rows[v * max_graphs + p].set(w);
+                            graph_rows[w * max_graphs + p].set(v);
+                        }
+                    }
+                }
+            }
+        }
+
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
+        {
+            for (unsigned v = 0 ; v < size ; ++v)
+                for (unsigned w = 0 ; w < size ; ++w)
+                    if (! graph_rows[v * max_graphs + 0].test(w))
+                        graph_rows[v * max_graphs + 5].set(w);
+        }
+    };
+
     enum class SearchResult
     {
         Aborted,
@@ -138,41 +358,32 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename ArrayType_>
-    struct SIP
+    template <typename BitSetType_>
+    struct SIPDomain
     {
-        struct Domain
+        unsigned v;
+        unsigned count;
+        bool fixed = false;
+        BitSetType_ values;
+
+        explicit SIPDomain(unsigned s) :
+            values(s, 0)
         {
-            unsigned v;
-            unsigned count;
-            bool fixed = false;
-            BitSetType_ values;
+        }
 
-            explicit Domain(unsigned s) :
-                values(s, 0)
-            {
-            }
+        SIPDomain(const SIPDomain &) = default;
+        SIPDomain(SIPDomain &&) = default;
+    };
 
-            Domain(const Domain &) = default;
-            Domain(Domain &&) = default;
-        };
-
+    template <typename BitSetType_, typename ArrayType_>
+    struct SequentialSearcher
+    {
+        using Model = SIPModel<BitSetType_, ArrayType_>;
+        using Domain = SIPDomain<BitSetType_>;
         using Domains = vector<Domain>;
 
+        Model model;
         const Params & params;
-        const int max_graphs;
-
-        unsigned pattern_size, full_pattern_size, target_size;
-
-        vector<uint8_t> pattern_adjacencies_bits;
-        vector<dynamic_bitset<> > pattern_graph_rows;
-        vector<BitSetType_> target_graph_rows;
-
-        vector<int> pattern_permutation, isolated_vertices;
-        vector<vector<int> > patterns_degrees, targets_degrees;
-        int largest_target_degree;
-
-        vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
         Nogoods nogoods;
         Watches watches;
@@ -180,138 +391,14 @@ namespace
 
         mt19937 global_rand;
 
-        SIP(const InputGraph & target, const InputGraph & pattern, const Params & a) :
-            params(a),
-            max_graphs(5 + (params.induced ? 1 : 0)),
-            pattern_size(pattern.size()),
-            full_pattern_size(pattern.size()),
-            target_size(target.size()),
-            patterns_degrees(max_graphs),
-            targets_degrees(max_graphs),
-            largest_target_degree(0)
+
+        SequentialSearcher(const InputGraph & target, const InputGraph & pattern, const Params & p) :
+            model(target, pattern, p),
+            params(p)
         {
-            if (pattern.has_edge_labels() && ! params.induced)
-                throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
-
-            // strip out isolated vertices in the pattern, and build pattern_permutation
-            for (unsigned v = 0 ; v < full_pattern_size ; ++v)
-                if ((! params.induced) && (! params.enumerate) && (0 == pattern.degree(v))) {
-                    isolated_vertices.push_back(v);
-                    --pattern_size;
-                }
-                else
-                    pattern_permutation.push_back(v);
-
-            // recode pattern to a bit graph
-            pattern_graph_rows.resize(pattern_size * max_graphs, dynamic_bitset<>(pattern_size));
-            for (unsigned i = 0 ; i < pattern_size ; ++i)
-                for (unsigned j = 0 ; j < pattern_size ; ++j)
-                    if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
-                        pattern_graph_rows[i * max_graphs + 0].set(j);
-
-            // re-encode and store pattern labels
-            map<string, int> vertex_labels_map;
-            int next_vertex_label = 0;
-            if (pattern.has_vertex_labels()) {
-                for (unsigned i = 0 ; i < pattern_size ; ++i) {
-                    if (vertex_labels_map.emplace(pattern.vertex_label(pattern_permutation.at(i)), next_vertex_label).second)
-                        ++next_vertex_label;
-                }
-
-                pattern_vertex_labels.resize(pattern_size);
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    pattern_vertex_labels[pattern_permutation[i]] = vertex_labels_map.find(string{ pattern.vertex_label(pattern_permutation[i]) })->second;
-            }
-
-            // re-encode and store edge labels
-            map<string, int> edge_labels_map;
-            int next_edge_label = 0;
-            if (pattern.has_edge_labels()) {
-                pattern_edge_labels.resize(pattern_size * pattern_size);
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    for (unsigned j = 0 ; j < pattern_size ; ++j)
-                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j))) {
-                            auto r = edge_labels_map.emplace(pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)), next_edge_label);
-                            if (r.second)
-                                ++next_edge_label;
-                            pattern_edge_labels[pattern_permutation.at(i) * pattern_size + pattern_permutation.at(j)] = r.first->second;
-                        }
-            }
-
             // set up space for watches
             if (! params.enumerate)
-                watches.initialise(pattern_size, target_size);
-
-            // recode target to a bit graph
-            target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
-            for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
-                if (target.adjacent(e->first.first, e->first.second))
-                    target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
-
-            // target vertex labels
-            if (pattern.has_vertex_labels()) {
-                for (unsigned i = 0 ; i < target_size ; ++i) {
-                    if (vertex_labels_map.emplace(target.vertex_label(i), next_vertex_label).second)
-                        ++next_vertex_label;
-                }
-
-                target_vertex_labels.resize(target_size);
-                for (unsigned i = 0 ; i < target_size ; ++i)
-                    target_vertex_labels[i] = vertex_labels_map.find(string{ target.vertex_label(i) })->second;
-            }
-
-            // target edge labels
-            if (pattern.has_edge_labels()) {
-                target_edge_labels.resize(target_size * target_size);
-                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
-                    auto r = edge_labels_map.emplace(e->second, next_edge_label);
-                    if (r.second)
-                        ++next_edge_label;
-
-                    target_edge_labels[e->first.first * target_size + e->first.second] = r.first->second;
-                }
-            }
-        }
-
-        template <typename PossiblySomeOtherBitSetType_>
-        auto build_supplemental_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
-        {
-            vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
-
-            // count number of paths from w to v (only w >= v, so not v to w)
-            for (unsigned v = 0 ; v < size ; ++v) {
-                auto nv = graph_rows[v * max_graphs + 0];
-                for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
-                    nv.reset(c);
-                    auto nc = graph_rows[c * max_graphs + 0];
-                    for (auto w = nc.find_first() ; w != decltype(nc)::npos && w <= v ; w = nc.find_first()) {
-                        nc.reset(w);
-                        ++path_counts[v][w];
-                    }
-                }
-            }
-
-            for (unsigned v = 0 ; v < size ; ++v) {
-                for (unsigned w = v ; w < size ; ++w) {
-                    // w to v, not v to w, see above
-                    unsigned path_count = path_counts[w][v];
-                    for (unsigned p = 1 ; p <= 4 ; ++p) {
-                        if (path_count >= p) {
-                            graph_rows[v * max_graphs + p].set(w);
-                            graph_rows[w * max_graphs + p].set(v);
-                        }
-                    }
-                }
-            }
-        }
-
-        template <typename PossiblySomeOtherBitSetType_>
-        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
-        {
-            for (unsigned v = 0 ; v < size ; ++v)
-                for (unsigned w = 0 ; w < size ; ++w)
-                    if (! graph_rows[v * max_graphs + 0].test(w))
-                        graph_rows[v * max_graphs + 5].set(w);
+                watches.initialise(model.pattern_size, model.target_size);
         }
 
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
@@ -384,14 +471,14 @@ namespace
         template <int max_graphs_, bool has_edge_labels_>
         auto propagate_adjacency_constraints(Domain & d, const Assignment & current_assignment) -> void
         {
-            auto pattern_adjacency_bits = pattern_adjacencies_bits[pattern_size * current_assignment.pattern_vertex + d.v];
+            auto pattern_adjacency_bits = model.pattern_adjacencies_bits[model.pattern_size * current_assignment.pattern_vertex + d.v];
 
             // for each graph pair...
             for (int g = 0 ; g < max_graphs_ ; ++g) {
                 // if we're adjacent...
                 if (pattern_adjacency_bits & (1u << g)) {
                     // ...then we can only be mapped to adjacent vertices
-                    d.values &= target_graph_rows[current_assignment.target_vertex * max_graphs_ + g];
+                    d.values &= model.target_graph_rows[current_assignment.target_vertex * max_graphs_ + g];
                 }
             }
 
@@ -400,13 +487,13 @@ namespace
                 if (pattern_adjacency_bits & (1u << 0)) {
                     auto check_d_values = d.values;
 
-                    auto want_forward_label = pattern_edge_labels.at(pattern_size * d.v + current_assignment.pattern_vertex);
-                    auto want_reverse_label = pattern_edge_labels.at(pattern_size * current_assignment.pattern_vertex + d.v);
+                    auto want_forward_label = model.pattern_edge_labels.at(model.pattern_size * d.v + current_assignment.pattern_vertex);
+                    auto want_reverse_label = model.pattern_edge_labels.at(model.pattern_size * current_assignment.pattern_vertex + d.v);
                     for (auto c = check_d_values.find_first() ; c != decltype(check_d_values)::npos ; c = check_d_values.find_first()) {
                         check_d_values.reset(c);
 
-                        auto got_forward_label = target_edge_labels.at(target_size * c + current_assignment.target_vertex);
-                        auto got_reverse_label = target_edge_labels.at(target_size * current_assignment.target_vertex + c);
+                        auto got_forward_label = model.target_edge_labels.at(model.target_size * c + current_assignment.target_vertex);
+                        auto got_reverse_label = model.target_edge_labels.at(model.target_size * current_assignment.target_vertex + c);
 
                         if (got_forward_label != want_forward_label || got_reverse_label != want_reverse_label)
                             d.values.reset(c);
@@ -426,8 +513,8 @@ namespace
                 d.values.reset(current_assignment.target_vertex);
 
                 // adjacency
-                if (pattern_edge_labels.empty()) {
-                    switch (max_graphs) {
+                if (model.pattern_edge_labels.empty()) {
+                    switch (model.max_graphs) {
                         case 5: propagate_adjacency_constraints<5, false>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, false>(d, current_assignment); break;
 
@@ -436,7 +523,7 @@ namespace
                     }
                 }
                 else {
-                    switch (max_graphs) {
+                    switch (model.max_graphs) {
                         case 5: propagate_adjacency_constraints<5, true>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, true>(d, current_assignment); break;
 
@@ -490,7 +577,7 @@ namespace
                 if (! d.fixed)
                     if ((! result) ||
                             (d.count < result->count) ||
-                            (d.count == result->count && patterns_degrees[0][d.v] > patterns_degrees[0][result->v]))
+                            (d.count == result->count && model.patterns_degrees[0][d.v] > model.patterns_degrees[0][result->v]))
                         result = &d;
             return result;
         }
@@ -543,7 +630,7 @@ namespace
             // Using floating point here turned out to be way too slow. Fortunately the base
             // of softmax doesn't seem to matter, so we use 2 instead of e, and do everything
             // using bit voodoo.
-            auto expish = [largest_target_degree = this->largest_target_degree] (int degree) {
+            auto expish = [largest_target_degree = this->model.largest_target_degree] (int degree) {
                 constexpr int sufficient_space_for_adding_up = numeric_limits<long long>::digits - 18;
                 auto shift = max<int>(degree - largest_target_degree + sufficient_space_for_adding_up, 0);
                 return 1ll << shift;
@@ -551,7 +638,7 @@ namespace
 
             long long total = 0;
             for (unsigned v = 0 ; v < branch_v_end ; ++v)
-                total += expish(targets_degrees[0][branch_v[v]]);
+                total += expish(model.targets_degrees[0][branch_v[v]]);
 
             for (unsigned start = 0 ; start < branch_v_end ; ++start) {
                 // pick a random number between 1 and total inclusive
@@ -561,13 +648,13 @@ namespace
                 // go over the list until we hit the score
                 unsigned select_element = start;
                 for ( ; select_element + 1 < branch_v_end ; ++select_element) {
-                    select_score -= expish(targets_degrees[0][branch_v[select_element]]);
+                    select_score -= expish(model.targets_degrees[0][branch_v[select_element]]);
                     if (select_score <= 0)
                         break;
                 }
 
                 // move to front
-                total -= expish(targets_degrees[0][branch_v[select_element]]);
+                total -= expish(model.targets_degrees[0][branch_v[select_element]]);
                 swap(branch_v[select_element], branch_v[start]);
             }
         }
@@ -579,7 +666,7 @@ namespace
                 ) -> void
         {
             stable_sort(branch_v.begin(), branch_v.begin() + branch_v_end, [&] (int a, int b) -> bool {
-                    return (targets_degrees[0][a] >= targets_degrees[0][b]) ^ reverse;
+                    return (model.targets_degrees[0][a] >= model.targets_degrees[0][b]) ^ reverse;
                     });
         }
 
@@ -613,7 +700,7 @@ namespace
 
             ArrayType_ branch_v;
             if constexpr (is_same<ArrayType_, vector<int> >::value)
-                branch_v.resize(target_size);
+                branch_v.resize(model.target_size);
 
             unsigned branch_v_end = 0;
             for (auto f_v = remaining.find_first() ; f_v != decltype(remaining)::npos ; f_v = remaining.find_first()) {
@@ -715,16 +802,16 @@ namespace
 
         auto initialise_domains(Domains & domains, bool presolve) -> bool
         {
-            int graphs_to_consider = presolve ? 1 : max_graphs;
+            int graphs_to_consider = presolve ? 1 : model.max_graphs;
             if ((! presolve) && params.induced) {
                 // when looking at the complement graph, if the largest degree
                 // in the pattern is smaller than the smallest degree in the
                 // target, then we're going to spend a lot of time doing
                 // nothing useful
-                auto largest_pattern_c_degree = max_element(patterns_degrees[max_graphs - 1].begin(), patterns_degrees[max_graphs - 1].end());
-                auto smallest_target_c_degree = min_element(targets_degrees[max_graphs - 1].begin(), targets_degrees[max_graphs - 1].end());
-                if (largest_pattern_c_degree != patterns_degrees[max_graphs - 1].end() &&
-                        smallest_target_c_degree != targets_degrees[max_graphs - 1].end() &&
+                auto largest_pattern_c_degree = max_element(model.patterns_degrees[model.max_graphs - 1].begin(), model.patterns_degrees[model.max_graphs - 1].end());
+                auto smallest_target_c_degree = min_element(model.targets_degrees[model.max_graphs - 1].begin(), model.targets_degrees[model.max_graphs - 1].end());
+                if (largest_pattern_c_degree != model.patterns_degrees[model.max_graphs - 1].end() &&
+                        smallest_target_c_degree != model.targets_degrees[model.max_graphs - 1].end() &&
                         *largest_pattern_c_degree < *smallest_target_c_degree)
                     --graphs_to_consider;
             }
@@ -735,16 +822,16 @@ namespace
 
             if (! presolve) {
                 for (int g = 0 ; g < graphs_to_consider ; ++g) {
-                    patterns_ndss.at(g).resize(pattern_size);
-                    targets_ndss.at(g).resize(target_size);
+                    patterns_ndss.at(g).resize(model.pattern_size);
+                    targets_ndss.at(g).resize(model.target_size);
                 }
 
                 for (int g = 0 ; g < graphs_to_consider ; ++g) {
-                    for (unsigned i = 0 ; i < pattern_size ; ++i) {
-                        auto ni = pattern_graph_rows[i * max_graphs + g];
+                    for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
+                        auto ni = model.pattern_graph_rows[i * model.max_graphs + g];
                         for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
                             ni.reset(j);
-                            patterns_ndss.at(g).at(i).push_back(patterns_degrees.at(g).at(j));
+                            patterns_ndss.at(g).at(i).push_back(model.patterns_degrees.at(g).at(j));
                         }
                         sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
                     }
@@ -755,37 +842,37 @@ namespace
                 if (! targets_ndss.at(0).at(i)) {
                     for (int g = 0 ; g < graphs_to_consider ; ++g) {
                         targets_ndss.at(g).at(i) = vector<int>{};
-                        auto ni = target_graph_rows[i * max_graphs + g];
+                        auto ni = model.target_graph_rows[i * model.max_graphs + g];
                         for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
                             ni.reset(j);
-                            targets_ndss.at(g).at(i)->push_back(targets_degrees.at(g).at(j));
+                            targets_ndss.at(g).at(i)->push_back(model.targets_degrees.at(g).at(j));
                         }
                         sort(targets_ndss.at(g).at(i)->begin(), targets_ndss.at(g).at(i)->end(), greater<int>());
                     }
                 }
             };
 
-            for (unsigned i = 0 ; i < pattern_size ; ++i) {
+            for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
                 domains.at(i).v = i;
                 domains.at(i).values.reset();
 
-                for (unsigned j = 0 ; j < target_size ; ++j) {
+                for (unsigned j = 0 ; j < model.target_size ; ++j) {
                     bool ok = true;
 
-                    if (! pattern_vertex_labels.empty())
-                        if (pattern_vertex_labels[i] != target_vertex_labels[j])
+                    if (! model.pattern_vertex_labels.empty())
+                        if (model.pattern_vertex_labels[i] != model.target_vertex_labels[j])
                             ok = false;
 
                     // check for loops
-                    for (int g = 0 ; g < max_graphs && ok ; ++g) {
-                        if (pattern_graph_rows[i * max_graphs + g].test(i) && ! target_graph_rows[j * max_graphs + g].test(j)) {
+                    for (int g = 0 ; g < model.max_graphs && ok ; ++g) {
+                        if (model.pattern_graph_rows[i * model.max_graphs + g].test(i) && ! model.target_graph_rows[j * model.max_graphs + g].test(j)) {
                             ok = false;
                         }
                     }
 
                     // check degree-like things
                     for (int g = 0 ; g < graphs_to_consider && ok ; ++g) {
-                        if (targets_degrees.at(g).at(j) < patterns_degrees.at(g).at(i)) {
+                        if (model.targets_degrees.at(g).at(j) < model.patterns_degrees.at(g).at(i)) {
                             // not ok, degrees differ
                             ok = false;
                         }
@@ -806,12 +893,12 @@ namespace
                 domains.at(i).count = domains.at(i).values.count();
             }
 
-            BitSetType_ domains_union{ target_size, 0 };
+            BitSetType_ domains_union{ model.target_size, 0 };
             for (auto & d : domains)
                 domains_union |= d.values;
 
             unsigned domains_union_popcount = domains_union.count();
-            if (domains_union_popcount < unsigned(pattern_size))
+            if (domains_union_popcount < unsigned(model.pattern_size))
                 return false;
 
             for (auto & d : domains)
@@ -832,11 +919,11 @@ namespace
             ArrayType_ first, next;
 
             if constexpr (is_same<ArrayType_, vector<int> >::value)
-                first.resize(target_size + 1);
+                first.resize(model.target_size + 1);
             fill(first.begin(), first.begin() + domains.size() + 1, -1);
 
             if constexpr (is_same<ArrayType_, vector<int> >::value)
-                next.resize(target_size);
+                next.resize(model.target_size);
             fill(next.begin(), next.begin() + domains.size(), -1);
 
             // Iterate backwards, because we insert elements at the head of
@@ -850,7 +937,7 @@ namespace
             }
 
             // counting all-different
-            BitSetType_ domains_so_far{ target_size, 0 }, hall{ target_size, 0 };
+            BitSetType_ domains_so_far{ model.target_size, 0 }, hall{ model.target_size, 0 };
             unsigned neighbours_so_far = 0;
 
             for (unsigned i = 0 ; i <= domains.size() ; ++i) {
@@ -886,11 +973,11 @@ namespace
         auto save_result(const Assignments & assignments, Result & result) -> void
         {
             for (auto & a : assignments.values)
-                result.isomorphism.emplace(pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
+                result.isomorphism.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
 
             // re-add isolated vertices
             int t = 0;
-            for (auto & v : isolated_vertices) {
+            for (auto & v : model.isolated_vertices) {
                 while (result.isomorphism.end() != find_if(result.isomorphism.begin(), result.isomorphism.end(),
                             [&t] (const pair<int, int> & p) { return p.second == t; }))
                         ++t;
@@ -907,42 +994,10 @@ namespace
         {
             Result result;
 
-            build_supplemental_graphs(pattern_graph_rows, pattern_size);
-            build_supplemental_graphs(target_graph_rows, target_size);
-
-            // build complement graphs
-            if (params.induced) {
-                build_complement_graphs(pattern_graph_rows, pattern_size);
-                build_complement_graphs(target_graph_rows, target_size);
-            }
-
-            // pattern and target degrees, including supplemental graphs
-            for (int g = 0 ; g < max_graphs ; ++g) {
-                patterns_degrees.at(g).resize(pattern_size);
-                targets_degrees.at(g).resize(target_size);
-            }
-
-            for (int g = 0 ; g < max_graphs ; ++g) {
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
-
-                for (unsigned i = 0 ; i < target_size ; ++i)
-                    targets_degrees.at(g).at(i) = target_graph_rows[i * max_graphs + g].count();
-            }
-
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
-
-            // pattern adjacencies, compressed
-            pattern_adjacencies_bits.resize(pattern_size * pattern_size);
-            for (int g = 0 ; g < max_graphs ; ++g)
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    for (unsigned j = 0 ; j < pattern_size ; ++j)
-                        if (pattern_graph_rows[i * max_graphs + g].test(j))
-                            pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
+            model.prepare(params.induced);
 
             // domains
-            Domains domains(pattern_size, Domain{ target_size });
+            Domains domains(model.pattern_size, Domain{ model.target_size });
             if (! initialise_domains(domains, false)) {
                 result.complete = true;
                 return result;
@@ -950,7 +1005,7 @@ namespace
 
             // assignments
             Assignments assignments;
-            assignments.values.reserve(pattern_size);
+            assignments.values.reserve(model.pattern_size);
 
             // start search timer
             auto search_start_time = steady_clock::now();
@@ -1067,37 +1122,10 @@ namespace
         {
             Result result;
 
-            // build complement graphs
-            if (params.induced) {
-                build_complement_graphs(pattern_graph_rows, pattern_size);
-                build_complement_graphs(target_graph_rows, target_size);
-            }
-
-            // pattern and target degrees, not including supplemental graphs
-            patterns_degrees.at(0).resize(pattern_size);
-            targets_degrees.at(0).resize(target_size);
-
-            for (unsigned i = 0 ; i < pattern_size ; ++i)
-                patterns_degrees.at(0).at(i) = pattern_graph_rows[i * max_graphs + 0].count();
-
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                targets_degrees.at(0).at(i) = target_graph_rows[i * max_graphs + 0].count();
-
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
-
-            // pattern adjacencies, compressed
-            pattern_adjacencies_bits.resize(pattern_size * pattern_size);
-            for (unsigned i = 0 ; i < pattern_size ; ++i)
-                for (unsigned j = 0 ; j < pattern_size ; ++j) {
-                    if (pattern_graph_rows[i * max_graphs + 0].test(j))
-                        pattern_adjacencies_bits[i * pattern_size + j] |= (1u << 0);
-                    if (params.induced && pattern_graph_rows[i * max_graphs + 5].test(j))
-                        pattern_adjacencies_bits[i * pattern_size + j] |= (1u << 5);
-                }
+            model.prepare_presolve(params.induced);
 
             // domains
-            Domains domains(pattern_size, Domain{ target_size });
+            Domains domains(model.pattern_size, Domain{ model.target_size });
             if (! initialise_domains(domains, true)) {
                 result.complete = true;
                 return result;
@@ -1105,7 +1133,7 @@ namespace
 
             // assignments
             Assignments assignments;
-            assignments.values.reserve(pattern_size);
+            assignments.values.reserve(model.pattern_size);
 
             // start search timer
             auto search_start_time = steady_clock::now();
@@ -1159,7 +1187,7 @@ namespace
 
         auto run() -> Result
         {
-            if (full_pattern_size > target_size) {
+            if (model.full_pattern_size > model.target_size) {
                 /* some of our fixed size data structures will throw a hissy
                  * fit. check this early. */
                 Result result;
@@ -1200,6 +1228,6 @@ auto sequential_subgraph_isomorphism(const pair<InputGraph, InputGraph> & graphs
     if (graphs.first.size() > graphs.second.size())
         return Result{ };
 
-    return select_graph_size<SIP, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
+    return select_graph_size<SequentialSearcher, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
 }
 
