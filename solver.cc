@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <list>
@@ -33,7 +34,9 @@ using std::next;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
+using std::round;
 using std::sort;
+using std::stable_sort;
 using std::string;
 using std::swap;
 using std::to_string;
@@ -43,6 +46,7 @@ using std::vector;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
+using std::chrono::operator""ms;
 
 using boost::dynamic_bitset;
 
@@ -568,6 +572,17 @@ namespace
             }
         }
 
+        auto degree_sort(
+                ArrayType_ & branch_v,
+                unsigned branch_v_end,
+                bool reverse
+                ) -> void
+        {
+            stable_sort(branch_v.begin(), branch_v.begin() + branch_v_end, [&] (int a, int b) -> bool {
+                    return (targets_degrees[0][a] >= targets_degrees[0][b]) ^ reverse;
+                    });
+        }
+
         auto restarting_search(
                 Assignments & assignments,
                 const Domains & domains,
@@ -606,10 +621,26 @@ namespace
                 branch_v[branch_v_end++] = f_v;
             }
 
-            softmax_shuffle(branch_v, branch_v_end);
+            switch (params.value_ordering_heuristic) {
+                case ValueOrdering::Degree:
+                    degree_sort(branch_v, branch_v_end, false);
+                    break;
+
+                case ValueOrdering::AntiDegree:
+                    degree_sort(branch_v, branch_v_end, true);
+                    break;
+
+                case ValueOrdering::Biased:
+                    softmax_shuffle(branch_v, branch_v_end);
+                    break;
+
+                case ValueOrdering::Random:
+                    shuffle(branch_v.begin(), branch_v.begin() + branch_v_end, global_rand);
+                    break;
+            }
 
             int discrepancy_count = 0;
-            bool actually_hit_a_success = false, actually_hit_a_failure = true;
+            bool actually_hit_a_success = false, actually_hit_a_failure = false;
 
             // for each value remaining...
             for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end ; f_v != f_end ; ++f_v) {
@@ -627,6 +658,7 @@ namespace
                 if (! propagate(new_domains, assignments)) {
                     // failure? restore assignments and go on to the next thing
                     assignments.values.resize(assignments_size);
+                    actually_hit_a_failure = true;
                     continue;
                 }
 
@@ -927,15 +959,20 @@ namespace
             bool done = false;
             list<long long> luby = {{ 1 }};
             auto current_luby = luby.begin();
+            double current_geometric = params.restarts_constant;
             unsigned number_of_restarts = 0;
 
             while (! done) {
                 long long backtracks_until_restart;
 
-                if (params.enumerate)
+                if (params.enumerate || 0 == params.restarts_constant)
                     backtracks_until_restart = -1;
+                else if (0.0 != params.geometric_multiplier) {
+                    current_geometric *= params.geometric_multiplier;
+                    backtracks_until_restart = round(current_geometric);
+                }
                 else {
-                    backtracks_until_restart = *current_luby * params.luby_multiplier;
+                    backtracks_until_restart = *current_luby * params.restarts_constant;
                     if (next(current_luby) == luby.end()) {
                         luby.insert(luby.end(), luby.begin(), luby.end());
                         luby.push_back(*luby.rbegin() * 2);
@@ -1164,15 +1201,5 @@ auto sequential_subgraph_isomorphism(const pair<InputGraph, InputGraph> & graphs
         return Result{ };
 
     return select_graph_size<SIP, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
-}
-
-UnsupportedConfiguration::UnsupportedConfiguration(const string & message) throw () :
-    _what(message)
-{
-}
-
-auto UnsupportedConfiguration::what() const throw () -> const char *
-{
-    return _what.c_str();
 }
 

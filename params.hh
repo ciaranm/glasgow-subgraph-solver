@@ -3,9 +3,14 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_PARAMS_HH
 #define GLASGOW_SUBGRAPH_SOLVER_PARAMS_HH 1
 
-#include <chrono>
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <exception>
+#include <limits>
+#include <string>
+
+#include "value_ordering.hh"
 
 struct Params
 {
@@ -24,11 +29,32 @@ struct Params
     /// Presolve?
     bool presolve = false;
 
-    /// Default chosen by SMAC
-    static constexpr unsigned long long dodgy_default_magic_luby_multiplier = 660;
+    /// Which value-ordering heuristic?
+    ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
 
-    /// Multiplier for Luby sequence
-    unsigned long long luby_multiplier = dodgy_default_magic_luby_multiplier;
+    /// Default chosen by SMAC
+    static constexpr unsigned long long dodgy_default_magic_constant_restart_multiplier = 660;
+
+    /// Constant multiplier for restarts sequence (0 disables restarts)
+    unsigned long long restarts_constant = dodgy_default_magic_constant_restart_multiplier;
+
+    /// If non-zero, use geometric restarts with this multiplier, instead of Luby
+    double geometric_multiplier = 0.0;
+
+    /// Largest size of nogood to store (0 disables nogoods)
+    unsigned nogood_size_limit = std::numeric_limits<unsigned>::max();
+};
+
+class UnsupportedConfiguration :
+    public std::exception
+{
+    private:
+        std::string _what;
+
+    public:
+        UnsupportedConfiguration(const std::string & message) throw ();
+
+        auto what() const throw () -> const char *;
 };
 
 #endif

@@ -42,66 +42,6 @@ using std::chrono::system_clock;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 
-/* Helper: return a function that runs the specified algorithm, dealing
- * with timing information and timeouts. */
-template <typename Result_, typename Params_, typename Data_>
-auto run_this_wrapped(const function<Result_ (const Data_ &, const Params_ &)> & func)
-    -> function<Result_ (const Data_ &, Params_ &, bool &, int)>
-{
-    return [func] (const Data_ & data, Params_ & params, bool & aborted, int timeout) -> Result_ {
-        /* For a timeout, we use a thread and a timed CV. We also wake the
-         * CV up if we're done, so the timeout thread can terminate. */
-        thread timeout_thread;
-        mutex timeout_mutex;
-        condition_variable timeout_cv;
-        atomic<bool> abort;
-        abort.store(false);
-        params.abort = &abort;
-        if (0 != timeout) {
-            timeout_thread = thread([&] {
-                    auto abort_time = steady_clock::now() + seconds(timeout);
-                    {
-                        /* Sleep until either we've reached the time limit,
-                         * or we've finished all the work. */
-                        unique_lock<mutex> guard(timeout_mutex);
-                        while (! abort.load()) {
-                            if (cv_status::timeout == timeout_cv.wait_until(guard, abort_time)) {
-                                /* We've woken up, and it's due to a timeout. */
-                                aborted = true;
-                                break;
-                            }
-                        }
-                    }
-                    abort.store(true);
-                    });
-        }
-
-        /* Start the clock */
-        params.start_time = steady_clock::now();
-        auto result = func(data, params);
-
-        /* Clean up the timeout thread */
-        if (timeout_thread.joinable()) {
-            {
-                unique_lock<mutex> guard(timeout_mutex);
-                abort.store(true);
-                timeout_cv.notify_all();
-            }
-            timeout_thread.join();
-        }
-
-        return result;
-    };
-}
-
-/* Helper: return a function that runs the specified algorithm, dealing
- * with timing information and timeouts. */
-template <typename Result_, typename Params_, typename Data_>
-auto run_this(Result_ func(const Data_ &, const Params_ &)) -> function<Result_ (const Data_ &, Params_ &, bool &, int)>
-{
-    return run_this_wrapped(function<Result_ (const Data_ &, const Params_ &)>(func));
-}
-
 auto main(int argc, char * argv[]) -> int
 {
     try {
@@ -113,8 +53,17 @@ auto main(int argc, char * argv[]) -> int
             ("pattern-format",     po::value<std::string>(), "Specify input file format just for the pattern graph")
             ("target-format",      po::value<std::string>(), "Specify input file format just for the target graph")
             ("induced",                                      "Solve the induced version")
-            ("enumerate",                                    "Count the number of solutions")
-            ("presolve",                                     "Try presolving (hacky, experimental, possibly useful for easy instances");
+            ("enumerate",                                    "Count the number of solutions");
+
+        po::options_description configuration_options{ "Advanced configuration options" };
+        configuration_options.add_options()
+            ("presolve",                                     "Try presolving (hacky, experimental, possibly useful for easy instances")
+            ("nogood-size-limit",  po::value<int>(),         "Maximum size of nogood to generate (0 disables nogoods")
+            ("restarts-constant",  po::value<int>(),         "How often to perform restarts (0 disables restarts)")
+            ("restart-timer",      po::value<int>(),         "Also restart after this many milliseconds (0 disables)")
+            ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)")
+            ("value-ordering",     po::value<std::string>(), "Specify value-ordering heuristic (biased / degree / antidegree / random)");
+        display_options.add(configuration_options);
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -151,14 +100,35 @@ auto main(int argc, char * argv[]) -> int
             return EXIT_FAILURE;
         }
 
-        auto algorithm = sequential_subgraph_isomorphism;
-
         /* Figure out what our options should be. */
         Params params;
 
         params.induced = options_vars.count("induced");
         params.enumerate = options_vars.count("enumerate");
         params.presolve = options_vars.count("presolve");
+
+        if (options_vars.count("nogood-size-limit"))
+            params.nogood_size_limit = options_vars["nogood-size-limit"].as<int>();
+        if (options_vars.count("restarts-constant"))
+            params.restarts_constant = options_vars["restarts-constant"].as<int>();
+        if (options_vars.count("geometric-restarts"))
+            params.geometric_multiplier = options_vars["geometric-restarts"].as<double>();
+
+        if (options_vars.count("value-ordering")) {
+            std::string value_ordering_heuristic = options_vars["value-ordering"].as<std::string>();
+            if (value_ordering_heuristic == "biased")
+                params.value_ordering_heuristic = ValueOrdering::Biased;
+            else if (value_ordering_heuristic == "degree")
+                params.value_ordering_heuristic = ValueOrdering::Degree;
+            else if (value_ordering_heuristic == "antidegree")
+                params.value_ordering_heuristic = ValueOrdering::AntiDegree;
+            else if (value_ordering_heuristic == "random")
+                params.value_ordering_heuristic = ValueOrdering::Random;
+            else {
+                cerr << "Unknown value-ordering heuristic '" << value_ordering_heuristic << "'" << endl;
+                return EXIT_FAILURE;
+            }
+        }
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
@@ -182,16 +152,53 @@ auto main(int argc, char * argv[]) -> int
         cout << "pattern_file = " << options_vars["pattern-file"].as<std::string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<std::string>() << endl;
 
-        /* Do the actual run. */
+        int timeout = options_vars.count("timeout") ? options_vars["timeout"].as<int>() : 0;
+
+        /* For a timeout, we use a thread and a timed CV. We also wake the
+         * CV up if we're done, so the timeout thread can terminate. */
         bool aborted = false;
-        auto result = run_this(algorithm)(
-                graphs,
-                params,
-                aborted,
-                options_vars.count("timeout") ? options_vars["timeout"].as<int>() : 0);
+        thread timeout_thread;
+        mutex timeout_mutex;
+        condition_variable timeout_cv;
+        atomic<bool> abort;
+        abort.store(false);
+        params.abort = &abort;
+        if (0 != timeout) {
+            timeout_thread = thread([&] {
+                    auto abort_time = steady_clock::now() + seconds(timeout);
+                    {
+                        /* Sleep until either we've reached the time limit,
+                         * or we've finished all the work. */
+                        unique_lock<mutex> guard(timeout_mutex);
+                        while (! abort.load()) {
+                            if (cv_status::timeout == timeout_cv.wait_until(guard, abort_time)) {
+                                /* We've woken up, and it's due to a timeout. */
+                                aborted = true;
+                                break;
+                            }
+                        }
+                    }
+                    abort.store(true);
+                    });
+        }
+
+        /* Start the clock */
+        params.start_time = steady_clock::now();
+
+        auto result = sequential_subgraph_isomorphism(graphs, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
+
+        /* Clean up the timeout thread */
+        if (timeout_thread.joinable()) {
+            {
+                unique_lock<mutex> guard(timeout_mutex);
+                abort.store(true);
+                timeout_cv.notify_all();
+            }
+            timeout_thread.join();
+        }
 
         cout << "status = ";
         if (aborted)

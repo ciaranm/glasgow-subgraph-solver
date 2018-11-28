@@ -9,16 +9,4 @@
 
 auto sequential_subgraph_isomorphism(const std::pair<InputGraph, InputGraph> & graphs, const Params & params) -> Result;
 
-class UnsupportedConfiguration :
-    public std::exception
-{
-    private:
-        std::string _what;
-
-    public:
-        UnsupportedConfiguration(const std::string & message) throw ();
-
-        auto what() const throw () -> const char *;
-};
-
 #endif

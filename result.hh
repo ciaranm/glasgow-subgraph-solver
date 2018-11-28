@@ -3,9 +3,9 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_RESULT_HH
 #define GLASGOW_SUBGRAPH_SOLVER_RESULT_HH 1
 
-#include <map>
-#include <list>
 #include <chrono>
+#include <list>
+#include <map>
 
 struct Result
 {
