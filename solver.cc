@@ -382,7 +382,7 @@ namespace
         using Domain = SIPDomain<BitSetType_>;
         using Domains = vector<Domain>;
 
-        Model model;
+        const Model & model;
         const Params & params;
 
         Nogoods nogoods;
@@ -391,9 +391,8 @@ namespace
 
         mt19937 global_rand;
 
-
-        SequentialSearcher(const InputGraph & target, const InputGraph & pattern, const Params & p) :
-            model(target, pattern, p),
+        SequentialSearcher(const Model & m, const Params & p) :
+            model(m),
             params(p)
         {
             // set up space for watches
@@ -994,8 +993,6 @@ namespace
         {
             Result result;
 
-            model.prepare(params.induced);
-
             // domains
             Domains domains(model.pattern_size, Domain{ model.target_size });
             if (! initialise_domains(domains, false)) {
@@ -1122,8 +1119,6 @@ namespace
         {
             Result result;
 
-            model.prepare_presolve(params.induced);
-
             // domains
             Domains domains(model.pattern_size, Domain{ model.target_size });
             if (! initialise_domains(domains, true)) {
@@ -1184,6 +1179,22 @@ namespace
 
             return result;
         }
+    };
+
+    template <typename BitSetType_, typename ArrayType_>
+    struct SIPRunner
+    {
+        using Model = SIPModel<BitSetType_, ArrayType_>;
+        using Searcher = SequentialSearcher<BitSetType_, ArrayType_>;
+
+        Model model;
+        const Params & params;
+
+        SIPRunner(const InputGraph & target, const InputGraph & pattern, const Params & p) :
+            model(target, pattern, p),
+            params(p)
+        {
+        }
 
         auto run() -> Result
         {
@@ -1199,7 +1210,9 @@ namespace
             auto presolve_start_time = steady_clock::now();
 
             if (params.presolve) {
-                presolve_result = presolve();
+                Searcher presolver(model, params);
+                model.prepare_presolve(params.induced);
+                presolve_result = presolver.presolve();
                 if (presolve_result.complete)
                     presolve_result.extra_stats.emplace_back("presolved = true");
             }
@@ -1209,7 +1222,9 @@ namespace
             if (presolve_result.complete)
                 return presolve_result;
 
-            Result result = solve();
+            Searcher solver(model, params);
+            model.prepare(params.induced);
+            Result result = solver.solve();
 
             if (params.presolve) {
                 for (auto & s : presolve_result.extra_stats)
@@ -1228,6 +1243,6 @@ auto sequential_subgraph_isomorphism(const pair<InputGraph, InputGraph> & graphs
     if (graphs.first.size() > graphs.second.size())
         return Result{ };
 
-    return select_graph_size<SequentialSearcher, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
+    return select_graph_size<SIPRunner, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
 }
 
