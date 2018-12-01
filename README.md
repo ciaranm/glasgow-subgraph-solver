@@ -30,7 +30,7 @@ Running
 
 To run:
 
-    ./solve_subgraph_isomorphism [ --induced ] pattern-file target-file
+    ./glasgow_subgraph_solver [ --induced ] pattern-file target-file
 
 You may need to increase the stack space, for larger graphs. In bash this is
 done as follows:

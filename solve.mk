@@ -8,9 +8,9 @@ SOURCES := \
     formats/csv.cc \
     formats/read_file_format.cc \
     fixed_bit_set.cc \
+    glasgow_subgraph_solver.cc \
     params.cc \
     result.cc \
-    solve_subgraph_isomorphism.cc \
     solver.cc
 
 TGT_LDLIBS := $(boost_ldlibs)
