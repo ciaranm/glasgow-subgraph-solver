@@ -1,4 +1,4 @@
-TARGET := solve_subgraph_isomorphism
+TARGET := glasgow_subgraph_solver
 
 SOURCES := \
     formats/input_graph.cc \
