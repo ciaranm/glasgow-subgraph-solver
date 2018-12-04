@@ -7,6 +7,6 @@
 #include "result.hh"
 #include "formats/input_graph.hh"
 
-auto sequential_subgraph_isomorphism(const std::pair<InputGraph, InputGraph> & graphs, const Params & params) -> Result;
+auto solve_subgraph_problem(const std::pair<InputGraph, InputGraph> & graphs, const Params & params) -> Result;
 
 #endif

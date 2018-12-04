@@ -23,6 +23,9 @@ struct Params
     /// Induced?
     bool induced = false;
 
+    /// Noninjective?
+    bool noninjective = false;
+
     /// Enumerate?
     bool enumerate = false;
 

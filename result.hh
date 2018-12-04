@@ -9,8 +9,8 @@
 
 struct Result
 {
-    /// The isomorphism, empty if none found.
-    std::map<int, int> isomorphism;
+    /// The mapping, empty if none found.
+    std::map<int, int> mapping;
 
     /// Total number of nodes processed (recursive calls).
     unsigned long long nodes = 0;

@@ -11,7 +11,8 @@ SOURCES := \
     glasgow_subgraph_solver.cc \
     params.cc \
     result.cc \
-    solver.cc
+    solver.cc \
+    verify.cc
 
 TGT_LDLIBS := $(boost_ldlibs)
 

@@ -53,7 +53,7 @@ using boost::dynamic_bitset;
 namespace
 {
     template <typename BitSetType_, typename ArrayType_>
-    struct SIPModel
+    struct SubgraphModel
     {
         const int max_graphs;
         unsigned pattern_size, full_pattern_size, target_size;
@@ -68,8 +68,8 @@ namespace
 
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
-        SIPModel(const InputGraph & target, const InputGraph & pattern, const Params & params) :
-            max_graphs(5 + (params.induced ? 1 : 0)),
+        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const Params & params) :
+            max_graphs(1 + (params.noninjective ? 0 : 4) + (params.induced ? 1 : 0)),
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
             target_size(target.size()),
@@ -156,10 +156,12 @@ namespace
             }
         }
 
-        auto prepare(bool induced) -> void
+        auto prepare(bool induced, bool noninjective) -> void
         {
-            build_supplemental_graphs(pattern_graph_rows, pattern_size);
-            build_supplemental_graphs(target_graph_rows, target_size);
+            if (! noninjective) {
+                build_supplemental_graphs(pattern_graph_rows, pattern_size);
+                build_supplemental_graphs(target_graph_rows, target_size);
+            }
 
             // build complement graphs
             if (induced) {
@@ -193,10 +195,12 @@ namespace
                             pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
         }
 
-        auto prepare_presolve(bool induced) -> void
+        auto prepare_presolve(bool induced, bool noninjective) -> void
         {
-            build_supplemental_graphs(pattern_graph_rows, pattern_size);
-            build_supplemental_graphs(target_graph_rows, target_size);
+            if (! noninjective) {
+                build_supplemental_graphs(pattern_graph_rows, pattern_size);
+                build_supplemental_graphs(target_graph_rows, target_size);
+            }
 
             // build complement graphs
             if (induced) {
@@ -268,7 +272,7 @@ namespace
             for (unsigned v = 0 ; v < size ; ++v)
                 for (unsigned w = 0 ; w < size ; ++w)
                     if (! graph_rows[v * max_graphs + 0].test(w))
-                        graph_rows[v * max_graphs + 5].set(w);
+                        graph_rows[v * max_graphs + max_graphs - 1].set(w);
         }
     };
 
@@ -359,27 +363,27 @@ namespace
     };
 
     template <typename BitSetType_>
-    struct SIPDomain
+    struct SubgraphDomain
     {
         unsigned v;
         unsigned count;
         bool fixed = false;
         BitSetType_ values;
 
-        explicit SIPDomain(unsigned s) :
+        explicit SubgraphDomain(unsigned s) :
             values(s, 0)
         {
         }
 
-        SIPDomain(const SIPDomain &) = default;
-        SIPDomain(SIPDomain &&) = default;
+        SubgraphDomain(const SubgraphDomain &) = default;
+        SubgraphDomain(SubgraphDomain &&) = default;
     };
 
     template <typename BitSetType_, typename ArrayType_>
     struct SequentialSearcher
     {
-        using Model = SIPModel<BitSetType_, ArrayType_>;
-        using Domain = SIPDomain<BitSetType_>;
+        using Model = SubgraphModel<BitSetType_, ArrayType_>;
+        using Domain = SubgraphDomain<BitSetType_>;
         using Domains = vector<Domain>;
 
         const Model & model;
@@ -509,11 +513,14 @@ namespace
                     continue;
 
                 // all different
-                d.values.reset(current_assignment.target_vertex);
+                if (! params.noninjective)
+                    d.values.reset(current_assignment.target_vertex);
 
                 // adjacency
                 if (model.pattern_edge_labels.empty()) {
                     switch (model.max_graphs) {
+                        case 1: propagate_adjacency_constraints<1, false>(d, current_assignment); break;
+                        case 2: propagate_adjacency_constraints<2, false>(d, current_assignment); break;
                         case 5: propagate_adjacency_constraints<5, false>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, false>(d, current_assignment); break;
 
@@ -523,6 +530,8 @@ namespace
                 }
                 else {
                     switch (model.max_graphs) {
+                        case 1: propagate_adjacency_constraints<1, true>(d, current_assignment); break;
+                        case 2: propagate_adjacency_constraints<2, true>(d, current_assignment); break;
                         case 5: propagate_adjacency_constraints<5, true>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, true>(d, current_assignment); break;
 
@@ -562,7 +571,7 @@ namespace
                     return false;
 
                 // propagate all different
-                if (! cheap_all_different(new_domains))
+                if ((! params.noninjective) && (! cheap_all_different(new_domains)))
                     return false;
             }
 
@@ -799,6 +808,64 @@ namespace
                 return SearchResult::Unsatisfiable;
         }
 
+        auto check_label_compatibility(int p, int t) -> bool
+        {
+            if (model.pattern_vertex_labels.empty())
+                return true;
+            else
+                return model.pattern_vertex_labels[p] == model.target_vertex_labels[t];
+        }
+
+        auto check_loop_compatibility(int p, int t) -> bool
+        {
+            for (int g = 0 ; g < model.max_graphs ; ++g)
+                if (model.pattern_graph_rows[p * model.max_graphs + g].test(p) && ! model.target_graph_rows[t * model.max_graphs + g].test(t))
+                    return false;
+
+            return true;
+        }
+
+        auto check_degree_compatibility(
+                int p,
+                int t,
+                bool presolve,
+                int graphs_to_consider,
+                vector<vector<vector<int> > > & patterns_ndss,
+                vector<vector<optional<vector<int> > > > & targets_ndss
+                ) -> bool
+        {
+            if (params.noninjective)
+                return true;
+
+            for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                if (model.targets_degrees.at(g).at(t) < model.patterns_degrees.at(g).at(p)) {
+                    // not ok, degrees differ
+                    return false;
+                }
+                else if (! presolve) {
+                    // full compare of neighbourhood degree sequences
+                    if (! targets_ndss.at(0).at(t)) {
+                        for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                            targets_ndss.at(g).at(t) = vector<int>{};
+                            auto ni = model.target_graph_rows[t * model.max_graphs + g];
+                            for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
+                                ni.reset(j);
+                                targets_ndss.at(g).at(t)->push_back(model.targets_degrees.at(g).at(j));
+                            }
+                            sort(targets_ndss.at(g).at(t)->begin(), targets_ndss.at(g).at(t)->end(), greater<int>());
+                        }
+                    }
+
+                    for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
+                        if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x))
+                            return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
         auto initialise_domains(Domains & domains, bool presolve) -> bool
         {
             int graphs_to_consider = presolve ? 1 : model.max_graphs;
@@ -819,7 +886,7 @@ namespace
             vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
             vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
 
-            if (! presolve) {
+            if ((! presolve) && (! params.noninjective)) {
                 for (int g = 0 ; g < graphs_to_consider ; ++g) {
                     patterns_ndss.at(g).resize(model.pattern_size);
                     targets_ndss.at(g).resize(model.target_size);
@@ -837,20 +904,6 @@ namespace
                 }
             }
 
-            auto need_nds = [&] (int i) {
-                if (! targets_ndss.at(0).at(i)) {
-                    for (int g = 0 ; g < graphs_to_consider ; ++g) {
-                        targets_ndss.at(g).at(i) = vector<int>{};
-                        auto ni = model.target_graph_rows[i * model.max_graphs + g];
-                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                            ni.reset(j);
-                            targets_ndss.at(g).at(i)->push_back(model.targets_degrees.at(g).at(j));
-                        }
-                        sort(targets_ndss.at(g).at(i)->begin(), targets_ndss.at(g).at(i)->end(), greater<int>());
-                    }
-                }
-            };
-
             for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
                 domains.at(i).v = i;
                 domains.at(i).values.reset();
@@ -858,32 +911,12 @@ namespace
                 for (unsigned j = 0 ; j < model.target_size ; ++j) {
                     bool ok = true;
 
-                    if (! model.pattern_vertex_labels.empty())
-                        if (model.pattern_vertex_labels[i] != model.target_vertex_labels[j])
-                            ok = false;
-
-                    // check for loops
-                    for (int g = 0 ; g < model.max_graphs && ok ; ++g) {
-                        if (model.pattern_graph_rows[i * model.max_graphs + g].test(i) && ! model.target_graph_rows[j * model.max_graphs + g].test(j)) {
-                            ok = false;
-                        }
-                    }
-
-                    // check degree-like things
-                    for (int g = 0 ; g < graphs_to_consider && ok ; ++g) {
-                        if (model.targets_degrees.at(g).at(j) < model.patterns_degrees.at(g).at(i)) {
-                            // not ok, degrees differ
-                            ok = false;
-                        }
-                        else if (! presolve) {
-                            // full compare of neighbourhood degree sequences
-                            need_nds(j);
-                            for (unsigned x = 0 ; ok && x < patterns_ndss.at(g).at(i).size() ; ++x) {
-                                if (targets_ndss.at(g).at(j)->at(x) < patterns_ndss.at(g).at(i).at(x))
-                                    ok = false;
-                            }
-                        }
-                    }
+                    if (! check_label_compatibility(i, j))
+                        ok = false;
+                    else if (! check_loop_compatibility(i, j))
+                        ok = false;
+                    else if (! check_degree_compatibility(i, j, presolve, graphs_to_consider, patterns_ndss, targets_ndss))
+                        ok = false;
 
                     if (ok)
                         domains.at(i).values.set(j);
@@ -892,13 +925,16 @@ namespace
                 domains.at(i).count = domains.at(i).values.count();
             }
 
-            BitSetType_ domains_union{ model.target_size, 0 };
-            for (auto & d : domains)
-                domains_union |= d.values;
+            // quick sanity check that we have enough values
+            if (! params.noninjective) {
+                BitSetType_ domains_union{ model.target_size, 0 };
+                for (auto & d : domains)
+                    domains_union |= d.values;
 
-            unsigned domains_union_popcount = domains_union.count();
-            if (domains_union_popcount < unsigned(model.pattern_size))
-                return false;
+                unsigned domains_union_popcount = domains_union.count();
+                if (domains_union_popcount < unsigned(model.pattern_size))
+                    return false;
+            }
 
             for (auto & d : domains)
                 d.count = d.values.count();
@@ -972,15 +1008,15 @@ namespace
         auto save_result(const Assignments & assignments, Result & result) -> void
         {
             for (auto & a : assignments.values)
-                result.isomorphism.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
+                result.mapping.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
 
             // re-add isolated vertices
             int t = 0;
             for (auto & v : model.isolated_vertices) {
-                while (result.isomorphism.end() != find_if(result.isomorphism.begin(), result.isomorphism.end(),
+                while (result.mapping.end() != find_if(result.mapping.begin(), result.mapping.end(),
                             [&t] (const pair<int, int> & p) { return p.second == t; }))
                         ++t;
-                result.isomorphism.emplace(v, t);
+                result.mapping.emplace(v, t);
             }
 
             string where = "where =";
@@ -1182,15 +1218,15 @@ namespace
     };
 
     template <typename BitSetType_, typename ArrayType_>
-    struct SIPRunner
+    struct SubgraphRunner
     {
-        using Model = SIPModel<BitSetType_, ArrayType_>;
+        using Model = SubgraphModel<BitSetType_, ArrayType_>;
         using Searcher = SequentialSearcher<BitSetType_, ArrayType_>;
 
         Model model;
         const Params & params;
 
-        SIPRunner(const InputGraph & target, const InputGraph & pattern, const Params & p) :
+        SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const Params & p) :
             model(target, pattern, p),
             params(p)
         {
@@ -1198,9 +1234,7 @@ namespace
 
         auto run() -> Result
         {
-            if (model.full_pattern_size > model.target_size) {
-                /* some of our fixed size data structures will throw a hissy
-                 * fit. check this early. */
+            if ((! params.noninjective) && (model.full_pattern_size > model.target_size)) {
                 Result result;
                 result.extra_stats.emplace_back("prepresolved = true");
                 return result;
@@ -1211,7 +1245,7 @@ namespace
 
             if (params.presolve) {
                 Searcher presolver(model, params);
-                model.prepare_presolve(params.induced);
+                model.prepare_presolve(params.induced, params.noninjective);
                 presolve_result = presolver.presolve();
                 if (presolve_result.complete)
                     presolve_result.extra_stats.emplace_back("presolved = true");
@@ -1223,7 +1257,7 @@ namespace
                 return presolve_result;
 
             Searcher solver(model, params);
-            model.prepare(params.induced);
+            model.prepare(params.induced, params.noninjective);
             Result result = solver.solve();
 
             if (params.presolve) {
@@ -1238,11 +1272,11 @@ namespace
     };
 }
 
-auto sequential_subgraph_isomorphism(const pair<InputGraph, InputGraph> & graphs, const Params & params) -> Result
+auto solve_subgraph_problem(const pair<InputGraph, InputGraph> & graphs, const Params & params) -> Result
 {
-    if (graphs.first.size() > graphs.second.size())
+    if ((! params.noninjective) && (graphs.first.size() > graphs.second.size()))
         return Result{ };
 
-    return select_graph_size<SIPRunner, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
+    return select_graph_size<SubgraphRunner, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
 }
 

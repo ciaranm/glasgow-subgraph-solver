@@ -2,6 +2,7 @@
 
 #include "formats/read_file_format.hh"
 #include "solver.hh"
+#include "verify.hh"
 
 #include <boost/program_options.hpp>
 
@@ -52,7 +53,8 @@ auto main(int argc, char * argv[]) -> int
             ("format",             po::value<std::string>(), "Specify input file format (auto, lad, labelledlad, dimacs)")
             ("pattern-format",     po::value<std::string>(), "Specify input file format just for the pattern graph")
             ("target-format",      po::value<std::string>(), "Specify input file format just for the target graph")
-            ("induced",                                      "Solve the induced version")
+            ("induced",                                      "Find an induced mapping")
+            ("noninjective",                                 "Drop the injectivity requirement")
             ("enumerate",                                    "Count the number of solutions");
 
         po::options_description configuration_options{ "Advanced configuration options" };
@@ -103,6 +105,7 @@ auto main(int argc, char * argv[]) -> int
         /* Figure out what our options should be. */
         Params params;
 
+        params.noninjective = options_vars.count("noninjective");
         params.induced = options_vars.count("induced");
         params.enumerate = options_vars.count("enumerate");
         params.presolve = options_vars.count("presolve");
@@ -185,7 +188,7 @@ auto main(int argc, char * argv[]) -> int
         /* Start the clock */
         params.start_time = steady_clock::now();
 
-        auto result = sequential_subgraph_isomorphism(graphs, params);
+        auto result = solve_subgraph_problem(graphs, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
@@ -203,7 +206,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "status = ";
         if (aborted)
             cout << "aborted";
-        else if ((! result.isomorphism.empty()) || (params.enumerate && result.solution_count > 0))
+        else if ((! result.mapping.empty()) || (params.enumerate && result.solution_count > 0))
             cout << "true";
         else
             cout << "false";
@@ -215,9 +218,9 @@ auto main(int argc, char * argv[]) -> int
         cout << "nodes = " << result.nodes << endl;
         cout << "propagations = " << result.propagations << endl;
 
-        if (! result.isomorphism.empty()) {
+        if (! result.mapping.empty()) {
             cout << "mapping = ";
-            for (auto v : result.isomorphism)
+            for (auto v : result.mapping)
                 cout << "(" << v.first << " -> " << v.second << ") ";
             cout << endl;
         }
@@ -227,19 +230,7 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
-        if (! result.isomorphism.empty()) {
-            for (int i = 0 ; i < graphs.first.size() ; ++i) {
-                for (int j = 0 ; j < graphs.first.size() ; ++j) {
-                    if (params.induced || graphs.first.adjacent(i, j)) {
-                        if (graphs.first.adjacent(i, j) !=
-                                graphs.second.adjacent(result.isomorphism.find(i)->second, result.isomorphism.find(j)->second)) {
-                            cerr << "Oops! not an isomorphism: " << i << ", " << j << endl;
-                            return EXIT_FAILURE;
-                        }
-                    }
-                }
-            }
-        }
+        verify(graphs, params, result);
 
         return EXIT_SUCCESS;
     }
