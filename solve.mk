@@ -15,4 +15,7 @@ SOURCES := \
     verify.cc
 
 TGT_LDLIBS := $(boost_ldlibs)
+TGT_PREREQS := run-tests.bash
+
+TGT_POSTMAKE := bash ./run-tests.bash
 
