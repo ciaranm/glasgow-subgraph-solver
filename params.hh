@@ -29,9 +29,6 @@ struct Params
     /// Enumerate?
     bool enumerate = false;
 
-    /// Presolve?
-    bool presolve = false;
-
     /// Which value-ordering heuristic?
     ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
 

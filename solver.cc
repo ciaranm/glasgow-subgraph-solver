@@ -195,45 +195,6 @@ namespace
                             pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
         }
 
-        auto prepare_presolve(bool induced, bool noninjective) -> void
-        {
-            if (! noninjective) {
-                build_supplemental_graphs(pattern_graph_rows, pattern_size);
-                build_supplemental_graphs(target_graph_rows, target_size);
-            }
-
-            // build complement graphs
-            if (induced) {
-                build_complement_graphs(pattern_graph_rows, pattern_size);
-                build_complement_graphs(target_graph_rows, target_size);
-            }
-
-            // pattern and target degrees, including supplemental graphs
-            for (int g = 0 ; g < max_graphs ; ++g) {
-                patterns_degrees.at(g).resize(pattern_size);
-                targets_degrees.at(g).resize(target_size);
-            }
-
-            for (int g = 0 ; g < max_graphs ; ++g) {
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
-
-                for (unsigned i = 0 ; i < target_size ; ++i)
-                    targets_degrees.at(g).at(i) = target_graph_rows[i * max_graphs + g].count();
-            }
-
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
-
-            // pattern adjacencies, compressed
-            pattern_adjacencies_bits.resize(pattern_size * pattern_size);
-            for (int g = 0 ; g < max_graphs ; ++g)
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    for (unsigned j = 0 ; j < pattern_size ; ++j)
-                        if (pattern_graph_rows[i * max_graphs + g].test(j))
-                            pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
-        }
-
         template <typename PossiblySomeOtherBitSetType_>
         auto build_supplemental_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
         {
@@ -828,7 +789,6 @@ namespace
         auto check_degree_compatibility(
                 int p,
                 int t,
-                bool presolve,
                 int graphs_to_consider,
                 vector<vector<vector<int> > > & patterns_ndss,
                 vector<vector<optional<vector<int> > > > & targets_ndss
@@ -842,34 +802,33 @@ namespace
                     // not ok, degrees differ
                     return false;
                 }
-                else if (! presolve) {
-                    // full compare of neighbourhood degree sequences
-                    if (! targets_ndss.at(0).at(t)) {
-                        for (int g = 0 ; g < graphs_to_consider ; ++g) {
-                            targets_ndss.at(g).at(t) = vector<int>{};
-                            auto ni = model.target_graph_rows[t * model.max_graphs + g];
-                            for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                                ni.reset(j);
-                                targets_ndss.at(g).at(t)->push_back(model.targets_degrees.at(g).at(j));
-                            }
-                            sort(targets_ndss.at(g).at(t)->begin(), targets_ndss.at(g).at(t)->end(), greater<int>());
-                        }
-                    }
 
-                    for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
-                        if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x))
-                            return false;
+                // full compare of neighbourhood degree sequences
+                if (! targets_ndss.at(0).at(t)) {
+                    for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                        targets_ndss.at(g).at(t) = vector<int>{};
+                        auto ni = model.target_graph_rows[t * model.max_graphs + g];
+                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
+                            ni.reset(j);
+                            targets_ndss.at(g).at(t)->push_back(model.targets_degrees.at(g).at(j));
+                        }
+                        sort(targets_ndss.at(g).at(t)->begin(), targets_ndss.at(g).at(t)->end(), greater<int>());
                     }
+                }
+
+                for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
+                    if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x))
+                        return false;
                 }
             }
 
             return true;
         }
 
-        auto initialise_domains(Domains & domains, bool presolve) -> bool
+        auto initialise_domains(Domains & domains) -> bool
         {
-            int graphs_to_consider = presolve ? 1 : model.max_graphs;
-            if ((! presolve) && params.induced) {
+            int graphs_to_consider = model.max_graphs;
+            if (params.induced) {
                 // when looking at the complement graph, if the largest degree
                 // in the pattern is smaller than the smallest degree in the
                 // target, then we're going to spend a lot of time doing
@@ -886,7 +845,7 @@ namespace
             vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
             vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
 
-            if ((! presolve) && (! params.noninjective)) {
+            if (! params.noninjective) {
                 for (int g = 0 ; g < graphs_to_consider ; ++g) {
                     patterns_ndss.at(g).resize(model.pattern_size);
                     targets_ndss.at(g).resize(model.target_size);
@@ -915,7 +874,7 @@ namespace
                         ok = false;
                     else if (! check_loop_compatibility(i, j))
                         ok = false;
-                    else if (! check_degree_compatibility(i, j, presolve, graphs_to_consider, patterns_ndss, targets_ndss))
+                    else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss))
                         ok = false;
 
                     if (ok)
@@ -1031,7 +990,7 @@ namespace
 
             // domains
             Domains domains(model.pattern_size, Domain{ model.target_size });
-            if (! initialise_domains(domains, false)) {
+            if (! initialise_domains(domains)) {
                 result.complete = true;
                 return result;
             }
@@ -1150,71 +1109,6 @@ namespace
 
             return result;
         }
-
-        auto presolve() -> Result
-        {
-            Result result;
-
-            // domains
-            Domains domains(model.pattern_size, Domain{ model.target_size });
-            if (! initialise_domains(domains, true)) {
-                result.complete = true;
-                return result;
-            }
-
-            // assignments
-            Assignments assignments;
-            assignments.values.reserve(model.pattern_size);
-
-            // start search timer
-            auto search_start_time = steady_clock::now();
-
-            // do just a little bit of search
-            bool done = false;
-
-            for (int pass = 0 ; pass < (params.enumerate ? 1 : 100) && ! done ; ++pass) {
-                auto assignments_copy = assignments;
-                auto domains_copy = domains;
-                long long backtracks_until_give_up = (params.enumerate ? 1000 : 10);
-                ++result.propagations;
-                if (propagate(domains_copy, assignments_copy)) {
-                    switch (restarting_search(assignments_copy, domains_copy, result.nodes, result.propagations,
-                                result.solution_count, 0, backtracks_until_give_up)) {
-                        case SearchResult::Satisfiable:
-                            save_result(assignments_copy, result);
-                            result.complete = true;
-                            done = true;
-                            break;
-
-                        case SearchResult::SatisfiableButKeepGoing:
-                            result.complete = true;
-                            done = true;
-                            break;
-
-                        case SearchResult::Unsatisfiable:
-                            result.complete = true;
-                            done = true;
-                            break;
-
-                        case SearchResult::Aborted:
-                            done = true;
-                            break;
-
-                        case SearchResult::Restart:
-                            break;
-                    }
-                }
-                else {
-                    result.complete = true;
-                    done = true;
-                }
-            }
-
-            result.extra_stats.emplace_back("search_time = " + to_string(
-                        duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
-
-            return result;
-        }
     };
 
     template <typename BitSetType_, typename ArrayType_>
@@ -1240,32 +1134,9 @@ namespace
                 return result;
             }
 
-            Result presolve_result;
-            auto presolve_start_time = steady_clock::now();
-
-            if (params.presolve) {
-                Searcher presolver(model, params);
-                model.prepare_presolve(params.induced, params.noninjective);
-                presolve_result = presolver.presolve();
-                if (presolve_result.complete)
-                    presolve_result.extra_stats.emplace_back("presolved = true");
-            }
-
-            auto presolve_time = duration_cast<milliseconds>(steady_clock::now() - presolve_start_time).count();
-
-            if (presolve_result.complete)
-                return presolve_result;
-
             Searcher solver(model, params);
             model.prepare(params.induced, params.noninjective);
             Result result = solver.solve();
-
-            if (params.presolve) {
-                for (auto & s : presolve_result.extra_stats)
-                    result.extra_stats.emplace_back("presolve_" + s);
-                result.extra_stats.emplace_back("presolved = false");
-                result.extra_stats.emplace_back("presolve_time = " + to_string(presolve_time));
-            }
 
             return result;
         }
