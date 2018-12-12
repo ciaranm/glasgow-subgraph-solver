@@ -126,8 +126,7 @@ namespace
             // recode target to a bit graph
             target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
             for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
-                if (target.adjacent(e->first.first, e->first.second))
-                    target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
+                target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
 
             // target vertex labels
             if (pattern.has_vertex_labels()) {
