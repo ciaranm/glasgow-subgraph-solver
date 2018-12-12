@@ -12,12 +12,13 @@
 #include <string>
 
 #include "restarts.hh"
+#include "timeout.hh"
 #include "value_ordering.hh"
 
 struct Params
 {
-    /// If this is set to true, we should abort due to a time limit.
-    std::atomic<bool> * abort;
+    /// Timeout handler
+    std::unique_ptr<Timeout> timeout;
 
     /// The start time of the algorithm.
     std::chrono::time_point<std::chrono::steady_clock> start_time;

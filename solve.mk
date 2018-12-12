@@ -13,6 +13,7 @@ SOURCES := \
     restarts.cc \
     result.cc \
     solver.cc \
+    timeout.cc \
     verify.cc
 
 TGT_LDLIBS := $(boost_ldlibs)

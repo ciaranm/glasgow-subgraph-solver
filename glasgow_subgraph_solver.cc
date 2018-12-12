@@ -8,43 +8,35 @@
 #include <boost/program_options.hpp>
 
 #include <chrono>
-#include <condition_variable>
 #include <cstdlib>
 #include <ctime>
 #include <exception>
 #include <iomanip>
 #include <iostream>
 #include <memory>
-#include <mutex>
-#include <thread>
 
 #include <unistd.h>
 
 namespace po = boost::program_options;
 
-using std::atomic;
 using std::boolalpha;
 using std::cerr;
-using std::condition_variable;
 using std::cout;
-using std::cv_status;
 using std::endl;
 using std::exception;
 using std::function;
 using std::localtime;
 using std::make_pair;
 using std::make_unique;
-using std::mutex;
 using std::put_time;
 using std::string;
-using std::thread;
-using std::unique_lock;
 
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
-using std::chrono::duration_cast;
-using std::chrono::milliseconds;
 
 auto main(int argc, char * argv[]) -> int
 {
@@ -168,35 +160,8 @@ auto main(int argc, char * argv[]) -> int
         cout << "pattern_file = " << options_vars["pattern-file"].as<std::string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<std::string>() << endl;
 
-        int timeout = options_vars.count("timeout") ? options_vars["timeout"].as<int>() : 0;
-
-        /* For a timeout, we use a thread and a timed CV. We also wake the
-         * CV up if we're done, so the timeout thread can terminate. */
-        bool aborted = false;
-        thread timeout_thread;
-        mutex timeout_mutex;
-        condition_variable timeout_cv;
-        atomic<bool> abort;
-        abort.store(false);
-        params.abort = &abort;
-        if (0 != timeout) {
-            timeout_thread = thread([&] {
-                    auto abort_time = steady_clock::now() + seconds(timeout);
-                    {
-                        /* Sleep until either we've reached the time limit,
-                         * or we've finished all the work. */
-                        unique_lock<mutex> guard(timeout_mutex);
-                        while (! abort.load()) {
-                            if (cv_status::timeout == timeout_cv.wait_until(guard, abort_time)) {
-                                /* We've woken up, and it's due to a timeout. */
-                                aborted = true;
-                                break;
-                            }
-                        }
-                    }
-                    abort.store(true);
-                    });
-        }
+        /* Prepare and start timeout */
+        params.timeout = make_unique<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
 
         /* Start the clock */
         params.start_time = steady_clock::now();
@@ -206,18 +171,10 @@ auto main(int argc, char * argv[]) -> int
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
 
-        /* Clean up the timeout thread */
-        if (timeout_thread.joinable()) {
-            {
-                unique_lock<mutex> guard(timeout_mutex);
-                abort.store(true);
-                timeout_cv.notify_all();
-            }
-            timeout_thread.join();
-        }
+        params.timeout->stop();
 
         cout << "status = ";
-        if (aborted)
+        if (params.timeout->aborted())
             cout << "aborted";
         else if ((! result.mapping.empty()) || (params.enumerate && result.solution_count > 0))
             cout << "true";

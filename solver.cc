@@ -646,7 +646,7 @@ namespace
                 int depth,
                 RestartsSchedule & restarts_schedule) -> SearchResult
         {
-            if (params.abort->load())
+            if (params.timeout->should_abort())
                 return SearchResult::Aborted;
 
             ++nodes;
