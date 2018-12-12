@@ -1,6 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "formats/read_file_format.hh"
+#include "restarts.hh"
 #include "solver.hh"
 #include "verify.hh"
 
@@ -13,6 +14,7 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -31,6 +33,7 @@ using std::exception;
 using std::function;
 using std::localtime;
 using std::make_pair;
+using std::make_unique;
 using std::mutex;
 using std::put_time;
 using std::string;
@@ -110,10 +113,22 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("nogood-size-limit"))
             params.nogood_size_limit = options_vars["nogood-size-limit"].as<int>();
-        if (options_vars.count("restarts-constant"))
-            params.restarts_constant = options_vars["restarts-constant"].as<int>();
-        if (options_vars.count("geometric-restarts"))
-            params.geometric_multiplier = options_vars["geometric-restarts"].as<double>();
+
+        if (params.enumerate)
+            params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        else if (options_vars.count("geometric-restarts")) {
+            double initial_value = GeometricRestartsSchedule::default_initial_value;
+            double multiplier = options_vars["geometric-restarts"].as<double>();
+            if (options_vars.count("restarts-constant"))
+                multiplier = options_vars["restarts-constant"].as<int>();
+            params.restarts_schedule = make_unique<GeometricRestartsSchedule>(initial_value, multiplier);
+        }
+        else {
+            long long multiplier = LubyRestartsSchedule::default_multiplier;
+            if (options_vars.count("restarts-constant"))
+                multiplier = options_vars["restarts-constant"].as<int>();
+            params.restarts_schedule = make_unique<LubyRestartsSchedule>(multiplier);
+        }
 
         if (options_vars.count("value-ordering")) {
             std::string value_ordering_heuristic = options_vars["value-ordering"].as<std::string>();

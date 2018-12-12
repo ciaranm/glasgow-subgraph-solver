@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <functional>
 #include <limits>
 #include <list>
@@ -34,7 +33,6 @@ using std::next;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
-using std::round;
 using std::sort;
 using std::stable_sort;
 using std::string;
@@ -646,7 +644,7 @@ namespace
                 unsigned long long & propagations,
                 unsigned long long & solution_count,
                 int depth,
-                long long & backtracks_until_restart) -> SearchResult
+                RestartsSchedule & restarts_schedule) -> SearchResult
         {
             if (params.abort->load())
                 return SearchResult::Aborted;
@@ -720,7 +718,7 @@ namespace
 
                 // recursive search
                 auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
-                        solution_count, depth + 1, backtracks_until_restart);
+                        solution_count, depth + 1, restarts_schedule);
 
                 switch (search_result) {
                     case SearchResult::Satisfiable:
@@ -759,7 +757,10 @@ namespace
             }
 
             // no values remaining, backtrack, or possibly kick off a restart
-            if (actually_hit_a_failure && backtracks_until_restart > 0 && 0 == --backtracks_until_restart) {
+            if (actually_hit_a_failure)
+                restarts_schedule.did_a_backtrack();
+
+            if (restarts_schedule.should_restart()) {
                 post_nogood(assignments);
                 return SearchResult::Restart;
             }
@@ -1002,31 +1003,11 @@ namespace
             // start search timer
             auto search_start_time = steady_clock::now();
 
-            // do the appropriate search variant
+            // do the search
             bool done = false;
-            list<long long> luby = {{ 1 }};
-            auto current_luby = luby.begin();
-            double current_geometric = params.restarts_constant;
             unsigned number_of_restarts = 0;
 
             while (! done) {
-                long long backtracks_until_restart;
-
-                if (params.enumerate || 0 == params.restarts_constant)
-                    backtracks_until_restart = -1;
-                else if (0.0 != params.geometric_multiplier) {
-                    current_geometric *= params.geometric_multiplier;
-                    backtracks_until_restart = round(current_geometric);
-                }
-                else {
-                    backtracks_until_restart = *current_luby * params.restarts_constant;
-                    if (next(current_luby) == luby.end()) {
-                        luby.insert(luby.end(), luby.begin(), luby.end());
-                        luby.push_back(*luby.rbegin() * 2);
-                    }
-                    ++current_luby;
-                }
-
                 ++number_of_restarts;
 
                 // start watching new nogoods. we're not backjumping so this is a bit icky.
@@ -1058,7 +1039,7 @@ namespace
                     auto assignments_copy = assignments;
 
                     switch (restarting_search(assignments_copy, domains, result.nodes, result.propagations,
-                                result.solution_count, 0, backtracks_until_restart)) {
+                                result.solution_count, 0, *params.restarts_schedule)) {
                         case SearchResult::Satisfiable:
                             save_result(assignments_copy, result);
                             result.complete = true;
@@ -1087,6 +1068,8 @@ namespace
                     result.complete = true;
                     done = true;
                 }
+
+                params.restarts_schedule->did_a_restart();
             }
 
             if (! params.enumerate)

@@ -10,6 +10,7 @@ SOURCES := \
     fixed_bit_set.cc \
     glasgow_subgraph_solver.cc \
     params.cc \
+    restarts.cc \
     result.cc \
     solver.cc \
     verify.cc

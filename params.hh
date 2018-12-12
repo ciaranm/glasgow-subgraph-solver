@@ -8,8 +8,10 @@
 #include <cmath>
 #include <exception>
 #include <limits>
+#include <memory>
 #include <string>
 
+#include "restarts.hh"
 #include "value_ordering.hh"
 
 struct Params
@@ -32,14 +34,8 @@ struct Params
     /// Which value-ordering heuristic?
     ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
 
-    /// Default chosen by SMAC
-    static constexpr unsigned long long dodgy_default_magic_constant_restart_multiplier = 660;
-
-    /// Constant multiplier for restarts sequence (0 disables restarts)
-    unsigned long long restarts_constant = dodgy_default_magic_constant_restart_multiplier;
-
-    /// If non-zero, use geometric restarts with this multiplier, instead of Luby
-    double geometric_multiplier = 0.0;
+    /// Restarts schedule
+    std::unique_ptr<RestartsSchedule> restarts_schedule;
 
     /// Largest size of nogood to store (0 disables nogoods)
     unsigned nogood_size_limit = std::numeric_limits<unsigned>::max();
