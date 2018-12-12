@@ -5,54 +5,30 @@
 
 #include "fixed_bit_set.hh"
 
-#include <type_traits>
-#include <vector>
 #include <array>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include <boost/dynamic_bitset.hpp>
 
-template <unsigned...>
-struct GraphSizes;
-
-struct NoMoreGraphSizes
+template <template <typename, typename> class Algorithm_, typename Result_, typename Graph_, unsigned size_, unsigned... other_sizes_, typename... Params_>
+auto select_graph_size(const std::integer_sequence<unsigned, size_, other_sizes_...> &, const Graph_ & graph, Params_ && ... params) -> Result_
 {
-};
-
-template <unsigned n_, unsigned... n_rest_>
-struct GraphSizes<n_, n_rest_...>
-{
-    enum { n = n_ };
-
-    using Rest = GraphSizes<n_rest_...>;
-};
-
-template <unsigned n_>
-struct GraphSizes<n_>
-{
-    enum { n = n_ };
-
-    using Rest = NoMoreGraphSizes;
-};
-
-template <template <typename, typename> class Algorithm_, typename Result_, typename Graph_, unsigned... sizes_, typename... Params_>
-auto select_graph_size(const GraphSizes<sizes_...> &, const Graph_ & graph, Params_ && ... params) -> Result_
-{
-    if (graph.size() < GraphSizes<sizes_...>::n * bits_per_word) {
-        Algorithm_<FixedBitSet<GraphSizes<sizes_...>::n>, std::array<int, GraphSizes<sizes_...>::n * bits_per_word + 1> > algorithm{
-            graph, std::forward<Params_>(params)... };
+    if (graph.size() < int(size_ * bits_per_word)) {
+        Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1> > algorithm{ graph, std::forward<Params_>(params)... };
         return algorithm.run();
     }
-    else
-        return select_graph_size<Algorithm_, Result_, Graph_>(typename GraphSizes<sizes_...>::Rest(), graph, std::forward<Params_>(params)...);
+    else {
+        if constexpr (0 == sizeof...(other_sizes_)) {
+            Algorithm_<boost::dynamic_bitset<>, std::vector<int> > algorithm{ graph, std::forward<Params_>(params)... };
+            return algorithm.run();
+        }
+        else
+            return select_graph_size<Algorithm_, Result_, Graph_>(std::integer_sequence<unsigned, other_sizes_...>{}, graph, std::forward<Params_>(params)...);
+    }
 }
 
-template <template <typename, typename> class Algorithm_, typename Result_, typename Graph_, typename... Params_>
-auto select_graph_size(const NoMoreGraphSizes &, const Graph_ & graph, Params_ && ... params) -> Result_
-{
-    Algorithm_<boost::dynamic_bitset<>, std::vector<int> > algorithm{ graph, std::forward<Params_>(params)... };
-    return algorithm.run();
-}
-
-using AllGraphSizes = GraphSizes<1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
+using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
 
 #endif
