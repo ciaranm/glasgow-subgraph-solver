@@ -5,7 +5,6 @@
 
 using std::map;
 using std::string;
-using std::to_string;
 
 BuggySolution::BuggySolution(const string & message) throw () :
     _what(message)
@@ -26,47 +25,55 @@ auto verify(const std::pair<InputGraph, InputGraph> & graphs, const Params & par
     // totality and range
     for (int i = 0 ; i < graphs.first.size() ; ++i) {
         if (! result.mapping.count(i))
-            throw BuggySolution{ "No mapping for vertex " + to_string(i) };
+            throw BuggySolution{ "No mapping for vertex " + graphs.first.vertex_name(i) };
         else if (result.mapping.find(i)->second < 0 || result.mapping.find(i)->second >= graphs.second.size())
-            throw BuggySolution{ "Mapping " + to_string(i) + " -> " + to_string(result.mapping.find(i)->second) + " out of range" };
+            throw BuggySolution{ "Mapping " + graphs.first.vertex_name(i) + " -> " +
+                graphs.second.vertex_name(result.mapping.find(i)->second) + " out of range" };
     }
 
     // no extra stuff
     for (auto & i : result.mapping)
         if (i.first < 0 || i.first >= graphs.first.size())
-            throw BuggySolution{ "Vertex " + to_string(i.first)  + " out of range" };
+            throw BuggySolution{ "Vertex " + graphs.first.vertex_name(i.first)  + " out of range" };
 
     // labels
     if (graphs.first.has_vertex_labels())
         for (int i = 0 ; i < graphs.first.size() ; ++i)
             if (graphs.first.vertex_label(i) != graphs.second.vertex_label(result.mapping.find(i)->second))
-                throw BuggySolution{ "Mismatched vertex label for assignment " + to_string(i) + " -> " + to_string(result.mapping.find(i)->second) };
+                throw BuggySolution{ "Mismatched vertex label for assignment " + graphs.first.vertex_name(i) + " -> " +
+                    graphs.second.vertex_name(result.mapping.find(i)->second) };
 
     // injectivity
     if (! params.noninjective) {
         map<int, int> seen;
         for (auto & [ i, j ] : result.mapping) {
             if (! seen.emplace(j, i).second)
-                throw BuggySolution{ "Non-injective mapping: " + to_string(i) + " -> " + to_string(result.mapping.find(i)->second) + " and "
-                    + to_string(seen.find(j)->second) + " -> " + to_string(j) };
+                throw BuggySolution{ "Non-injective mapping: " + graphs.first.vertex_name(i) + " -> " +
+                    graphs.second.vertex_name(result.mapping.find(i)->second) + " and " +
+                    graphs.second.vertex_name(seen.find(j)->second) + " -> " + graphs.first.vertex_name(j) };
         }
     }
 
     // loops
     for (int i = 0 ; i < graphs.first.size() ; ++i) {
         if (graphs.first.adjacent(i, i) && ! graphs.second.adjacent(result.mapping.find(i)->second, result.mapping.find(i)->second))
-            throw BuggySolution{ "Vertex " + to_string(i) + " has a loop but mapped vertex " + to_string(result.mapping.find(i)->second) + " does not" };
-        else if (params.induced && graphs.second.adjacent(result.mapping.find(i)->second, result.mapping.find(i)->second && ! graphs.first.adjacent(i, i)))
-            throw BuggySolution{ "Vertex " + to_string(i) + " has no loop but mapped vertex " + to_string(result.mapping.find(i)->second) + " does" };
+            throw BuggySolution{ "Vertex " + graphs.first.vertex_name(i) + " has a loop but mapped vertex " +
+                graphs.second.vertex_name(result.mapping.find(i)->second) + " does not" };
+        else if (params.induced && graphs.second.adjacent(result.mapping.find(i)->second, result.mapping.find(i)->second &&
+                    ! graphs.first.adjacent(i, i)))
+            throw BuggySolution{ "Vertex " + graphs.first.vertex_name(i) + " has no loop but mapped vertex " +
+                graphs.second.vertex_name(result.mapping.find(i)->second) + " does" };
     }
 
     // adjacency, non-adjacency, and edge labels
     for (auto & [ i, t ] : result.mapping) {
         for (auto & [ j, u ] : result.mapping) {
             if (graphs.first.adjacent(i, j) && ! graphs.second.adjacent(t, u))
-                throw BuggySolution{ "Edge " + to_string(i) + " -- " + to_string(j) + " mapped to non-edge " + to_string(t) + " -/- " + to_string(u) };
+                throw BuggySolution{ "Edge " + graphs.first.vertex_name(i) + " -- " + graphs.first.vertex_name(j) +
+                    " mapped to non-edge " + graphs.second.vertex_name(t) + " -/- " + graphs.second.vertex_name(u) };
             else if (params.induced && ! graphs.first.adjacent(i, j) && graphs.second.adjacent(t, u))
-                throw BuggySolution{ "Non-edge " + to_string(i) + " -/- " + to_string(j) + " mapped to edge " + to_string(t) + " -- " + to_string(u) };
+                throw BuggySolution{ "Non-edge " + graphs.first.vertex_name(i) + " -/- " + graphs.first.vertex_name(j) +
+                    " mapped to edge " + graphs.second.vertex_name(t) + " -- " + graphs.second.vertex_name(u) };
         }
     }
 }

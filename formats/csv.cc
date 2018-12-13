@@ -41,7 +41,7 @@ auto read_csv(ifstream && infile, const string & filename) -> InputGraph
         result.add_edge(e.first, e.second);
 
     for (auto & [v, l] : vertices)
-        result.set_vertex_label(l, v);
+        result.set_vertex_name(l, v);
 
     return result;
 }

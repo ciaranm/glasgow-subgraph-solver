@@ -58,7 +58,7 @@ auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
         throw GraphFileError{ filename, "error reading file" };
 
     for (int v = 0 ; v < result.size() ; ++v)
-        result.set_vertex_label(v, to_string(v + 1));
+        result.set_vertex_name(v, to_string(v + 1));
 
     return result;
 }

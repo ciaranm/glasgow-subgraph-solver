@@ -191,7 +191,7 @@ auto main(int argc, char * argv[]) -> int
         if (! result.mapping.empty()) {
             cout << "mapping = ";
             for (auto v : result.mapping)
-                cout << "(" << v.first << " -> " << v.second << ") ";
+                cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
             cout << endl;
         }
 

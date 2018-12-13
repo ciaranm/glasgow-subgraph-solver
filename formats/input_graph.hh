@@ -23,6 +23,7 @@ class InputGraph
         bool _has_vertex_labels, _has_edge_labels;
         std::map<std::pair<int, int>, std::string> _edges;
         std::vector<std::string> _vertex_labels;
+        std::vector<std::string> _vertex_names;
 
     public:
         /**
@@ -73,6 +74,16 @@ class InputGraph
         auto vertex_label(int v) const -> std::string_view;
 
         auto has_vertex_labels() const -> bool;
+
+        /**
+         * Set a vertex name (for output purposes).
+         */
+        auto set_vertex_name(int v, std::string_view label) -> void;
+
+        /**
+         * What is the name associated with a given vertex (for output purposes)?
+         */
+        auto vertex_name(int v) const -> std::string;
 
         /**
          * What is the label associated with a given edge?
