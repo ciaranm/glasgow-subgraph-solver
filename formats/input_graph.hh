@@ -33,6 +33,8 @@ class InputGraph
 
         InputGraph(const InputGraph &) = default;
 
+        InputGraph(InputGraph &&) = default;
+
         /**
          * Number of vertices.
          */
