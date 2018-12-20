@@ -45,9 +45,9 @@ auto main(int argc, char * argv[]) -> int
         display_options.add_options()
             ("help",                                         "Display help information")
             ("timeout",            po::value<int>(),         "Abort after this many seconds")
-            ("format",             po::value<std::string>(), "Specify input file format (auto, lad, labelledlad, dimacs)")
-            ("pattern-format",     po::value<std::string>(), "Specify input file format just for the pattern graph")
-            ("target-format",      po::value<std::string>(), "Specify input file format just for the target graph")
+            ("format",             po::value<string>(),      "Specify input file format (auto, lad, labelledlad, dimacs)")
+            ("pattern-format",     po::value<string>(),      "Specify input file format just for the pattern graph")
+            ("target-format",      po::value<string>(),      "Specify input file format just for the target graph")
             ("induced",                                      "Find an induced mapping")
             ("noninjective",                                 "Drop the injectivity requirement")
             ("enumerate",                                    "Count the number of solutions");
@@ -58,7 +58,7 @@ auto main(int argc, char * argv[]) -> int
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (0 disables restarts)")
             ("restart-timer",      po::value<int>(),         "Also restart after this many milliseconds (0 disables)")
             ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)")
-            ("value-ordering",     po::value<std::string>(), "Specify value-ordering heuristic (biased / degree / antidegree / random)");
+            ("value-ordering",     po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
         display_options.add(configuration_options);
 
         po::options_description all_options{ "All options" };
@@ -123,7 +123,7 @@ auto main(int argc, char * argv[]) -> int
         }
 
         if (options_vars.count("value-ordering")) {
-            std::string value_ordering_heuristic = options_vars["value-ordering"].as<std::string>();
+            string value_ordering_heuristic = options_vars["value-ordering"].as<string>();
             if (value_ordering_heuristic == "biased")
                 params.value_ordering_heuristic = ValueOrdering::Biased;
             else if (value_ordering_heuristic == "degree")
@@ -157,8 +157,8 @@ auto main(int argc, char * argv[]) -> int
             read_file_format(pattern_format_name, options_vars["pattern-file"].as<string>()),
             read_file_format(target_format_name, options_vars["target-file"].as<string>()));
 
-        cout << "pattern_file = " << options_vars["pattern-file"].as<std::string>() << endl;
-        cout << "target_file = " << options_vars["target-file"].as<std::string>() << endl;
+        cout << "pattern_file = " << options_vars["pattern-file"].as<string>() << endl;
+        cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
 
         /* Prepare and start timeout */
         params.timeout = make_unique<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
