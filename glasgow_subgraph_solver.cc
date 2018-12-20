@@ -112,7 +112,7 @@ auto main(int argc, char * argv[]) -> int
             double initial_value = GeometricRestartsSchedule::default_initial_value;
             double multiplier = options_vars["geometric-restarts"].as<double>();
             if (options_vars.count("restarts-constant"))
-                multiplier = options_vars["restarts-constant"].as<int>();
+                initial_value = options_vars["restarts-constant"].as<int>();
             params.restarts_schedule = make_unique<GeometricRestartsSchedule>(initial_value, multiplier);
         }
         else {
