@@ -284,6 +284,8 @@ namespace
                 if (done)
                     break;
 
+                watches.clear_new_nogoods();
+
                 auto new_p = p;
                 vector<int> c;
                 switch (expand(result.nodes, result.find_nodes, result.prove_nodes, c, new_p)) {

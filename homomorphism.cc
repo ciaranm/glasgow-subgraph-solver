@@ -19,6 +19,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <boost/thread/barrier.hpp>
 #include <boost/dynamic_bitset.hpp>
 
 using std::fill;
@@ -50,6 +51,7 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::operator""ms;
 
+using boost::barrier;
 using boost::dynamic_bitset;
 
 namespace
@@ -989,6 +991,8 @@ namespace
                 if (done)
                     break;
 
+                searcher.watches.clear_new_nogoods();
+
                 ++result.propagations;
                 if (searcher.propagate(domains, assignments)) {
                     auto assignments_copy = assignments;
@@ -1088,9 +1092,11 @@ namespace
             vector<thread> threads;
             vector<unique_ptr<Searcher<BitSetType_, ArrayType_> > > searchers{ n_threads };
 
+            barrier wait_for_new_nogoods_barrier{ n_threads }, synced_nogoods_barrier{ n_threads };
+
             for (unsigned t = 0 ; t < n_threads ; ++t)
-                threads.emplace_back([t, &searchers, &common_domains, &model = this->model, &params = this->params,
-                        &common_result, &common_result_mutex] () {
+                threads.emplace_back([t, &searchers, &common_domains, &model = this->model, &params = this->params, n_threads = this->n_threads,
+                        &common_result, &common_result_mutex, &wait_for_new_nogoods_barrier, &synced_nogoods_barrier] () {
                     // do the search
                     HomomorphismResult thread_result;
 
@@ -1098,7 +1104,6 @@ namespace
                     if (0 != t)
                         searchers[t]->global_rand.seed(t);
 
-                    bool done = false;
                     unsigned number_of_restarts = 0;
 
                     Domains domains = common_domains;
@@ -1109,11 +1114,17 @@ namespace
                     // each thread needs its own restarts schedule
                     unique_ptr<RestartsSchedule> thread_restarts_schedule{ params.restarts_schedule->clone() };
 
-                    while (! done) {
+                    while (true) {
                         ++number_of_restarts;
 
+                        wait_for_new_nogoods_barrier.wait();
+
+                        for (unsigned u = 0 ; u < n_threads ; ++u)
+                            if (t != u)
+                                searchers[t]->watches.gather_nogoods_from(searchers[u]->watches);
+
                         // start watching new nogoods
-                        done = searchers[t]->watches.apply_new_nogoods(
+                        if (searchers[t]->watches.apply_new_nogoods(
                                 [&] (const Assignment & assignment) {
                                     for (auto & d : domains)
                                         if (d.v == assignment.pattern_vertex) {
@@ -1121,10 +1132,13 @@ namespace
                                             d.count = d.values.count();
                                             break;
                                         }
-                                });
-
-                        if (done)
+                                })) {
                             break;
+                        }
+
+                        synced_nogoods_barrier.wait();
+
+                        searchers[t]->watches.clear_new_nogoods();
 
                         ++thread_result.propagations;
                         if (searchers[t]->propagate(domains, thread_assignments)) {
@@ -1135,21 +1149,24 @@ namespace
                                 case SearchResult::Satisfiable:
                                     searchers[t]->save_result(assignments_copy, thread_result);
                                     thread_result.complete = true;
-                                    done = true;
+                                    params.timeout->trigger_early_abort();
+                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
                                     break;
 
                                 case SearchResult::SatisfiableButKeepGoing:
                                     thread_result.complete = true;
-                                    done = true;
+                                    params.timeout->trigger_early_abort();
+                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
                                     break;
 
                                 case SearchResult::Unsatisfiable:
                                     thread_result.complete = true;
-                                    done = true;
+                                    params.timeout->trigger_early_abort();
+                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
                                     break;
 
                                 case SearchResult::Aborted:
-                                    done = true;
+                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
                                     break;
 
                                 case SearchResult::Restart:
@@ -1158,13 +1175,12 @@ namespace
                         }
                         else {
                             thread_result.complete = true;
-                            done = true;
+                            searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
+                            params.timeout->trigger_early_abort();
                         }
 
                         thread_restarts_schedule->did_a_restart();
                     }
-
-                    params.timeout->trigger_early_abort();
 
                     thread_result.extra_stats.emplace_back("nogoods_size = " + to_string(searchers[t]->watches.nogoods.size()));
 

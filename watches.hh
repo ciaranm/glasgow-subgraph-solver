@@ -38,7 +38,7 @@ struct Watches
     // parallel shenanigans easier).
     using NeedToWatch = std::list<typename NogoodStore::iterator>;
 
-    NeedToWatch need_to_watch;
+    NeedToWatch need_to_watch, gathered_need_to_watch;
 
     template <typename CanWatchFunction_, typename AssignmentIsNogoodFunction_>
     auto propagate(
@@ -98,21 +98,47 @@ struct Watches
     auto apply_new_nogoods(
             const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> bool
     {
-        for (auto & n : need_to_watch) {
-            if (n->literals.empty()) {
+        for (auto & n : need_to_watch)
+            if (apply_one_new_nogood(n, assignment_is_nogood))
                 return true;
-            }
-            else if (1 == n->literals.size()) {
-                assignment_is_nogood(n->literals[0]);
-            }
-            else {
-                table[n->literals[0]].push_back(n);
-                table[n->literals[1]].push_back(n);
-            }
-        }
-        need_to_watch.clear();
+
+        for (auto & n : gathered_need_to_watch)
+            if (apply_one_new_nogood(n, assignment_is_nogood))
+                return true;
 
         return false;
+    }
+
+    template <typename AssignmentIsNogoodFunction_>
+    auto apply_one_new_nogood(
+            const typename NogoodStore::iterator & n,
+            const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> bool
+    {
+        if (n->literals.empty())
+            return true;
+        else if (1 == n->literals.size())
+            assignment_is_nogood(n->literals[0]);
+        else {
+            table[n->literals[0]].push_back(n);
+            table[n->literals[1]].push_back(n);
+        }
+
+        return false;
+    }
+
+    auto gather_nogoods_from(
+            Watches & other)
+    {
+        for (auto & n : other.need_to_watch) {
+            nogoods.emplace_back(*n);
+            gathered_need_to_watch.emplace_back(std::prev(nogoods.end()));
+        }
+    }
+
+    auto clear_new_nogoods() -> void
+    {
+        need_to_watch.clear();
+        gathered_need_to_watch.clear();
     }
 };
 
