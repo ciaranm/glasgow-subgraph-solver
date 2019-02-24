@@ -1,6 +1,6 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "params.hh"
+#include "configuration.hh"
 
 using std::string;
 

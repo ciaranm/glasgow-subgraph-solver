@@ -1,7 +1,7 @@
 BUILD_DIR := intermediate
 TARGET_DIR := ./
 
-SUBMAKEFILES := solve.mk
+SUBMAKEFILES := common.mk glasgow_subgraph_solver.mk glasgow_clique_solver.mk
 
 boost_ldlibs := -lboost_thread -lboost_system -lboost_program_options
 

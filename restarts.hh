@@ -13,6 +13,8 @@ class RestartsSchedule
         virtual auto did_a_backtrack() -> void = 0;
         virtual auto did_a_restart() -> void = 0;
         virtual auto should_restart() -> bool = 0;
+        virtual auto might_restart() -> bool = 0;
+        virtual auto clone() -> RestartsSchedule * = 0;
 };
 
 class NoRestartsSchedule final : public RestartsSchedule
@@ -21,6 +23,8 @@ class NoRestartsSchedule final : public RestartsSchedule
         virtual auto did_a_backtrack() -> void override;
         virtual auto did_a_restart() -> void override;
         virtual auto should_restart() -> bool override;
+        virtual auto might_restart() -> bool override;
+        virtual auto clone() -> NoRestartsSchedule * override;
 };
 
 class LubyRestartsSchedule final : public RestartsSchedule
@@ -31,13 +35,15 @@ class LubyRestartsSchedule final : public RestartsSchedule
         std::list<long long>::const_iterator _current_sequence;
 
     public:
-        static constexpr unsigned long long default_multiplier = 660; // chosen by SMAC
+        static constexpr unsigned long long default_multiplier = 666; // chosen by divine inspiration
 
         explicit LubyRestartsSchedule(long long multiplier);
 
         virtual auto did_a_backtrack() -> void override;
         virtual auto did_a_restart() -> void override;
         virtual auto should_restart() -> bool override;
+        virtual auto might_restart() -> bool override;
+        virtual auto clone() -> LubyRestartsSchedule * override;
 };
 
 class GeometricRestartsSchedule final : public RestartsSchedule
@@ -47,7 +53,7 @@ class GeometricRestartsSchedule final : public RestartsSchedule
         double _current_value, _multiplier;
 
     public:
-        static constexpr double default_initial_value = 660;
+        static constexpr double default_initial_value = 5400;
         static constexpr double default_multiplier = 1.0;
 
         GeometricRestartsSchedule(double initial_value, double multiplier);
@@ -55,6 +61,8 @@ class GeometricRestartsSchedule final : public RestartsSchedule
         virtual auto did_a_backtrack() -> void override;
         virtual auto did_a_restart() -> void override;
         virtual auto should_restart() -> bool override;
+        virtual auto might_restart() -> bool override;
+        virtual auto clone() -> GeometricRestartsSchedule * override;
 };
 
 #endif

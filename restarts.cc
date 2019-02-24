@@ -18,6 +18,16 @@ auto NoRestartsSchedule::should_restart() -> bool
     return false;
 }
 
+auto NoRestartsSchedule::might_restart() -> bool
+{
+    return false;
+}
+
+auto NoRestartsSchedule::clone() -> NoRestartsSchedule *
+{
+    return new NoRestartsSchedule(*this);
+}
+
 LubyRestartsSchedule::LubyRestartsSchedule(long long m) :
     _backtracks_remaining(m)
 {
@@ -44,6 +54,16 @@ auto LubyRestartsSchedule::should_restart() -> bool
     return _backtracks_remaining <= 0;
 }
 
+auto LubyRestartsSchedule::clone() -> LubyRestartsSchedule *
+{
+    return new LubyRestartsSchedule(*this);
+}
+
+auto LubyRestartsSchedule::might_restart() -> bool
+{
+    return true;
+}
+
 GeometricRestartsSchedule::GeometricRestartsSchedule(double v, double m) :
     _current_value(v),
     _multiplier(m)
@@ -64,5 +84,15 @@ auto GeometricRestartsSchedule::did_a_restart() -> void
 auto GeometricRestartsSchedule::should_restart() -> bool
 {
     return _number_of_backtracks >= round(_current_value);
+}
+
+auto GeometricRestartsSchedule::clone() -> GeometricRestartsSchedule *
+{
+    return new GeometricRestartsSchedule(*this);
+}
+
+auto GeometricRestartsSchedule::might_restart() -> bool
+{
+    return true;
 }
 

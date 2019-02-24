@@ -4,13 +4,15 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_VERIFY_HH 1
 
 #include "formats/input_graph.hh"
-#include "params.hh"
-#include "result.hh"
 
 #include <exception>
+#include <map>
 #include <utility>
 
-auto verify(const std::pair<InputGraph, InputGraph> & graphs, const Params & params, const Result & result) -> void;
+auto verify_homomorphism(const std::pair<InputGraph, InputGraph> & graphs,
+        bool noninjective,
+        bool induced,
+        const std::map<int, int> & mapping) -> void;
 
 class BuggySolution :
     public std::exception

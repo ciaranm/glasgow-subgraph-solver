@@ -1,0 +1,50 @@
+/* vim: set sw=4 sts=4 et foldmethod=syntax : */
+
+#ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_CLIQUE_HH
+#define GLASGOW_SUBGRAPH_SOLVER_GUARD_CLIQUE_HH 1
+
+#include "formats/input_graph.hh"
+#include "restarts.hh"
+#include "timeout.hh"
+
+#include <chrono>
+#include <list>
+#include <optional>
+#include <set>
+
+struct CliqueParams
+{
+    /// Timeout handler
+    std::unique_ptr<Timeout> timeout;
+
+    /// The start time of the algorithm.
+    std::chrono::time_point<std::chrono::steady_clock> start_time;
+
+    /// Decide instead of maximise?
+    std::optional<unsigned> decide;
+
+    /// Restarts schedule
+    std::unique_ptr<RestartsSchedule> restarts_schedule;
+
+    /// Largest size of nogood to store (0 disables nogoods)
+    unsigned nogood_size_limit = std::numeric_limits<unsigned>::max();
+};
+
+struct CliqueResult
+{
+    /// The vertices in the clique, empty if none found.
+    std::set<int> clique;
+
+    /// Total number of nodes processed (recursive calls).
+    unsigned long long nodes = 0, find_nodes = 0, prove_nodes = 0;
+
+    /// Extra stats, to output
+    std::list<std::string> extra_stats;
+
+    /// Did we perform a complete search?
+    bool complete = false;
+};
+
+auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult;
+
+#endif

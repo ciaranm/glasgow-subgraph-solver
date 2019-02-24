@@ -10,6 +10,10 @@ following paper:
 
     https://dblp.org/rec/html/conf/cp/McCreeshP15
 
+The clique algorithm is based upon:
+
+    https://dblp.org/rec/html/journals/ol/SegundoMRH13
+
 If you use this solver in a non-research setting, please get in touch if you
 can. This software is an output of taxpayer funded research, and it is very
 helpful for us if we can demonstrate real-world impact when we write grant

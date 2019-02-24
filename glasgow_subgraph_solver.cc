@@ -1,8 +1,8 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "formats/read_file_format.hh"
+#include "homomorphism.hh"
 #include "restarts.hh"
-#include "solver.hh"
 #include "verify.hh"
 
 #include <boost/program_options.hpp>
@@ -54,9 +54,7 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description configuration_options{ "Advanced configuration options" };
         configuration_options.add_options()
-            ("nogood-size-limit",  po::value<int>(),         "Maximum size of nogood to generate (0 disables nogoods")
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (0 disables restarts)")
-            ("restart-timer",      po::value<int>(),         "Also restart after this many milliseconds (0 disables)")
             ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)")
             ("value-ordering",     po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
         display_options.add(configuration_options);
@@ -97,14 +95,11 @@ auto main(int argc, char * argv[]) -> int
         }
 
         /* Figure out what our options should be. */
-        Params params;
+        HomomorphismParams params;
 
         params.noninjective = options_vars.count("noninjective");
         params.induced = options_vars.count("induced");
         params.enumerate = options_vars.count("enumerate");
-
-        if (options_vars.count("nogood-size-limit"))
-            params.nogood_size_limit = options_vars["nogood-size-limit"].as<int>();
 
         if (params.enumerate)
             params.restarts_schedule = make_unique<NoRestartsSchedule>();
@@ -166,7 +161,7 @@ auto main(int argc, char * argv[]) -> int
         /* Start the clock */
         params.start_time = steady_clock::now();
 
-        auto result = solve_subgraph_problem(graphs, params);
+        auto result = solve_homomorphism_problem(graphs, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
@@ -200,7 +195,7 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
-        verify(graphs, params, result);
+        verify_homomorphism(graphs, params.noninjective, params.induced, result.mapping);
 
         return EXIT_SUCCESS;
     }

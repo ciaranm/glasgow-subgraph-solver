@@ -1,3 +1,4 @@
 intermediate
 glasgow_subgraph_solver
-create_random_graph
+glasgow_clique_solver
+libcommon.a

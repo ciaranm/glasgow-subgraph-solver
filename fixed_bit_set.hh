@@ -134,6 +134,14 @@ class FixedBitSet
             }
             return npos;
         }
+
+        auto any() const -> bool
+        {
+            for (typename Bits::size_type i = 0 ; i < _bits.size() ; ++i)
+                if (_bits[i])
+                    return true;
+            return false;
+        }
 };
 
 #endif

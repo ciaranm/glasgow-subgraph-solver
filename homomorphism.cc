@@ -1,16 +1,15 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "solver.hh"
+#include "homomorphism.hh"
 #include "fixed_bit_set.hh"
 #include "template_voodoo.hh"
+#include "configuration.hh"
+#include "watches.hh"
 
 #include <algorithm>
-#include <array>
 #include <functional>
 #include <limits>
-#include <list>
 #include <map>
-#include <numeric>
 #include <optional>
 #include <random>
 #include <type_traits>
@@ -18,18 +17,14 @@
 
 #include <boost/dynamic_bitset.hpp>
 
-using std::array;
-using std::iota;
 using std::fill;
 using std::find_if;
 using std::greater;
 using std::is_same;
-using std::list;
 using std::max;
 using std::map;
 using std::move;
 using std::mt19937;
-using std::next;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
@@ -66,7 +61,7 @@ namespace
 
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
-        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const Params & params) :
+        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
             max_graphs(1 + (params.noninjective ? 0 : 4) + (params.induced ? 1 : 0)),
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
@@ -280,46 +275,6 @@ namespace
         }
     };
 
-    // A nogood, aways of the form (list of assignments) -> false, where the
-    // last part is implicit. If there are at least two assignments, then the
-    // first two assignments are the watches (and the literals are permuted
-    // when the watches are updates).
-    struct Nogood
-    {
-        vector<Assignment> literals;
-    };
-
-    // nogoods stored here
-    using Nogoods = list<Nogood>;
-
-    // Two watched literals for our nogoods store.
-    struct Watches
-    {
-        // for each watched literal, we have a list of watched things, each of
-        // which is an iterator into the global watch list (so we can reorder
-        // the literal to keep the watches as the first two elements)
-        using WatchList = list<Nogoods::iterator>;
-
-        // two dimensional array, indexed by (target_size * p + t)
-        vector<WatchList> data;
-
-        unsigned pattern_size = 0, target_size = 0;
-
-        // not a ctor to avoid annoyingness with isolated vertices altering the
-        // pattern size
-        void initialise(unsigned p, unsigned t)
-        {
-            pattern_size = p;
-            target_size = t;
-            data.resize(p * t);
-        }
-
-        WatchList & operator[] (const Assignment & a)
-        {
-            return data[target_size * a.pattern_vertex + a.target_vertex];
-        }
-    };
-
     template <typename BitSetType_>
     struct SubgraphDomain
     {
@@ -337,6 +292,18 @@ namespace
         SubgraphDomain(SubgraphDomain &&) = default;
     };
 
+    template <typename EntryType_>
+    struct AssignmentWatchTable
+    {
+        unsigned target_size;
+        vector<EntryType_> data;
+
+        EntryType_ & operator[] (Assignment x)
+        {
+            return data[target_size * x.pattern_vertex + x.target_vertex];
+        }
+    };
+
     template <typename BitSetType_, typename ArrayType_>
     struct SequentialSearcher
     {
@@ -345,21 +312,21 @@ namespace
         using Domains = vector<Domain>;
 
         const Model & model;
-        const Params & params;
+        const HomomorphismParams & params;
 
-        Nogoods nogoods;
-        Watches watches;
-        list<typename Nogoods::iterator> need_to_watch;
+        Watches<Assignment, AssignmentWatchTable> watches;
 
         mt19937 global_rand;
 
-        SequentialSearcher(const Model & m, const Params & p) :
+        SequentialSearcher(const Model & m, const HomomorphismParams & p) :
             model(m),
             params(p)
         {
             // set up space for watches
-            if (! params.enumerate)
-                watches.initialise(model.pattern_size, model.target_size);
+            if (! params.enumerate) {
+                watches.table.target_size = model.target_size;
+                watches.table.data.resize(model.pattern_size * model.target_size);
+            }
         }
 
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
@@ -367,62 +334,6 @@ namespace
             return find_if(domains.begin(), domains.end(), [] (Domain & d) {
                     return (! d.fixed) && 1 == d.count;
                     });
-        }
-
-        auto propagate_watches(Domains & new_domains, Assignments & assignments, const Assignment & current_assignment) -> bool
-        {
-            if (params.enumerate)
-                return true;
-
-            auto & watches_to_update = watches[current_assignment];
-            for (auto watch_to_update = watches_to_update.begin() ; watch_to_update != watches_to_update.end() ; ) {
-                Nogood & nogood = **watch_to_update;
-
-                // make the first watch the thing we just triggered
-                if (nogood.literals[0] != current_assignment)
-                    swap(nogood.literals[0], nogood.literals[1]);
-
-                // can we find something else to watch?
-                bool success = false;
-                for (auto new_literal = next(nogood.literals.begin(), 2) ; new_literal != nogood.literals.end() ; ++new_literal) {
-                    if (! assignments.contains(*new_literal)) {
-                        // we can watch new_literal instead of current_assignment in this nogood
-                        success = true;
-
-                        // move the new watch to be the first item in the nogood
-                        swap(nogood.literals[0], *new_literal);
-
-                        // start watching it
-                        watches[nogood.literals[0]].push_back(*watch_to_update);
-
-                        // remove the current watch, and update the loop iterator
-                        watches_to_update.erase(watch_to_update++);
-
-                        break;
-                    }
-                }
-
-                // found something new? nothing to propagate (and we've already updated our loop iterator in the erase)
-                if (success)
-                    continue;
-
-                // no new watch, this nogood will now propagate. do a linear scan to find the variable for now... note
-                // that it might not exist if we've assigned it something other value anyway.
-                for (auto & d : new_domains) {
-                    if (d.fixed)
-                        continue;
-
-                    if (d.v == nogood.literals[1].pattern_vertex) {
-                        d.values.reset(nogood.literals[1].target_vertex);
-                        break;
-                    }
-                }
-
-                // step the loop variable, only if we've not already erased it
-                ++watch_to_update;
-            }
-
-            return true;
         }
 
         // The max_graphs_ template parameter is so that the for each graph
@@ -521,8 +432,20 @@ namespace
                 assignments.values.push_back({ current_assignment, false, -1, -1 });
 
                 // propagate watches
-                if (! propagate_watches(new_domains, assignments, current_assignment))
-                    return false;
+                if (! params.enumerate)
+                    watches.propagate(current_assignment,
+                            [&] (const Assignment & a) { return ! assignments.contains(a); },
+                            [&] (const Assignment & a) {
+                                    for (auto & d : new_domains) {
+                                        if (d.fixed)
+                                            continue;
+
+                                        if (d.v == a.pattern_vertex) {
+                                            d.values.reset(a.target_vertex);
+                                            break;
+                                        }
+                                    }
+                                });
 
                 // propagate simple all different and adjacency
                 if (! propagate_simple_constraints(new_domains, current_assignment))
@@ -575,14 +498,13 @@ namespace
             if (params.enumerate)
                 return;
 
-            Nogood nogood;
+            Nogood<Assignment> nogood;
 
             for (auto & a : assignments.values)
                 if (a.is_decision)
                     nogood.literals.emplace_back(a.assignment);
 
-            nogoods.emplace_back(move(nogood));
-            need_to_watch.emplace_back(prev(nogoods.end()));
+            watches.post_nogood(move(nogood));
         }
 
         auto softmax_shuffle(
@@ -964,7 +886,7 @@ namespace
             return true;
         }
 
-        auto save_result(const Assignments & assignments, Result & result) -> void
+        auto save_result(const Assignments & assignments, HomomorphismResult & result) -> void
         {
             for (auto & a : assignments.values)
                 result.mapping.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
@@ -984,9 +906,9 @@ namespace
             result.extra_stats.push_back(where);
         }
 
-        auto solve() -> Result
+        auto solve() -> HomomorphismResult
         {
-            Result result;
+            HomomorphismResult result;
 
             // domains
             Domains domains(model.pattern_size, Domain{ model.target_size });
@@ -1009,26 +931,16 @@ namespace
             while (! done) {
                 ++number_of_restarts;
 
-                // start watching new nogoods. we're not backjumping so this is a bit icky.
-                for (auto & n : need_to_watch) {
-                    if (n->literals.empty()) {
-                        done = true;
-                        break;
-                    }
-                    else if (1 == n->literals.size()) {
-                        for (auto & d : domains)
-                            if (d.v == n->literals[0].pattern_vertex) {
-                                d.values.reset(n->literals[0].target_vertex);
-                                d.count = d.values.count();
-                                break;
-                            }
-                    }
-                    else {
-                        watches[n->literals[0]].push_back(n);
-                        watches[n->literals[1]].push_back(n);
-                    }
-                }
-                need_to_watch.clear();
+                // start watching new nogoods
+                done = watches.apply_new_nogoods(
+                        [&] (const Assignment & assignment) {
+                            for (auto & d : domains)
+                                if (d.v == assignment.pattern_vertex) {
+                                    d.values.reset(assignment.target_vertex);
+                                    d.count = d.values.count();
+                                    break;
+                                }
+                        });
 
                 if (done)
                     break;
@@ -1071,15 +983,15 @@ namespace
                 params.restarts_schedule->did_a_restart();
             }
 
-            if (! params.enumerate)
+            if (params.restarts_schedule->might_restart() && ! params.enumerate)
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
             result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
-            result.extra_stats.emplace_back("nogoods_size = " + to_string(nogoods.size()));
+            result.extra_stats.emplace_back("nogoods_size = " + to_string(watches.nogoods.size()));
 
             map<int, int> nogoods_lengths;
-            for (auto & n : nogoods)
+            for (auto & n : watches.nogoods)
                 nogoods_lengths[n.literals.size()]++;
 
             string nogoods_lengths_str;
@@ -1100,36 +1012,36 @@ namespace
         using Searcher = SequentialSearcher<BitSetType_, ArrayType_>;
 
         Model model;
-        const Params & params;
+        const HomomorphismParams & params;
 
-        SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const Params & p) :
+        SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & p) :
             model(target, pattern, p),
             params(p)
         {
         }
 
-        auto run() -> Result
+        auto run() -> HomomorphismResult
         {
             if ((! params.noninjective) && (model.full_pattern_size > model.target_size)) {
-                Result result;
+                HomomorphismResult result;
                 result.extra_stats.emplace_back("prepresolved = true");
                 return result;
             }
 
             Searcher solver(model, params);
             model.prepare(params.induced, params.noninjective);
-            Result result = solver.solve();
+            HomomorphismResult result = solver.solve();
 
             return result;
         }
     };
 }
 
-auto solve_subgraph_problem(const pair<InputGraph, InputGraph> & graphs, const Params & params) -> Result
+auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult
 {
     if ((! params.noninjective) && (graphs.first.size() > graphs.second.size()))
-        return Result{ };
+        return HomomorphismResult{ };
 
-    return select_graph_size<SubgraphRunner, Result>(AllGraphSizes(), graphs.second, graphs.first, params);
+    return select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params);
 }
 
