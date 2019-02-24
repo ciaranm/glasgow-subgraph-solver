@@ -72,6 +72,11 @@ auto Timeout::aborted() const -> bool
     return _detail->aborted;
 }
 
+auto Timeout::trigger_early_abort() -> void
+{
+    return _detail->abort.store(true);
+}
+
 auto Timeout::stop() -> void
 {
     /* Clean up the timeout thread */

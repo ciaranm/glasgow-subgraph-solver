@@ -38,6 +38,7 @@ class LubyRestartsSchedule final : public RestartsSchedule
         static constexpr unsigned long long default_multiplier = 666; // chosen by divine inspiration
 
         explicit LubyRestartsSchedule(long long multiplier);
+        LubyRestartsSchedule(const LubyRestartsSchedule &);
 
         virtual auto did_a_backtrack() -> void override;
         virtual auto did_a_restart() -> void override;

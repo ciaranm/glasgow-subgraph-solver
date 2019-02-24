@@ -19,6 +19,7 @@ class Timeout
         auto should_abort() const -> bool;
         auto aborted() const -> bool;
         auto stop() -> void;
+        auto trigger_early_abort() -> void;
 };
 
 #endif

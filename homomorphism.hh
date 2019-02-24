@@ -33,6 +33,10 @@ struct HomomorphismParams
 
     /// Largest size of nogood to store (0 disables nogoods)
     unsigned nogood_size_limit = std::numeric_limits<unsigned>::max();
+
+    /// How many threads to use (1 for sequential, 0 to auto-detect). Must be
+    /// used in conjunction with restarts.
+    unsigned n_threads = 1;
 };
 
 struct HomomorphismResult

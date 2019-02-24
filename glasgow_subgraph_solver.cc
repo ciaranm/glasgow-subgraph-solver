@@ -54,6 +54,7 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description configuration_options{ "Advanced configuration options" };
         configuration_options.add_options()
+            ("threads",            po::value<unsigned>(),    "Use threaded search, with this many threads")
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (0 disables restarts)")
             ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)")
             ("value-ordering",     po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
@@ -100,6 +101,9 @@ auto main(int argc, char * argv[]) -> int
         params.noninjective = options_vars.count("noninjective");
         params.induced = options_vars.count("induced");
         params.enumerate = options_vars.count("enumerate");
+
+        if (options_vars.count("threads"))
+            params.n_threads = options_vars["threads"].as<unsigned>();
 
         if (params.enumerate)
             params.restarts_schedule = make_unique<NoRestartsSchedule>();

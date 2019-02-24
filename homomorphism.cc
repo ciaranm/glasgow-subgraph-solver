@@ -7,11 +7,15 @@
 #include "watches.hh"
 
 #include <algorithm>
+#include <condition_variable>
 #include <functional>
 #include <limits>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -21,10 +25,12 @@ using std::fill;
 using std::find_if;
 using std::greater;
 using std::is_same;
+using std::make_unique;
 using std::max;
 using std::map;
 using std::move;
 using std::mt19937;
+using std::mutex;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
@@ -32,8 +38,11 @@ using std::sort;
 using std::stable_sort;
 using std::string;
 using std::swap;
+using std::thread;
 using std::to_string;
 using std::uniform_int_distribution;
+using std::unique_lock;
+using std::unique_ptr;
 using std::vector;
 
 using std::chrono::duration_cast;
@@ -305,7 +314,7 @@ namespace
     };
 
     template <typename BitSetType_, typename ArrayType_>
-    struct SequentialSearcher
+    struct Searcher
     {
         using Model = SubgraphModel<BitSetType_, ArrayType_>;
         using Domain = SubgraphDomain<BitSetType_>;
@@ -318,7 +327,7 @@ namespace
 
         mt19937 global_rand;
 
-        SequentialSearcher(const Model & m, const HomomorphismParams & p) :
+        Searcher(const Model & m, const HomomorphismParams & p) :
             model(m),
             params(p)
         {
@@ -691,6 +700,106 @@ namespace
                 return SearchResult::Unsatisfiable;
         }
 
+        auto cheap_all_different(Domains & domains) -> bool
+        {
+            // Pick domains smallest first; ties are broken by smallest .v first.
+            // For each count p we have a linked list, whose first member is
+            // first[p].  The element following x in one of these lists is next[x].
+            // Any domain with a count greater than domains.size() is put
+            // int the "count==domains.size()" bucket.
+            // The "first" array is sized to be able to hold domains.size()+1
+            // elements
+            ArrayType_ first, next;
+
+            if constexpr (is_same<ArrayType_, vector<int> >::value)
+                first.resize(model.target_size + 1);
+            fill(first.begin(), first.begin() + domains.size() + 1, -1);
+
+            if constexpr (is_same<ArrayType_, vector<int> >::value)
+                next.resize(model.target_size);
+            fill(next.begin(), next.begin() + domains.size(), -1);
+
+            // Iterate backwards, because we insert elements at the head of
+            // lists and we want the sort to be stable
+            for (int i = int(domains.size()) - 1 ; i >= 0; --i) {
+                unsigned count = domains.at(i).count;
+                if (count > domains.size())
+                    count = domains.size();
+                next.at(i) = first.at(count);
+                first.at(count) = i;
+            }
+
+            // counting all-different
+            BitSetType_ domains_so_far{ model.target_size, 0 }, hall{ model.target_size, 0 };
+            unsigned neighbours_so_far = 0;
+
+            for (unsigned i = 0 ; i <= domains.size() ; ++i) {
+                // iterate over linked lists
+                int domain_index = first[i];
+                while (domain_index != -1) {
+                    auto & d = domains.at(domain_index);
+
+                    d.values &= ~hall;
+                    d.count = d.values.count();
+
+                    if (0 == d.count)
+                        return false;
+
+                    domains_so_far |= d.values;
+                    ++neighbours_so_far;
+
+                    unsigned domains_so_far_popcount = domains_so_far.count();
+                    if (domains_so_far_popcount < neighbours_so_far) {
+                        return false;
+                    }
+                    else if (domains_so_far_popcount == neighbours_so_far) {
+                        // equivalent to hall=domains_so_far
+                        hall |= domains_so_far;
+                    }
+                    domain_index = next[domain_index];
+                }
+            }
+
+            return true;
+        }
+
+        auto save_result(const Assignments & assignments, HomomorphismResult & result) -> void
+        {
+            for (auto & a : assignments.values)
+                result.mapping.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
+
+            // re-add isolated vertices
+            int t = 0;
+            for (auto & v : model.isolated_vertices) {
+                while (result.mapping.end() != find_if(result.mapping.begin(), result.mapping.end(),
+                            [&t] (const pair<int, int> & p) { return p.second == t; }))
+                        ++t;
+                result.mapping.emplace(v, t);
+            }
+
+            string where = "where =";
+            for (auto & a : assignments.values)
+                where.append(" " + to_string(a.discrepancy_count) + "/" + to_string(a.choice_count));
+            result.extra_stats.push_back(where);
+        }
+    };
+
+    template <typename BitSetType_, typename ArrayType_>
+    struct BasicSolver
+    {
+        using Model = SubgraphModel<BitSetType_, ArrayType_>;
+        using Domain = SubgraphDomain<BitSetType_>;
+        using Domains = vector<Domain>;
+
+        const Model & model;
+        const HomomorphismParams & params;
+
+        BasicSolver(const Model & m, const HomomorphismParams & p) :
+            model(m),
+            params(p)
+        {
+        }
+
         auto check_label_compatibility(int p, int t) -> bool
         {
             if (model.pattern_vertex_labels.empty())
@@ -822,89 +931,22 @@ namespace
 
             return true;
         }
+    };
 
-        auto cheap_all_different(Domains & domains) -> bool
-        {
-            // Pick domains smallest first; ties are broken by smallest .v first.
-            // For each count p we have a linked list, whose first member is
-            // first[p].  The element following x in one of these lists is next[x].
-            // Any domain with a count greater than domains.size() is put
-            // int the "count==domains.size()" bucket.
-            // The "first" array is sized to be able to hold domains.size()+1
-            // elements
-            ArrayType_ first, next;
+    template <typename BitSetType_, typename ArrayType_>
+    struct SequentialSolver :
+        BasicSolver<BitSetType_, ArrayType_>
+    {
+        using BasicSolver<BitSetType_, ArrayType_>::BasicSolver;
 
-            if constexpr (is_same<ArrayType_, vector<int> >::value)
-                first.resize(model.target_size + 1);
-            fill(first.begin(), first.begin() + domains.size() + 1, -1);
+        using Model = typename BasicSolver<BitSetType_, ArrayType_>::Model;
+        using Domain = typename BasicSolver<BitSetType_, ArrayType_>::Domain;
+        using Domains = typename BasicSolver<BitSetType_, ArrayType_>::Domains;
 
-            if constexpr (is_same<ArrayType_, vector<int> >::value)
-                next.resize(model.target_size);
-            fill(next.begin(), next.begin() + domains.size(), -1);
+        using BasicSolver<BitSetType_, ArrayType_>::model;
+        using BasicSolver<BitSetType_, ArrayType_>::params;
 
-            // Iterate backwards, because we insert elements at the head of
-            // lists and we want the sort to be stable
-            for (int i = int(domains.size()) - 1 ; i >= 0; --i) {
-                unsigned count = domains.at(i).count;
-                if (count > domains.size())
-                    count = domains.size();
-                next.at(i) = first.at(count);
-                first.at(count) = i;
-            }
-
-            // counting all-different
-            BitSetType_ domains_so_far{ model.target_size, 0 }, hall{ model.target_size, 0 };
-            unsigned neighbours_so_far = 0;
-
-            for (unsigned i = 0 ; i <= domains.size() ; ++i) {
-                // iterate over linked lists
-                int domain_index = first[i];
-                while (domain_index != -1) {
-                    auto & d = domains.at(domain_index);
-
-                    d.values &= ~hall;
-                    d.count = d.values.count();
-
-                    if (0 == d.count)
-                        return false;
-
-                    domains_so_far |= d.values;
-                    ++neighbours_so_far;
-
-                    unsigned domains_so_far_popcount = domains_so_far.count();
-                    if (domains_so_far_popcount < neighbours_so_far) {
-                        return false;
-                    }
-                    else if (domains_so_far_popcount == neighbours_so_far) {
-                        // equivalent to hall=domains_so_far
-                        hall |= domains_so_far;
-                    }
-                    domain_index = next[domain_index];
-                }
-            }
-
-            return true;
-        }
-
-        auto save_result(const Assignments & assignments, HomomorphismResult & result) -> void
-        {
-            for (auto & a : assignments.values)
-                result.mapping.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
-
-            // re-add isolated vertices
-            int t = 0;
-            for (auto & v : model.isolated_vertices) {
-                while (result.mapping.end() != find_if(result.mapping.begin(), result.mapping.end(),
-                            [&t] (const pair<int, int> & p) { return p.second == t; }))
-                        ++t;
-                result.mapping.emplace(v, t);
-            }
-
-            string where = "where =";
-            for (auto & a : assignments.values)
-                where.append(" " + to_string(a.discrepancy_count) + "/" + to_string(a.choice_count));
-            result.extra_stats.push_back(where);
-        }
+        using BasicSolver<BitSetType_, ArrayType_>::initialise_domains;
 
         auto solve() -> HomomorphismResult
         {
@@ -928,11 +970,13 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
+            Searcher<BitSetType_, ArrayType_> searcher(model, params);
+
             while (! done) {
                 ++number_of_restarts;
 
                 // start watching new nogoods
-                done = watches.apply_new_nogoods(
+                done = searcher.watches.apply_new_nogoods(
                         [&] (const Assignment & assignment) {
                             for (auto & d : domains)
                                 if (d.v == assignment.pattern_vertex) {
@@ -946,13 +990,13 @@ namespace
                     break;
 
                 ++result.propagations;
-                if (propagate(domains, assignments)) {
+                if (searcher.propagate(domains, assignments)) {
                     auto assignments_copy = assignments;
 
-                    switch (restarting_search(assignments_copy, domains, result.nodes, result.propagations,
+                    switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
                                 result.solution_count, 0, *params.restarts_schedule)) {
                         case SearchResult::Satisfiable:
-                            save_result(assignments_copy, result);
+                            searcher.save_result(assignments_copy, result);
                             result.complete = true;
                             done = true;
                             break;
@@ -988,10 +1032,10 @@ namespace
 
             result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
-            result.extra_stats.emplace_back("nogoods_size = " + to_string(watches.nogoods.size()));
+            result.extra_stats.emplace_back("nogoods_size = " + to_string(searcher.watches.nogoods.size()));
 
             map<int, int> nogoods_lengths;
-            for (auto & n : watches.nogoods)
+            for (auto & n : searcher.watches.nogoods)
                 nogoods_lengths[n.literals.size()]++;
 
             string nogoods_lengths_str;
@@ -1006,10 +1050,165 @@ namespace
     };
 
     template <typename BitSetType_, typename ArrayType_>
+    struct ThreadedSolver :
+        BasicSolver<BitSetType_, ArrayType_>
+    {
+        using Model = typename BasicSolver<BitSetType_, ArrayType_>::Model;
+        using Domain = typename BasicSolver<BitSetType_, ArrayType_>::Domain;
+        using Domains = typename BasicSolver<BitSetType_, ArrayType_>::Domains;
+
+        using BasicSolver<BitSetType_, ArrayType_>::model;
+        using BasicSolver<BitSetType_, ArrayType_>::params;
+
+        using BasicSolver<BitSetType_, ArrayType_>::initialise_domains;
+
+        unsigned n_threads;
+
+        ThreadedSolver(const Model & m, const HomomorphismParams & p, unsigned t) :
+            BasicSolver<BitSetType_, ArrayType_>(m, p),
+            n_threads(t)
+        {
+        }
+
+        auto solve() -> HomomorphismResult
+        {
+            mutex common_result_mutex;
+            HomomorphismResult common_result;
+
+            // domains
+            Domains common_domains(model.pattern_size, Domain{ model.target_size });
+            if (! initialise_domains(common_domains)) {
+                common_result.complete = true;
+                return common_result;
+            }
+
+            // start search timer
+            auto search_start_time = steady_clock::now();
+
+            vector<thread> threads;
+            vector<unique_ptr<Searcher<BitSetType_, ArrayType_> > > searchers{ n_threads };
+
+            for (unsigned t = 0 ; t < n_threads ; ++t)
+                threads.emplace_back([t, &searchers, &common_domains, &model = this->model, &params = this->params,
+                        &common_result, &common_result_mutex] () {
+                    // do the search
+                    HomomorphismResult thread_result;
+
+                    searchers[t] = make_unique<Searcher<BitSetType_, ArrayType_> >(model, params);
+                    if (0 != t)
+                        searchers[t]->global_rand.seed(t);
+
+                    bool done = false;
+                    unsigned number_of_restarts = 0;
+
+                    Domains domains = common_domains;
+
+                    Assignments thread_assignments;
+                    thread_assignments.values.reserve(model.pattern_size);
+
+                    // each thread needs its own restarts schedule
+                    unique_ptr<RestartsSchedule> thread_restarts_schedule{ params.restarts_schedule->clone() };
+
+                    while (! done) {
+                        ++number_of_restarts;
+
+                        // start watching new nogoods
+                        done = searchers[t]->watches.apply_new_nogoods(
+                                [&] (const Assignment & assignment) {
+                                    for (auto & d : domains)
+                                        if (d.v == assignment.pattern_vertex) {
+                                            d.values.reset(assignment.target_vertex);
+                                            d.count = d.values.count();
+                                            break;
+                                        }
+                                });
+
+                        if (done)
+                            break;
+
+                        ++thread_result.propagations;
+                        if (searchers[t]->propagate(domains, thread_assignments)) {
+                            auto assignments_copy = thread_assignments;
+
+                            switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
+                                        thread_result.solution_count, 0, *thread_restarts_schedule)) {
+                                case SearchResult::Satisfiable:
+                                    searchers[t]->save_result(assignments_copy, thread_result);
+                                    thread_result.complete = true;
+                                    done = true;
+                                    break;
+
+                                case SearchResult::SatisfiableButKeepGoing:
+                                    thread_result.complete = true;
+                                    done = true;
+                                    break;
+
+                                case SearchResult::Unsatisfiable:
+                                    thread_result.complete = true;
+                                    done = true;
+                                    break;
+
+                                case SearchResult::Aborted:
+                                    done = true;
+                                    break;
+
+                                case SearchResult::Restart:
+                                    break;
+                            }
+                        }
+                        else {
+                            thread_result.complete = true;
+                            done = true;
+                        }
+
+                        thread_restarts_schedule->did_a_restart();
+                    }
+
+                    params.timeout->trigger_early_abort();
+
+                    thread_result.extra_stats.emplace_back("nogoods_size = " + to_string(searchers[t]->watches.nogoods.size()));
+
+                    map<int, int> nogoods_lengths;
+                    for (auto & n : searchers[t]->watches.nogoods)
+                        nogoods_lengths[n.literals.size()]++;
+
+                    string nogoods_lengths_str;
+                    for (auto & n : nogoods_lengths) {
+                        nogoods_lengths_str += " ";
+                        nogoods_lengths_str += to_string(n.first) + ":" + to_string(n.second);
+                    }
+                    thread_result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
+
+                    if (params.restarts_schedule->might_restart() && ! params.enumerate)
+                        thread_result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
+
+                    thread_result.extra_stats.emplace_back("nodes = " + to_string(thread_result.nodes));
+
+                    unique_lock<mutex> lock{ common_result_mutex };
+                    if (! thread_result.mapping.empty())
+                        common_result.mapping = move(thread_result.mapping);
+                    common_result.nodes += thread_result.nodes;
+                    common_result.propagations += thread_result.propagations;
+                    common_result.solution_count += thread_result.solution_count;
+                    common_result.complete = common_result.complete || thread_result.complete;
+                    for (auto & x : thread_result.extra_stats)
+                        common_result.extra_stats.push_back("t" + to_string(t) + "_" + x);
+                });
+
+            for (auto & t : threads)
+                t.join();
+
+            common_result.extra_stats.emplace_back("search_time = " + to_string(
+                        duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+
+            return common_result;
+        }
+    };
+
+    template <typename BitSetType_, typename ArrayType_>
     struct SubgraphRunner
     {
         using Model = SubgraphModel<BitSetType_, ArrayType_>;
-        using Searcher = SequentialSearcher<BitSetType_, ArrayType_>;
 
         Model model;
         const HomomorphismParams & params;
@@ -1028,9 +1227,20 @@ namespace
                 return result;
             }
 
-            Searcher solver(model, params);
             model.prepare(params.induced, params.noninjective);
-            HomomorphismResult result = solver.solve();
+
+            HomomorphismResult result;
+            if (1 == params.n_threads) {
+                SequentialSolver<BitSetType_, ArrayType_> solver(model, params);
+                result = solver.solve();
+            }
+            else {
+                if (! params.restarts_schedule->might_restart())
+                    throw UnsupportedConfiguration{ "Threaded search requires restarts" };
+                ThreadedSolver<BitSetType_, ArrayType_> solver(model, params,
+                        0 == params.n_threads ? thread::hardware_concurrency() : params.n_threads);
+                result = solver.solve();
+            }
 
             return result;
         }

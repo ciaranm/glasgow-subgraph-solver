@@ -1,8 +1,11 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "restarts.hh"
+#include <algorithm>
 #include <cmath>
 
+using std::advance;
+using std::distance;
 using std::round;
 
 auto NoRestartsSchedule::did_a_backtrack() -> void
@@ -32,6 +35,14 @@ LubyRestartsSchedule::LubyRestartsSchedule(long long m) :
     _backtracks_remaining(m)
 {
     _current_sequence = _sequence.insert(_sequence.end(), m);
+}
+
+LubyRestartsSchedule::LubyRestartsSchedule(const LubyRestartsSchedule & other) :
+    _backtracks_remaining(other._backtracks_remaining),
+    _sequence(other._sequence),
+    _current_sequence(_sequence.begin())
+{
+    advance(_current_sequence, distance(other._sequence.begin(), other._current_sequence));
 }
 
 auto LubyRestartsSchedule::did_a_backtrack() -> void
