@@ -1080,6 +1080,7 @@ namespace
         {
             mutex common_result_mutex;
             HomomorphismResult common_result;
+            string by_thread_nodes, by_thread_propagations;
 
             // domains
             Domains common_domains(model.pattern_size, Domain{ model.target_size });
@@ -1098,8 +1099,10 @@ namespace
             atomic<bool> restart_synchroniser{ false };
 
             for (unsigned t = 0 ; t < n_threads ; ++t)
-                threads.emplace_back([t, &searchers, &common_domains, &model = this->model, &params = this->params, n_threads = this->n_threads,
-                        &common_result, &common_result_mutex, &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser] () {
+                threads.emplace_back([t, &searchers, &common_domains,
+                        &model = this->model, &params = this->params, n_threads = this->n_threads,
+                        &common_result, &common_result_mutex, &by_thread_nodes, &by_thread_propagations,
+                        &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser] () {
                     // do the search
                     HomomorphismResult thread_result;
 
@@ -1193,24 +1196,6 @@ namespace
                         thread_restarts_schedule->did_a_restart();
                     }
 
-                    thread_result.extra_stats.emplace_back("nogoods_size = " + to_string(searchers[t]->watches.nogoods.size()));
-
-                    map<int, int> nogoods_lengths;
-                    for (auto & n : searchers[t]->watches.nogoods)
-                        nogoods_lengths[n.literals.size()]++;
-
-                    string nogoods_lengths_str;
-                    for (auto & n : nogoods_lengths) {
-                        nogoods_lengths_str += " ";
-                        nogoods_lengths_str += to_string(n.first) + ":" + to_string(n.second);
-                    }
-                    thread_result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
-
-                    if (params.restarts_schedule->might_restart() && ! params.enumerate)
-                        thread_result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
-
-                    thread_result.extra_stats.emplace_back("nodes = " + to_string(thread_result.nodes));
-
                     unique_lock<mutex> lock{ common_result_mutex };
                     if (! thread_result.mapping.empty())
                         common_result.mapping = move(thread_result.mapping);
@@ -1220,11 +1205,16 @@ namespace
                     common_result.complete = common_result.complete || thread_result.complete;
                     for (auto & x : thread_result.extra_stats)
                         common_result.extra_stats.push_back("t" + to_string(t) + "_" + x);
+
+                    by_thread_nodes.append(" " + to_string(thread_result.nodes));
+                    by_thread_propagations.append(" " + to_string(thread_result.propagations));
                 });
 
             for (auto & t : threads)
                 t.join();
 
+            common_result.extra_stats.emplace_back("by_thread_nodes =" + by_thread_nodes);
+            common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
             common_result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
 
