@@ -54,7 +54,7 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description parallel_options{ "Parallelism options" };
         parallel_options.add_options()
-            ("threads",            po::value<unsigned>(),    "Use threaded search, with this many threads")
+            ("threads",            po::value<unsigned>(),    "Use threaded search, with this many threads (0 to auto-detect)")
             ("reproducible-parallelism",                     "Try to give reproducible search space sizes (less efficient)");
         display_options.add(parallel_options);
 

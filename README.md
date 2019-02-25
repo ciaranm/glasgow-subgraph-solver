@@ -36,13 +36,30 @@ To run:
 
     ./glasgow_subgraph_solver [ --induced ] pattern-file target-file
 
+We try to auto-detect the input format, but it's best to specify it using, for
+example:
+
+    ./glasgow_subgraph_solver --format lad pattern-file target-file
+
+We can read LAD, Labelled LAD, CSV, and DIMACS 2 formatted graphs. If in doubt,
+it's best to use the LAD format, described here:
+
+    https://perso.liris.cnrs.fr/christine.solnon/SIP.html
+
+The solver supports parallel search. Usually you should enable this, as
+follows:
+
+    ./glasgow_subgraph_solver --threads 0 ...
+
+Here, 0 means auto-detect. You can also specify an exact number to use. Note
+that parallel search is non-deterministic; if you need determinism, try:
+
+    ./glasgow_subgraph_solver --threads 0 --reproducible-parallelism ...
+
+This will sacrifice some throughput for (approximate) reproducibility.
+
 You may need to increase the stack space, for larger graphs. In bash this is
 done as follows:
 
     ulimit -s 1048576
-
-We try to auto-detect the input format. We can read LAD, Labelled LAD, and
-DIMACS 2 formatted graphs. If in doubt, it's best to use the format described here:
-
-    https://perso.liris.cnrs.fr/christine.solnon/SIP.html
 

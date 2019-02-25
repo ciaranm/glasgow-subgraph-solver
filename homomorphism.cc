@@ -1264,8 +1264,13 @@ namespace
             else {
                 if (! params.restarts_schedule->might_restart())
                     throw UnsupportedConfiguration{ "Threaded search requires restarts" };
-                ThreadedSolver<BitSetType_, ArrayType_> solver(model, params,
-                        0 == params.n_threads ? thread::hardware_concurrency() : params.n_threads);
+
+                unsigned n_threads = params.n_threads;
+                if (0 == params.n_threads)
+                    n_threads = thread::hardware_concurrency();
+                if (0 == params.n_threads)
+                    n_threads = 1;
+                ThreadedSolver<BitSetType_, ArrayType_> solver(model, params, n_threads);
                 result = solver.solve();
             }
 
