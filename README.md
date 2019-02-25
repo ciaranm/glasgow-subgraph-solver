@@ -17,8 +17,8 @@ Please contact [Ciaran McCreesh](mailto:ciaran.mccreesh@glasgow.ac.uk) with any 
 Compiling
 ---------
 
-To build, type 'make'. You will need a C++17 compiler (we use GCC 7.3) and Boost (built with threads
-enabled).
+To build, type 'make'. You will need a C++17 compiler (we use GCC 7.3 or Clang 7.0.0) and Boost
+(we use 1.65.1 or later, built with threads enabled).
 
 Running
 -------
