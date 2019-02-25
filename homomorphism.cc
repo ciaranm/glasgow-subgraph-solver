@@ -7,6 +7,7 @@
 #include "watches.hh"
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <functional>
 #include <limits>
@@ -22,6 +23,7 @@
 #include <boost/thread/barrier.hpp>
 #include <boost/dynamic_bitset.hpp>
 
+using std::atomic;
 using std::fill;
 using std::find_if;
 using std::greater;
@@ -1093,10 +1095,11 @@ namespace
             vector<unique_ptr<Searcher<BitSetType_, ArrayType_> > > searchers{ n_threads };
 
             barrier wait_for_new_nogoods_barrier{ n_threads }, synced_nogoods_barrier{ n_threads };
+            atomic<bool> restart_synchroniser{ false };
 
             for (unsigned t = 0 ; t < n_threads ; ++t)
                 threads.emplace_back([t, &searchers, &common_domains, &model = this->model, &params = this->params, n_threads = this->n_threads,
-                        &common_result, &common_result_mutex, &wait_for_new_nogoods_barrier, &synced_nogoods_barrier] () {
+                        &common_result, &common_result_mutex, &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser] () {
                     // do the search
                     HomomorphismResult thread_result;
 
@@ -1112,7 +1115,11 @@ namespace
                     thread_assignments.values.reserve(model.pattern_size);
 
                     // each thread needs its own restarts schedule
-                    unique_ptr<RestartsSchedule> thread_restarts_schedule{ params.restarts_schedule->clone() };
+                    unique_ptr<RestartsSchedule> thread_restarts_schedule;
+                    if (params.reproducible_parallelism || 0 == t)
+                        thread_restarts_schedule.reset(params.restarts_schedule->clone());
+                    else
+                        thread_restarts_schedule = make_unique<SyncedRestartSchedule>(restart_synchroniser);
 
                     while (true) {
                         ++number_of_restarts;
@@ -1132,9 +1139,11 @@ namespace
                                             d.count = d.values.count();
                                             break;
                                         }
-                                })) {
+                                }))
                             break;
-                        }
+
+                        if (0 == t)
+                            restart_synchroniser.store(false);
 
                         synced_nogoods_barrier.wait();
 
@@ -1179,6 +1188,8 @@ namespace
                             params.timeout->trigger_early_abort();
                         }
 
+                        if (0 == t)
+                            restart_synchroniser.store(true);
                         thread_restarts_schedule->did_a_restart();
                     }
 

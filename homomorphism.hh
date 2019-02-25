@@ -37,6 +37,9 @@ struct HomomorphismParams
     /// How many threads to use (1 for sequential, 0 to auto-detect). Must be
     /// used in conjunction with restarts.
     unsigned n_threads = 1;
+
+    /// Try to produce reproducible parallelism?
+    bool reproducible_parallelism = false;
 };
 
 struct HomomorphismResult

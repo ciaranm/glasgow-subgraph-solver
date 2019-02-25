@@ -52,9 +52,14 @@ auto main(int argc, char * argv[]) -> int
             ("noninjective",                                 "Drop the injectivity requirement")
             ("enumerate",                                    "Count the number of solutions");
 
+        po::options_description parallel_options{ "Parallelism options" };
+        parallel_options.add_options()
+            ("threads",            po::value<unsigned>(),    "Use threaded search, with this many threads")
+            ("reproducible-parallelism",                     "Try to give reproducible search space sizes (less efficient)");
+        display_options.add(parallel_options);
+
         po::options_description configuration_options{ "Advanced configuration options" };
         configuration_options.add_options()
-            ("threads",            po::value<unsigned>(),    "Use threaded search, with this many threads")
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (0 disables restarts)")
             ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)")
             ("value-ordering",     po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
@@ -104,6 +109,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("threads"))
             params.n_threads = options_vars["threads"].as<unsigned>();
+        params.reproducible_parallelism = options_vars.count("reproducible-parallelism");
 
         if (params.enumerate)
             params.restarts_schedule = make_unique<NoRestartsSchedule>();

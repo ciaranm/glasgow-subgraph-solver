@@ -3,7 +3,9 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_RESTARTS_HH
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_RESTARTS_HH 1
 
+#include <atomic>
 #include <list>
+#include <memory>
 
 class RestartsSchedule
 {
@@ -64,6 +66,21 @@ class GeometricRestartsSchedule final : public RestartsSchedule
         virtual auto should_restart() -> bool override;
         virtual auto might_restart() -> bool override;
         virtual auto clone() -> GeometricRestartsSchedule * override;
+};
+
+class SyncedRestartSchedule final : public RestartsSchedule
+{
+    private:
+        std::atomic<bool> & _synchroniser;
+
+    public:
+        explicit SyncedRestartSchedule(std::atomic<bool> &);
+
+        virtual auto did_a_backtrack() -> void override;
+        virtual auto did_a_restart() -> void override;
+        virtual auto should_restart() -> bool override;
+        virtual auto might_restart() -> bool override;
+        virtual auto clone() -> SyncedRestartSchedule * override;
 };
 
 #endif

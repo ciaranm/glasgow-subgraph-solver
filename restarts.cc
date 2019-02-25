@@ -107,3 +107,31 @@ auto GeometricRestartsSchedule::might_restart() -> bool
     return true;
 }
 
+SyncedRestartSchedule::SyncedRestartSchedule(std::atomic<bool> & a) :
+    _synchroniser(a)
+{
+}
+
+auto SyncedRestartSchedule::did_a_backtrack() -> void
+{
+}
+
+auto SyncedRestartSchedule::did_a_restart() -> void
+{
+}
+
+auto SyncedRestartSchedule::should_restart() -> bool
+{
+    return _synchroniser;
+}
+
+auto SyncedRestartSchedule::might_restart() -> bool
+{
+    return true;
+}
+
+auto SyncedRestartSchedule::clone() -> SyncedRestartSchedule *
+{
+    return new SyncedRestartSchedule(*this);
+}
+
