@@ -1266,9 +1266,9 @@ namespace
                     throw UnsupportedConfiguration{ "Threaded search requires restarts" };
 
                 unsigned n_threads = params.n_threads;
-                if (0 == params.n_threads)
+                if (0 == n_threads)
                     n_threads = thread::hardware_concurrency();
-                if (0 == params.n_threads)
+                if (0 == n_threads)
                     n_threads = 1;
                 ThreadedSolver<BitSetType_, ArrayType_> solver(model, params, n_threads);
                 result = solver.solve();
