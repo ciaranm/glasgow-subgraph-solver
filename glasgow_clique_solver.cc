@@ -2,6 +2,7 @@
 
 #include "formats/read_file_format.hh"
 #include "clique.hh"
+#include "configuration.hh"
 
 #include <boost/program_options.hpp>
 
@@ -30,6 +31,7 @@ using std::make_pair;
 using std::make_unique;
 using std::put_time;
 using std::string;
+using std::string_view;
 
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
@@ -37,6 +39,18 @@ using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
+
+auto colour_class_order_from_string(string_view s) -> ColourClassOrder
+{
+    if (s == "colour")
+        return ColourClassOrder::ColourOrder;
+    else if (s == "singletons-first")
+        return ColourClassOrder::SingletonsFirst;
+    else if (s == "sorted")
+        return ColourClassOrder::Sorted;
+    else
+        throw UnsupportedConfiguration{ "Unknown colour class order '" + string(s) + "'" };
+}
 
 auto main(int argc, char * argv[]) -> int
 {
@@ -50,6 +64,7 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description configuration_options{ "Advanced configuration options" };
         configuration_options.add_options()
+            ("colour-ordering",    po::value<string>(),      "Specify colour-ordering (colour / singletons-first / sorted)")
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (disabled by default)")
             ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)");
         display_options.add(configuration_options);
@@ -108,6 +123,9 @@ auto main(int argc, char * argv[]) -> int
         }
         else
             params.restarts_schedule = make_unique<NoRestartsSchedule>();
+
+        if (options_vars.count("colour-ordering"))
+            params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))

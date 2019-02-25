@@ -12,6 +12,13 @@
 #include <optional>
 #include <set>
 
+enum class ColourClassOrder
+{
+    ColourOrder,
+    SingletonsFirst,
+    Sorted
+};
+
 struct CliqueParams
 {
     /// Timeout handler
@@ -28,6 +35,9 @@ struct CliqueParams
 
     /// Largest size of nogood to store (0 disables nogoods)
     unsigned nogood_size_limit = std::numeric_limits<unsigned>::max();
+
+    /// Which colour order to use?
+    ColourClassOrder colour_class_order = ColourClassOrder::SingletonsFirst;
 };
 
 struct CliqueResult

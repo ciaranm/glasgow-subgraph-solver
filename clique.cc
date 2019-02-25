@@ -143,6 +143,127 @@ namespace
             }
         }
 
+        auto colour_class_order_2df(
+                const BitSetType_ & p,
+                ArrayType_ & p_order,
+                ArrayType_ & p_bounds,
+                int & p_end) -> void
+        {
+            BitSetType_ p_left = p;      // not coloured yet
+            unsigned colour = 0;         // current colour
+            p_end = 0;
+
+            unsigned d = 0;             // number deferred
+            ArrayType_ defer;
+            if constexpr (is_same<ArrayType_, vector<int> >::value)
+                defer.resize(size);
+
+            // while we've things left to colour
+            while (p_left.any()) {
+                // next colour
+                ++colour;
+                // things that can still be given this colour
+                BitSetType_ q = p_left;
+
+                // while we can still give something this colour
+                unsigned number_with_this_colour = 0;
+                while (q.any()) {
+                    // first thing we can colour
+                    int v = q.find_first();
+                    p_left.reset(v);
+                    q.reset(v);
+
+                    // can't give anything adjacent to this the same colour
+                    q &= ~adj[v];
+
+                    // record in result
+                    p_bounds[p_end] = colour;
+                    p_order[p_end] = v;
+                    ++p_end;
+                    ++number_with_this_colour;
+                }
+
+                if (1 == number_with_this_colour) {
+                    --p_end;
+                    --colour;
+                    defer[d++] = p_order[p_end];
+                }
+            }
+
+            // handle deferred singletons
+            for (unsigned n = 0 ; n < d ; ++n) {
+                ++colour;
+                p_order[p_end] = defer[n];
+                p_bounds[p_end] = colour;
+                ++p_end;
+            }
+        }
+
+        auto colour_class_order_sorted(
+                const BitSetType_ & p,
+                ArrayType_ & p_order,
+                ArrayType_ & p_bounds,
+                int & p_end) -> void
+        {
+            BitSetType_ p_left = p;      // not coloured yet
+            unsigned colour = 0;         // current colour
+            p_end = 0;
+
+            ArrayType_ p_order_prelim;
+            ArrayType_ colour_sizes;
+            ArrayType_ colour_start;
+            ArrayType_ sorted_order;
+            if constexpr (is_same<ArrayType_, vector<int> >::value) {
+                p_order_prelim.resize(size);
+                colour_sizes.resize(size);
+                colour_start.resize(size);
+                sorted_order.resize(size);
+            }
+
+            // while we've things left to colour
+            while (p_left.any()) {
+                colour_start[colour] = p_end;
+                colour_sizes[colour] = 0;
+
+                // next colour
+                ++colour;
+                // things that can still be given this colour
+                BitSetType_ q = p_left;
+
+                // while we can still give something this colour
+                while (q.any()) {
+                    // first thing we can colour
+                    int v = q.find_first();
+                    p_left.reset(v);
+                    q.reset(v);
+
+                    // can't give anything adjacent to this the same colour
+                    q &= ~adj[v];
+
+                    // record in result
+                    p_order_prelim[p_end] = v;
+                    ++p_end;
+                    ++colour_sizes[colour - 1];
+                }
+            }
+
+            // sort
+            iota(sorted_order.begin(), sorted_order.begin() + colour, 0);
+            sort(sorted_order.begin(), sorted_order.begin() + colour, [&] (int a, int b) {
+                    return make_tuple(colour_sizes[b], a) < make_tuple(colour_sizes[a], b);
+                    });
+
+            // copy out
+            int p_end2 = 0;
+            for (unsigned c = 0 ; c < colour ; ++c) {
+                for (int v = colour_start[sorted_order[c]] ; v < colour_start[sorted_order[c]] + colour_sizes[sorted_order[c]] ; ++v) {
+                    p_bounds[p_end2] = c + 1;
+                    p_order[p_end2] = p_order_prelim[v];
+                    ++p_end2;
+                }
+            }
+        }
+
         auto post_nogood(
                 const vector<int> & c)
         {
@@ -170,7 +291,11 @@ namespace
             }
 
             int p_end = 0;
-            colour_class_order(p, p_order, p_bounds, p_end);
+            switch (params.colour_class_order) {
+                case ColourClassOrder::ColourOrder:     colour_class_order(p, p_order, p_bounds, p_end); break;
+                case ColourClassOrder::SingletonsFirst: colour_class_order_2df(p, p_order, p_bounds, p_end); break;
+                case ColourClassOrder::Sorted:          colour_class_order_sorted(p, p_order, p_bounds, p_end); break;
+            }
 
             // for each v in p... (v comes later)
             for (int n = p_end - 1 ; n >= 0 ; --n) {
