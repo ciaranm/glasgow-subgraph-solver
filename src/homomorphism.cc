@@ -1,6 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "homomorphism.hh"
+#include "homomorphism_traits.hh"
 #include "fixed_bit_set.hh"
 #include "template_voodoo.hh"
 #include "configuration.hh"
@@ -88,7 +89,7 @@ namespace
 
             // strip out isolated vertices in the pattern, and build pattern_permutation
             for (unsigned v = 0 ; v < full_pattern_size ; ++v)
-                if ((! params.induced) && (! params.enumerate) && (0 == pattern.degree(v))) {
+                if (can_strip_isolated_vertices(params) && 0 == pattern.degree(v)) {
                     isolated_vertices.push_back(v);
                     --pattern_size;
                 }
@@ -161,15 +162,16 @@ namespace
             }
         }
 
-        auto prepare(bool induced, bool noninjective) -> void
+        auto prepare(const HomomorphismParams & params) -> void
         {
-            if (! noninjective) {
-                build_supplemental_graphs(pattern_graph_rows, pattern_size);
-                build_supplemental_graphs(target_graph_rows, target_size);
+            // build exact path graphs
+            if (supports_exact_path_graphs(params)) {
+                build_exact_path_graphs(pattern_graph_rows, pattern_size);
+                build_exact_path_graphs(target_graph_rows, target_size);
             }
 
             // build complement graphs
-            if (induced) {
+            if (params.induced) {
                 build_complement_graphs(pattern_graph_rows, pattern_size);
                 build_complement_graphs(target_graph_rows, target_size);
             }
@@ -201,7 +203,7 @@ namespace
         }
 
         template <typename PossiblySomeOtherBitSetType_>
-        auto build_supplemental_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
+        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
         {
             vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
@@ -336,7 +338,7 @@ namespace
             params(p)
         {
             // set up space for watches
-            if (! params.enumerate) {
+            if (might_have_watches(params)) {
                 watches.table.target_size = model.target_size;
                 watches.table.data.resize(model.pattern_size * model.target_size);
             }
@@ -445,7 +447,7 @@ namespace
                 assignments.values.push_back({ current_assignment, false, -1, -1 });
 
                 // propagate watches
-                if (! params.enumerate)
+                if (might_have_watches(params))
                     watches.propagate(current_assignment,
                             [&] (const Assignment & a) { return ! assignments.contains(a); },
                             [&] (const Assignment & a) {
@@ -508,7 +510,7 @@ namespace
         auto post_nogood(
                 const Assignments & assignments)
         {
-            if (params.enumerate)
+            if (! might_have_watches(params))
                 return;
 
             Nogood<Assignment> nogood;
@@ -829,7 +831,7 @@ namespace
                 vector<vector<optional<vector<int> > > > & targets_ndss
                 ) -> bool
         {
-            if (params.noninjective)
+            if (! degree_and_nds_are_preserved(params))
                 return true;
 
             for (int g = 0 ; g < graphs_to_consider ; ++g) {
@@ -880,7 +882,7 @@ namespace
             vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
             vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
 
-            if (! params.noninjective) {
+            if (degree_and_nds_are_preserved(params)) {
                 for (int g = 0 ; g < graphs_to_consider ; ++g) {
                     patterns_ndss.at(g).resize(model.pattern_size);
                     targets_ndss.at(g).resize(model.target_size);
@@ -920,7 +922,7 @@ namespace
             }
 
             // quick sanity check that we have enough values
-            if (! params.noninjective) {
+            if (is_nonshrinking(params)) {
                 BitSetType_ domains_union{ model.target_size, 0 };
                 for (auto & d : domains)
                     domains_union |= d.values;
@@ -1038,18 +1040,21 @@ namespace
 
             result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
-            result.extra_stats.emplace_back("nogoods_size = " + to_string(searcher.watches.nogoods.size()));
 
-            map<int, int> nogoods_lengths;
-            for (auto & n : searcher.watches.nogoods)
-                nogoods_lengths[n.literals.size()]++;
+            if (might_have_watches(params)) {
+                result.extra_stats.emplace_back("nogoods_size = " + to_string(searcher.watches.nogoods.size()));
 
-            string nogoods_lengths_str;
-            for (auto & n : nogoods_lengths) {
-                nogoods_lengths_str += " ";
-                nogoods_lengths_str += to_string(n.first) + ":" + to_string(n.second);
+                map<int, int> nogoods_lengths;
+                for (auto & n : searcher.watches.nogoods)
+                    nogoods_lengths[n.literals.size()]++;
+
+                string nogoods_lengths_str;
+                for (auto & n : nogoods_lengths) {
+                    nogoods_lengths_str += " ";
+                    nogoods_lengths_str += to_string(n.first) + ":" + to_string(n.second);
+                }
+                result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
             }
-            result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
 
             return result;
         }
@@ -1238,13 +1243,13 @@ namespace
 
         auto run() -> HomomorphismResult
         {
-            if ((! params.noninjective) && (model.full_pattern_size > model.target_size)) {
+            if (is_nonshrinking(params) && (model.full_pattern_size > model.target_size)) {
                 HomomorphismResult result;
                 result.extra_stats.emplace_back("prepresolved = true");
                 return result;
             }
 
-            model.prepare(params.induced, params.noninjective);
+            model.prepare(params);
 
             HomomorphismResult result;
             if (1 == params.n_threads) {
@@ -1271,7 +1276,7 @@ namespace
 
 auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult
 {
-    if ((! params.noninjective) && (graphs.first.size() > graphs.second.size()))
+    if (is_nonshrinking(params) && (graphs.first.size() > graphs.second.size()))
         return HomomorphismResult{ };
 
     return select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params);

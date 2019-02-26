@@ -1,0 +1,33 @@
+/* vim: set sw=4 sts=4 et foldmethod=syntax : */
+
+#ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_TRAITS_HH
+#define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_TRAITS_HH 1
+
+#include "homomorphism.hh"
+
+auto can_strip_isolated_vertices(const HomomorphismParams & params) -> bool
+{
+    return (! params.induced) && (! params.enumerate);
+}
+
+auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
+{
+     return ! params.induced;
+}
+
+auto might_have_watches(const HomomorphismParams & params) -> bool
+{
+    return ! params.enumerate;
+}
+
+auto is_nonshrinking(const HomomorphismParams & params) -> bool
+{
+    return ! params.noninjective;
+}
+
+auto degree_and_nds_are_preserved(const HomomorphismParams & params) -> bool
+{
+    return ! params.noninjective;
+}
+
+#endif
