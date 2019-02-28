@@ -45,25 +45,39 @@ auto main(int argc, char * argv[]) -> int
         display_options.add_options()
             ("help",                                         "Display help information")
             ("timeout",            po::value<int>(),         "Abort after this many seconds")
+            ("parallel",                                     "Use auto-configured parallel search (highly nondeterministic runtimes)");
+
+        po::options_description problem_options{ "Problem options" };
+        problem_options.add_options()
+            ("noninjective",                                 "Drop the injectivity requirement")
+            ("enumerate",                                    "Count the number of solutions")
+            ("induced",                                      "Find an induced mapping");
+        display_options.add(problem_options);
+
+        po::options_description input_options{ "Input file options" };
+        input_options.add_options()
             ("format",             po::value<string>(),      "Specify input file format (auto, lad, labelledlad, dimacs)")
             ("pattern-format",     po::value<string>(),      "Specify input file format just for the pattern graph")
-            ("target-format",      po::value<string>(),      "Specify input file format just for the target graph")
-            ("induced",                                      "Find an induced mapping")
-            ("noninjective",                                 "Drop the injectivity requirement")
-            ("enumerate",                                    "Count the number of solutions");
+            ("target-format",      po::value<string>(),      "Specify input file format just for the target graph");
+        display_options.add(input_options);
 
-        po::options_description parallel_options{ "Parallelism options" };
+        po::options_description search_options{ "Advanced search configuration options" };
+        search_options.add_options()
+            ("restarts",             po::value<string>(),      "Specify restart policy (luby / geometric / timed / none)")
+            ("geometric-multiplier", po::value<double>(),      "Specify multiplier for geometric restarts")
+            ("geometric-constant",   po::value<double>(),      "Specify starting constant for geometric restarts")
+            ("restart-interval",     po::value<int>(),         "Specify the restart interval in milliseconds for timed restarts")
+            ("restart-minimum",      po::value<int>(),         "Specify a minimum number of backtracks before a timed restart can trigger")
+            ("luby-constant",        po::value<int>(),         "Specify the starting constant / multiplier for Luby restarts")
+            ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
+        display_options.add(search_options);
+
+        po::options_description parallel_options{ "Advanced parallelism options" };
         parallel_options.add_options()
-            ("threads",            po::value<unsigned>(),    "Use threaded search, with this many threads (0 to auto-detect)")
-            ("reproducible-parallelism",                     "Try to give reproducible search space sizes (less efficient)");
+            ("threads",              po::value<unsigned>(),    "Use threaded search, with this many threads (0 to auto-detect)")
+            ("triggered-restarts",                             "Have one thread trigger restarts (more nondeterminism, better performance)")
+            ("delay-thread-creation",                          "Do not create threads until after the first restart");
         display_options.add(parallel_options);
-
-        po::options_description configuration_options{ "Advanced configuration options" };
-        configuration_options.add_options()
-            ("restarts-constant",  po::value<int>(),         "How often to perform restarts (0 disables restarts)")
-            ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)")
-            ("value-ordering",     po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
-        display_options.add(configuration_options);
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -107,24 +121,57 @@ auto main(int argc, char * argv[]) -> int
         params.induced = options_vars.count("induced");
         params.enumerate = options_vars.count("enumerate");
 
+        params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
+
         if (options_vars.count("threads"))
             params.n_threads = options_vars["threads"].as<unsigned>();
-        params.reproducible_parallelism = options_vars.count("reproducible-parallelism");
+        else if (options_vars.count("parallel"))
+            params.n_threads = 0;
 
-        if (params.enumerate)
-            params.restarts_schedule = make_unique<NoRestartsSchedule>();
-        else if (options_vars.count("geometric-restarts")) {
-            double initial_value = GeometricRestartsSchedule::default_initial_value;
-            double multiplier = options_vars["geometric-restarts"].as<double>();
-            if (options_vars.count("restarts-constant"))
-                initial_value = options_vars["restarts-constant"].as<int>();
-            params.restarts_schedule = make_unique<GeometricRestartsSchedule>(initial_value, multiplier);
+        if (options_vars.count("delay-thread-creation") || options_vars.count("parallel"))
+            params.delay_thread_creation = true;
+
+        if (options_vars.count("restarts")) {
+            string restarts_policy = options_vars["restarts"].as<string>();
+            if (restarts_policy == "luby") {
+                unsigned long long multiplier = LubyRestartsSchedule::default_multiplier;
+                if (options_vars.count("luby-constant"))
+                    multiplier = options_vars["luby-constant"].as<int>();
+                params.restarts_schedule = make_unique<LubyRestartsSchedule>(multiplier);
+            }
+            else if (restarts_policy == "geometric") {
+                double geometric_constant = GeometricRestartsSchedule::default_initial_value;
+                double geometric_multiplier = GeometricRestartsSchedule::default_multiplier;
+                if (options_vars.count("geometric-constant"))
+                    geometric_constant = options_vars["geometric-constant"].as<double>();
+                if (options_vars.count("geometric-multiplier"))
+                    geometric_multiplier = options_vars["geometric-multiplier"].as<double>();
+                params.restarts_schedule = make_unique<GeometricRestartsSchedule>(geometric_constant, geometric_multiplier);
+            }
+            else if (restarts_policy == "timed") {
+                milliseconds duration = TimedRestartsSchedule::default_duration;
+                unsigned long long minimum_backtracks = TimedRestartsSchedule::default_minimum_backtracks;
+                if (options_vars.count("restart-interval"))
+                    duration = milliseconds{ options_vars["restart-interval"].as<int>() };
+                if (options_vars.count("restart-minimum"))
+                    minimum_backtracks = options_vars["restart-minimum"].as<int>();
+                params.restarts_schedule = make_unique<TimedRestartsSchedule>(duration, minimum_backtracks);
+            }
+            else if (restarts_policy == "none") {
+                params.restarts_schedule = make_unique<NoRestartsSchedule>();
+            }
+            else {
+                cerr << "Unknown restarts policy '" << restarts_policy << "'" << endl;
+                return EXIT_FAILURE;
+            }
         }
         else {
-            long long multiplier = LubyRestartsSchedule::default_multiplier;
-            if (options_vars.count("restarts-constant"))
-                multiplier = options_vars["restarts-constant"].as<int>();
-            params.restarts_schedule = make_unique<LubyRestartsSchedule>(multiplier);
+            if (params.enumerate)
+                params.restarts_schedule = make_unique<NoRestartsSchedule>();
+            else if (options_vars.count("parallel"))
+                params.restarts_schedule = make_unique<TimedRestartsSchedule>(TimedRestartsSchedule::default_duration, TimedRestartsSchedule::default_minimum_backtracks);
+            else
+                params.restarts_schedule = make_unique<LubyRestartsSchedule>(LubyRestartsSchedule::default_multiplier);
         }
 
         if (options_vars.count("value-ordering")) {

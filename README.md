@@ -43,17 +43,10 @@ choice.
 The solver supports parallel search. Usually you should enable this, as follows:
 
 ```shell session
-$ ./glasgow_subgraph_solver --threads 0 ...
+$ ./glasgow_subgraph_solver --parallel ...
 ```
 
-Here, 0 means auto-detect. You can also specify an exact number to use. Note that parallel search is
-non-deterministic; if you need determinism, try:
-
-```shell session
-$ ./glasgow_subgraph_solver --threads 0 --reproducible-parallelism ...
-```
-
-This will sacrifice some throughput for (approximate) reproducibility.
+Note that parallel search, in its default configuration, is non-deterministic.
 
 To run the clique solver, use:
 

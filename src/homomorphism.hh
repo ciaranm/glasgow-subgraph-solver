@@ -38,8 +38,11 @@ struct HomomorphismParams
     /// used in conjunction with restarts.
     unsigned n_threads = 1;
 
-    /// Try to produce reproducible parallelism?
-    bool reproducible_parallelism = false;
+    /// Do one restart before launching remaining threads?
+    bool delay_thread_creation = false;
+
+    /// Trigger restarts using the first thread?
+    bool triggered_restarts = false;
 };
 
 struct HomomorphismResult

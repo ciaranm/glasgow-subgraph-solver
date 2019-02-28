@@ -8,6 +8,9 @@ using std::advance;
 using std::distance;
 using std::round;
 
+using std::chrono::milliseconds;
+using std::chrono::steady_clock;
+
 auto NoRestartsSchedule::did_a_backtrack() -> void
 {
 }
@@ -133,5 +136,39 @@ auto SyncedRestartSchedule::might_restart() -> bool
 auto SyncedRestartSchedule::clone() -> SyncedRestartSchedule *
 {
     return new SyncedRestartSchedule(*this);
+}
+
+TimedRestartsSchedule::TimedRestartsSchedule(milliseconds d, unsigned long long m) :
+    _number_of_backtracks(0),
+    _minimum_backtracks(m),
+    _duration(d),
+    _next_restart_point(steady_clock::now() + d)
+{
+}
+
+auto TimedRestartsSchedule::did_a_backtrack() -> void
+{
+    ++_number_of_backtracks;
+}
+
+auto TimedRestartsSchedule::did_a_restart() -> void
+{
+    _next_restart_point = steady_clock::now() + _duration;
+    _number_of_backtracks = 0;
+}
+
+auto TimedRestartsSchedule::should_restart() -> bool
+{
+    return (_number_of_backtracks >= _minimum_backtracks) && (steady_clock::now() >= _next_restart_point);
+}
+
+auto TimedRestartsSchedule::clone() -> TimedRestartsSchedule *
+{
+    return new TimedRestartsSchedule(*this);
+}
+
+auto TimedRestartsSchedule::might_restart() -> bool
+{
+    return true;
 }
 

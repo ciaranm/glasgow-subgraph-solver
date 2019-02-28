@@ -4,6 +4,7 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_RESTARTS_HH 1
 
 #include <atomic>
+#include <chrono>
 #include <list>
 #include <memory>
 
@@ -81,6 +82,26 @@ class SyncedRestartSchedule final : public RestartsSchedule
         virtual auto should_restart() -> bool override;
         virtual auto might_restart() -> bool override;
         virtual auto clone() -> SyncedRestartSchedule * override;
+};
+
+class TimedRestartsSchedule final : public RestartsSchedule
+{
+    private:
+        long long _number_of_backtracks = 0, _minimum_backtracks;
+        std::chrono::milliseconds _duration;
+        std::chrono::steady_clock::time_point _next_restart_point;
+
+    public:
+        static constexpr std::chrono::milliseconds default_duration{ 100 };
+        static constexpr unsigned long long default_minimum_backtracks = 100;
+
+        TimedRestartsSchedule(std::chrono::milliseconds duration, unsigned long long minimum_backtracks);
+
+        virtual auto did_a_backtrack() -> void override;
+        virtual auto did_a_restart() -> void override;
+        virtual auto should_restart() -> bool override;
+        virtual auto might_restart() -> bool override;
+        virtual auto clone() -> TimedRestartsSchedule * override;
 };
 
 #endif

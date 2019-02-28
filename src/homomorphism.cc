@@ -1115,7 +1115,7 @@ namespace
                 // do the search
                 HomomorphismResult thread_result;
 
-                bool just_the_first_thread = (0 == t);
+                bool just_the_first_thread = (0 == t) && params.delay_thread_creation;
 
                 searchers[t] = make_unique<Searcher<BitSetType_, ArrayType_> >(model, params);
                 if (0 != t)
@@ -1130,7 +1130,7 @@ namespace
 
                 // each thread needs its own restarts schedule
                 unique_ptr<RestartsSchedule> thread_restarts_schedule;
-                if (params.reproducible_parallelism || 0 == t)
+                if (0 == t || ! params.triggered_restarts)
                     thread_restarts_schedule.reset(params.restarts_schedule->clone());
                 else
                     thread_restarts_schedule = make_unique<SyncedRestartSchedule>(restart_synchroniser);
@@ -1208,7 +1208,7 @@ namespace
                         restart_synchroniser.store(true);
                     thread_restarts_schedule->did_a_restart();
 
-                    if (just_the_first_thread) {
+                    if (params.delay_thread_creation && just_the_first_thread) {
                         if (! thread_result.complete) {
                             just_the_first_thread = false;
                             for (unsigned u = 1 ; u < n_threads ; ++u)
@@ -1219,7 +1219,7 @@ namespace
                     }
                 }
 
-                if (0 == t)
+                if (params.delay_thread_creation && 0 == t)
                     for (auto & th : threads)
                         th.join();
 
@@ -1237,7 +1237,15 @@ namespace
                 by_thread_propagations.append(" " + to_string(thread_result.propagations));
             };
 
-            work_function(0);
+            if (params.delay_thread_creation)
+                work_function(0);
+            else {
+                for (unsigned u = 0 ; u < n_threads ; ++u)
+                    threads.emplace_back([&, u] () { work_function(u); });
+
+                for (auto & th : threads)
+                    th.join();
+            }
 
             common_result.extra_stats.emplace_back("by_thread_nodes =" + by_thread_nodes);
             common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
