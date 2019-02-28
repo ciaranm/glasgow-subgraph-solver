@@ -28,6 +28,7 @@
 using std::atomic;
 using std::fill;
 using std::find_if;
+using std::function;
 using std::greater;
 using std::is_same;
 using std::make_unique;
@@ -1099,40 +1100,45 @@ namespace
             auto search_start_time = steady_clock::now();
 
             vector<thread> threads;
+            threads.reserve(n_threads);
+
             vector<unique_ptr<Searcher<BitSetType_, ArrayType_> > > searchers{ n_threads };
 
             barrier wait_for_new_nogoods_barrier{ n_threads }, synced_nogoods_barrier{ n_threads };
             atomic<bool> restart_synchroniser{ false };
 
-            for (unsigned t = 0 ; t < n_threads ; ++t)
-                threads.emplace_back([t, &searchers, &common_domains,
+            function<auto (unsigned) -> void> work_function = [&searchers, &common_domains, &threads, &work_function,
                         &model = this->model, &params = this->params, n_threads = this->n_threads,
                         &common_result, &common_result_mutex, &by_thread_nodes, &by_thread_propagations,
-                        &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser] () {
-                    // do the search
-                    HomomorphismResult thread_result;
+                        &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser] (unsigned t) -> void
+            {
+                // do the search
+                HomomorphismResult thread_result;
 
-                    searchers[t] = make_unique<Searcher<BitSetType_, ArrayType_> >(model, params);
-                    if (0 != t)
-                        searchers[t]->global_rand.seed(t);
+                bool just_the_first_thread = (0 == t);
 
-                    unsigned number_of_restarts = 0;
+                searchers[t] = make_unique<Searcher<BitSetType_, ArrayType_> >(model, params);
+                if (0 != t)
+                    searchers[t]->global_rand.seed(t);
 
-                    Domains domains = common_domains;
+                unsigned number_of_restarts = 0;
 
-                    Assignments thread_assignments;
-                    thread_assignments.values.reserve(model.pattern_size);
+                Domains domains = common_domains;
 
-                    // each thread needs its own restarts schedule
-                    unique_ptr<RestartsSchedule> thread_restarts_schedule;
-                    if (params.reproducible_parallelism || 0 == t)
-                        thread_restarts_schedule.reset(params.restarts_schedule->clone());
-                    else
-                        thread_restarts_schedule = make_unique<SyncedRestartSchedule>(restart_synchroniser);
+                Assignments thread_assignments;
+                thread_assignments.values.reserve(model.pattern_size);
 
-                    while (true) {
-                        ++number_of_restarts;
+                // each thread needs its own restarts schedule
+                unique_ptr<RestartsSchedule> thread_restarts_schedule;
+                if (params.reproducible_parallelism || 0 == t)
+                    thread_restarts_schedule.reset(params.restarts_schedule->clone());
+                else
+                    thread_restarts_schedule = make_unique<SyncedRestartSchedule>(restart_synchroniser);
 
+                while (true) {
+                    ++number_of_restarts;
+
+                    if (! just_the_first_thread) {
                         wait_for_new_nogoods_barrier.wait();
 
                         for (unsigned u = 0 ; u < n_threads ; ++u)
@@ -1157,67 +1163,81 @@ namespace
                         synced_nogoods_barrier.wait();
 
                         searchers[t]->watches.clear_new_nogoods();
-
-                        ++thread_result.propagations;
-                        if (searchers[t]->propagate(domains, thread_assignments)) {
-                            auto assignments_copy = thread_assignments;
-
-                            switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
-                                        thread_result.solution_count, 0, *thread_restarts_schedule)) {
-                                case SearchResult::Satisfiable:
-                                    searchers[t]->save_result(assignments_copy, thread_result);
-                                    thread_result.complete = true;
-                                    params.timeout->trigger_early_abort();
-                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
-                                    break;
-
-                                case SearchResult::SatisfiableButKeepGoing:
-                                    thread_result.complete = true;
-                                    params.timeout->trigger_early_abort();
-                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
-                                    break;
-
-                                case SearchResult::Unsatisfiable:
-                                    thread_result.complete = true;
-                                    params.timeout->trigger_early_abort();
-                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
-                                    break;
-
-                                case SearchResult::Aborted:
-                                    searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
-                                    break;
-
-                                case SearchResult::Restart:
-                                    break;
-                            }
-                        }
-                        else {
-                            thread_result.complete = true;
-                            searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
-                            params.timeout->trigger_early_abort();
-                        }
-
-                        if (0 == t)
-                            restart_synchroniser.store(true);
-                        thread_restarts_schedule->did_a_restart();
                     }
 
-                    unique_lock<mutex> lock{ common_result_mutex };
-                    if (! thread_result.mapping.empty())
-                        common_result.mapping = move(thread_result.mapping);
-                    common_result.nodes += thread_result.nodes;
-                    common_result.propagations += thread_result.propagations;
-                    common_result.solution_count += thread_result.solution_count;
-                    common_result.complete = common_result.complete || thread_result.complete;
-                    for (auto & x : thread_result.extra_stats)
-                        common_result.extra_stats.push_back("t" + to_string(t) + "_" + x);
+                    ++thread_result.propagations;
+                    if (searchers[t]->propagate(domains, thread_assignments)) {
+                        auto assignments_copy = thread_assignments;
 
-                    by_thread_nodes.append(" " + to_string(thread_result.nodes));
-                    by_thread_propagations.append(" " + to_string(thread_result.propagations));
-                });
+                        switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
+                                    thread_result.solution_count, 0, *thread_restarts_schedule)) {
+                            case SearchResult::Satisfiable:
+                                searchers[t]->save_result(assignments_copy, thread_result);
+                                thread_result.complete = true;
+                                params.timeout->trigger_early_abort();
+                                searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
+                                break;
 
-            for (auto & t : threads)
-                t.join();
+                            case SearchResult::SatisfiableButKeepGoing:
+                                thread_result.complete = true;
+                                params.timeout->trigger_early_abort();
+                                searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
+                                break;
+
+                            case SearchResult::Unsatisfiable:
+                                thread_result.complete = true;
+                                params.timeout->trigger_early_abort();
+                                searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
+                                break;
+
+                            case SearchResult::Aborted:
+                                searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
+                                break;
+
+                            case SearchResult::Restart:
+                                break;
+                        }
+                    }
+                    else {
+                        thread_result.complete = true;
+                        searchers[t]->watches.post_nogood(Nogood<Assignment>{ });
+                        params.timeout->trigger_early_abort();
+                    }
+
+                    if (0 == t)
+                        restart_synchroniser.store(true);
+                    thread_restarts_schedule->did_a_restart();
+
+                    if (just_the_first_thread) {
+                        if (! thread_result.complete) {
+                            just_the_first_thread = false;
+                            for (unsigned u = 1 ; u < n_threads ; ++u)
+                                threads.emplace_back([&, u] () { work_function(u); });
+                        }
+                        else
+                            break;
+                    }
+                }
+
+                if (0 == t)
+                    for (auto & th : threads)
+                        th.join();
+
+                unique_lock<mutex> lock{ common_result_mutex };
+                if (! thread_result.mapping.empty())
+                    common_result.mapping = move(thread_result.mapping);
+                common_result.nodes += thread_result.nodes;
+                common_result.propagations += thread_result.propagations;
+                common_result.solution_count += thread_result.solution_count;
+                common_result.complete = common_result.complete || thread_result.complete;
+                for (auto & x : thread_result.extra_stats)
+                    common_result.extra_stats.push_back("t" + to_string(t) + "_" + x);
+
+                by_thread_nodes.append(" " + to_string(thread_result.nodes));
+                by_thread_propagations.append(" " + to_string(thread_result.propagations));
+            };
+
+            work_function(0);
 
             common_result.extra_stats.emplace_back("by_thread_nodes =" + by_thread_nodes);
             common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
