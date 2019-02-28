@@ -25,7 +25,7 @@ auto detect_format(ifstream & infile, const string & filename) -> string
 {
     string line;
     if (! getline(infile, line) || line.empty())
-        throw GraphFileError{ filename, "unable to read file to detect file format" };
+        throw GraphFileError{ filename, "unable to read file to detect file format", true };
 
     static const regex
         dimacs_comment{ R"(c(\s.*)?)" },
@@ -41,10 +41,10 @@ auto detect_format(ifstream & infile, const string & filename) -> string
         while (regex_match(line, match, dimacs_comment)) {
             // looks like a DIMACS comment, ignore
             if (! getline(infile, line) || line.empty())
-                throw GraphFileError{ filename, "unable to auto-detect file format (entirely c lines?)" };
+                throw GraphFileError{ filename, "unable to auto-detect file format (entirely c lines?)", true };
         }
         if (! regex_match(line, match, dimacs_problem))
-            throw GraphFileError{ filename, "unable to auto-detect file format (c line not followed by a p line?)" };
+            throw GraphFileError{ filename, "unable to auto-detect file format (c line not followed by a p line?)", true };
         return "dimacs";
     }
     else if (regex_match(line, match, dimacs_problem))
@@ -55,7 +55,7 @@ auto detect_format(ifstream & infile, const string & filename) -> string
 
         // got to figure out whether we're labelled or not
         if (! getline(infile, line) || line.empty())
-            throw GraphFileError{ filename, "unable to auto-detect file format (number followed by nothing)" };
+            throw GraphFileError{ filename, "unable to auto-detect file format (number followed by nothing)", true };
         if (regex_match(line, match, lad_zero_labelled_line))
             return "labelledlad";
         else if (regex_match(line, match, lad_zero_unlabelled_line))
@@ -68,7 +68,7 @@ auto detect_format(ifstream & infile, const string & filename) -> string
                 words.emplace_back(word);
 
             if (words.size() < 2)
-                throw GraphFileError{ filename, "unable to auto-detect file format (not enough words in a lad line)" };
+                throw GraphFileError{ filename, "unable to auto-detect file format (not enough words in a lad line)", true };
 
             unsigned items_if_lad = stoi(words.at(0)), items_if_labelledlad = stoi(words.at(1));
             if (words.size() == items_if_lad + 1 && ! (words.size() == (2 * items_if_labelledlad) + 2))
@@ -76,33 +76,33 @@ auto detect_format(ifstream & infile, const string & filename) -> string
             else if (! (words.size() == items_if_lad + 1) && (words.size() == (2 * items_if_labelledlad) + 2))
                 return "labelledlad";
             else if ((words.size() == items_if_lad + 1) && (words.size() == (2 * items_if_labelledlad) + 2))
-                throw GraphFileError{ filename, "unable to auto-detect between lad or labelledlad" };
+                throw GraphFileError{ filename, "unable to auto-detect between lad or labelledlad", true };
             else
                 throw GraphFileError{ filename, "unable to auto-detect file format (looks like lad, but got " +
                     to_string(words.size()) + " items on a line with first two elements " + to_string(items_if_lad)
-                       + " and " + to_string(items_if_labelledlad) + ")" };
+                       + " and " + to_string(items_if_labelledlad) + ")", true };
         }
         else
-            throw GraphFileError{ filename, "unable to auto-detect file format (looks like lad, but no edge line found)" };
+            throw GraphFileError{ filename, "unable to auto-detect file format (looks like lad, but no edge line found)", true };
     }
     else if (regex_match(line, match, csv_problem))
         return "csv";
 
-    throw GraphFileError{ filename, "unable to auto-detect file format (no recognisable header found)" };
+    throw GraphFileError{ filename, "unable to auto-detect file format (no recognisable header found)", true };
 }
 
 auto read_file_format(const string & format, const string & filename) -> InputGraph
 {
     ifstream infile{ filename };
     if (! infile)
-        throw GraphFileError{ filename, "unable to open file" };
+        throw GraphFileError{ filename, "unable to open file", false };
 
     auto actual_format = format;
     if (actual_format == "auto") {
         actual_format = detect_format(infile, filename);
         infile.clear();
         if (! infile.seekg(0, ios::beg))
-            throw GraphFileError{ filename, "unable to seek on input file (try specifying file format explicitly)" };
+            throw GraphFileError{ filename, "unable to seek on input file (try specifying file format explicitly)", true };
     }
 
     if (actual_format == "dimacs")
@@ -114,6 +114,6 @@ auto read_file_format(const string & format, const string & filename) -> InputGr
     else if (actual_format == "csv")
         return read_csv(move(infile), filename);
     else
-        throw GraphFileError{ filename, "Unknown file format '" + format + "'" };
+        throw GraphFileError{ filename, "Unknown file format '" + format + "'", true };
 }
 

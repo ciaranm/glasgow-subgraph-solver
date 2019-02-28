@@ -39,7 +39,7 @@ auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
             /* Problem. Specifies the size of the graph. Must happen exactly
              * once. */
             if (0 != result.size())
-                throw GraphFileError{ filename, "multiple 'p' lines encountered" };
+                throw GraphFileError{ filename, "multiple 'p' lines encountered", true };
             result.resize(stoi(match.str(2)));
         }
         else if (regex_match(line, match, edge)) {
@@ -47,15 +47,15 @@ auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
              * a problem line (if not our size will be 0, so we'll throw). */
             int a{ stoi(match.str(1)) }, b{ stoi(match.str(2)) };
             if (0 == a || 0 == b || a > result.size() || b > result.size())
-                throw GraphFileError{ filename, "line '" + line + "' edge index out of bounds" };
+                throw GraphFileError{ filename, "line '" + line + "' edge index out of bounds", true };
             result.add_edge(a - 1, b - 1);
         }
         else
-            throw GraphFileError{ filename, "cannot parse line '" + line + "'" };
+            throw GraphFileError{ filename, "cannot parse line '" + line + "'", true };
     }
 
     if (! infile.eof())
-        throw GraphFileError{ filename, "error reading file" };
+        throw GraphFileError{ filename, "error reading file", true };
 
     for (int v = 0 ; v < result.size() ; ++v)
         result.set_vertex_name(v, to_string(v + 1));

@@ -28,18 +28,18 @@ auto read_lad(ifstream && infile, const string & filename) -> InputGraph
 
     result.resize(read_word(infile));
     if (! infile)
-        throw GraphFileError{ filename, "error reading size" };
+        throw GraphFileError{ filename, "error reading size", true };
 
     for (int r = 0 ; r < result.size() ; ++r) {
         int c_end = read_word(infile);
         if (! infile)
-            throw GraphFileError{ filename, "error reading edges count" };
+            throw GraphFileError{ filename, "error reading edges count", true };
 
         for (int c = 0 ; c < c_end ; ++c) {
             int e = read_word(infile);
 
             if (e < 0 || e >= result.size())
-                throw GraphFileError{ filename, "edge index out of bounds" };
+                throw GraphFileError{ filename, "edge index out of bounds", true };
 
             result.add_edge(r, e);
         }
@@ -47,9 +47,9 @@ auto read_lad(ifstream && infile, const string & filename) -> InputGraph
 
     string rest;
     if (infile >> rest)
-        throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"" };
+        throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"", true };
     if (! infile.eof())
-        throw GraphFileError{ filename, "EOF not reached" };
+        throw GraphFileError{ filename, "EOF not reached", true };
 
     return result;
 }
@@ -60,16 +60,16 @@ auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGrap
 
     result.resize(read_word(infile));
     if (! infile)
-        throw GraphFileError{ filename, "error reading size" };
+        throw GraphFileError{ filename, "error reading size", true };
 
     for (int r = 0 ; r < result.size() ; ++r) {
         int l = read_word(infile);
         if (! infile)
-            throw GraphFileError{ filename, "error reading label" };
+            throw GraphFileError{ filename, "error reading label", true };
 
         int c_end = read_word(infile);
         if (! infile)
-            throw GraphFileError{ filename, "error reading edges count" };
+            throw GraphFileError{ filename, "error reading edges count", true };
 
         result.set_vertex_label(r, to_string(l));
 
@@ -77,11 +77,11 @@ auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGrap
             int e = read_word(infile);
 
             if (e < 0 || e >= result.size())
-                throw GraphFileError{ filename, "edge index out of bounds" };
+                throw GraphFileError{ filename, "edge index out of bounds", true };
 
             int l = read_word(infile);
             if (l < 0)
-                throw GraphFileError{ filename, "edge label invalid" };
+                throw GraphFileError{ filename, "edge label invalid", true };
 
             result.add_directed_edge(r, e, to_string(l));
         }
@@ -89,9 +89,9 @@ auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGrap
 
     string rest;
     if (infile >> rest)
-        throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"" };
+        throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"", true };
     if (! infile.eof())
-        throw GraphFileError{ filename, "EOF not reached" };
+        throw GraphFileError{ filename, "EOF not reached", true };
 
     return result;
 }

@@ -15,11 +15,13 @@ class GraphFileError :
 {
     private:
         std::string _what;
+        bool _exists;
 
     public:
-        GraphFileError(const std::string & filename, const std::string & message) throw ();
+        GraphFileError(const std::string & filename, const std::string & message, bool exists) throw ();
 
         auto what() const throw () -> const char *;
+        auto file_at_least_existed() const throw () -> bool;
 };
 
 

@@ -185,7 +185,8 @@ auto main(int argc, char * argv[]) -> int
     }
     catch (const GraphFileError & e) {
         cerr << "Error: " << e.what() << endl;
-        cerr << "Maybe try specifying one of --format, --pattern-format, or --target-format?" << endl;
+        if (e.file_at_least_existed())
+            cerr << "Maybe try specifying --format?" << endl;
         return EXIT_FAILURE;
     }
     catch (const po::error & e) {
