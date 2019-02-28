@@ -12,7 +12,8 @@ SOURCES := \
     fixed_bit_set.cc \
     homomorphism.cc \
     restarts.cc \
+    thread_utils.cc \
     timeout.cc \
-    watches.cc \
-    verify.cc
+    verify.cc \
+    watches.cc
 
