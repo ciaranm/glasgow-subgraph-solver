@@ -921,6 +921,8 @@ namespace
                 }
 
                 domains.at(i).count = domains.at(i).values.count();
+                if (0 == domains.at(i).count)
+                    return false;
             }
 
             // quick sanity check that we have enough values
