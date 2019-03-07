@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <vector>
 
 #include <unistd.h>
 
@@ -31,6 +32,7 @@ using std::make_shared;
 using std::make_unique;
 using std::put_time;
 using std::string;
+using std::vector;
 
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
@@ -87,6 +89,13 @@ auto main(int argc, char * argv[]) -> int
             ("triggered-restarts",                             "Have one thread trigger restarts (more nondeterminism, better performance)")
             ("delay-thread-creation",                          "Do not create threads until after the first restart");
         display_options.add(parallel_options);
+
+        vector<string> pattern_less_thans;
+        po::options_description symmetry_options{ "Manual symmetry options" };
+        symmetry_options.add_options()
+            ("pattern-less-than",   po::value<vector<string> >(&pattern_less_thans),
+                                                               "Specify a pattern less than constraint, in the form v<w");
+        display_options.add(symmetry_options);
 
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
@@ -216,6 +225,16 @@ auto main(int argc, char * argv[]) -> int
 
         params.clique_detection = ! options_vars.count("no-clique-detection");
         params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
+
+        for (auto & s : pattern_less_thans) {
+            auto p = s.find('<');
+            if (p == string::npos) {
+                cerr << "Invalid pattern less-than constraint '" << s << "'" << endl;
+                return EXIT_FAILURE;
+            }
+            auto a = s.substr(0, p), b = s.substr(p + 1);
+            params.pattern_less_constraints.emplace_back(a, b);
+        }
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
