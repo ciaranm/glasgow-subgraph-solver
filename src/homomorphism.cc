@@ -46,6 +46,7 @@ using std::pair;
 using std::sort;
 using std::stable_sort;
 using std::string;
+using std::string_view;
 using std::swap;
 using std::thread;
 using std::to_string;
@@ -71,12 +72,13 @@ namespace
         unsigned pattern_size, full_pattern_size, target_size;
 
         vector<uint8_t> pattern_adjacencies_bits;
-        vector<dynamic_bitset<> > pattern_graph_rows;
+        vector<dynamic_bitset<> > pattern_graph_rows, pattern_less_thans;
         vector<BitSetType_> target_graph_rows;
 
         vector<int> pattern_permutation, isolated_vertices;
         vector<vector<int> > patterns_degrees, targets_degrees;
         int largest_target_degree;
+        bool has_less_thans;
 
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
@@ -87,7 +89,8 @@ namespace
             target_size(target.size()),
             patterns_degrees(max_graphs),
             targets_degrees(max_graphs),
-            largest_target_degree(0)
+            largest_target_degree(0),
+            has_less_thans(false)
         {
             if (pattern.has_edge_labels() && ! params.induced)
                 throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
@@ -164,6 +167,21 @@ namespace
 
                     target_edge_labels[e->first.first * target_size + e->first.second] = r.first->second;
                 }
+            }
+
+            auto decode = [&] (string_view s) -> int {
+                auto n = pattern.vertex_from_name(s);
+                if (! n)
+                    throw UnsupportedConfiguration{ "No vertex named '" + string{ s } + "'" };
+                return *n;
+            };
+
+            // pattern less than constraints
+            if (! params.pattern_less_constraints.empty()) {
+                has_less_thans = true;
+                pattern_less_thans.resize(pattern_size, dynamic_bitset<>(pattern_size));
+                for (auto & [ a, b ] : params.pattern_less_constraints)
+                    pattern_less_thans[decode(a)].set(decode(b));
             }
         }
 
@@ -493,6 +511,23 @@ namespace
             return true;
         }
 
+        auto propagate_less_thans(Domains & new_domains, const Assignment & current_assignment) -> bool
+        {
+            for (auto & d : new_domains) {
+                if (! model.pattern_less_thans[current_assignment.pattern_vertex][d.v])
+                    continue;
+
+                for (unsigned i = 0 ; i <= current_assignment.target_vertex ; ++i)
+                    d.values.reset(i);
+
+                d.count = d.values.count();
+                if (0 == d.count)
+                    return false;
+            }
+
+            return true;
+        }
+
         auto propagate(Domains & new_domains, Assignments & assignments) -> bool
         {
             // whilst we've got a unit domain...
@@ -524,6 +559,10 @@ namespace
 
                 // propagate simple all different and adjacency
                 if (! propagate_simple_constraints(new_domains, current_assignment))
+                    return false;
+
+                // propagate less than
+                if (model.has_less_thans && ! propagate_less_thans(new_domains, current_assignment))
                     return false;
 
                 // propagate all different

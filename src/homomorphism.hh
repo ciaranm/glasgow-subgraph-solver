@@ -66,6 +66,9 @@ struct HomomorphismParams
 
     /// Are we allowed to remove isolated vertices?
     bool remove_isolated_vertices = true;
+
+    /// Less pattern constraints
+    std::list<std::pair<std::string, std::string> > pattern_less_constraints;
 };
 
 struct HomomorphismResult
