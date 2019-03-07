@@ -5,7 +5,9 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -97,6 +99,11 @@ class InputGraph
          * What is the name associated with a given vertex (for output purposes)?
          */
         auto vertex_name(int v) const -> std::string;
+
+        /**
+         * Find a given vertex by name.
+         */
+        auto vertex_from_name(std::string_view n) const -> std::optional<int>;
 
         /**
          * What is the label associated with a given edge?

@@ -7,9 +7,13 @@
 #include <string_view>
 
 using std::distance;
+using std::find;
 using std::numeric_limits;
+using std::make_optional;
 using std::make_pair;
 using std::max;
+using std::nullopt;
+using std::optional;
 using std::string;
 using std::string_view;
 using std::to_string;
@@ -94,6 +98,15 @@ auto InputGraph::vertex_name(int v) const -> string
         return to_string(v);
     else
         return _vertex_names[v];
+}
+
+auto InputGraph::vertex_from_name(string_view n) const -> optional<int>
+{
+    auto i = find(_vertex_names.begin(), _vertex_names.end(), n);
+    if (i == _vertex_names.end())
+        return nullopt;
+    else
+        return make_optional(i - _vertex_names.begin());
 }
 
 auto InputGraph::edge_label(int a, int b) const -> string_view
