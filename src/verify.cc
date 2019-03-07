@@ -62,8 +62,8 @@ auto verify_homomorphism(const std::pair<InputGraph, InputGraph> & graphs,
         if (graphs.first.adjacent(i, i) && ! graphs.second.adjacent(mapping.find(i)->second, mapping.find(i)->second))
             throw BuggySolution{ "Vertex " + graphs.first.vertex_name(i) + " has a loop but mapped vertex " +
                 graphs.second.vertex_name(mapping.find(i)->second) + " does not" };
-        else if (induced && graphs.second.adjacent(mapping.find(i)->second, mapping.find(i)->second &&
-                    ! graphs.first.adjacent(i, i)))
+        else if (induced && graphs.second.adjacent(mapping.find(i)->second, mapping.find(i)->second) &&
+                    ! graphs.first.adjacent(i, i))
             throw BuggySolution{ "Vertex " + graphs.first.vertex_name(i) + " has no loop but mapped vertex " +
                 graphs.second.vertex_name(mapping.find(i)->second) + " does" };
     }
