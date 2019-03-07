@@ -15,5 +15,10 @@ if ! grep '^solution_count = 6$' <(./glasgow_subgraph_solver --enumerate --forma
     exit 1
 fi
 
+if ! grep '^solution_count = 12$' <(./glasgow_subgraph_solver --enumerate test-instances/{trident,longtrident}.csv ) ; then
+    echo "trident enumerate test failed" 1>&1
+    exit 1
+fi
+
 true
 
