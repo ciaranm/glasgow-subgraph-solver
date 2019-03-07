@@ -20,5 +20,10 @@ if ! grep '^solution_count = 12$' <(./glasgow_subgraph_solver --enumerate test-i
     exit 1
 fi
 
+if ! grep '^solution_count = 6$' <(./glasgow_subgraph_solver --enumerate --induced test-instances/{c3,c3c2}.csv ) ; then
+    echo "induced cyclic enumerate test failed" 1>&1
+    exit 1
+fi
+
 true
 
