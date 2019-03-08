@@ -346,6 +346,21 @@ namespace
             }
         }
 
+        auto expand_to_full_result(const Assignments & assignments, VertexToVertexMapping & mapping) -> void
+        {
+            for (auto & a : assignments.values)
+                mapping.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
+
+            // re-add isolated vertices
+            int t = 0;
+            for (auto & v : model.isolated_vertices) {
+                while (mapping.end() != find_if(mapping.begin(), mapping.end(),
+                            [&t] (const pair<int, int> & p) { return p.second == t; }))
+                        ++t;
+                mapping.emplace(v, t);
+            }
+        }
+
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
         {
             return find_if(domains.begin(), domains.end(), [] (Domain & d) {
@@ -592,8 +607,13 @@ namespace
             // find ourselves a domain, or succeed if we're all assigned
             const Domain * branch_domain = find_branch_domain(domains);
             if (! branch_domain) {
-                if (params.enumerate) {
+                if (params.count_solutions) {
                     ++solution_count;
+                    if (params.enumerate_callback) {
+                        VertexToVertexMapping mapping;
+                        expand_to_full_result(assignments, mapping);
+                        params.enumerate_callback(mapping);
+                    }
                     return SearchResult::SatisfiableButKeepGoing;
                 }
                 else
@@ -773,17 +793,7 @@ namespace
 
         auto save_result(const Assignments & assignments, HomomorphismResult & result) -> void
         {
-            for (auto & a : assignments.values)
-                result.mapping.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
-
-            // re-add isolated vertices
-            int t = 0;
-            for (auto & v : model.isolated_vertices) {
-                while (result.mapping.end() != find_if(result.mapping.begin(), result.mapping.end(),
-                            [&t] (const pair<int, int> & p) { return p.second == t; }))
-                        ++t;
-                result.mapping.emplace(v, t);
-            }
+            expand_to_full_result(assignments, result.mapping);
 
             string where = "where =";
             for (auto & a : assignments.values)
@@ -1039,7 +1049,7 @@ namespace
                 params.restarts_schedule->did_a_restart();
             }
 
-            if (params.restarts_schedule->might_restart() && ! params.enumerate)
+            if (params.restarts_schedule->might_restart() && ! params.count_solutions)
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
             result.extra_stats.emplace_back("search_time = " + to_string(

@@ -7,7 +7,7 @@
 
 auto can_strip_isolated_vertices(const HomomorphismParams & params) -> bool
 {
-    return (! params.induced) && (! params.enumerate);
+    return (! params.induced) && (! params.count_solutions);
 }
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
@@ -17,7 +17,7 @@ auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
 
 auto might_have_watches(const HomomorphismParams & params) -> bool
 {
-    return ! params.enumerate;
+    return ! params.count_solutions;
 }
 
 auto is_nonshrinking(const HomomorphismParams & params) -> bool

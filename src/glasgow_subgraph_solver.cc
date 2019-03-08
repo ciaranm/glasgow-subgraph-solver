@@ -50,7 +50,8 @@ auto main(int argc, char * argv[]) -> int
         po::options_description problem_options{ "Problem options" };
         problem_options.add_options()
             ("noninjective",                                 "Drop the injectivity requirement")
-            ("enumerate",                                    "Count the number of solutions")
+            ("count-solutions",                              "Count the number of solutions")
+            ("print-all-solutions",                          "Print out every solution, rather than one")
             ("induced",                                      "Find an induced mapping");
         display_options.add(problem_options);
 
@@ -119,7 +120,7 @@ auto main(int argc, char * argv[]) -> int
 
         params.noninjective = options_vars.count("noninjective");
         params.induced = options_vars.count("induced");
-        params.enumerate = options_vars.count("enumerate");
+        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
@@ -166,7 +167,7 @@ auto main(int argc, char * argv[]) -> int
             }
         }
         else {
-            if (params.enumerate)
+            if (params.count_solutions)
                 params.restarts_schedule = make_unique<NoRestartsSchedule>();
             else if (options_vars.count("parallel"))
                 params.restarts_schedule = make_unique<TimedRestartsSchedule>(TimedRestartsSchedule::default_duration, TimedRestartsSchedule::default_minimum_backtracks);
@@ -212,6 +213,15 @@ auto main(int argc, char * argv[]) -> int
         cout << "pattern_file = " << options_vars["pattern-file"].as<string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
 
+        if (options_vars.count("print-all-solutions")) {
+            params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
+                cout << "mapping = ";
+                for (auto v : mapping)
+                    cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+                cout << endl;
+            };
+        }
+
         /* Prepare and start timeout */
         params.timeout = make_unique<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
 
@@ -228,19 +238,19 @@ auto main(int argc, char * argv[]) -> int
         cout << "status = ";
         if (params.timeout->aborted())
             cout << "aborted";
-        else if ((! result.mapping.empty()) || (params.enumerate && result.solution_count > 0))
+        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
             cout << "true";
         else
             cout << "false";
         cout << endl;
 
-        if (params.enumerate)
+        if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
 
         cout << "nodes = " << result.nodes << endl;
         cout << "propagations = " << result.propagations << endl;
 
-        if (! result.mapping.empty()) {
+        if (! result.mapping.empty() && ! options_vars.count("print-all-solutions")) {
             cout << "mapping = ";
             for (auto v : result.mapping)
                 cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";

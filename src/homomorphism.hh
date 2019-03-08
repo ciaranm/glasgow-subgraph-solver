@@ -8,6 +8,12 @@
 #include "timeout.hh"
 #include "value_ordering.hh"
 
+#include <functional>
+#include <list>
+#include <string>
+
+using VertexToVertexMapping = std::map<int, int>;
+
 struct HomomorphismParams
 {
     /// Timeout handler
@@ -23,7 +29,10 @@ struct HomomorphismParams
     bool noninjective = false;
 
     /// Enumerate?
-    bool enumerate = false;
+    bool count_solutions = false;
+
+    /// Print solutions, for enumerating
+    std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;
 
     /// Which value-ordering heuristic?
     ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
@@ -48,7 +57,7 @@ struct HomomorphismParams
 struct HomomorphismResult
 {
     /// The mapping, empty if none found.
-    std::map<int, int> mapping;
+    VertexToVertexMapping mapping;
 
     /// Total number of nodes processed (recursive calls).
     unsigned long long nodes = 0;
