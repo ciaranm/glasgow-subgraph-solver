@@ -26,8 +26,42 @@ Running
 To run:
 
 ```shell session
-$ ./glasgow_subgraph_solver [ --induced ] pattern-file target-file
+$ ./glasgow_subgraph_solver pattern-file target-file
 ```
+
+If you would like induced subgraph isomorphisms rather than non-induced (that is, if non-adjacent
+vertices must be mapped to non-adjacent vertices), you must request it:
+
+```shell session
+$ ./glasgow_subgraph_solver --induced pattern-file target-file
+```
+
+The default mode is to display the first found solution, or to prove unsatisfiability if no solution
+exists. To count or print all solutions, use one of:
+
+```shell session
+$ ./glasgow_subgraph_solver [ --count-solutions | --print-all-solutions ] pattern-file target-file
+```
+
+Note that printing all solutions can be exponentially slower than counting solutions.
+
+The solver supports parallel search. Usually you should enable this, as follows:
+
+```shell session
+$ ./glasgow_subgraph_solver --parallel ...
+```
+
+Note that parallel search, in its default configuration, is non-deterministic.
+
+Depending upon how your system is configured, you may need to increase the stack space, for larger
+graphs.  In bash this is done as follows:
+
+```shell session
+$ ulimit -s 1048576
+```
+
+File Formats
+------------
 
 We try to auto-detect the input format, but it's best to specify it using, for example:
 
@@ -40,25 +74,13 @@ graph has no neighbours.  We can read LAD, Labelled LAD, CSV, and DIMACS 2 forma
 consider using [the LAD format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) if you have a
 choice.
 
-The solver supports parallel search. Usually you should enable this, as follows:
-
-```shell session
-$ ./glasgow_subgraph_solver --parallel ...
-```
-
-Note that parallel search, in its default configuration, is non-deterministic.
+Clique Solving
+--------------
 
 To run the clique solver, use:
 
 ```shell session
 $ ./glasgow_clique_solver graph-file
-```
-
-For both solvers, you may need to increase the stack space, for larger graphs.  In bash this is done
-as follows:
-
-```shell session
-$ ulimit -s 1048576
 ```
 
 Details on the Algorithms
