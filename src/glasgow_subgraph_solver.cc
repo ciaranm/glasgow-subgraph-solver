@@ -80,6 +80,10 @@ auto main(int argc, char * argv[]) -> int
             ("delay-thread-creation",                          "Do not create threads until after the first restart");
         display_options.add(parallel_options);
 
+        po::options_description hidden_options{ "Hidden options" };
+        hidden_options.add_options()
+            ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)");
+
         po::options_description all_options{ "All options" };
         all_options.add_options()
             ("pattern-file", "Specify the pattern file")
@@ -87,6 +91,7 @@ auto main(int argc, char * argv[]) -> int
             ;
 
         all_options.add(display_options);
+        all_options.add(hidden_options);
 
         po::positional_options_description positional_options;
         positional_options
@@ -120,7 +125,7 @@ auto main(int argc, char * argv[]) -> int
 
         params.noninjective = options_vars.count("noninjective");
         params.induced = options_vars.count("induced");
-        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
+        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
