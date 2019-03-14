@@ -1,12 +1,14 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "homomorphism.hh"
-#include "homomorphism_traits.hh"
-#include "fixed_bit_set.hh"
-#include "template_voodoo.hh"
+#include "clique.hh"
 #include "configuration.hh"
-#include "watches.hh"
+#include "fixed_bit_set.hh"
+#include "graph_traits.hh"
+#include "homomorphism_traits.hh"
+#include "template_voodoo.hh"
 #include "thread_utils.hh"
+#include "watches.hh"
 
 #include <algorithm>
 #include <atomic>
@@ -31,6 +33,7 @@ using std::find_if;
 using std::function;
 using std::greater;
 using std::is_same;
+using std::make_optional;
 using std::make_unique;
 using std::max;
 using std::map;
@@ -1316,6 +1319,26 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
     if (is_nonshrinking(params) && (graphs.first.size() > graphs.second.size()))
         return HomomorphismResult{ };
 
-    return select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params);
+    if (can_use_clique(params) && is_simple_clique(graphs.first)) {
+        CliqueParams clique_params;
+        clique_params.timeout = params.timeout;
+        clique_params.start_time = params.start_time;
+        clique_params.decide = make_optional(graphs.first.size());
+        clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        auto clique_result = solve_clique_problem(graphs.second, clique_params);
+
+        HomomorphismResult result;
+        int v = 0;
+        for (auto & m : clique_result.clique)
+            result.mapping.emplace(v++, m);
+        result.nodes = clique_result.nodes;
+        result.extra_stats = move(clique_result.extra_stats);
+        result.extra_stats.emplace_back("used_clique_solver = true");
+        result.complete = clique_result.complete;
+
+        return result;
+    }
+    else
+        return select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params);
 }
 

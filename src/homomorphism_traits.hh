@@ -30,4 +30,9 @@ auto degree_and_nds_are_preserved(const HomomorphismParams & params) -> bool
     return ! params.noninjective;
 }
 
+auto can_use_clique(const HomomorphismParams & params) -> bool
+{
+    return (! params.count_solutions) && params.clique_detection;
+}
+
 #endif

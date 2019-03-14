@@ -53,6 +53,9 @@ struct HomomorphismParams
 
     /// Trigger restarts using the first thread?
     bool triggered_restarts = false;
+
+    /// Are we allowed to do clique detection?
+    bool clique_detection = true;
 };
 
 struct HomomorphismResult

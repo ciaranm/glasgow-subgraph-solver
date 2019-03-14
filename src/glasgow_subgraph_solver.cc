@@ -74,6 +74,11 @@ auto main(int argc, char * argv[]) -> int
             ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
         display_options.add(search_options);
 
+        po::options_description mangling_options{ "Advanced input processing options" };
+        mangling_options.add_options()
+            ("no-clique-detection",                            "Disable clique / independent set detection");
+        display_options.add(mangling_options);
+
         po::options_description parallel_options{ "Advanced parallelism options" };
         parallel_options.add_options()
             ("threads",              po::value<unsigned>(),    "Use threaded search, with this many threads (0 to auto-detect)")
@@ -196,6 +201,8 @@ auto main(int argc, char * argv[]) -> int
                 return EXIT_FAILURE;
             }
         }
+
+        params.clique_detection = ! options_vars.count("no-clique-detection");
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))

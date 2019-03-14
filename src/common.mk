@@ -10,6 +10,7 @@ SOURCES := \
     clique.cc \
     configuration.cc \
     fixed_bit_set.cc \
+    graph_traits.cc \
     homomorphism.cc \
     restarts.cc \
     thread_utils.cc \
