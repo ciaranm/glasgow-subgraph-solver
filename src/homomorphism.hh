@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <list>
+#include <memory>
 #include <string>
 
 using VertexToVertexMapping = std::map<int, int>;
@@ -17,7 +18,7 @@ using VertexToVertexMapping = std::map<int, int>;
 struct HomomorphismParams
 {
     /// Timeout handler
-    std::unique_ptr<Timeout> timeout;
+    std::shared_ptr<Timeout> timeout;
 
     /// The start time of the algorithm.
     std::chrono::time_point<std::chrono::steady_clock> start_time;

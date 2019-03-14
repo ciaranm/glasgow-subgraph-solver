@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <list>
+#include <memory>
 #include <optional>
 #include <set>
 
@@ -22,7 +23,7 @@ enum class ColourClassOrder
 struct CliqueParams
 {
     /// Timeout handler
-    std::unique_ptr<Timeout> timeout;
+    std::shared_ptr<Timeout> timeout;
 
     /// The start time of the algorithm.
     std::chrono::time_point<std::chrono::steady_clock> start_time;

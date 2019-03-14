@@ -28,6 +28,7 @@ using std::function;
 using std::localtime;
 using std::make_optional;
 using std::make_pair;
+using std::make_shared;
 using std::make_unique;
 using std::put_time;
 using std::string;
@@ -145,7 +146,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "file = " << options_vars["graph-file"].as<string>() << endl;
 
         /* Prepare and start timeout */
-        params.timeout = make_unique<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
+        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
 
         /* Start the clock */
         params.start_time = steady_clock::now();
