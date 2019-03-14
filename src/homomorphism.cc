@@ -81,7 +81,7 @@ namespace
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
-            max_graphs(1 + (params.noninjective ? 0 : 4) + (params.induced ? 1 : 0)),
+            max_graphs(1 + (supports_exact_path_graphs(params) ? 4 : 0) + (params.induced ? 1 : 0)),
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
             target_size(target.size()),
