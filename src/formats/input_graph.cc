@@ -16,7 +16,8 @@ using std::to_string;
 
 InputGraph::InputGraph(int size, bool v, bool e) :
     _has_vertex_labels(v),
-    _has_edge_labels(e)
+    _has_edge_labels(e),
+    _loopy(false)
 {
     if (0 != size)
         resize(size);
@@ -33,12 +34,16 @@ auto InputGraph::add_edge(int a, int b) -> void
 {
     _edges.emplace(make_pair(a, b), "");
     _edges.emplace(make_pair(b, a), "");
+    if (a == b)
+        _loopy = true;
 }
 
 auto InputGraph::add_directed_edge(int a, int b, string_view label) -> void
 {
     _edges.emplace(make_pair(a, b), label).first->second = label;
     _edges.emplace(make_pair(b, a), "unlabelled");
+    if (a == b)
+        _loopy = true;
 }
 
 auto InputGraph::adjacent(int a, int b) const -> bool
@@ -49,6 +54,16 @@ auto InputGraph::adjacent(int a, int b) const -> bool
 auto InputGraph::size() const -> int
 {
     return _size;
+}
+
+auto InputGraph::number_of_directed_edges() const -> int
+{
+    return _edges.size();
+}
+
+auto InputGraph::loopy() const -> bool
+{
+    return _loopy;
 }
 
 auto InputGraph::degree(int a) const -> int

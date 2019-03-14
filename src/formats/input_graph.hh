@@ -24,6 +24,7 @@ class InputGraph
         std::map<std::pair<int, int>, std::string> _edges;
         std::vector<std::string> _vertex_labels;
         std::vector<std::string> _vertex_names;
+        bool _loopy = false;
 
     public:
         /**
@@ -39,6 +40,16 @@ class InputGraph
          * Number of vertices.
          */
         auto size() const -> int;
+
+        /**
+         * Number of (directed, even if the graph is undirected) edges.
+         */
+        auto number_of_directed_edges() const -> int;
+
+        /**
+         * Do we have any loops?
+         */
+        auto loopy() const -> bool;
 
         /**
          * Change our size. Must be called before adding an edge.
