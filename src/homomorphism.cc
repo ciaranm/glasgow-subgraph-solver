@@ -1073,6 +1073,9 @@ namespace
                 result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
             }
 
+            if (can_strip_isolated_vertices(params) && ! model.isolated_vertices.empty())
+                result.extra_stats.emplace_back("isolated_vertices_removed = " + to_string(model.isolated_vertices.size()));
+
             return result;
         }
     };
@@ -1266,6 +1269,9 @@ namespace
             common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
             common_result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+
+            if (can_strip_isolated_vertices(params) && ! model.isolated_vertices.empty())
+                common_result.extra_stats.emplace_back("isolated_vertices_removed = " + to_string(model.isolated_vertices.size()));
 
             return common_result;
         }

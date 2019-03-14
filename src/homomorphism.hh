@@ -56,6 +56,9 @@ struct HomomorphismParams
 
     /// Are we allowed to do clique detection?
     bool clique_detection = true;
+
+    /// Are we allowed to remove isolated vertices?
+    bool remove_isolated_vertices = true;
 };
 
 struct HomomorphismResult
