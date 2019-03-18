@@ -861,6 +861,11 @@ namespace
                     // not ok, degrees differ
                     return false;
                 }
+                else if (degree_and_nds_are_exact(params, model.full_pattern_size, model.target_size)
+                        && model.targets_degrees.at(g).at(t) != model.patterns_degrees.at(g).at(p)) {
+                    // not ok, degrees must be exactly the same
+                    return false;
+                }
 
                 // full compare of neighbourhood degree sequences
                 if (! targets_ndss.at(0).at(t)) {
@@ -877,6 +882,9 @@ namespace
 
                 for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
                     if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x))
+                        return false;
+                    else if (degree_and_nds_are_exact(params, model.full_pattern_size, model.target_size)
+                            && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x))
                         return false;
                 }
             }
