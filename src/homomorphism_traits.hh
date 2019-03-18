@@ -12,7 +12,7 @@ auto can_strip_isolated_vertices(const HomomorphismParams & params) -> bool
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
 {
-     return ! params.noninjective;
+    return params.injectivity == Injectivity::Injective;
 }
 
 auto might_have_watches(const HomomorphismParams & params) -> bool
@@ -22,12 +22,12 @@ auto might_have_watches(const HomomorphismParams & params) -> bool
 
 auto is_nonshrinking(const HomomorphismParams & params) -> bool
 {
-    return ! params.noninjective;
+    return params.injectivity == Injectivity::Injective;
 }
 
 auto degree_and_nds_are_preserved(const HomomorphismParams & params) -> bool
 {
-    return ! params.noninjective;
+    return params.injectivity != Injectivity::NonInjective;
 }
 
 auto can_use_clique(const HomomorphismParams & params) -> bool

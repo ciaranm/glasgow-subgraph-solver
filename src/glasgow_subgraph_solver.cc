@@ -51,6 +51,7 @@ auto main(int argc, char * argv[]) -> int
         po::options_description problem_options{ "Problem options" };
         problem_options.add_options()
             ("noninjective",                                 "Drop the injectivity requirement")
+            ("locally-injective",                            "Require only local injectivity")
             ("count-solutions",                              "Count the number of solutions")
             ("print-all-solutions",                          "Print out every solution, rather than one")
             ("induced",                                      "Find an induced mapping");
@@ -130,7 +131,17 @@ auto main(int argc, char * argv[]) -> int
         /* Figure out what our options should be. */
         HomomorphismParams params;
 
-        params.noninjective = options_vars.count("noninjective");
+        if (options_vars.count("noninjective") && options_vars.count("locally-injective")) {
+            cerr << "Cannot specify both --noninjective and --locally-injective" << endl;
+            return EXIT_FAILURE;
+        }
+        else if (options_vars.count("noninjective"))
+            params.injectivity = Injectivity::NonInjective;
+        else if (options_vars.count("locally-injective"))
+            params.injectivity = Injectivity::LocallyInjective;
+        else
+            params.injectivity = Injectivity::Injective;
+
         params.induced = options_vars.count("induced");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions");
 
@@ -277,7 +288,7 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
-        verify_homomorphism(graphs, params.noninjective, params.induced, result.mapping);
+        verify_homomorphism(graphs, params.injectivity != Injectivity::Injective, params.induced, result.mapping);
 
         return EXIT_SUCCESS;
     }

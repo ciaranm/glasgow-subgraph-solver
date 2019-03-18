@@ -416,9 +416,18 @@ namespace
                 if (d.fixed)
                     continue;
 
-                // all different
-                if (! params.noninjective)
-                    d.values.reset(current_assignment.target_vertex);
+                // injectivity
+                switch (params.injectivity) {
+                    case Injectivity::Injective:
+                        d.values.reset(current_assignment.target_vertex);
+                        break;
+                    case Injectivity::LocallyInjective:
+                        if (model.pattern_graph_rows[current_assignment.pattern_vertex * model.max_graphs + 0].test(d.v))
+                            d.values.reset(current_assignment.target_vertex);
+                        break;
+                    case Injectivity::NonInjective:
+                        break;
+                }
 
                 // adjacency
                 if (model.pattern_edge_labels.empty()) {
@@ -487,8 +496,9 @@ namespace
                     return false;
 
                 // propagate all different
-                if ((! params.noninjective) && (! cheap_all_different(new_domains)))
-                    return false;
+                if (params.injectivity == Injectivity::Injective)
+                    if (! cheap_all_different(new_domains))
+                        return false;
             }
 
             return true;

@@ -15,6 +15,13 @@
 
 using VertexToVertexMapping = std::map<int, int>;
 
+enum class Injectivity
+{
+    Injective,
+    LocallyInjective,
+    NonInjective
+};
+
 struct HomomorphismParams
 {
     /// Timeout handler
@@ -27,7 +34,7 @@ struct HomomorphismParams
     bool induced = false;
 
     /// Noninjective?
-    bool noninjective = false;
+    Injectivity injectivity = Injectivity::Injective;
 
     /// Enumerate?
     bool count_solutions = false;
