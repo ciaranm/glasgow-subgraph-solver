@@ -17,7 +17,7 @@ auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
 
 auto might_have_watches(const HomomorphismParams & params) -> bool
 {
-    return ! params.count_solutions;
+    return params.restarts_schedule->might_restart();
 }
 
 auto is_nonshrinking(const HomomorphismParams & params) -> bool

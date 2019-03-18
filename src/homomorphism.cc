@@ -665,7 +665,7 @@ namespace
             }
 
             int discrepancy_count = 0;
-            bool actually_hit_a_success = false, actually_hit_a_failure = false;
+            bool actually_hit_a_failure = false;
 
             // for each value remaining...
             for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end ; f_v != f_end ; ++f_v) {
@@ -714,7 +714,6 @@ namespace
                     case SearchResult::SatisfiableButKeepGoing:
                         // restore assignments
                         assignments.values.resize(assignments_size);
-                        actually_hit_a_success = true;
                         break;
 
                     case SearchResult::Unsatisfiable:
@@ -735,8 +734,6 @@ namespace
                 post_nogood(assignments);
                 return SearchResult::Restart;
             }
-            else if (actually_hit_a_success)
-                return SearchResult::SatisfiableButKeepGoing;
             else
                 return SearchResult::Unsatisfiable;
         }
@@ -1062,7 +1059,7 @@ namespace
                 params.restarts_schedule->did_a_restart();
             }
 
-            if (params.restarts_schedule->might_restart() && ! params.count_solutions)
+            if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
             result.extra_stats.emplace_back("search_time = " + to_string(
