@@ -1350,8 +1350,12 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
 
         HomomorphismResult result;
         int v = 0;
-        for (auto & m : clique_result.clique)
+        for (auto & m : clique_result.clique) {
             result.mapping.emplace(v++, m);
+            // the clique solver can find a bigger clique than we ask for
+            if (v >= graphs.first.size())
+                break;
+        }
         result.nodes = clique_result.nodes;
         result.extra_stats = move(clique_result.extra_stats);
         result.extra_stats.emplace_back("used_clique_solver = true");
