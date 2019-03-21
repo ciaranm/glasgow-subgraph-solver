@@ -409,6 +409,13 @@ namespace
             }
         }
 
+        auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool
+        {
+            auto & nv = model.pattern_graph_rows[v * model.max_graphs + 0];
+            auto & nw = model.pattern_graph_rows[w * model.max_graphs + 0];
+            return ! (nv & nw).empty();
+        }
+
         auto propagate_simple_constraints(Domains & new_domains, const Assignment & current_assignment) -> bool
         {
             // propagate for each remaining domain...
@@ -422,7 +429,7 @@ namespace
                         d.values.reset(current_assignment.target_vertex);
                         break;
                     case Injectivity::LocallyInjective:
-                        if (model.pattern_graph_rows[current_assignment.pattern_vertex * model.max_graphs + 0].test(d.v))
+                        if (both_in_the_neighbourhood_of_some_vertex(current_assignment.pattern_vertex, d.v))
                             d.values.reset(current_assignment.target_vertex);
                         break;
                     case Injectivity::NonInjective:

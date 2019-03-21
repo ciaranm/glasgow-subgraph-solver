@@ -12,7 +12,7 @@ auto can_strip_isolated_vertices(const HomomorphismParams & params) -> bool
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
 {
-    return params.injectivity == Injectivity::Injective;
+    return params.injectivity != Injectivity::NonInjective;
 }
 
 auto might_have_watches(const HomomorphismParams & params) -> bool

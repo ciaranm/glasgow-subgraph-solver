@@ -288,7 +288,8 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
-        verify_homomorphism(graphs, params.injectivity != Injectivity::Injective, params.induced, result.mapping);
+        verify_homomorphism(graphs, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
+                params.induced, result.mapping);
 
         return EXIT_SUCCESS;
     }

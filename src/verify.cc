@@ -17,7 +17,8 @@ auto BuggySolution::what() const throw () -> const char *
 }
 
 auto verify_homomorphism(const std::pair<InputGraph, InputGraph> & graphs,
-        bool noninjective,
+        bool injective,
+        bool locally_injective,
         bool induced,
         const std::map<int, int> & mapping) -> void
 {
@@ -47,13 +48,27 @@ auto verify_homomorphism(const std::pair<InputGraph, InputGraph> & graphs,
                     graphs.second.vertex_name(mapping.find(i)->second) };
 
     // injectivity
-    if (! noninjective) {
+    if (injective) {
         map<int, int> seen;
         for (auto & [ i, j ] : mapping) {
             if (! seen.emplace(j, i).second)
                 throw BuggySolution{ "Non-injective mapping: " + graphs.first.vertex_name(i) + " -> " +
                     graphs.second.vertex_name(mapping.find(i)->second) + " and " +
-                    graphs.second.vertex_name(seen.find(j)->second) + " -> " + graphs.first.vertex_name(j) };
+                    graphs.first.vertex_name(seen.find(j)->second) + " -> " + graphs.second.vertex_name(j) };
+        }
+    }
+
+    // local injectivity
+    if (locally_injective) {
+        for (int v = 0 ; v < graphs.first.size() ; ++v) {
+            map<int, int> seen;
+            for (auto & [ i, j ] : mapping) {
+                if (graphs.first.adjacent(v, i) && ! seen.emplace(j, i).second)
+                    throw BuggySolution{ "Non locally-injective mapping: on neighbourhood of "
+                        + graphs.first.vertex_name(v) + ", " + graphs.first.vertex_name(i) + " -> " +
+                        graphs.second.vertex_name(mapping.find(i)->second) + " and " +
+                        graphs.first.vertex_name(seen.find(j)->second) + " -> " + graphs.second.vertex_name(j) };
+            }
         }
     }
 

@@ -10,7 +10,8 @@
 #include <utility>
 
 auto verify_homomorphism(const std::pair<InputGraph, InputGraph> & graphs,
-        bool noninjective,
+        bool injective,
+        bool locally_injective,
         bool induced,
         const std::map<int, int> & mapping) -> void;
 
