@@ -873,20 +873,22 @@ namespace
                     // not ok, degrees must be exactly the same
                     return false;
                 }
+            }
 
-                // full compare of neighbourhood degree sequences
-                if (! targets_ndss.at(0).at(t)) {
-                    for (int g = 0 ; g < graphs_to_consider ; ++g) {
-                        targets_ndss.at(g).at(t) = vector<int>{};
-                        auto ni = model.target_graph_rows[t * model.max_graphs + g];
-                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                            ni.reset(j);
-                            targets_ndss.at(g).at(t)->push_back(model.targets_degrees.at(g).at(j));
-                        }
-                        sort(targets_ndss.at(g).at(t)->begin(), targets_ndss.at(g).at(t)->end(), greater<int>());
+            // full compare of neighbourhood degree sequences
+            if (! targets_ndss.at(0).at(t)) {
+                for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                    targets_ndss.at(g).at(t) = vector<int>{};
+                    auto ni = model.target_graph_rows[t * model.max_graphs + g];
+                    for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
+                        ni.reset(j);
+                        targets_ndss.at(g).at(t)->push_back(model.targets_degrees.at(g).at(j));
                     }
+                    sort(targets_ndss.at(g).at(t)->begin(), targets_ndss.at(g).at(t)->end(), greater<int>());
                 }
+            }
 
+            for (int g = 0 ; g < graphs_to_consider ; ++g) {
                 for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
                     if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x))
                         return false;
