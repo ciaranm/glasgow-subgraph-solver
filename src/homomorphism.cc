@@ -167,8 +167,30 @@ namespace
             }
         }
 
-        auto prepare(const HomomorphismParams & params) -> void
+        auto prepare(const HomomorphismParams & params) -> bool
         {
+            // pattern and target degrees, for the main graph
+            patterns_degrees.at(0).resize(pattern_size);
+            targets_degrees.at(0).resize(target_size);
+
+            for (unsigned i = 0 ; i < pattern_size ; ++i)
+                patterns_degrees.at(0).at(i) = pattern_graph_rows[i * max_graphs + 0].count();
+
+            for (unsigned i = 0 ; i < target_size ; ++i)
+                targets_degrees.at(0).at(i) = target_graph_rows[i * max_graphs + 0].count();
+
+            if (global_degree_is_preserved(params)) {
+                auto pattern_degrees_sorted = patterns_degrees.at(0), target_degrees_sorted = targets_degrees.at(0);
+                sort(pattern_degrees_sorted.begin(), pattern_degrees_sorted.end(), greater<int>());
+                sort(target_degrees_sorted.begin(), target_degrees_sorted.end(), greater<int>());
+                for (unsigned i = 0 ; i < pattern_degrees_sorted.size() ; ++i)
+                    if (pattern_degrees_sorted.at(i) > target_degrees_sorted.at(i))
+                        return false;
+            }
+
+            for (unsigned i = 0 ; i < target_size ; ++i)
+                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
+
             // build exact path graphs
             if (supports_exact_path_graphs(params)) {
                 build_exact_path_graphs(pattern_graph_rows, pattern_size);
@@ -181,13 +203,13 @@ namespace
                 build_complement_graphs(target_graph_rows, target_size);
             }
 
-            // pattern and target degrees, including supplemental graphs
-            for (int g = 0 ; g < max_graphs ; ++g) {
+            // pattern and target degrees, for supplemental graphs
+            for (int g = 1 ; g < max_graphs ; ++g) {
                 patterns_degrees.at(g).resize(pattern_size);
                 targets_degrees.at(g).resize(target_size);
             }
 
-            for (int g = 0 ; g < max_graphs ; ++g) {
+            for (int g = 1 ; g < max_graphs ; ++g) {
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
                     patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
 
@@ -205,6 +227,8 @@ namespace
                     for (unsigned j = 0 ; j < pattern_size ; ++j)
                         if (pattern_graph_rows[i * max_graphs + g].test(j))
                             pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
+
+            return true;
         }
 
         template <typename PossiblySomeOtherBitSetType_>
@@ -1319,11 +1343,16 @@ namespace
         {
             if (is_nonshrinking(params) && (model.full_pattern_size > model.target_size)) {
                 HomomorphismResult result;
-                result.extra_stats.emplace_back("prepresolved = true");
+                result.extra_stats.emplace_back("nonshrinking = false");
                 return result;
             }
 
-            model.prepare(params);
+            if (! model.prepare(params)) {
+                HomomorphismResult result;
+                result.extra_stats.emplace_back("model_consistent = false");
+                result.complete = true;
+                return result;
+            }
 
             HomomorphismResult result;
             if (1 == params.n_threads) {

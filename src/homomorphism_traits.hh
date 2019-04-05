@@ -35,6 +35,11 @@ auto degree_and_nds_are_exact(const HomomorphismParams & params, unsigned patter
     return params.induced && pattern_size == target_size;
 }
 
+auto global_degree_is_preserved(const HomomorphismParams & params) -> bool
+{
+    return params.injectivity == Injectivity::Injective;
+}
+
 auto can_use_clique(const HomomorphismParams & params) -> bool
 {
     return (! params.count_solutions) && params.clique_detection;
