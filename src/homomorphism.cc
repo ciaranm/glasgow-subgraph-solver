@@ -15,6 +15,7 @@
 #include <condition_variable>
 #include <functional>
 #include <limits>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -33,6 +34,7 @@ using std::find_if;
 using std::function;
 using std::greater;
 using std::is_same;
+using std::list;
 using std::make_optional;
 using std::make_unique;
 using std::max;
@@ -43,6 +45,7 @@ using std::mutex;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
+using std::set;
 using std::sort;
 using std::stable_sort;
 using std::string;
@@ -72,8 +75,9 @@ namespace
         unsigned pattern_size, full_pattern_size, target_size;
 
         vector<uint8_t> pattern_adjacencies_bits;
-        vector<dynamic_bitset<> > pattern_graph_rows, pattern_less_thans;
+        vector<dynamic_bitset<> > pattern_graph_rows;
         vector<BitSetType_> target_graph_rows;
+        vector<pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;
 
         vector<int> pattern_permutation, isolated_vertices;
         vector<vector<int> > patterns_degrees, targets_degrees;
@@ -179,9 +183,31 @@ namespace
             // pattern less than constraints
             if (! params.pattern_less_constraints.empty()) {
                 has_less_thans = true;
-                pattern_less_thans.resize(pattern_size, dynamic_bitset<>(pattern_size));
-                for (auto & [ a, b ] : params.pattern_less_constraints)
-                    pattern_less_thans[decode(a)].set(decode(b));
+                list<pair<unsigned, unsigned> > pattern_less_thans_in_wrong_order;
+                for (auto & [ a, b ] : params.pattern_less_constraints) {
+                    auto a_decoded = decode(a), b_decoded = decode(b);
+                    pattern_less_thans_in_wrong_order.emplace_back(a_decoded, b_decoded);
+                }
+
+                // put them in a convenient order, so we don't need a propagation loop
+                while (! pattern_less_thans_in_wrong_order.empty()) {
+                    bool loop_detect = true;
+                    set<unsigned> cannot_order_yet;
+                    for (auto & [ _, b ] : pattern_less_thans_in_wrong_order)
+                        cannot_order_yet.emplace(b);
+                    for (auto p = pattern_less_thans_in_wrong_order.begin() ; p != pattern_less_thans_in_wrong_order.end() ; ) {
+                        if (cannot_order_yet.count(p->first))
+                            ++p;
+                        else {
+                            loop_detect = false;
+                            pattern_less_thans_in_convenient_order.push_back(*p);
+                            pattern_less_thans_in_wrong_order.erase(p++);
+                        }
+                    }
+
+                    if (loop_detect)
+                        throw UnsupportedConfiguration{ "Pattern less than constraints form a loop" };
+                }
             }
         }
 
@@ -511,17 +537,72 @@ namespace
             return true;
         }
 
-        auto propagate_less_thans(Domains & new_domains, const Assignment & current_assignment) -> bool
+        auto find_domain(Domains & domains, unsigned v) -> Domain *
         {
-            for (auto & d : new_domains) {
-                if (! model.pattern_less_thans[current_assignment.pattern_vertex][d.v])
+            auto i = find_if(domains.begin(), domains.end(), [&] (const Domain & d) { return d.v == v; });
+            if (i == domains.end())
+                return nullptr;
+            else
+                return &*i;
+        }
+
+        auto propagate_less_thans(Domains & new_domains) -> bool
+        {
+            for (auto & [ a, b ] : model.pattern_less_thans_in_convenient_order) {
+                auto a_domain = find_domain(new_domains, a);
+                auto b_domain = find_domain(new_domains, b);
+                if ((! a_domain) || (! b_domain))
                     continue;
 
-                for (unsigned i = 0 ; i <= current_assignment.target_vertex ; ++i)
-                    d.values.reset(i);
+                // first value of b must be at least one after the first possible value of a
+                auto first_a = a_domain->values.find_first();
+                if (first_a == decltype(a_domain->values)::npos)
+                    return false;
+                auto first_allowed_b = first_a + 1;
 
-                d.count = d.values.count();
-                if (0 == d.count)
+                if (first_allowed_b >= model.target_size)
+                    return false;
+
+                for (auto v = b_domain->values.find_first() ; v != decltype(b_domain->values)::npos ; v = b_domain->values.find_first()) {
+                    if (v >= first_allowed_b)
+                        break;
+                    b_domain->values.reset(v);
+                }
+
+                // b might have shrunk (and detect empty before the next bit to make life easier)
+                b_domain->count = b_domain->values.count();
+                if (0 == b_domain->count)
+                    return false;
+            }
+
+            for (auto & [ a, b ] : model.pattern_less_thans_in_convenient_order) {
+                auto a_domain = find_domain(new_domains, a);
+                auto b_domain = find_domain(new_domains, b);
+                if ((! a_domain) || (! b_domain))
+                    continue;
+
+                // last value of a must be at least one before the last possible value of b
+                auto b_values_copy = b_domain->values;
+                auto last_b = b_domain->values.find_first();
+                for (auto v = last_b ; v != decltype(b_values_copy)::npos ; v = b_values_copy.find_first()) {
+                    b_values_copy.reset(v);
+                    last_b = v;
+                }
+
+                if (last_b == 0)
+                    return false;
+                auto last_allowed_a = last_b - 1;
+
+                auto a_values_copy = a_domain->values;
+                for (auto v = a_values_copy.find_first() ; v != decltype(a_values_copy)::npos ; v = a_values_copy.find_first()) {
+                    a_values_copy.reset(v);
+                    if (v > last_allowed_a)
+                        a_domain->values.reset(v);
+                }
+
+                // a might have shrunk
+                a_domain->count = a_domain->values.count();
+                if (0 == a_domain->count)
                     return false;
             }
 
@@ -562,7 +643,7 @@ namespace
                     return false;
 
                 // propagate less than
-                if (model.has_less_thans && ! propagate_less_thans(new_domains, current_assignment))
+                if (model.has_less_thans && ! propagate_less_thans(new_domains))
                     return false;
 
                 // propagate all different
