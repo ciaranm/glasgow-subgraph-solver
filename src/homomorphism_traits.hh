@@ -7,7 +7,7 @@
 
 auto can_strip_isolated_vertices(const HomomorphismParams & params) -> bool
 {
-    return (! params.induced) && (! params.count_solutions) && params.remove_isolated_vertices;
+    return (! params.induced) && (! params.count_solutions) && (! params.lackey) && params.remove_isolated_vertices;
 }
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
@@ -42,7 +42,7 @@ auto global_degree_is_preserved(const HomomorphismParams & params) -> bool
 
 auto can_use_clique(const HomomorphismParams & params) -> bool
 {
-    return (! params.count_solutions) && params.clique_detection;
+    return (! params.count_solutions) && (! params.lackey) && params.clique_detection;
 }
 
 #endif

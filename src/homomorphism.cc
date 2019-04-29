@@ -771,6 +771,13 @@ namespace
             // find ourselves a domain, or succeed if we're all assigned
             const Domain * branch_domain = find_branch_domain(domains);
             if (! branch_domain) {
+                if (params.lackey) {
+                    VertexToVertexMapping mapping;
+                    expand_to_full_result(assignments, mapping);
+                    if (! params.lackey->check_solution(mapping))
+                        return SearchResult::Unsatisfiable;
+                }
+
                 if (params.count_solutions) {
                     ++solution_count;
                     if (params.enumerate_callback) {

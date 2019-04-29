@@ -4,16 +4,16 @@
 #define GLASGOW_SUBGRAPH_SOLVER_HOMOMORPHISM_HH 1
 
 #include "formats/input_graph.hh"
+#include "lackey.hh"
 #include "restarts.hh"
 #include "timeout.hh"
 #include "value_ordering.hh"
+#include "vertex_to_vertex_mapping.hh"
 
 #include <functional>
 #include <list>
 #include <memory>
 #include <string>
-
-using VertexToVertexMapping = std::map<int, int>;
 
 enum class Injectivity
 {
@@ -69,6 +69,9 @@ struct HomomorphismParams
 
     /// Less pattern constraints
     std::list<std::pair<std::string, std::string> > pattern_less_constraints;
+
+    /// Optional lackey, for external side constraints
+    std::unique_ptr<Lackey> lackey;
 };
 
 struct HomomorphismResult

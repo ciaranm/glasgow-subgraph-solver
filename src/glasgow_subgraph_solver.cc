@@ -2,6 +2,7 @@
 
 #include "formats/read_file_format.hh"
 #include "homomorphism.hh"
+#include "lackey.hh"
 #include "restarts.hh"
 #include "verify.hh"
 
@@ -96,6 +97,12 @@ auto main(int argc, char * argv[]) -> int
             ("pattern-less-than",   po::value<vector<string> >(&pattern_less_thans),
                                                                "Specify a pattern less than constraint, in the form v<w");
         display_options.add(symmetry_options);
+
+        po::options_description lackey_options{ "External constraint solver options" };
+        lackey_options.add_options()
+            ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
+            ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe");
+        display_options.add(lackey_options);
 
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
@@ -236,6 +243,11 @@ auto main(int argc, char * argv[]) -> int
             params.pattern_less_constraints.emplace_back(a, b);
         }
 
+        if (options_vars.count("send-to-lackey") ^ options_vars.count("receive-from-lackey")) {
+            cerr << "Must specify both of --send-to-lackey and --receive-from-lackey" << endl;
+            return EXIT_FAILURE;
+        }
+
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
@@ -257,6 +269,14 @@ auto main(int argc, char * argv[]) -> int
 
         cout << "pattern_file = " << options_vars["pattern-file"].as<string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
+
+        if (options_vars.count("send-to-lackey") && options_vars.count("receive-from-lackey")) {
+            params.lackey = make_unique<Lackey>(
+                    options_vars["send-to-lackey"].as<string>(),
+                    options_vars["receive-from-lackey"].as<string>(),
+                    graphs.first,
+                    graphs.second);
+        }
 
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {

@@ -12,6 +12,7 @@ SOURCES := \
     fixed_bit_set.cc \
     graph_traits.cc \
     homomorphism.cc \
+    lackey.cc \
     restarts.cc \
     thread_utils.cc \
     timeout.cc \
