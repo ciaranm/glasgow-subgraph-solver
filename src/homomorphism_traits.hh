@@ -7,7 +7,8 @@
 
 auto can_strip_isolated_vertices(const HomomorphismParams & params) -> bool
 {
-    return (! params.induced) && (! params.count_solutions) && (! params.lackey) && params.remove_isolated_vertices;
+    return (! params.induced) && (! params.count_solutions) && (! params.lackey)
+        && (params.pattern_less_constraints.empty()) && params.remove_isolated_vertices;
 }
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
