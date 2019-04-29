@@ -16,7 +16,7 @@ class UnsupportedConfiguration :
     public:
         UnsupportedConfiguration(const std::string & message) noexcept;
 
-        auto what() const noexcept -> const char *;
+        auto what() const noexcept -> const char * override;
 };
 
 #endif

@@ -7,18 +7,18 @@
 
 using std::string;
 
-GraphFileError::GraphFileError(const string & filename, const string & message, bool x) throw () :
+GraphFileError::GraphFileError(const string & filename, const string & message, bool x) noexcept :
     _what("Error reading graph file '" + filename + "': " + message),
     _exists(x)
 {
 }
 
-auto GraphFileError::what() const throw () -> const char *
+auto GraphFileError::what() const noexcept -> const char *
 {
     return _what.c_str();
 }
 
-auto GraphFileError::file_at_least_existed() const throw () -> bool
+auto GraphFileError::file_at_least_existed() const noexcept -> bool
 {
     return _exists;
 }

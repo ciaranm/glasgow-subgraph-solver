@@ -22,9 +22,9 @@ class BuggySolution :
         std::string _what;
 
     public:
-        BuggySolution(const std::string & message) throw ();
+        BuggySolution(const std::string & message) noexcept;
 
-        auto what() const throw () -> const char *;
+        auto what() const noexcept -> const char * override;
 };
 
 #endif

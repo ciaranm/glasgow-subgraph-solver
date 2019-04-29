@@ -4,12 +4,12 @@
 
 using std::string;
 
-UnsupportedConfiguration::UnsupportedConfiguration(const string & message) throw () :
+UnsupportedConfiguration::UnsupportedConfiguration(const string & message) noexcept :
     _what(message)
 {
 }
 
-auto UnsupportedConfiguration::what() const throw () -> const char *
+auto UnsupportedConfiguration::what() const noexcept -> const char *
 {
     return _what.c_str();
 }

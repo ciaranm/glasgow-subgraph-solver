@@ -18,10 +18,10 @@ class GraphFileError :
         bool _exists;
 
     public:
-        GraphFileError(const std::string & filename, const std::string & message, bool exists) throw ();
+        GraphFileError(const std::string & filename, const std::string & message, bool exists) noexcept;
 
-        auto what() const throw () -> const char *;
-        auto file_at_least_existed() const throw () -> bool;
+        auto what() const noexcept -> const char * override;
+        auto file_at_least_existed() const noexcept -> bool;
 };
 
 

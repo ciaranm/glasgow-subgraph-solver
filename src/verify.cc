@@ -6,12 +6,12 @@
 using std::map;
 using std::string;
 
-BuggySolution::BuggySolution(const string & message) throw () :
+BuggySolution::BuggySolution(const string & message) noexcept :
     _what(message)
 {
 }
 
-auto BuggySolution::what() const throw () -> const char *
+auto BuggySolution::what() const noexcept -> const char *
 {
     return _what.c_str();
 }
