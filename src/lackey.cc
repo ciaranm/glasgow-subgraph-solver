@@ -37,6 +37,8 @@ Lackey::Lackey(const string & send_to_name, const string & read_from_name,
         const InputGraph & pattern_graph, const InputGraph & target_graph) :
     _imp(new Imp{ {}, ofstream{ send_to_name }, ifstream{ read_from_name }, pattern_graph, target_graph })
 {
+    if ((! _imp->read_from) || (! _imp->send_to))
+        throw DisobedientLackeyError{ "error setting up lackey communication using " + send_to_name + " and " + read_from_name };
 }
 
 Lackey::~Lackey() = default;
