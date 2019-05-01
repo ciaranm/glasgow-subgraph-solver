@@ -31,6 +31,8 @@ auto read_lad(ifstream && infile, const string & filename) -> InputGraph
         throw GraphFileError{ filename, "error reading size", true };
 
     for (int r = 0 ; r < result.size() ; ++r) {
+        result.set_vertex_name(r, to_string(r));
+
         int c_end = read_word(infile);
         if (! infile)
             throw GraphFileError{ filename, "error reading edges count", true };
