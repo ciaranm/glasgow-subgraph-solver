@@ -41,13 +41,18 @@ Lackey::Lackey(const string & send_to_name, const string & read_from_name,
         throw DisobedientLackeyError{ "error setting up lackey communication using " + send_to_name + " and " + read_from_name };
 }
 
-Lackey::~Lackey() = default;
+Lackey::~Lackey()
+{
+    if (_imp->send_to) {
+        _imp->send_to << "Q 0" << endl;
+    }
+}
 
 auto Lackey::check_solution(const VertexToVertexMapping & m) -> bool
 {
     unique_lock<mutex> lock{ _imp->external_solver_mutex };
 
-    _imp->send_to << "S " << m.size();
+    _imp->send_to << "C " << m.size();
     for (auto & [ p, t ] : m)
         _imp->send_to << " " << _imp->pattern_graph.vertex_name(p) << " " << _imp->target_graph.vertex_name(t);
     _imp->send_to << endl;
@@ -56,23 +61,23 @@ auto Lackey::check_solution(const VertexToVertexMapping & m) -> bool
         throw DisobedientLackeyError{ "error giving lackey its orders" };
 
     string operation;
-    if (! (_imp->read_from >> operation) || operation != "S")
-        throw DisobedientLackeyError{ "asked lackey to S, but it replied with '" + operation + "'" };
+    if (! (_imp->read_from >> operation) || operation != "C")
+        throw DisobedientLackeyError{ "asked lackey to C, but it replied with '" + operation + "'" };
 
     bool result;
     string response;
     if (! (_imp->read_from >> response))
-        throw DisobedientLackeyError{ "asked lackey to S, but it gave no T/F" };
+        throw DisobedientLackeyError{ "asked lackey to C, but it gave no T/F" };
     else if (response == "T")
         result = true;
     else if (response == "F")
         result = false;
     else
-        throw DisobedientLackeyError{ "asked lackey to S, but it replied with '" + operation + "' then '" + response + "'" };
+        throw DisobedientLackeyError{ "asked lackey to C, but it replied with '" + operation + "' then '" + response + "'" };
 
     int n;
     if (! (_imp->read_from >> n) || n != 0)
-        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to S query" };
+        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to C query" };
 
     return result;
 }
