@@ -537,53 +537,52 @@ namespace
             return true;
         }
 
-        auto find_domain(Domains & domains, unsigned v) -> Domain *
-        {
-            auto i = find_if(domains.begin(), domains.end(), [&] (const Domain & d) { return d.v == v; });
-            if (i == domains.end())
-                return nullptr;
-            else
-                return &*i;
-        }
-
         auto propagate_less_thans(Domains & new_domains) -> bool
         {
+            ArrayType_ find_domain;
+            if constexpr (is_same<ArrayType_, vector<int> >::value)
+                find_domain.resize(model.pattern_size);
+            fill(find_domain.begin(), find_domain.end(), -1);
+
+            for (unsigned i = 0, i_end = new_domains.size() ; i != i_end ; ++i)
+                find_domain[new_domains[i].v] = i;
+
             for (auto & [ a, b ] : model.pattern_less_thans_in_convenient_order) {
-                auto a_domain = find_domain(new_domains, a);
-                auto b_domain = find_domain(new_domains, b);
-                if ((! a_domain) || (! b_domain))
+                if (find_domain[a] == -1 || find_domain[b] == -1)
                     continue;
+                auto & a_domain = new_domains[find_domain[a]];
+                auto & b_domain = new_domains[find_domain[b]];
 
-                // first value of b must be at least one after the first possible value of a
-                auto first_a = a_domain->values.find_first();
-                if (first_a == decltype(a_domain->values)::npos)
-                    return false;
-                auto first_allowed_b = first_a + 1;
+               // first value of b must be at least one after the first possible value of a
+               auto first_a = a_domain.values.find_first();
+               if (first_a == decltype(a_domain.values)::npos)
+                   return false;
+               auto first_allowed_b = first_a + 1;
 
-                if (first_allowed_b >= model.target_size)
-                    return false;
+               if (first_allowed_b >= model.target_size)
+                   return false;
 
-                for (auto v = b_domain->values.find_first() ; v != decltype(b_domain->values)::npos ; v = b_domain->values.find_first()) {
-                    if (v >= first_allowed_b)
-                        break;
-                    b_domain->values.reset(v);
-                }
+               for (auto v = b_domain.values.find_first() ; v != decltype(b_domain.values)::npos ; v = b_domain.values.find_first()) {
+                   if (v >= first_allowed_b)
+                       break;
+                   b_domain.values.reset(v);
+               }
 
-                // b might have shrunk (and detect empty before the next bit to make life easier)
-                b_domain->count = b_domain->values.count();
-                if (0 == b_domain->count)
-                    return false;
+               // b might have shrunk (and detect empty before the next bit to make life easier)
+               b_domain.count = b_domain.values.count();
+               if (0 == b_domain.count)
+                   return false;
             }
 
             for (auto & [ a, b ] : model.pattern_less_thans_in_convenient_order) {
-                auto a_domain = find_domain(new_domains, a);
-                auto b_domain = find_domain(new_domains, b);
-                if ((! a_domain) || (! b_domain))
+                if (find_domain[a] == -1 || find_domain[b] == -1)
                     continue;
+                auto & a_domain = new_domains[find_domain[a]];
+                auto & b_domain = new_domains[find_domain[b]];
 
                 // last value of a must be at least one before the last possible value of b
-                auto b_values_copy = b_domain->values;
-                auto last_b = b_domain->values.find_first();
+                auto b_values_copy = b_domain.values;
+                auto last_b = b_domain.values.find_first();
                 for (auto v = last_b ; v != decltype(b_values_copy)::npos ; v = b_values_copy.find_first()) {
                     b_values_copy.reset(v);
                     last_b = v;
@@ -593,16 +592,16 @@ namespace
                     return false;
                 auto last_allowed_a = last_b - 1;
 
-                auto a_values_copy = a_domain->values;
+                auto a_values_copy = a_domain.values;
                 for (auto v = a_values_copy.find_first() ; v != decltype(a_values_copy)::npos ; v = a_values_copy.find_first()) {
                     a_values_copy.reset(v);
                     if (v > last_allowed_a)
-                        a_domain->values.reset(v);
+                        a_domain.values.reset(v);
                 }
 
                 // a might have shrunk
-                a_domain->count = a_domain->values.count();
-                if (0 == a_domain->count)
+                a_domain.count = a_domain.values.count();
+                if (0 == a_domain.count)
                     return false;
             }
 
