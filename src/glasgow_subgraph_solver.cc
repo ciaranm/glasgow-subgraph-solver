@@ -95,7 +95,9 @@ auto main(int argc, char * argv[]) -> int
         po::options_description symmetry_options{ "Manual symmetry options" };
         symmetry_options.add_options()
             ("pattern-less-than",   po::value<vector<string> >(&pattern_less_thans),
-                                                               "Specify a pattern less than constraint, in the form v<w");
+                                                               "Specify a pattern less than constraint, in the form v<w")
+            ("pattern-automorphism-group-size", po::value<long long>(),
+                                                               "Specify the size of the pattern graph automorphism group");
         display_options.add(symmetry_options);
 
         po::options_description lackey_options{ "External constraint solver options" };
@@ -233,6 +235,13 @@ auto main(int argc, char * argv[]) -> int
         params.clique_detection = ! options_vars.count("no-clique-detection");
         params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
 
+        long long pattern_automorphism_group_size = 1;
+        bool was_given_automorphism_group = false;
+        if (options_vars.count("pattern-automorphism-group-size")) {
+            pattern_automorphism_group_size = options_vars["pattern-automorphism-group-size"].as<long long>();
+            was_given_automorphism_group = true;
+        }
+
         for (auto & s : pattern_less_thans) {
             auto p = s.find('<');
             if (p == string::npos) {
@@ -311,6 +320,8 @@ auto main(int argc, char * argv[]) -> int
 
         if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
+        if (was_given_automorphism_group)
+            cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
 
         cout << "nodes = " << result.nodes << endl;
         cout << "propagations = " << result.propagations << endl;
