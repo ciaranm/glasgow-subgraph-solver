@@ -96,7 +96,7 @@ auto main(int argc, char * argv[]) -> int
         symmetry_options.add_options()
             ("pattern-less-than",   po::value<vector<string> >(&pattern_less_thans),
                                                                "Specify a pattern less than constraint, in the form v<w")
-            ("pattern-automorphism-group-size", po::value<long long>(),
+            ("pattern-automorphism-group-size", po::value<string>(),
                                                                "Specify the size of the pattern graph automorphism group");
         display_options.add(symmetry_options);
 
@@ -237,10 +237,10 @@ auto main(int argc, char * argv[]) -> int
         params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
         params.common_neighbour_shapes = options_vars.count("common-neighbour-shapes");
 
-        long long pattern_automorphism_group_size = 1;
+        string pattern_automorphism_group_size = "1";
         bool was_given_automorphism_group = false;
         if (options_vars.count("pattern-automorphism-group-size")) {
-            pattern_automorphism_group_size = options_vars["pattern-automorphism-group-size"].as<long long>();
+            pattern_automorphism_group_size = options_vars["pattern-automorphism-group-size"].as<string>();
             was_given_automorphism_group = true;
         }
 
