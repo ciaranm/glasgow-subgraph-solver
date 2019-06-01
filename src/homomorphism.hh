@@ -67,6 +67,9 @@ struct HomomorphismParams
     /// Are we allowed to remove isolated vertices?
     bool remove_isolated_vertices = true;
 
+    /// Use common neighbour shape filtering?
+    bool common_neighbour_shapes = false;
+
     /// Less pattern constraints
     std::list<std::pair<std::string, std::string> > pattern_less_constraints;
 

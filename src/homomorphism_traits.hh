@@ -16,6 +16,11 @@ auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
     return params.injectivity != Injectivity::NonInjective;
 }
 
+auto supports_common_neighbour_shapes(const HomomorphismParams & params) -> bool
+{
+    return params.common_neighbour_shapes && params.injectivity != Injectivity::NonInjective;
+}
+
 auto might_have_watches(const HomomorphismParams & params) -> bool
 {
     return params.restarts_schedule->might_restart();

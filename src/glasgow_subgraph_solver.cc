@@ -108,7 +108,8 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
-            ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)");
+            ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
+            ("common-neighbour-shapes",                        "Use common neighbour shapes filtering (experimental)");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -234,6 +235,7 @@ auto main(int argc, char * argv[]) -> int
 
         params.clique_detection = ! options_vars.count("no-clique-detection");
         params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
+        params.common_neighbour_shapes = options_vars.count("common-neighbour-shapes");
 
         long long pattern_automorphism_group_size = 1;
         bool was_given_automorphism_group = false;

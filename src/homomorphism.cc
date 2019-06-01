@@ -68,6 +68,9 @@ using boost::dynamic_bitset;
 
 namespace
 {
+    const constexpr int number_of_exact_path_graphs = 4;
+    const constexpr int number_of_common_neighbour_graphs = 3;
+
     template <typename BitSetType_, typename ArrayType_>
     struct SubgraphModel
     {
@@ -87,7 +90,10 @@ namespace
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
-            max_graphs(1 + (supports_exact_path_graphs(params) ? 4 : 0) + (params.induced ? 1 : 0)),
+            max_graphs(1 +
+                    (supports_exact_path_graphs(params) ? number_of_exact_path_graphs : 0) +
+                    (supports_common_neighbour_shapes(params) ? number_of_common_neighbour_graphs : 0) +
+                    (params.induced ? 1 : 0)),
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
             target_size(target.size()),
@@ -96,6 +102,9 @@ namespace
             largest_target_degree(0),
             has_less_thans(false)
         {
+            if (max_graphs > 8)
+                throw UnsupportedConfiguration{ "Too many supplemental graphs in use" };
+
             if (pattern.has_edge_labels() && ! params.induced)
                 throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
 
@@ -239,6 +248,11 @@ namespace
             if (supports_exact_path_graphs(params)) {
                 build_exact_path_graphs(pattern_graph_rows, pattern_size);
                 build_exact_path_graphs(target_graph_rows, target_size);
+
+                if (supports_common_neighbour_shapes(params)) {
+                    build_common_neighbour_graphs(pattern_graph_rows, pattern_size);
+                    build_common_neighbour_graphs(target_graph_rows, target_size);
+                }
             }
 
             // build complement graphs
@@ -297,10 +311,34 @@ namespace
                 for (unsigned w = v ; w < size ; ++w) {
                     // w to v, not v to w, see above
                     unsigned path_count = path_counts[w][v];
-                    for (unsigned p = 1 ; p <= 4 ; ++p) {
+                    for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
                         if (path_count >= p) {
                             graph_rows[v * max_graphs + p].set(w);
                             graph_rows[w * max_graphs + p].set(v);
+                        }
+                    }
+                }
+            }
+        }
+
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_common_neighbour_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
+        {
+            for (unsigned v = 0 ; v < size ; ++v) {
+                auto nv = graph_rows[v * max_graphs + 0];
+                for (unsigned w = 0 ; w < v ; ++w) {
+                    if (nv.test(w)) {
+                        auto common_neighbours = graph_rows[w * max_graphs + 0];
+                        common_neighbours &= nv;
+                        common_neighbours.reset(v);
+                        common_neighbours.reset(w);
+                        auto count = common_neighbours.count();
+
+                        for (unsigned p = 1 ; p <= number_of_common_neighbour_graphs ; ++p) {
+                            if (count >= p) {
+                                graph_rows[v * max_graphs + p + number_of_exact_path_graphs].set(w);
+                                graph_rows[w * max_graphs + p + number_of_exact_path_graphs].set(v);
+                            }
                         }
                     }
                 }
@@ -511,6 +549,8 @@ namespace
                         case 2: propagate_adjacency_constraints<2, false>(d, current_assignment); break;
                         case 5: propagate_adjacency_constraints<5, false>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, false>(d, current_assignment); break;
+                        case 7: propagate_adjacency_constraints<7, false>(d, current_assignment); break;
+                        case 8: propagate_adjacency_constraints<8, false>(d, current_assignment); break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
@@ -522,6 +562,8 @@ namespace
                         case 2: propagate_adjacency_constraints<2, true>(d, current_assignment); break;
                         case 5: propagate_adjacency_constraints<5, true>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, true>(d, current_assignment); break;
+                        case 7: propagate_adjacency_constraints<7, true>(d, current_assignment); break;
+                        case 8: propagate_adjacency_constraints<8, true>(d, current_assignment); break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
