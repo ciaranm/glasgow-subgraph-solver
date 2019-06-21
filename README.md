@@ -74,6 +74,17 @@ graph has no neighbours.  We can read LAD, Labelled LAD, CSV, and DIMACS 2 forma
 consider using [the LAD format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) if you have a
 choice.
 
+Symmetries
+----------
+
+Symmetry elimination support is currently very experimental, only usable on pattern symmetries, and
+is probably only useful for solution counting. To use it, you must have the GAP computer algebra
+system in your PATH as 'gap', with the 'digraph' library installed. Then, do:
+
+```shell session
+$ ./glasgow_clique_solver --pattern-symmetries --count-solutions pattern-file target-file
+```
+
 Clique Solving
 --------------
 

@@ -3,6 +3,7 @@
 #include "formats/read_file_format.hh"
 #include "homomorphism.hh"
 #include "lackey.hh"
+#include "symmetries.hh"
 #include "restarts.hh"
 #include "verify.hh"
 
@@ -75,7 +76,8 @@ auto main(int argc, char * argv[]) -> int
             ("restart-interval",     po::value<int>(),         "Specify the restart interval in milliseconds for timed restarts")
             ("restart-minimum",      po::value<int>(),         "Specify a minimum number of backtracks before a timed restart can trigger")
             ("luby-constant",        po::value<int>(),         "Specify the starting constant / multiplier for Luby restarts")
-            ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)");
+            ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)")
+            ("pattern-symmetries",                             "Eliminate pattern symmetries (requires Gap)");
         display_options.add(search_options);
 
         po::options_description mangling_options{ "Advanced input processing options" };
@@ -306,12 +308,20 @@ auto main(int argc, char * argv[]) -> int
         /* Start the clock */
         params.start_time = steady_clock::now();
 
+        if (options_vars.count("pattern-symmetries")) {
+            auto gap_start_time = steady_clock::now();
+            find_symmetries(graphs.first, params.pattern_less_constraints, pattern_automorphism_group_size);
+            was_given_automorphism_group = true;
+            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
+        }
+
+        if (was_given_automorphism_group)
+            cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
+
         auto result = solve_homomorphism_problem(graphs, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
-
-        params.timeout->stop();
 
         cout << "status = ";
         if (params.timeout->aborted())
@@ -324,8 +334,6 @@ auto main(int argc, char * argv[]) -> int
 
         if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
-        if (was_given_automorphism_group)
-            cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
 
         cout << "nodes = " << result.nodes << endl;
         cout << "propagations = " << result.propagations << endl;
