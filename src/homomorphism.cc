@@ -89,7 +89,8 @@ namespace
 
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
-        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
+        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
+                const set<int> & exclude_pattern_vertices) :
             max_graphs(1 +
                     (supports_exact_path_graphs(params) ? number_of_exact_path_graphs : 0) +
                     (supports_common_neighbour_shapes(params) ? number_of_common_neighbour_graphs : 0) +
@@ -109,13 +110,17 @@ namespace
                 throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
 
             // strip out isolated vertices in the pattern, and build pattern_permutation
-            for (unsigned v = 0 ; v < full_pattern_size ; ++v)
-                if (can_strip_isolated_vertices(params) && 0 == pattern.degree(v)) {
+            for (unsigned v = 0 ; v < full_pattern_size ; ++v) {
+                if (exclude_pattern_vertices.count(v)) {
+                    --pattern_size;
+                }
+                else if (can_strip_isolated_vertices(params) && 0 == pattern.degree(v)) {
                     isolated_vertices.push_back(v);
                     --pattern_size;
                 }
                 else
                     pattern_permutation.push_back(v);
+            }
 
             // recode pattern to a bit graph
             pattern_graph_rows.resize(pattern_size * max_graphs, dynamic_bitset<>(pattern_size));
@@ -1501,8 +1506,8 @@ namespace
         Model model;
         const HomomorphismParams & params;
 
-        SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & p) :
-            model(target, pattern, p),
+        SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & p, const set<int> & x) :
+            model(target, pattern, p, x),
             params(p)
         {
         }
@@ -1569,7 +1574,29 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
 
         return result;
     }
+    else if (params.minimal_unsat_pattern) {
+        HomomorphismResult result = select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
+        if (! result.mapping.empty())
+            return result;
+
+        set<int> exclude;
+        for (int n = 0 ; n < graphs.first.size() ; ++n) {
+            exclude.insert(n);
+            result = select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params, exclude);
+            if (! result.mapping.empty()) {
+                result.mapping.clear();
+                exclude.erase(n);
+            }
+        }
+
+        for (int n = 0 ; n < graphs.first.size() ; ++n) {
+            if (! exclude.count(n))
+                result.minimal_unsat_pattern.push_back(n);
+        }
+
+        return result;
+    }
     else
-        return select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params);
+        return select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
 }
 

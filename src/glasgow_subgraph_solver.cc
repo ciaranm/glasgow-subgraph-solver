@@ -109,7 +109,8 @@ auto main(int argc, char * argv[]) -> int
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
-            ("common-neighbour-shapes",                        "Use common neighbour shapes filtering (experimental)");
+            ("common-neighbour-shapes",                        "Use common neighbour shapes filtering (experimental)")
+            ("minimal-unsat-pattern",                          "Find a minimal unsat pattern graph, if unsat (experimental)");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -163,6 +164,7 @@ auto main(int argc, char * argv[]) -> int
 
         params.induced = options_vars.count("induced");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions");
+        params.minimal_unsat_pattern = options_vars.count("minimal-unsat-pattern");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
@@ -332,6 +334,13 @@ auto main(int argc, char * argv[]) -> int
             cout << "mapping = ";
             for (auto v : result.mapping)
                 cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+            cout << endl;
+        }
+
+        if (! result.minimal_unsat_pattern.empty()) {
+            cout << "minimal_unsat_pattern =";
+            for (auto v : result.minimal_unsat_pattern)
+                cout << " " << graphs.first.vertex_name(v);
             cout << endl;
         }
 
