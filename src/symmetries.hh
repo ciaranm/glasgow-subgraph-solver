@@ -21,6 +21,6 @@ class GapFailedUs :
         auto what() const noexcept -> const char *;
 };
 
-auto find_symmetries(const InputGraph & graph, std::list<std::pair<std::string, std::string> > & constraints, std::string & aut_size) -> void;
+auto find_symmetries(const char * const argv0, const InputGraph & graph, std::list<std::pair<std::string, std::string> > & constraints, std::string & aut_size) -> void;
 
 #endif

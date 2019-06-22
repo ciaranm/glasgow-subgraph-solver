@@ -310,7 +310,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("pattern-symmetries")) {
             auto gap_start_time = steady_clock::now();
-            find_symmetries(graphs.first, params.pattern_less_constraints, pattern_automorphism_group_size);
+            find_symmetries(argv[0], graphs.first, params.pattern_less_constraints, pattern_automorphism_group_size);
             was_given_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
         }

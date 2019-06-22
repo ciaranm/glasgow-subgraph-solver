@@ -1,12 +1,19 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "symmetries.hh"
+#include "config.hh"
 
 #include <istream>
 #include <ostream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#ifdef STD_FS_IS_EXPERIMENTAL
+#  include <experimental/filesystem>
+#else
+#  include <filesystem>
+#endif
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -21,6 +28,14 @@ using std::stringstream;
 using std::to_string;
 using std::vector;
 
+#ifdef STD_FS_IS_EXPERIMENTAL
+using std::experimental::filesystem::exists;
+using std::experimental::filesystem::path;
+#else
+using std::filesystem::exists;
+using std::filesystem::path;
+#endif
+
 GapFailedUs::GapFailedUs(const std::string & message) noexcept :
     _what("Running 'gap for symmetry detection failed: " + message)
 {
@@ -31,8 +46,21 @@ auto GapFailedUs::what() const noexcept -> const char *
     return _what.c_str();
 }
 
-auto find_symmetries(const InputGraph & graph, std::list<std::pair<std::string, std::string> > & constraints, std::string & size) -> void
+auto find_symmetries(
+        const char * const argv0,
+        const InputGraph & graph,
+        std::list<std::pair<std::string, std::string> > & constraints,
+        std::string & size) -> void
 {
+    path gap_helper_file_path = argv0;
+    if (gap_helper_file_path.has_filename()) {
+        gap_helper_file_path = gap_helper_file_path.parent_path() / "gap" / "findDPfactorsOfGraphs.g";
+    }
+
+    if (! exists(gap_helper_file_path))
+        throw GapFailedUs{ "couldn't find gap/findDPfactorsOfGraphs.g, which we need for symmetry detection" };
+    string gap_helper_file_path_str = gap_helper_file_path;
+
     stringstream stdin_stream;
     stdin_stream << graph.size() << endl;
     for (int n = 0 ; n < graph.size() ; ++n) {
@@ -54,7 +82,7 @@ auto find_symmetries(const InputGraph & graph, std::list<std::pair<std::string, 
     if (0 == child_pid) {
         dup2(stdin_pipefd[0], STDIN_FILENO);
         dup2(stdout_pipefd[1], STDOUT_FILENO);
-        execlp("gap", "-q", "-A", "-b", "gap/findDPfactorsOfGraphs.g", static_cast<char *>(nullptr));
+        execlp("gap", "-q", "-A", "-b", gap_helper_file_path_str.c_str(), static_cast<char *>(nullptr));
         throw GapFailedUs{ "exec gap failed" };
     }
 
@@ -102,14 +130,14 @@ auto find_symmetries(const InputGraph & graph, std::list<std::pair<std::string, 
             found_size = true;
         }
         else if (word == "--pattern-less-than") {
-            if (arg.size() < 3 || '\'' != arg[0] || '\'' != arg[arg.length() - 1])
-                throw GapFailedUs{ "can't parse pattern-less-than '" + arg + "'" };
+            if (arg.length() < 3 || '\'' != arg[0] || '\'' != arg[arg.length() - 1])
+                throw GapFailedUs{ "can't parse pattern-less-than '" + arg + "': not quoted" };
             arg.erase(0, 1);
             arg.erase(arg.length() - 1);
 
             auto p = arg.find('<');
             if (p == string::npos)
-                throw GapFailedUs{ "can't parse pattern-less-than '" + arg + "'" };
+                throw GapFailedUs{ "can't parse pattern-less-than '" + arg + "': no less than" };
             constraints.emplace_back(arg.substr(0, p), arg.substr(p + 1));
         }
         else
