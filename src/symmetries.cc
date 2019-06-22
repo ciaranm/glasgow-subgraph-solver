@@ -9,10 +9,12 @@
 #include <string>
 #include <vector>
 
-#ifdef STD_FS_IS_EXPERIMENTAL
+#if defined(STD_FS_IS_EXPERIMENTAL)
 #  include <experimental/filesystem>
-#else
+#elif defined(STD_FS_IS_STD)
 #  include <filesystem>
+#elif defined(STD_FS_IS_BOOST)
+#  include <boost/filesystem.hpp>
 #endif
 
 #include <fcntl.h>
@@ -28,12 +30,15 @@ using std::stringstream;
 using std::to_string;
 using std::vector;
 
-#ifdef STD_FS_IS_EXPERIMENTAL
+#if defined(STD_FS_IS_EXPERIMENTAL)
 using std::experimental::filesystem::exists;
 using std::experimental::filesystem::path;
-#else
+#elif defined(STD_FS_IS_STD)
 using std::filesystem::exists;
 using std::filesystem::path;
+#elif defined(STD_FS_IS_BOOST)
+using boost::filesystem::exists;
+using boost::filesystem::path;
 #endif
 
 GapFailedUs::GapFailedUs(const std::string & message) noexcept :
@@ -59,7 +64,12 @@ auto find_symmetries(
 
     if (! exists(gap_helper_file_path))
         throw GapFailedUs{ "couldn't find gap/findDPfactorsOfGraphs.g, which we need for symmetry detection" };
+
+#if defined(STD_FS_IS_BOOST)
+    string gap_helper_file_path_str = gap_helper_file_path.string();
+#else
     string gap_helper_file_path_str = gap_helper_file_path;
+#endif
 
     stringstream stdin_stream;
     stdin_stream << graph.size() << endl;
