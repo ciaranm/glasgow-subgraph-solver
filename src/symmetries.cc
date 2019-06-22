@@ -82,10 +82,22 @@ auto find_symmetries(
     }
 
     int stdin_pipefd[2], stdout_pipefd[2];
+
+#ifdef __linux__
     if (0 != pipe2(stdin_pipefd, O_CLOEXEC))
         throw GapFailedUs{ "couldn't make stdin pipes" };
     if (0 != pipe2(stdout_pipefd, O_CLOEXEC))
         throw GapFailedUs{ "couldn't make stdout pipes" };
+#else
+    if (0 != pipe(stdin_pipefd))
+        throw GapFailedUs{ "couldn't make stdin pipes" };
+    if (0 != pipe(stdout_pipefd))
+        throw GapFailedUs{ "couldn't make stdout pipes" };
+    fcntl(stdin_pipefd[0], F_SETFD, FD_CLOEXEC);
+    fcntl(stdin_pipefd[1], F_SETFD, FD_CLOEXEC);
+    fcntl(stdout_pipefd[0], F_SETFD, FD_CLOEXEC);
+    fcntl(stdout_pipefd[1], F_SETFD, FD_CLOEXEC);
+#endif
 
     pid_t child_pid = fork();
 
