@@ -1,0 +1,43 @@
+# vim: set sw=2 et :
+
+language: cpp
+
+script:
+  - $CXX_COMPILER --version
+  - env CXX=$CXX_COMPILER make
+
+matrix:
+  include:
+    - os: linux
+      dist: xenial
+      compiler: gcc-7
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - libboost-all-dev
+      env:
+        - CXX_COMPILER=g++-7
+
+    - os: linux
+      dist: xenial
+      compiler: clang-7
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-xenial-7
+          packages:
+            - clang-7
+            - libstdc++-7-dev
+            - libboost-all-dev
+      env:
+        - CXX_COMPILER=clang++-7
+
+    - os: osx
+      osx_image: xcode10.2
+      compiler: clang
+      env:
+        - CXX_COMPILER=clang++
