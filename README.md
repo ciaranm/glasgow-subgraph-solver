@@ -180,7 +180,7 @@ References
 * [cpaior/ArchibaldDHMPT19]: http://dcs.gla.ac.uk/~ciaran/papers/cpaior2019-sbs-for-subgraphs.pdf
   **cpaior/ArchibaldDHMPT19**:
   Blair Archibald, Fraser Dunlop, Ruth Hoffmann, Ciaran McCreesh, Patrick Prosser and James Trimble:
-  Sequential and Parallel Solution-Biased Search for Subgraph Algorithms. CPAIOR 2019, to appear.
+  Sequential and Parallel Solution-Biased Search for Subgraph Algorithms. CPAIOR 2019: 20-38.
   PDF: [cpaior/ArchibaldDHMPT19].
 
 <!-- vim: set tw=100 spell spelllang=en : -->
