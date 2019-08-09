@@ -1,4 +1,5 @@
 intermediate
 glasgow_subgraph_solver
 glasgow_clique_solver
+sip_to_opb
 libcommon.a
