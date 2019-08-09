@@ -63,7 +63,7 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description input_options{ "Input file options" };
         input_options.add_options()
-            ("format",             po::value<string>(),      "Specify input file format (auto, lad, labelledlad, dimacs)")
+            ("format",             po::value<string>(),      "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)")
             ("pattern-format",     po::value<string>(),      "Specify input file format just for the pattern graph")
             ("target-format",      po::value<string>(),      "Specify input file format just for the target graph");
         display_options.add(input_options);
