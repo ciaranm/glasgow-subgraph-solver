@@ -111,6 +111,8 @@ auto read_file_format(const string & format, const string & filename) -> InputGr
         return read_lad(move(infile), filename);
     else if (actual_format == "labelledlad")
         return read_labelled_lad(move(infile), filename);
+    else if (actual_format == "vertexlabelledlad")
+        return read_vertex_labelled_lad(move(infile), filename);
     else if (actual_format == "csv")
         return read_csv(move(infile), filename);
     else

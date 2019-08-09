@@ -98,3 +98,41 @@ auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGrap
     return result;
 }
 
+auto read_vertex_labelled_lad(ifstream && infile, const string & filename) -> InputGraph
+{
+    InputGraph result{ 0, true, false };
+
+    result.resize(read_word(infile));
+    if (! infile)
+        throw GraphFileError{ filename, "error reading size", true };
+
+    for (int r = 0 ; r < result.size() ; ++r) {
+        int l = read_word(infile);
+        if (! infile)
+            throw GraphFileError{ filename, "error reading label", true };
+
+        int c_end = read_word(infile);
+        if (! infile)
+            throw GraphFileError{ filename, "error reading edges count", true };
+
+        result.set_vertex_label(r, to_string(l));
+
+        for (int c = 0 ; c < c_end ; ++c) {
+            int e = read_word(infile);
+
+            if (e < 0 || e >= result.size())
+                throw GraphFileError{ filename, "edge index out of bounds", true };
+
+            result.add_edge(r, e);
+        }
+    }
+
+    string rest;
+    if (infile >> rest)
+        throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"", true };
+    if (! infile.eof())
+        throw GraphFileError{ filename, "EOF not reached", true };
+
+    return result;
+}
+

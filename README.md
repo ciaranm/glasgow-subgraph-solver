@@ -71,9 +71,9 @@ $ ./glasgow_subgraph_solver --format lad pattern-file target-file
 ```
 
 In particular, note that auto-detection can easily fail if, for example, the first vertex in the
-graph has no neighbours.  We can read LAD, Labelled LAD, CSV, and DIMACS 2 formatted graphs;
-consider using [the LAD format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) if you have a
-choice.
+graph has no neighbours.  We can read LAD, Labelled LAD (labels on vertices, and optionally also on
+edges), CSV, and DIMACS 2 formatted graphs; consider using [the LAD
+format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) if you have a choice.
 
 Symmetries
 ----------

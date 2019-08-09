@@ -23,4 +23,11 @@ auto read_lad(std::ifstream && infile, const std::string & filename) -> InputGra
  */
 auto read_labelled_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
 
+/**
+ * Read a Vertex-Labelled LAD format file into an InputGraph.
+ *
+ * \throw GraphFileError
+ */
+auto read_vertex_labelled_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
+
 #endif
