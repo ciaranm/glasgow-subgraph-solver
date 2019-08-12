@@ -40,7 +40,8 @@ auto main(int argc, char * argv[]) -> int
         display_options.add_options()
             ("help",                                         "Display help information")
             ("format",             po::value<string>(),      "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)")
-            ("preprocess",                                   "Apply preprocessing (degree, nds)")
+            ("degree",                                       "Apply degree preprocessing")
+            ("nds",                                          "Also apply neighbourhood degree sequence preprocessing")
             ;
 
         po::options_description all_options{ "All options" };
@@ -77,7 +78,8 @@ auto main(int argc, char * argv[]) -> int
             return EXIT_FAILURE;
         }
 
-        bool preprocess = options_vars.count("preprocess");
+        bool degree = options_vars.count("degree");
+        bool nds = options_vars.count("nds");
 
         /* Read in the graphs */
         string default_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
@@ -94,7 +96,7 @@ auto main(int argc, char * argv[]) -> int
         vector<vector<int> > antidomains(target.size());
         map<pair<int, int>, int> numberings;
 
-        if (preprocess) {
+        if (degree) {
             for (auto e = pattern.begin_edges(), e_end = pattern.end_edges() ; e != e_end ; ++e) {
                 if (e->first.first == e->first.second)
                     continue;
@@ -130,9 +132,9 @@ auto main(int argc, char * argv[]) -> int
                     ok = false;
                 else if (pattern.adjacent(i, i) && ! target.adjacent(j, j))
                     ok = false;
-                else if (preprocess && (pattern_degrees[i] > target_degrees[j]))
+                else if (degree && (pattern_degrees[i] > target_degrees[j]))
                     ok = false;
-                else if (preprocess) {
+                else if (degree && nds) {
                     for (int x = 0 ; ok && x < pattern_degrees[i] ; ++x)
                         if (pattern_ndss[i][x] > target_ndss[j][x])
                             ok = false;
