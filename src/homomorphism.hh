@@ -73,6 +73,9 @@ struct HomomorphismParams
     /// Use common neighbour shape filtering?
     bool common_neighbour_shapes = false;
 
+    /// Disable all supplemental graphs?
+    bool no_supplementals = false;
+
     /// Less pattern constraints
     std::list<std::pair<std::string, std::string> > pattern_less_constraints;
 

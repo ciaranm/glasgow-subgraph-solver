@@ -13,12 +13,14 @@ auto can_strip_isolated_vertices(const HomomorphismParams & params) -> bool
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
 {
-    return params.injectivity != Injectivity::NonInjective;
+    return (! params.no_supplementals) && (params.injectivity != Injectivity::NonInjective);
 }
 
 auto supports_common_neighbour_shapes(const HomomorphismParams & params) -> bool
 {
-    return params.common_neighbour_shapes && params.injectivity != Injectivity::NonInjective;
+    return (! params.no_supplementals) &&
+        params.common_neighbour_shapes &&
+        params.injectivity != Injectivity::NonInjective;
 }
 
 auto might_have_watches(const HomomorphismParams & params) -> bool

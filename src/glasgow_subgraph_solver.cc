@@ -83,7 +83,8 @@ auto main(int argc, char * argv[]) -> int
         po::options_description mangling_options{ "Advanced input processing options" };
         mangling_options.add_options()
             ("no-clique-detection",                            "Disable clique / independent set detection")
-            ("no-isolated-vertex-removal",                     "Disable isolated vertex removal");
+            ("no-isolated-vertex-removal",                     "Disable isolated vertex removal")
+            ("no-supplementals",                               "Do not use supplemental graphs");
         display_options.add(mangling_options);
 
         po::options_description parallel_options{ "Advanced parallelism options" };
@@ -240,6 +241,7 @@ auto main(int argc, char * argv[]) -> int
         params.clique_detection = ! options_vars.count("no-clique-detection");
         params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
         params.common_neighbour_shapes = options_vars.count("common-neighbour-shapes");
+        params.no_supplementals = options_vars.count("no-supplementals");
 
         string pattern_automorphism_group_size = "1";
         bool was_given_automorphism_group = false;
