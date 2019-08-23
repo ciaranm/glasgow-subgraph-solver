@@ -9,6 +9,7 @@
 #include "template_voodoo.hh"
 #include "thread_utils.hh"
 #include "watches.hh"
+#include "proof.hh"
 
 #include <algorithm>
 #include <atomic>
@@ -1548,6 +1549,56 @@ namespace
 
 auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult
 {
+    if (params.proof) {
+        if (1 != params.n_threads)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with threads" };
+        if (! params.no_supplementals)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with supplemental graphs" };
+        if (params.clique_detection)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with clique detection" };
+        if (params.lackey)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with a lackey" };
+        if (! params.pattern_less_constraints.empty())
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with less-constraints" };
+        if (params.injectivity != Injectivity::Injective)
+            throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity" };
+        if (params.induced)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used for induced problems" };
+        if (params.count_solutions)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used for counting solutions" };
+        if (params.minimal_unsat_pattern)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used for finding a minimal unsat pattern" };
+        if (graphs.first.has_vertex_labels() || graphs.first.has_edge_labels())
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
+
+        for (int n = 0 ; n < graphs.first.size() ; ++n) {
+            params.proof->create_cp_variable(n, graphs.second.size());
+        }
+
+        params.proof->create_injectivity_constraints(graphs.first.size(), graphs.second.size());
+
+        for (int p = 0 ; p < graphs.first.size() ; ++p) {
+            for (int t = 0 ; t < graphs.second.size() ; ++t) {
+                if (graphs.first.adjacent(p, p) && ! graphs.second.adjacent(t, t))
+                    params.proof->create_forbidden_assignment_constraint(p, t);
+                else {
+                    // if p can be mapped to t, then each neighbour of p...
+                    for (int q = 0 ; q < graphs.first.size() ; ++q)
+                        if (q != p && graphs.first.adjacent(p, q)) {
+                            // ... must be mapped to a neighbour of t
+                            vector<int> permitted;
+                            for (int u = 0 ; u < graphs.second.size() ; ++u)
+                                if (t != u && graphs.second.adjacent(t, u))
+                                    permitted.push_back(u);
+                            params.proof->create_adjacency_constraint(p, q, t, permitted);
+                        }
+                }
+            }
+        }
+
+        params.proof->finalise_model();
+    }
+
     if (is_nonshrinking(params) && (graphs.first.size() > graphs.second.size()))
         return HomomorphismResult{ };
 

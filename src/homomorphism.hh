@@ -9,6 +9,7 @@
 #include "timeout.hh"
 #include "value_ordering.hh"
 #include "vertex_to_vertex_mapping.hh"
+#include "proof-fwd.hh"
 
 #include <functional>
 #include <list>
@@ -81,6 +82,9 @@ struct HomomorphismParams
 
     /// Optional lackey, for external side constraints
     std::unique_ptr<Lackey> lackey;
+
+    /// Optional proof handler
+    std::unique_ptr<Proof> proof;
 };
 
 struct HomomorphismResult

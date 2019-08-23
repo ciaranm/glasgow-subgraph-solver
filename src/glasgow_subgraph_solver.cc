@@ -6,6 +6,7 @@
 #include "symmetries.hh"
 #include "restarts.hh"
 #include "verify.hh"
+#include "proof.hh"
 
 #include <boost/program_options.hpp>
 
@@ -108,6 +109,11 @@ auto main(int argc, char * argv[]) -> int
             ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
             ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe");
         display_options.add(lackey_options);
+
+        po::options_description proof_logging_options{ "Proof logging options" };
+        proof_logging_options.add_options()
+            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .log)");
+        display_options.add(proof_logging_options);
 
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
@@ -263,6 +269,11 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("send-to-lackey") ^ options_vars.count("receive-from-lackey")) {
             cerr << "Must specify both of --send-to-lackey and --receive-from-lackey" << endl;
             return EXIT_FAILURE;
+        }
+
+        if (options_vars.count("prove")) {
+            string fn = options_vars["prove"].as<string>();
+            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log");
         }
 
         char hostname_buf[255];

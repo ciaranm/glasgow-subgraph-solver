@@ -13,6 +13,7 @@ SOURCES := \
     graph_traits.cc \
     homomorphism.cc \
     lackey.cc \
+    proof.cc \
     restarts.cc \
     symmetries.cc \
     thread_utils.cc \
