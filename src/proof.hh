@@ -43,6 +43,28 @@ class Proof
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u) -> void;
         auto finalise_model() -> void;
+
+        // when we're done
+        auto finish_unsat_proof() -> void;
+
+        // top of search failures
+        auto failure_due_to_pattern_bigger_than_target() -> void;
+
+        // domain initialisation
+        auto incompatible_by_degrees(int g, int p, const std::vector<int> & n_p, int t, const std::vector<int> & n_t) -> void;
+        auto incompatible_by_nds(int g, int p, int t) -> void;
+        auto initial_domain_is_empty(int p) -> void;
+
+        // new constraints
+        auto emit_hall_set_or_violator(const std::vector<int> & lhs, const std::vector<int> & rhs) -> void;
+
+        // branch logging
+        auto root_propagation_failed() -> void;
+        auto guessing(int depth, int branch_v, int val) -> void;
+        auto propagation_failure(const std::vector<std::pair<int, int> > & decisions, int branch_v, int val) -> void;
+        auto incorrect_guess(const std::vector<std::pair<int, int> > & decisions) -> void;
+        auto out_of_guesses(const std::vector<std::pair<int, int> > & decisions) -> void;
+        auto unit_propagating(int var, int val) -> void;
 };
 
 #endif

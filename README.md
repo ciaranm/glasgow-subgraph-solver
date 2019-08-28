@@ -86,6 +86,26 @@ system in your PATH as 'gap', with the 'digraph' library installed. Then, do:
 $ ./glasgow_clique_solver --pattern-symmetries --count-solutions pattern-file target-file
 ```
 
+Proof Logging
+-------------
+
+As a highly experimental feature, the solver can output a proof log for unsatisfiable instances. You
+will need to install two dependencies to verify the logs:
+
+* refpy from https://github.com/StephanGocht/refpy/ .
+* roundingsat from https://github.com/elffersj/roundingsat/ .
+
+And then you can produce and verify a log like this:
+
+```shell session
+$ ./glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
+    --prove myproof pattern-file target-file
+$ refpy myproof.opb myproof.log
+```
+
+Note that most features are not yet supported with proof logging. This is a "not yet implemented"
+problem, not a fundamental restriction.
+
 Clique Solving
 --------------
 

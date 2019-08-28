@@ -23,6 +23,7 @@
 #include <optional>
 #include <random>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -30,6 +31,7 @@
 #include <boost/dynamic_bitset.hpp>
 
 using std::atomic;
+using std::conditional_t;
 using std::fill;
 using std::find_if;
 using std::function;
@@ -54,6 +56,7 @@ using std::string_view;
 using std::swap;
 using std::thread;
 using std::to_string;
+using std::tuple;
 using std::uniform_int_distribution;
 using std::unique_lock;
 using std::unique_ptr;
@@ -238,7 +241,7 @@ namespace
             for (unsigned i = 0 ; i < target_size ; ++i)
                 targets_degrees.at(0).at(i) = target_graph_rows[i * max_graphs + 0].count();
 
-            if (global_degree_is_preserved(params)) {
+            if (global_degree_is_preserved(params) && ! params.proof) {
                 auto pattern_degrees_sorted = patterns_degrees.at(0), target_degrees_sorted = targets_degrees.at(0);
                 sort(pattern_degrees_sorted.begin(), pattern_degrees_sorted.end(), greater<int>());
                 sort(target_degrees_sorted.begin(), target_degrees_sorted.end(), greater<int>());
@@ -461,6 +464,16 @@ namespace
             }
         }
 
+        auto assignments_as_proof_decisions(const Assignments & assignments) const -> vector<pair<int, int> >
+        {
+            vector<pair<int, int> > trail;
+            for (auto & a : assignments.values)
+                if (a.is_decision)
+                    trail.emplace_back(model.pattern_permutation[a.assignment.pattern_vertex],
+                            a.assignment.target_vertex);
+            return trail;
+        }
+
         auto expand_to_full_result(const Assignments & assignments, VertexToVertexMapping & mapping) -> void
         {
             for (auto & a : assignments.values)
@@ -669,6 +682,10 @@ namespace
                 branch_domain->fixed = true;
                 assignments.values.push_back({ current_assignment, false, -1, -1 });
 
+                if (params.proof)
+                    params.proof->unit_propagating(model.pattern_permutation[current_assignment.pattern_vertex],
+                            current_assignment.target_vertex);
+
                 // propagate watches
                 if (might_have_watches(params))
                     watches.propagate(current_assignment,
@@ -695,7 +712,7 @@ namespace
 
                 // propagate all different
                 if (params.injectivity == Injectivity::Injective)
-                    if (! cheap_all_different(new_domains))
+                    if (! (params.proof ? cheap_all_different<true>(new_domains) : cheap_all_different<false>(new_domains)))
                         return false;
             }
 
@@ -874,6 +891,9 @@ namespace
 
             // for each value remaining...
             for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end ; f_v != f_end ; ++f_v) {
+                if (params.proof)
+                    params.proof->guessing(depth, model.pattern_permutation[branch_domain->v], *f_v);
+
                 // modified in-place by appending, we can restore by shrinking
                 auto assignments_size = assignments.values.size();
 
@@ -887,8 +907,12 @@ namespace
                 ++propagations;
                 if (! propagate(new_domains, assignments)) {
                     // failure? restore assignments and go on to the next thing
+                    if (params.proof)
+                        params.proof->propagation_failure(assignments_as_proof_decisions(assignments), branch_domain->v, *f_v);
+
                     assignments.values.resize(assignments_size);
                     actually_hit_a_failure = true;
+
                     continue;
                 }
 
@@ -922,9 +946,14 @@ namespace
                         break;
 
                     case SearchResult::Unsatisfiable:
+                        if (params.proof) {
+                            params.proof->incorrect_guess(assignments_as_proof_decisions(assignments));
+                        }
+
                         // restore assignments
                         assignments.values.resize(assignments_size);
                         actually_hit_a_failure = true;
+
                         break;
                 }
 
@@ -932,6 +961,9 @@ namespace
             }
 
             // no values remaining, backtrack, or possibly kick off a restart
+            if (params.proof)
+                params.proof->out_of_guesses(assignments_as_proof_decisions(assignments));
+
             if (actually_hit_a_failure)
                 restarts_schedule.did_a_backtrack();
 
@@ -943,6 +975,7 @@ namespace
                 return SearchResult::Unsatisfiable;
         }
 
+        template <bool proof_>
         auto cheap_all_different(Domains & domains) -> bool
         {
             // Pick domains smallest first; ties are broken by smallest .v first.
@@ -962,6 +995,8 @@ namespace
                 next.resize(model.target_size);
             fill(next.begin(), next.begin() + domains.size(), -1);
 
+            [[ maybe_unused ]] conditional_t<proof_, vector<int>, tuple<> > lhs, hall_lhs, hall_rhs;
+
             // Iterate backwards, because we insert elements at the head of
             // lists and we want the sort to be stable
             for (int i = int(domains.size()) - 1 ; i >= 0; --i) {
@@ -976,14 +1011,29 @@ namespace
             BitSetType_ domains_so_far{ model.target_size, 0 }, hall{ model.target_size, 0 };
             unsigned neighbours_so_far = 0;
 
+            [[ maybe_unused ]] conditional_t<proof_, unsigned, tuple<> > last_outputted_hall_size{};
+
             for (unsigned i = 0 ; i <= domains.size() ; ++i) {
                 // iterate over linked lists
                 int domain_index = first[i];
                 while (domain_index != -1) {
                     auto & d = domains.at(domain_index);
 
+                    if constexpr (proof_)
+                        lhs.push_back(model.pattern_permutation[d.v]);
+
+                    [[ maybe_unused ]] conditional_t<proof_, unsigned, tuple<> > old_d_values_count;
+                    if constexpr (proof_)
+                        old_d_values_count = d.values.count();
+
                     d.values &= ~hall;
                     d.count = d.values.count();
+
+                    if constexpr (proof_)
+                        if (last_outputted_hall_size != hall.count() && d.count != old_d_values_count) {
+                            last_outputted_hall_size = hall.count();
+                            params.proof->emit_hall_set_or_violator(hall_lhs, hall_rhs);
+                        }
 
                     if (0 == d.count)
                         return false;
@@ -992,12 +1042,32 @@ namespace
                     ++neighbours_so_far;
 
                     unsigned domains_so_far_popcount = domains_so_far.count();
+
                     if (domains_so_far_popcount < neighbours_so_far) {
+                        // hall violator, so we fail (after outputting a proof)
+                        if constexpr (proof_) {
+                            vector<int> rhs;
+                            auto d = domains_so_far;
+                            for (auto v = d.find_first() ; v != decltype(d)::npos ; v = d.find_first()) {
+                                d.reset(v);
+                                rhs.push_back(v);
+                            }
+                            params.proof->emit_hall_set_or_violator(lhs, rhs);
+                        }
                         return false;
                     }
                     else if (domains_so_far_popcount == neighbours_so_far) {
                         // equivalent to hall=domains_so_far
                         hall |= domains_so_far;
+                        if constexpr (proof_) {
+                            hall_lhs = lhs;
+                            hall_rhs.clear();
+                            auto d = domains_so_far;
+                            for (auto v = d.find_first() ; v != decltype(d)::npos ; v = d.find_first()) {
+                                d.reset(v);
+                                hall_rhs.push_back(v);
+                            }
+                        }
                     }
                     domain_index = next[domain_index];
                 }
@@ -1064,6 +1134,24 @@ namespace
             for (int g = 0 ; g < graphs_to_consider ; ++g) {
                 if (model.targets_degrees.at(g).at(t) < model.patterns_degrees.at(g).at(p)) {
                     // not ok, degrees differ
+                    if (params.proof) {
+                        // get the actual neighbours of p and t, in their original terms
+                        vector<int> n_p, n_t;
+
+                        auto np = model.pattern_graph_rows[p * model.max_graphs + g];
+                        for (auto j = np.find_first() ; j != decltype(np)::npos ; j = np.find_first()) {
+                            np.reset(j);
+                            n_p.push_back(model.pattern_permutation[j]);
+                        }
+
+                        auto nt = model.target_graph_rows[t * model.max_graphs + g];
+                        for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
+                            nt.reset(j);
+                            n_t.push_back(j);
+                        }
+
+                        params.proof->incompatible_by_degrees(g, p, n_p, t, n_t);
+                    }
                     return false;
                 }
                 else if (degree_and_nds_are_exact(params, model.full_pattern_size, model.target_size)
@@ -1090,8 +1178,11 @@ namespace
 
             for (int g = 0 ; g < graphs_to_consider ; ++g) {
                 for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
-                    if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x))
+                    if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x)) {
+                        if (params.proof)
+                            params.proof->incompatible_by_nds(g, p, t);
                         return false;
+                    }
                     else if (degree_and_nds_are_exact(params, model.full_pattern_size, model.target_size)
                             && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x))
                         return false;
@@ -1158,8 +1249,11 @@ namespace
                 }
 
                 domains.at(i).count = domains.at(i).values.count();
-                if (0 == domains.at(i).count)
+                if (0 == domains.at(i).count) {
+                    if (params.proof)
+                        params.proof->initial_domain_is_empty(i);
                     return false;
+                }
             }
 
             // quick sanity check that we have enough values
@@ -1169,8 +1263,20 @@ namespace
                     domains_union |= d.values;
 
                 unsigned domains_union_popcount = domains_union.count();
-                if (domains_union_popcount < unsigned(model.pattern_size))
+                if (domains_union_popcount < unsigned(model.pattern_size)) {
+                    if (params.proof) {
+                        vector<int> hall_lhs, hall_rhs;
+                        for (auto & d : domains)
+                            hall_lhs.push_back(model.pattern_permutation[d.v]);
+                        auto dd = domains_union;
+                        for (auto v = dd.find_first() ; v != decltype(dd)::npos ; v = dd.find_first()) {
+                            dd.reset(v);
+                            hall_rhs.push_back(v);
+                        }
+                        params.proof->emit_hall_set_or_violator(hall_lhs, hall_rhs);
+                    }
                     return false;
+                }
             }
 
             for (auto & d : domains)
@@ -1269,6 +1375,8 @@ namespace
                     }
                 }
                 else {
+                    if (params.proof)
+                        params.proof->root_propagation_failed();
                     result.complete = true;
                     done = true;
                 }
@@ -1517,9 +1625,12 @@ namespace
 
         auto run() -> HomomorphismResult
         {
+            // quick check for size
             if (is_nonshrinking(params) && (model.full_pattern_size > model.target_size)) {
                 HomomorphismResult result;
                 result.extra_stats.emplace_back("nonshrinking = false");
+                if (params.proof)
+                    params.proof->failure_due_to_pattern_bigger_than_target();
                 return result;
             }
 
@@ -1578,12 +1689,15 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         if (graphs.first.has_vertex_labels() || graphs.first.has_edge_labels())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
 
+        // set up our model file, with a set of OPB variables for each CP variable
         for (int n = 0 ; n < graphs.first.size() ; ++n) {
             params.proof->create_cp_variable(n, graphs.second.size());
         }
 
+        // generate constraints for injectivity
         params.proof->create_injectivity_constraints(graphs.first.size(), graphs.second.size());
 
+        // generate edge constraints, and also handle loops here
         for (int p = 0 ; p < graphs.first.size() ; ++p) {
             for (int t = 0 ; t < graphs.second.size() ; ++t) {
                 if (graphs.first.adjacent(p, p) && ! graphs.second.adjacent(t, t))
@@ -1603,12 +1717,22 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
             }
         }
 
+        // output the model file
         params.proof->finalise_model();
     }
 
-    if (is_nonshrinking(params) && (graphs.first.size() > graphs.second.size()))
-        return HomomorphismResult{ };
+    // first sanity check: if we're finding an injective mapping, and there
+    // aren't enough vertices, fail immediately.
+    if (is_nonshrinking(params) && (graphs.first.size() > graphs.second.size())) {
+        if (params.proof) {
+            params.proof->failure_due_to_pattern_bigger_than_target();
+            params.proof->finish_unsat_proof();
+        }
 
+        return HomomorphismResult{ };
+    }
+
+    // is the pattern a clique? if so, use a clique algorithm instead
     if (can_use_clique(params) && is_simple_clique(graphs.first)) {
         CliqueParams clique_params;
         clique_params.timeout = params.timeout;
@@ -1617,6 +1741,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
         auto clique_result = solve_clique_problem(graphs.second, clique_params);
 
+        // now translate the result back into what we expect
         HomomorphismResult result;
         int v = 0;
         for (auto & m : clique_result.clique) {
@@ -1633,20 +1758,26 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         return result;
     }
     else if (params.minimal_unsat_pattern) {
-        HomomorphismResult result = select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
+        // if we're finding a minimal unsat pattern, solve the problem
+        // repeatedly with shrinking patterns
+        HomomorphismResult result = select_graph_size<SubgraphRunner, HomomorphismResult>(
+                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
         if (! result.mapping.empty())
             return result;
 
+        // try to exclude each vertex in turn
         set<int> exclude;
         for (int n = 0 ; n < graphs.first.size() ; ++n) {
             exclude.insert(n);
-            result = select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params, exclude);
+            result = select_graph_size<SubgraphRunner, HomomorphismResult>(
+                    AllGraphSizes(), graphs.second, graphs.first, params, exclude);
             if (! result.mapping.empty()) {
                 result.mapping.clear();
                 exclude.erase(n);
             }
         }
 
+        // build up the minimal unsat pattern
         for (int n = 0 ; n < graphs.first.size() ; ++n) {
             if (! exclude.count(n))
                 result.minimal_unsat_pattern.push_back(n);
@@ -1654,7 +1785,15 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
 
         return result;
     }
-    else
-        return select_graph_size<SubgraphRunner, HomomorphismResult>(AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
+    else {
+        // just solve the problem
+        auto result = select_graph_size<SubgraphRunner, HomomorphismResult>(
+                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
+
+        if (params.proof && result.mapping.empty())
+            params.proof->finish_unsat_proof();
+
+        return result;
+    }
 }
 

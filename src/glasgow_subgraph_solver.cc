@@ -273,11 +273,6 @@ auto main(int argc, char * argv[]) -> int
             return EXIT_FAILURE;
         }
 
-        if (options_vars.count("prove")) {
-            string fn = options_vars["prove"].as<string>();
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log");
-        }
-
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
@@ -315,6 +310,13 @@ auto main(int argc, char * argv[]) -> int
                     cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
                 cout << endl;
             };
+        }
+
+        if (options_vars.count("prove")) {
+            string fn = options_vars["prove"].as<string>();
+            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log");
+            cout << "proof_model = " << fn << ".opb" << endl;
+            cout << "proof_log = " << fn << ".log" << endl;
         }
 
         /* Prepare and start timeout */
