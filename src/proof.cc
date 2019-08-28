@@ -38,7 +38,7 @@ struct Proof::Imp
 };
 
 Proof::Proof(const std::string & opb_file, const std::string & log_file) :
-    _imp(new Imp{ })
+    _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
 }
