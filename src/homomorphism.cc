@@ -1072,6 +1072,8 @@ namespace
                     return false;
                 }
             }
+            if (params.no_nds)
+                return true;
 
             // full compare of neighbourhood degree sequences
             if (! targets_ndss.at(0).at(t)) {
@@ -1119,7 +1121,7 @@ namespace
             vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
             vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
 
-            if (degree_and_nds_are_preserved(params)) {
+            if (degree_and_nds_are_preserved(params) && ! params.no_nds) {
                 for (int g = 0 ; g < graphs_to_consider ; ++g) {
                     patterns_ndss.at(g).resize(model.pattern_size);
                     targets_ndss.at(g).resize(model.target_size);
@@ -1549,9 +1551,14 @@ namespace
 
 auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult
 {
+    // start by setting up proof logging, if necessary
     if (params.proof) {
+        // proof logging is currently incompatible with a whole load of "extra" features,
+        // but can be adapted to support most of them
         if (1 != params.n_threads)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with threads" };
+        if (! params.no_nds)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with neighbourhood degree sequences" };
         if (! params.no_supplementals)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with supplemental graphs" };
         if (params.clique_detection)

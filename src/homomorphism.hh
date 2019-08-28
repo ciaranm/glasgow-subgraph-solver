@@ -77,6 +77,9 @@ struct HomomorphismParams
     /// Disable all supplemental graphs?
     bool no_supplementals = false;
 
+    /// Disable neighbourhood degree sequence processing?
+    bool no_nds = false;
+
     /// Less pattern constraints
     std::list<std::pair<std::string, std::string> > pattern_less_constraints;
 
