@@ -29,7 +29,7 @@ class Proof
         std::unique_ptr<Imp> _imp;
 
     public:
-        Proof(const std::string & opb_file, const std::string & log_file);
+        Proof(const std::string & opb_file, const std::string & log_file, bool levels);
         Proof(Proof &&);
         ~Proof();
         auto operator= (Proof &&) -> Proof &;
@@ -65,6 +65,12 @@ class Proof
         auto incorrect_guess(const std::vector<std::pair<int, int> > & decisions) -> void;
         auto out_of_guesses(const std::vector<std::pair<int, int> > & decisions) -> void;
         auto unit_propagating(int var, int val) -> void;
+
+        // proof levels
+        auto start_level(int level) -> void;
+        auto back_up_to_level(int level) -> void;
+        auto back_up_to_top() -> void;
+        auto post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void;
 };
 
 #endif

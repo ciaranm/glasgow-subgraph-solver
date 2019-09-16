@@ -36,6 +36,7 @@ struct Proof::Imp
     string opb_filename, log_filename;
     stringstream model_stream;
     ofstream proof_stream;
+    bool levels;
 
     map<pair<int, int>, int> variable_mappings;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
@@ -45,11 +46,12 @@ struct Proof::Imp
     int proof_line = 0;
 };
 
-Proof::Proof(const std::string & opb_file, const std::string & log_file) :
+Proof::Proof(const std::string & opb_file, const std::string & log_file, bool l) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
     _imp->log_filename = log_file;
+    _imp->levels = l;
 }
 
 Proof::Proof(Proof &&) = default;
@@ -233,5 +235,37 @@ auto Proof::out_of_guesses(const std::vector<std::pair<int, int> > & decisions) 
 auto Proof::unit_propagating(int var, int val) -> void
 {
     _imp->proof_stream << "* unit propagating " << var << "=" << val << endl;
+}
+
+auto Proof::start_level(int level) -> void
+{
+    if (_imp->levels) {
+        _imp->proof_stream << "lvlset " << level << endl;
+        _imp->proof_stream << "lvlclear " << level << endl;
+    }
+}
+
+auto Proof::back_up_to_level(int level) -> void
+{
+    if (_imp->levels)
+        _imp->proof_stream << "lvlset " << level << endl;
+}
+
+auto Proof::back_up_to_top() -> void
+{
+    if (_imp->levels)
+        _imp->proof_stream << "lvlset " << 0 << endl;
+}
+
+auto Proof::post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void
+{
+    if (_imp->levels) {
+        _imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
+        _imp->proof_stream << "u opb";
+        for (auto & [ var, val ] : decisions)
+            _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
+        _imp->proof_stream << " >= -" << (decisions.size() - 1) << " ;" << endl;
+        ++_imp->proof_line;
+    }
 }
 

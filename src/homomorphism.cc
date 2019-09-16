@@ -765,6 +765,9 @@ namespace
                     nogood.literals.emplace_back(a.assignment);
 
             watches.post_nogood(move(nogood));
+
+            if (params.proof)
+                params.proof->post_restart_nogood(assignments_as_proof_decisions(assignments));
         }
 
         auto softmax_shuffle(
@@ -916,6 +919,9 @@ namespace
                     continue;
                 }
 
+                if (params.proof)
+                    params.proof->start_level(depth + 2);
+
                 // recursive search
                 auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
                         solution_count, depth + 1, restarts_schedule);
@@ -947,6 +953,7 @@ namespace
 
                     case SearchResult::Unsatisfiable:
                         if (params.proof) {
+                            params.proof->back_up_to_level(depth + 1);
                             params.proof->incorrect_guess(assignments_as_proof_decisions(assignments));
                         }
 
@@ -968,6 +975,7 @@ namespace
                 restarts_schedule.did_a_backtrack();
 
             if (restarts_schedule.should_restart()) {
+                params.proof->back_up_to_top();
                 post_nogood(assignments);
                 return SearchResult::Restart;
             }
