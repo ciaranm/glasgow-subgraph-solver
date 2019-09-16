@@ -259,13 +259,11 @@ auto Proof::back_up_to_top() -> void
 
 auto Proof::post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void
 {
-    if (_imp->levels) {
-        _imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
-        _imp->proof_stream << "u opb";
-        for (auto & [ var, val ] : decisions)
-            _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-        _imp->proof_stream << " >= -" << (decisions.size() - 1) << " ;" << endl;
-        ++_imp->proof_line;
-    }
+    _imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
+    _imp->proof_stream << "u opb";
+    for (auto & [ var, val ] : decisions)
+        _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
+    _imp->proof_stream << " >= -" << (decisions.size() - 1) << " ;" << endl;
+    ++_imp->proof_line;
 }
 
