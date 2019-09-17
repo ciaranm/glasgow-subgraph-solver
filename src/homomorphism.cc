@@ -975,7 +975,8 @@ namespace
                 restarts_schedule.did_a_backtrack();
 
             if (restarts_schedule.should_restart()) {
-                params.proof->back_up_to_top();
+                if (params.proof)
+                    params.proof->back_up_to_top();
                 post_nogood(assignments);
                 return SearchResult::Restart;
             }
