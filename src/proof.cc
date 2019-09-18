@@ -121,7 +121,7 @@ auto Proof::finalise_model() -> void
         throw ProofError{ "Error writing opb file to '" + _imp->opb_filename + "'" };
 
     _imp->proof_stream = ofstream{ _imp->log_filename };
-    _imp->proof_stream << "refutation using f l p u w c 0" << endl;
+    _imp->proof_stream << "refutation using f l p u c 0" << endl;
     _imp->proof_stream << "f " << _imp->nb_constraints << " 0" << endl;
     _imp->proof_line += _imp->nb_constraints;
     _imp->proof_stream << "l " << _imp->variable_mappings.size() << " 0" << endl;
@@ -171,8 +171,6 @@ auto Proof::incompatible_by_degrees(int g, int p, const vector<int> & n_p, int t
 
     _imp->proof_stream << "u opb 1 ~x" << _imp->variable_mappings[pair{ p, t }] << " >= 1 ;" << endl;
     ++_imp->proof_line;
-
-    _imp->proof_stream << "w " << (_imp->proof_line - 1) << " 0" << endl;
 }
 
 auto Proof::incompatible_by_nds(int g, int p, int t) -> void
