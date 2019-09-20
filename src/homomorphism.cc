@@ -93,6 +93,8 @@ namespace
 
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
+        vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
+
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
                 const set<int> & exclude_pattern_vertices) :
             max_graphs(1 +
@@ -112,6 +114,13 @@ namespace
 
             if (pattern.has_edge_labels() && ! params.induced)
                 throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
+
+            if (params.proof) {
+                for (int v = 0 ; v < pattern.size() ; ++v)
+                    pattern_vertex_proof_names.push_back(pattern.vertex_name(v));
+                for (int v = 0 ; v < target.size() ; ++v)
+                    target_vertex_proof_names.push_back(target.vertex_name(v));
+            }
 
             // strip out isolated vertices in the pattern, and build pattern_permutation
             for (unsigned v = 0 ; v < full_pattern_size ; ++v) {
@@ -228,6 +237,17 @@ namespace
                 }
             }
         }
+
+        auto pattern_vertex_for_proof(int v) const -> NamedVertex
+        {
+            return pair{ v, pattern_vertex_proof_names[pattern_permutation[v]] };
+        }
+
+        auto target_vertex_for_proof(int v) const -> NamedVertex
+        {
+            return pair{ v, target_vertex_proof_names[v] };
+        }
+
 
         auto prepare(const HomomorphismParams & params) -> bool
         {
@@ -474,14 +494,14 @@ namespace
             return trail;
         }
 
-        auto solution_in_proof_form(const Assignments & assignments) const -> vector<pair<int, int> >
+        auto solution_in_proof_form(const Assignments & assignments) const -> vector<pair<NamedVertex, NamedVertex> >
         {
-            vector<pair<int, int> > trail;
+            vector<pair<NamedVertex, NamedVertex> > solution;
             for (auto & a : assignments.values)
-                if (trail.end() == find_if(trail.begin(), trail.end(),
-                            [&] (const auto & t) { return t.first == model.pattern_permutation[a.assignment.pattern_vertex]; }))
-                    trail.emplace_back(model.pattern_permutation[a.assignment.pattern_vertex], a.assignment.target_vertex);
-            return trail;
+                if (solution.end() == find_if(solution.begin(), solution.end(),
+                            [&] (const auto & t) { return t.first.first == model.pattern_permutation[a.assignment.pattern_vertex]; }))
+                    solution.emplace_back(model.pattern_vertex_for_proof(a.assignment.pattern_vertex), model.target_vertex_for_proof(a.assignment.target_vertex));
+            return solution;
         }
 
         auto expand_to_full_result(const Assignments & assignments, VertexToVertexMapping & mapping) -> void
@@ -693,8 +713,9 @@ namespace
                 assignments.values.push_back({ current_assignment, false, -1, -1 });
 
                 if (params.proof)
-                    params.proof->unit_propagating(model.pattern_permutation[current_assignment.pattern_vertex],
-                            current_assignment.target_vertex);
+                    params.proof->unit_propagating(
+                            model.pattern_vertex_for_proof(current_assignment.pattern_vertex),
+                            model.target_vertex_for_proof(current_assignment.target_vertex));
 
                 // propagate watches
                 if (might_have_watches(params))
@@ -848,17 +869,15 @@ namespace
             // find ourselves a domain, or succeed if we're all assigned
             const Domain * branch_domain = find_branch_domain(domains);
             if (! branch_domain) {
-                if (params.lackey || params.proof) {
+                if (params.lackey) {
                     VertexToVertexMapping mapping;
                     expand_to_full_result(assignments, mapping);
-
-                    if (params.lackey)
-                        if (! params.lackey->check_solution(mapping))
-                            return SearchResult::Unsatisfiable;
-
-                    if (params.proof)
-                        params.proof->post_solution(mapping, solution_in_proof_form(assignments));
+                    if (! params.lackey->check_solution(mapping))
+                        return SearchResult::Unsatisfiable;
                 }
+
+                if (params.proof)
+                    params.proof->post_solution(solution_in_proof_form(assignments));
 
                 if (params.count_solutions) {
                     ++solution_count;
@@ -911,7 +930,7 @@ namespace
             // for each value remaining...
             for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end ; f_v != f_end ; ++f_v) {
                 if (params.proof)
-                    params.proof->guessing(depth, model.pattern_permutation[branch_domain->v], *f_v);
+                    params.proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
                 // modified in-place by appending, we can restore by shrinking
                 auto assignments_size = assignments.values.size();
@@ -927,7 +946,7 @@ namespace
                 if (! propagate(new_domains, assignments)) {
                     // failure? restore assignments and go on to the next thing
                     if (params.proof)
-                        params.proof->propagation_failure(assignments_as_proof_decisions(assignments), branch_domain->v, *f_v);
+                        params.proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
                     assignments.values.resize(assignments_size);
                     actually_hit_a_failure = true;
@@ -1180,7 +1199,7 @@ namespace
                             n_t.push_back(j);
                         }
 
-                        params.proof->incompatible_by_degrees(g, p, n_p, t, n_t);
+                        params.proof->incompatible_by_degrees(g, model.pattern_vertex_for_proof(p), n_p, model.target_vertex_for_proof(t), n_t);
                     }
                     return false;
                 }
@@ -1719,7 +1738,9 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
 
         // set up our model file, with a set of OPB variables for each CP variable
         for (int n = 0 ; n < graphs.first.size() ; ++n) {
-            params.proof->create_cp_variable(n, graphs.second.size());
+            params.proof->create_cp_variable(n, graphs.second.size(),
+                    [&] (int v) { return graphs.first.vertex_name(v); },
+                    [&] (int v) { return graphs.second.vertex_name(v); });
         }
 
         // generate constraints for injectivity

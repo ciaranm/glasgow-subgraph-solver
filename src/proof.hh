@@ -4,9 +4,9 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_PROOF_HH 1
 
 #include "proof-fwd.hh"
-#include "vertex_to_vertex_mapping.hh"
 
 #include <exception>
+#include <functional>
 #include <iosfwd>
 #include <memory>
 #include <string>
@@ -23,6 +23,8 @@ class ProofError : public std::exception
         virtual auto what() const noexcept -> const char *;
 };
 
+using NamedVertex = std::pair<int, std::string>;
+
 class Proof
 {
     private:
@@ -30,7 +32,7 @@ class Proof
         std::unique_ptr<Imp> _imp;
 
     public:
-        Proof(const std::string & opb_file, const std::string & log_file, bool levels, bool solutions);
+        Proof(const std::string & opb_file, const std::string & log_file, bool levels, bool solutions, bool friendly_names);
         Proof(Proof &&);
         ~Proof();
         auto operator= (Proof &&) -> Proof &;
@@ -39,7 +41,9 @@ class Proof
         auto operator= (const Proof &) -> Proof & = delete;
 
         // model-writing functions
-        auto create_cp_variable(int pattern_vertex, int target_size) -> void;
+        auto create_cp_variable(int pattern_vertex, int target_size,
+                const std::function<auto (int) -> std::string> & pattern_name,
+                const std::function<auto (int) -> std::string> & target_name) -> void;
         auto create_injectivity_constraints(int pattern_size, int target_size) -> void;
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u) -> void;
@@ -52,7 +56,7 @@ class Proof
         auto failure_due_to_pattern_bigger_than_target() -> void;
 
         // domain initialisation
-        auto incompatible_by_degrees(int g, int p, const std::vector<int> & n_p, int t, const std::vector<int> & n_t) -> void;
+        auto incompatible_by_degrees(int g, const NamedVertex & p, const std::vector<int> & n_p, const NamedVertex & t, const std::vector<int> & n_t) -> void;
         auto incompatible_by_nds(int g, int p, int t) -> void;
         auto initial_domain_is_empty(int p) -> void;
 
@@ -61,11 +65,11 @@ class Proof
 
         // branch logging
         auto root_propagation_failed() -> void;
-        auto guessing(int depth, int branch_v, int val) -> void;
-        auto propagation_failure(const std::vector<std::pair<int, int> > & decisions, int branch_v, int val) -> void;
+        auto guessing(int depth, const NamedVertex & branch_v, const NamedVertex & val) -> void;
+        auto propagation_failure(const std::vector<std::pair<int, int> > & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void;
         auto incorrect_guess(const std::vector<std::pair<int, int> > & decisions) -> void;
         auto out_of_guesses(const std::vector<std::pair<int, int> > & decisions) -> void;
-        auto unit_propagating(int var, int val) -> void;
+        auto unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void;
 
         // proof levels
         auto start_level(int level) -> void;
@@ -74,7 +78,7 @@ class Proof
         auto post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void;
 
         // enumeration
-        auto post_solution(const VertexToVertexMapping &, const std::vector<std::pair<int, int> > & decisions) -> void;
+        auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex> > & decisions) -> void;
 };
 
 #endif

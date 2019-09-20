@@ -11,6 +11,7 @@
 
 using std::copy;
 using std::endl;
+using std::function;
 using std::istreambuf_iterator;
 using std::map;
 using std::move;
@@ -19,6 +20,7 @@ using std::ostreambuf_iterator;
 using std::pair;
 using std::string;
 using std::stringstream;
+using std::to_string;
 using std::tuple;
 using std::vector;
 
@@ -39,8 +41,9 @@ struct Proof::Imp
     ofstream proof_stream;
     bool levels;
     bool solutions;
+    bool friendly_names;
 
-    map<pair<int, int>, int> variable_mappings;
+    map<pair<int, int>, string> variable_mappings;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<int, int, int, int>, int> adjacency_lines;
 
@@ -48,13 +51,14 @@ struct Proof::Imp
     int proof_line = 0;
 };
 
-Proof::Proof(const string & opb_file, const string & log_file, bool l, bool s) :
+Proof::Proof(const string & opb_file, const string & log_file, bool l, bool s, bool f) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
     _imp->log_filename = log_file;
     _imp->levels = l;
     _imp->solutions = s;
+    _imp->friendly_names = f;
 }
 
 Proof::Proof(Proof &&) = default;
@@ -63,10 +67,15 @@ Proof::~Proof() = default;
 
 auto Proof::operator= (Proof &&) -> Proof & = default;
 
-auto Proof::create_cp_variable(int pattern_vertex, int target_size) -> void
+auto Proof::create_cp_variable(int pattern_vertex, int target_size,
+        const function<auto (int) -> string> & pattern_name,
+        const function<auto (int) -> string> & target_name) -> void
 {
     for (int i = 0 ; i < target_size ; ++i)
-        _imp->variable_mappings.emplace(pair{ pattern_vertex, i }, _imp->variable_mappings.size() + 1);
+        if (_imp->friendly_names)
+            _imp->variable_mappings.emplace(pair{ pattern_vertex, i }, pattern_name(pattern_vertex) + "_" + target_name(i));
+        else
+            _imp->variable_mappings.emplace(pair{ pattern_vertex, i }, to_string(_imp->variable_mappings.size() + 1));
 
     _imp->model_stream << "* vertex " << pattern_vertex << " domain" << endl;
     for (int i = 0 ; i < target_size ; ++i)
@@ -163,13 +172,13 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
     ++_imp->proof_line;
 }
 
-auto Proof::incompatible_by_degrees(int g, int p, const vector<int> & n_p, int t, const vector<int> & n_t) -> void
+auto Proof::incompatible_by_degrees(int g, const NamedVertex & p, const vector<int> & n_p, const NamedVertex & t, const vector<int> & n_t) -> void
 {
-    _imp->proof_stream << "* cannot map " << p << " to " << t << " due to degrees in graph pairs " << g << endl;
+    _imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << endl;
 
     _imp->proof_stream << "p 0";
     for (auto & n : n_p)
-        _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p, n, t }] << " +";
+        _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
 
     // if I map p to t, I have to map the neighbours of p to neighbours of t
     for (auto & n : n_t)
@@ -206,14 +215,14 @@ auto Proof::root_propagation_failed() -> void
     _imp->proof_stream << "* root node propagation failed" << endl;
 }
 
-auto Proof::guessing(int depth, int branch_v, int val) -> void
+auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
-    _imp->proof_stream << "* [" << depth << "] guessing " << branch_v << "=" << val << endl;
+    _imp->proof_stream << "* [" << depth << "] guessing " << branch_v.second << "=" << val.second << endl;
 }
 
-auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, int branch_v, int val) -> void
+auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
-    _imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v << "=" << val << endl;
+    _imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << endl;
     _imp->proof_stream << "u opb";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
@@ -236,9 +245,9 @@ auto Proof::out_of_guesses(const vector<pair<int, int> > & decisions) -> void
     _imp->proof_stream << "* [" << decisions.size() << "] out of guesses" << endl;
 }
 
-auto Proof::unit_propagating(int var, int val) -> void
+auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void
 {
-    _imp->proof_stream << "* unit propagating " << var << "=" << val << endl;
+    _imp->proof_stream << "* unit propagating " << var.second << "=" << val.second << endl;
 }
 
 auto Proof::start_level(int level) -> void
@@ -271,17 +280,17 @@ auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> vo
     ++_imp->proof_line;
 }
 
-auto Proof::post_solution(const VertexToVertexMapping & m, const vector<pair<int, int> > & decisions) -> void
+auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisions) -> void
 {
     _imp->proof_stream << "* found solution";
-    for (auto & [ var, val ] : m)
-        _imp->proof_stream << " " << var << "=" << val;
+    for (auto & [ var, val ] : decisions)
+        _imp->proof_stream << " " << var.second << "=" << val.second;
     _imp->proof_stream << endl;
 
     if (_imp->solutions) {
         _imp->proof_stream << "v";
         for (auto & [ var, val ] : decisions)
-            _imp->proof_stream << " x" << _imp->variable_mappings[pair{ var, val }];
+            _imp->proof_stream << " x" << _imp->variable_mappings[pair{ var.first, val.first }];
         _imp->proof_stream << endl;
         ++_imp->proof_line;
     }
