@@ -474,6 +474,16 @@ namespace
             return trail;
         }
 
+        auto solution_in_proof_form(const Assignments & assignments) const -> vector<pair<int, int> >
+        {
+            vector<pair<int, int> > trail;
+            for (auto & a : assignments.values)
+                if (trail.end() == find_if(trail.begin(), trail.end(),
+                            [&] (const auto & t) { return t.first == model.pattern_permutation[a.assignment.pattern_vertex]; }))
+                    trail.emplace_back(model.pattern_permutation[a.assignment.pattern_vertex], a.assignment.target_vertex);
+            return trail;
+        }
+
         auto expand_to_full_result(const Assignments & assignments, VertexToVertexMapping & mapping) -> void
         {
             for (auto & a : assignments.values)
@@ -838,11 +848,16 @@ namespace
             // find ourselves a domain, or succeed if we're all assigned
             const Domain * branch_domain = find_branch_domain(domains);
             if (! branch_domain) {
-                if (params.lackey) {
+                if (params.lackey || params.proof) {
                     VertexToVertexMapping mapping;
                     expand_to_full_result(assignments, mapping);
-                    if (! params.lackey->check_solution(mapping))
-                        return SearchResult::Unsatisfiable;
+
+                    if (params.lackey)
+                        if (! params.lackey->check_solution(mapping))
+                            return SearchResult::Unsatisfiable;
+
+                    if (params.proof)
+                        params.proof->post_solution(mapping, solution_in_proof_form(assignments));
                 }
 
                 if (params.count_solutions) {
@@ -852,6 +867,7 @@ namespace
                         expand_to_full_result(assignments, mapping);
                         params.enumerate_callback(mapping);
                     }
+
                     return SearchResult::SatisfiableButKeepGoing;
                 }
                 else
@@ -947,6 +963,11 @@ namespace
                         return SearchResult::Restart;
 
                     case SearchResult::SatisfiableButKeepGoing:
+                        if (params.proof) {
+                            params.proof->back_up_to_level(depth + 1);
+                            params.proof->incorrect_guess(assignments_as_proof_decisions(assignments));
+                        }
+
                         // restore assignments
                         assignments.values.resize(assignments_size);
                         break;
@@ -1691,8 +1712,6 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
             throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity" };
         if (params.induced)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used for induced problems" };
-        if (params.count_solutions)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used for counting solutions" };
         if (params.minimal_unsat_pattern)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used for finding a minimal unsat pattern" };
         if (graphs.first.has_vertex_labels() || graphs.first.has_edge_labels())

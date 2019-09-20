@@ -4,6 +4,7 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_PROOF_HH 1
 
 #include "proof-fwd.hh"
+#include "vertex_to_vertex_mapping.hh"
 
 #include <exception>
 #include <iosfwd>
@@ -29,7 +30,7 @@ class Proof
         std::unique_ptr<Imp> _imp;
 
     public:
-        Proof(const std::string & opb_file, const std::string & log_file, bool levels);
+        Proof(const std::string & opb_file, const std::string & log_file, bool levels, bool solutions);
         Proof(Proof &&);
         ~Proof();
         auto operator= (Proof &&) -> Proof &;
@@ -71,6 +72,9 @@ class Proof
         auto back_up_to_level(int level) -> void;
         auto back_up_to_top() -> void;
         auto post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void;
+
+        // enumeration
+        auto post_solution(const VertexToVertexMapping &, const std::vector<std::pair<int, int> > & decisions) -> void;
 };
 
 #endif

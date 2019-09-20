@@ -89,8 +89,8 @@ $ ./glasgow_clique_solver --pattern-symmetries --count-solutions pattern-file ta
 Proof Logging
 -------------
 
-As a highly experimental feature, the solver can output a proof log for unsatisfiable instances. You
-will need to install two dependencies to verify the logs:
+As a highly experimental feature, the solver can output a proof log. You have two options for
+verifying the proof log. The first is to install the following two programs:
 
 * refpy from https://github.com/StephanGocht/refpy/ .
 * roundingsat from https://github.com/elffersj/roundingsat/ .
@@ -99,9 +99,25 @@ And then you can produce and verify a log like this:
 
 ```shell session
 $ ./glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
-    --prove myproof pattern-file target-file
+    --prove myproof --proof-solutions pattern-file target-file
 $ refpy myproof.opb myproof.log
 ```
+
+Or you can install:
+
+* verifier from https://github.com/elffersj/prooflogging
+
+And then you can produce and verify a log like this:
+
+```shell session
+$ ./glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
+    --prove myproof --proof-levels pattern-file target-file
+$ verifier myproof.opb myproof.log
+```
+
+At the time of writing, ``refpy`` supports ``--proof-solutions`` for logging satisfiable instances,
+whilst ``verifier`` does not, and ``verifier`` supports ``--proof-levels`` for faster verification
+and reduced memory usage, whilst ``refpy`` does not.
 
 Note that most features are not yet supported with proof logging. This is a "not yet implemented"
 problem, not a fundamental restriction.

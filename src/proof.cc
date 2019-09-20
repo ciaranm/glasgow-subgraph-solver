@@ -13,6 +13,7 @@ using std::copy;
 using std::endl;
 using std::istreambuf_iterator;
 using std::map;
+using std::move;
 using std::ofstream;
 using std::ostreambuf_iterator;
 using std::pair;
@@ -37,6 +38,7 @@ struct Proof::Imp
     stringstream model_stream;
     ofstream proof_stream;
     bool levels;
+    bool solutions;
 
     map<pair<int, int>, int> variable_mappings;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
@@ -46,12 +48,13 @@ struct Proof::Imp
     int proof_line = 0;
 };
 
-Proof::Proof(const std::string & opb_file, const std::string & log_file, bool l) :
+Proof::Proof(const string & opb_file, const string & log_file, bool l, bool s) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
     _imp->log_filename = log_file;
     _imp->levels = l;
+    _imp->solutions = s;
 }
 
 Proof::Proof(Proof &&) = default;
@@ -99,7 +102,7 @@ auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
     ++_imp->nb_constraints;
 }
 
-auto Proof::create_adjacency_constraint(int p, int q, int t, const std::vector<int> & uu) -> void
+auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu) -> void
 {
     _imp->model_stream << "* adjacency for edge " << p << " -- " << q << " mapping to vertex " << t << endl;
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{ p, t }];
@@ -121,7 +124,14 @@ auto Proof::finalise_model() -> void
         throw ProofError{ "Error writing opb file to '" + _imp->opb_filename + "'" };
 
     _imp->proof_stream = ofstream{ _imp->log_filename };
-    _imp->proof_stream << "refutation using f l p u c 0" << endl;
+    string commands = "f l p u c";
+    if (_imp->levels)
+        commands += " lvlset lvlclear";
+    if (_imp->solutions)
+        commands += " v";
+
+    _imp->proof_stream << "refutation using " << commands << " 0" << endl;
+
     _imp->proof_stream << "f " << _imp->nb_constraints << " 0" << endl;
     _imp->proof_line += _imp->nb_constraints;
     _imp->proof_stream << "l " << _imp->variable_mappings.size() << " 0" << endl;
@@ -129,7 +139,6 @@ auto Proof::finalise_model() -> void
 
     if (! _imp->proof_stream)
         throw ProofError{ "Error writing proof file to '" + _imp->log_filename + "'" };
-
 }
 
 auto Proof::finish_unsat_proof() -> void
@@ -168,9 +177,6 @@ auto Proof::incompatible_by_degrees(int g, int p, const vector<int> & n_p, int t
 
     _imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
-
-    _imp->proof_stream << "u opb 1 ~x" << _imp->variable_mappings[pair{ p, t }] << " >= 1 ;" << endl;
-    ++_imp->proof_line;
 }
 
 auto Proof::incompatible_by_nds(int g, int p, int t) -> void
@@ -183,7 +189,7 @@ auto Proof::initial_domain_is_empty(int p) -> void
     _imp->proof_stream << "* failure due to domain " << p << " being empty" << endl;
 }
 
-auto Proof::emit_hall_set_or_violator(const std::vector<int> & lhs, const std::vector<int> & rhs) -> void
+auto Proof::emit_hall_set_or_violator(const vector<int> & lhs, const vector<int> & rhs) -> void
 {
     _imp->proof_stream << "* hall set or violator size " << lhs.size() << "/" << rhs.size() << endl;
     _imp->proof_stream << "p 0";
@@ -205,27 +211,27 @@ auto Proof::guessing(int depth, int branch_v, int val) -> void
     _imp->proof_stream << "* [" << depth << "] guessing " << branch_v << "=" << val << endl;
 }
 
-auto Proof::propagation_failure(const std::vector<std::pair<int, int> > & decisions, int branch_v, int val) -> void
+auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, int branch_v, int val) -> void
 {
     _imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v << "=" << val << endl;
     _imp->proof_stream << "u opb";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= -" << (decisions.size() - 1) << " ;" << endl;
+    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
     ++_imp->proof_line;
 }
 
-auto Proof::incorrect_guess(const std::vector<std::pair<int, int> > & decisions) -> void
+auto Proof::incorrect_guess(const vector<pair<int, int> > & decisions) -> void
 {
     _imp->proof_stream << "* [" << decisions.size() << "] incorrect guess" << endl;
     _imp->proof_stream << "u opb";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= -" << (decisions.size() - 1) << " ;" << endl;
+    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
     ++_imp->proof_line;
 }
 
-auto Proof::out_of_guesses(const std::vector<std::pair<int, int> > & decisions) -> void
+auto Proof::out_of_guesses(const vector<pair<int, int> > & decisions) -> void
 {
     _imp->proof_stream << "* [" << decisions.size() << "] out of guesses" << endl;
 }
@@ -255,13 +261,29 @@ auto Proof::back_up_to_top() -> void
         _imp->proof_stream << "lvlset " << 0 << endl;
 }
 
-auto Proof::post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void
+auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> void
 {
     _imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
     _imp->proof_stream << "u opb";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= -" << (decisions.size() - 1) << " ;" << endl;
+    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
     ++_imp->proof_line;
+}
+
+auto Proof::post_solution(const VertexToVertexMapping & m, const vector<pair<int, int> > & decisions) -> void
+{
+    _imp->proof_stream << "* found solution";
+    for (auto & [ var, val ] : m)
+        _imp->proof_stream << " " << var << "=" << val;
+    _imp->proof_stream << endl;
+
+    if (_imp->solutions) {
+        _imp->proof_stream << "v";
+        for (auto & [ var, val ] : decisions)
+            _imp->proof_stream << " x" << _imp->variable_mappings[pair{ var, val }];
+        _imp->proof_stream << endl;
+        ++_imp->proof_line;
+    }
 }
 
