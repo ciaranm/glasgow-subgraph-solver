@@ -46,6 +46,7 @@ class Proof
                 const std::function<auto (int) -> std::string> & target_name) -> void;
         auto create_injectivity_constraints(int pattern_size, int target_size) -> void;
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
+        auto start_adjacency_constraints_for(int p, int t) -> void;
         auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u) -> void;
         auto finalise_model() -> void;
 
@@ -67,7 +68,7 @@ class Proof
         auto root_propagation_failed() -> void;
         auto guessing(int depth, const NamedVertex & branch_v, const NamedVertex & val) -> void;
         auto propagation_failure(const std::vector<std::pair<int, int> > & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void;
-        auto incorrect_guess(const std::vector<std::pair<int, int> > & decisions) -> void;
+        auto incorrect_guess(const std::vector<std::pair<int, int> > & decisions, bool was_failure) -> void;
         auto out_of_guesses(const std::vector<std::pair<int, int> > & decisions) -> void;
         auto unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void;
 

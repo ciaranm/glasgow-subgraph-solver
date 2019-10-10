@@ -111,9 +111,13 @@ auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
     ++_imp->nb_constraints;
 }
 
+auto Proof::start_adjacency_constraints_for(int p, int t) -> void
+{
+    _imp->model_stream << "* adjacency " << p << " maps to " << t << endl;
+}
+
 auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu) -> void
 {
-    _imp->model_stream << "* adjacency for edge " << p << " -- " << q << " mapping to vertex " << t << endl;
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{ p, t }];
     for (auto & u : uu)
         _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{ q, u }];
@@ -230,9 +234,13 @@ auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, const
     ++_imp->proof_line;
 }
 
-auto Proof::incorrect_guess(const vector<pair<int, int> > & decisions) -> void
+auto Proof::incorrect_guess(const vector<pair<int, int> > & decisions, bool failure) -> void
 {
-    _imp->proof_stream << "* [" << decisions.size() << "] incorrect guess" << endl;
+    if (failure)
+        _imp->proof_stream << "* [" << decisions.size() << "] incorrect guess" << endl;
+    else
+        _imp->proof_stream << "* [" << decisions.size() << "] backtracking" << endl;
+
     _imp->proof_stream << "u opb";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];

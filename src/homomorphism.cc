@@ -984,7 +984,7 @@ namespace
                     case SearchResult::SatisfiableButKeepGoing:
                         if (params.proof) {
                             params.proof->back_up_to_level(depth + 1);
-                            params.proof->incorrect_guess(assignments_as_proof_decisions(assignments));
+                            params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
                         }
 
                         // restore assignments
@@ -994,7 +994,7 @@ namespace
                     case SearchResult::Unsatisfiable:
                         if (params.proof) {
                             params.proof->back_up_to_level(depth + 1);
-                            params.proof->incorrect_guess(assignments_as_proof_decisions(assignments));
+                            params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
                         }
 
                         // restore assignments
@@ -1752,6 +1752,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
                 if (graphs.first.adjacent(p, p) && ! graphs.second.adjacent(t, t))
                     params.proof->create_forbidden_assignment_constraint(p, t);
                 else {
+                    params.proof->start_adjacency_constraints_for(p, t);
                     // if p can be mapped to t, then each neighbour of p...
                     for (int q = 0 ; q < graphs.first.size() ; ++q)
                         if (q != p && graphs.first.adjacent(p, q)) {
