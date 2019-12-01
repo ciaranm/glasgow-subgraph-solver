@@ -257,8 +257,8 @@ auto main(int argc, char * argv[]) -> int
         params.distance3 = options_vars.count("distance3");
         if (options_vars.count("n-exact-path-graphs"))
             params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
-        if (options_vars.count("n-common-neighbours-graphs"))
-            params.number_of_common_neighbour_graphs = options_vars["n-common-neighbours-graphs"].as<int>();
+        if (options_vars.count("n-common-neighbour-graphs"))
+            params.number_of_common_neighbour_graphs = options_vars["n-common-neighbour-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
 
