@@ -74,6 +74,9 @@ struct HomomorphismParams
     /// Use common neighbour shape filtering?
     bool common_neighbour_shapes = false;
 
+    /// Use distance 3 filtering?
+    bool distance3 = false;
+
     /// Disable all supplemental graphs?
     bool no_supplementals = false;
 

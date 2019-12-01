@@ -123,7 +123,8 @@ auto main(int argc, char * argv[]) -> int
         hidden_options.add_options()
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
             ("common-neighbour-shapes",                        "Use common neighbour shapes filtering (experimental)")
-            ("minimal-unsat-pattern",                          "Find a minimal unsat pattern graph, if unsat (experimental)");
+            ("minimal-unsat-pattern",                          "Find a minimal unsat pattern graph, if unsat (experimental)")
+            ("distance3",                                      "Use distance 3 filtering (experimental)");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -251,6 +252,7 @@ auto main(int argc, char * argv[]) -> int
         params.clique_detection = ! options_vars.count("no-clique-detection");
         params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
         params.common_neighbour_shapes = options_vars.count("common-neighbour-shapes");
+        params.distance3 = options_vars.count("distance3");
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
 

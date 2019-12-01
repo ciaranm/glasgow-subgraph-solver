@@ -100,6 +100,7 @@ namespace
             max_graphs(1 +
                     (supports_exact_path_graphs(params) ? number_of_exact_path_graphs : 0) +
                     (supports_common_neighbour_shapes(params) ? number_of_common_neighbour_graphs : 0) +
+                    (supports_distance3_graphs(params) ? 1 : 0) +
                     (params.induced ? 1 : 0)),
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
@@ -273,22 +274,32 @@ namespace
             for (unsigned i = 0 ; i < target_size ; ++i)
                 largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
 
+            int next_pattern_supplemental = 1, next_target_supplemental = 1;
             // build exact path graphs
             if (supports_exact_path_graphs(params)) {
-                build_exact_path_graphs(pattern_graph_rows, pattern_size);
-                build_exact_path_graphs(target_graph_rows, target_size);
+                build_exact_path_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                build_exact_path_graphs(target_graph_rows, target_size, next_target_supplemental);
 
                 if (supports_common_neighbour_shapes(params)) {
-                    build_common_neighbour_graphs(pattern_graph_rows, pattern_size);
-                    build_common_neighbour_graphs(target_graph_rows, target_size);
+                    build_common_neighbour_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                    build_common_neighbour_graphs(target_graph_rows, target_size, next_target_supplemental);
                 }
+            }
+
+            if (supports_distance3_graphs(params)) {
+                build_distance3_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                build_distance3_graphs(target_graph_rows, target_size, next_target_supplemental);
             }
 
             // build complement graphs
             if (params.induced) {
-                build_complement_graphs(pattern_graph_rows, pattern_size);
-                build_complement_graphs(target_graph_rows, target_size);
+                build_complement_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                build_complement_graphs(target_graph_rows, target_size, next_target_supplemental);
             }
+
+            if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs)
+                throw UnsupportedConfiguration{ "something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental)
+                    + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) };
 
             // pattern and target degrees, for supplemental graphs
             for (int g = 1 ; g < max_graphs ; ++g) {
@@ -319,7 +330,7 @@ namespace
         }
 
         template <typename PossiblySomeOtherBitSetType_>
-        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
+        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
         {
             vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
@@ -342,16 +353,37 @@ namespace
                     unsigned path_count = path_counts[w][v];
                     for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
                         if (path_count >= p) {
-                            graph_rows[v * max_graphs + p].set(w);
-                            graph_rows[w * max_graphs + p].set(v);
+                            graph_rows[v * max_graphs + idx + p - 1].set(w);
+                            graph_rows[w * max_graphs + idx + p - 1].set(v);
                         }
                     }
                 }
             }
+
+            idx += number_of_exact_path_graphs;
         }
 
         template <typename PossiblySomeOtherBitSetType_>
-        auto build_common_neighbour_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
+        auto build_distance3_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
+        {
+            for (unsigned v = 0 ; v < size ; ++v) {
+                auto nv = graph_rows[v * max_graphs + 0];
+                for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
+                    nv.reset(c);
+                    auto nc = graph_rows[c * max_graphs + 0];
+                    for (auto w = nc.find_first() ; w != decltype(nc)::npos ; w = nc.find_first()) {
+                        nc.reset(w);
+                        // v--c--w so v is within distance 3 of w's neighbours
+                        graph_rows[v * max_graphs + idx] |= graph_rows[w * max_graphs + 0];
+                    }
+                }
+            }
+
+            ++idx;
+        }
+
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_common_neighbour_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v) {
                 auto nv = graph_rows[v * max_graphs + 0];
@@ -365,22 +397,26 @@ namespace
 
                         for (unsigned p = 1 ; p <= number_of_common_neighbour_graphs ; ++p) {
                             if (count >= p) {
-                                graph_rows[v * max_graphs + p + number_of_exact_path_graphs].set(w);
-                                graph_rows[w * max_graphs + p + number_of_exact_path_graphs].set(v);
+                                graph_rows[v * max_graphs + idx + p - 1].set(w);
+                                graph_rows[w * max_graphs + idx + p - 1].set(v);
                             }
                         }
                     }
                 }
             }
+
+            idx += number_of_common_neighbour_graphs;
         }
 
         template <typename PossiblySomeOtherBitSetType_>
-        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size) -> void
+        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v)
                 for (unsigned w = 0 ; w < size ; ++w)
                     if (! graph_rows[v * max_graphs + 0].test(w))
-                        graph_rows[v * max_graphs + max_graphs - 1].set(w);
+                        graph_rows[v * max_graphs + idx].set(w);
+
+            ++idx;
         }
     };
 
@@ -596,6 +632,8 @@ namespace
                     switch (model.max_graphs) {
                         case 1: propagate_adjacency_constraints<1, false>(d, current_assignment); break;
                         case 2: propagate_adjacency_constraints<2, false>(d, current_assignment); break;
+                        case 3: propagate_adjacency_constraints<3, false>(d, current_assignment); break;
+                        case 4: propagate_adjacency_constraints<4, false>(d, current_assignment); break;
                         case 5: propagate_adjacency_constraints<5, false>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, false>(d, current_assignment); break;
                         case 7: propagate_adjacency_constraints<7, false>(d, current_assignment); break;
@@ -609,6 +647,8 @@ namespace
                     switch (model.max_graphs) {
                         case 1: propagate_adjacency_constraints<1, true>(d, current_assignment); break;
                         case 2: propagate_adjacency_constraints<2, true>(d, current_assignment); break;
+                        case 3: propagate_adjacency_constraints<3, true>(d, current_assignment); break;
+                        case 4: propagate_adjacency_constraints<4, true>(d, current_assignment); break;
                         case 5: propagate_adjacency_constraints<5, true>(d, current_assignment); break;
                         case 6: propagate_adjacency_constraints<6, true>(d, current_assignment); break;
                         case 7: propagate_adjacency_constraints<7, true>(d, current_assignment); break;
