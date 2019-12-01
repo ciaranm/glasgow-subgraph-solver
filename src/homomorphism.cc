@@ -72,9 +72,6 @@ using boost::dynamic_bitset;
 
 namespace
 {
-    const constexpr int number_of_exact_path_graphs = 4;
-    const constexpr int number_of_common_neighbour_graphs = 3;
-
     template <typename BitSetType_, typename ArrayType_>
     struct SubgraphModel
     {
@@ -98,8 +95,8 @@ namespace
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
                 const set<int> & exclude_pattern_vertices) :
             max_graphs(1 +
-                    (supports_exact_path_graphs(params) ? number_of_exact_path_graphs : 0) +
-                    (supports_common_neighbour_shapes(params) ? number_of_common_neighbour_graphs : 0) +
+                    (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
+                    (supports_common_neighbour_shapes(params) ? params.number_of_common_neighbour_graphs : 0) +
                     (supports_distance3_graphs(params) ? 1 : 0) +
                     (params.induced ? 1 : 0)),
             pattern_size(pattern.size()),
@@ -277,12 +274,48 @@ namespace
             int next_pattern_supplemental = 1, next_target_supplemental = 1;
             // build exact path graphs
             if (supports_exact_path_graphs(params)) {
-                build_exact_path_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                build_exact_path_graphs(target_graph_rows, target_size, next_target_supplemental);
+                switch (params.number_of_exact_path_graphs) {
+                    case 1:
+                        build_exact_path_graphs<1>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                        build_exact_path_graphs<1>(target_graph_rows, target_size, next_target_supplemental);
+                        break;
+                    case 2:
+                        build_exact_path_graphs<2>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                        build_exact_path_graphs<2>(target_graph_rows, target_size, next_target_supplemental);
+                        break;
+                    case 3:
+                        build_exact_path_graphs<3>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                        build_exact_path_graphs<3>(target_graph_rows, target_size, next_target_supplemental);
+                        break;
+                    case 4:
+                        build_exact_path_graphs<4>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                        build_exact_path_graphs<4>(target_graph_rows, target_size, next_target_supplemental);
+                        break;
+                    case 5:
+                        build_exact_path_graphs<5>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                        build_exact_path_graphs<5>(target_graph_rows, target_size, next_target_supplemental);
+                        break;
+                    default:
+                        throw UnsupportedConfiguration{ "Unsupported number of exact path graphs" };
+                }
 
                 if (supports_common_neighbour_shapes(params)) {
-                    build_common_neighbour_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                    build_common_neighbour_graphs(target_graph_rows, target_size, next_target_supplemental);
+                    switch (params.number_of_common_neighbour_graphs) {
+                        case 1:
+                            build_common_neighbour_graphs<1>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                            build_common_neighbour_graphs<1>(target_graph_rows, target_size, next_target_supplemental);
+                            break;
+                        case 2:
+                            build_common_neighbour_graphs<2>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                            build_common_neighbour_graphs<2>(target_graph_rows, target_size, next_target_supplemental);
+                            break;
+                        case 3:
+                            build_common_neighbour_graphs<3>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                            build_common_neighbour_graphs<3>(target_graph_rows, target_size, next_target_supplemental);
+                            break;
+                        default:
+                            throw UnsupportedConfiguration{ "Unsupported number of common neighbourhood graphs" };
+                    }
                 }
             }
 
@@ -329,7 +362,7 @@ namespace
             return true;
         }
 
-        template <typename PossiblySomeOtherBitSetType_>
+        template <unsigned number_of_exact_path_graphs_, typename PossiblySomeOtherBitSetType_>
         auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
         {
             vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
@@ -351,7 +384,7 @@ namespace
                 for (unsigned w = v ; w < size ; ++w) {
                     // w to v, not v to w, see above
                     unsigned path_count = path_counts[w][v];
-                    for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
+                    for (unsigned p = 1 ; p <= number_of_exact_path_graphs_ ; ++p) {
                         if (path_count >= p) {
                             graph_rows[v * max_graphs + idx + p - 1].set(w);
                             graph_rows[w * max_graphs + idx + p - 1].set(v);
@@ -360,7 +393,7 @@ namespace
                 }
             }
 
-            idx += number_of_exact_path_graphs;
+            idx += number_of_exact_path_graphs_;
         }
 
         template <typename PossiblySomeOtherBitSetType_>
@@ -382,7 +415,7 @@ namespace
             ++idx;
         }
 
-        template <typename PossiblySomeOtherBitSetType_>
+        template <unsigned number_of_common_neighbour_graphs_, typename PossiblySomeOtherBitSetType_>
         auto build_common_neighbour_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v) {
@@ -395,7 +428,7 @@ namespace
                         common_neighbours.reset(w);
                         auto count = common_neighbours.count();
 
-                        for (unsigned p = 1 ; p <= number_of_common_neighbour_graphs ; ++p) {
+                        for (unsigned p = 1 ; p <= number_of_common_neighbour_graphs_ ; ++p) {
                             if (count >= p) {
                                 graph_rows[v * max_graphs + idx + p - 1].set(w);
                                 graph_rows[w * max_graphs + idx + p - 1].set(v);
@@ -405,7 +438,7 @@ namespace
                 }
             }
 
-            idx += number_of_common_neighbour_graphs;
+            idx += number_of_common_neighbour_graphs_;
         }
 
         template <typename PossiblySomeOtherBitSetType_>

@@ -80,6 +80,12 @@ struct HomomorphismParams
     /// Disable all supplemental graphs?
     bool no_supplementals = false;
 
+    /// How many exact path graphs do we have, if we have any?
+    int number_of_exact_path_graphs = 4;
+
+    /// How many common neighbourhood graphs do we have, if we have any?
+    int number_of_common_neighbour_graphs = 1;
+
     /// Disable neighbourhood degree sequence processing?
     bool no_nds = false;
 

@@ -124,7 +124,9 @@ auto main(int argc, char * argv[]) -> int
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
             ("common-neighbour-shapes",                        "Use common neighbour shapes filtering (experimental)")
             ("minimal-unsat-pattern",                          "Find a minimal unsat pattern graph, if unsat (experimental)")
-            ("distance3",                                      "Use distance 3 filtering (experimental)");
+            ("distance3",                                      "Use distance 3 filtering (experimental)")
+            ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
+            ("n-common-neighbour-graphs", po::value<int>(),    "Specify number of common neighbour graphs");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -253,6 +255,10 @@ auto main(int argc, char * argv[]) -> int
         params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
         params.common_neighbour_shapes = options_vars.count("common-neighbour-shapes");
         params.distance3 = options_vars.count("distance3");
+        if (options_vars.count("n-exact-path-graphs"))
+            params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
+        if (options_vars.count("n-common-neighbours-graphs"))
+            params.number_of_common_neighbour_graphs = options_vars["n-common-neighbours-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
 
