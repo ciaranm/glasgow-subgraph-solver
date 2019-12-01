@@ -1,7 +1,7 @@
 BUILD_DIR := intermediate
 TARGET_DIR := ./
 
-SUBMAKEFILES := src/common.mk src/glasgow_subgraph_solver.mk src/glasgow_clique_solver.mk src/sip_to_opb.mk
+SUBMAKEFILES := src/common.mk src/glasgow_subgraph_solver.mk src/glasgow_clique_solver.mk src/sip_to_opb.mk src/plot_glasgow_solver_outputs.mk
 
 override CXXFLAGS += -O3 -march=native -std=c++17 -Isrc/ -W -Wall -g -ggdb3 -pthread
 
