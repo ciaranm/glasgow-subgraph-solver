@@ -1509,6 +1509,8 @@ namespace
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
+            result.extra_stats.emplace_back("shape_graphs = " + to_string(model.max_graphs));
+
             result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
 
