@@ -6,7 +6,6 @@
 #include "fixed_bit_set.hh"
 #include "graph_traits.hh"
 #include "homomorphism_traits.hh"
-#include "template_voodoo.hh"
 #include "thread_utils.hh"
 #include "watches.hh"
 #include "proof.hh"
@@ -72,13 +71,22 @@ using boost::dynamic_bitset;
 
 namespace
 {
-    template <typename BitSetType_, typename ArrayType_>
+    auto calculate_n_shape_graphs(const HomomorphismParams & params) -> unsigned
+    {
+        return 1 +
+            (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
+            (supports_common_neighbour_shapes(params) ? params.number_of_common_neighbour_graphs : 0) +
+            (supports_distance3_graphs(params) ? 1 : 0) +
+            (params.induced ? 1 : 0);
+    }
+
+    template <typename BitSetType_, typename ArrayType_, typename PatternAdjacencyBitsType_>
     struct SubgraphModel
     {
-        const int max_graphs;
+        const unsigned max_graphs;
         unsigned pattern_size, full_pattern_size, target_size;
 
-        vector<uint8_t> pattern_adjacencies_bits;
+        vector<PatternAdjacencyBitsType_> pattern_adjacencies_bits;
         vector<dynamic_bitset<> > pattern_graph_rows;
         vector<BitSetType_> target_graph_rows;
         vector<pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;
@@ -94,11 +102,7 @@ namespace
 
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
                 const set<int> & exclude_pattern_vertices) :
-            max_graphs(1 +
-                    (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
-                    (supports_common_neighbour_shapes(params) ? params.number_of_common_neighbour_graphs : 0) +
-                    (supports_distance3_graphs(params) ? 1 : 0) +
-                    (params.induced ? 1 : 0)),
+            max_graphs(calculate_n_shape_graphs(params)),
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
             target_size(target.size()),
@@ -107,8 +111,8 @@ namespace
             largest_target_degree(0),
             has_less_thans(false)
         {
-            if (max_graphs > 8)
-                throw UnsupportedConfiguration{ "Too many supplemental graphs in use" };
+            if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType_))
+                throw UnsupportedConfiguration{ "Supplemental graphs won't fit in the chosen bitset size" };
 
             if (pattern.has_edge_labels() && ! params.induced)
                 throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
@@ -271,7 +275,7 @@ namespace
             for (unsigned i = 0 ; i < target_size ; ++i)
                 largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
 
-            int next_pattern_supplemental = 1, next_target_supplemental = 1;
+            unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
             // build exact path graphs
             if (supports_exact_path_graphs(params)) {
                 switch (params.number_of_exact_path_graphs) {
@@ -324,7 +328,7 @@ namespace
                 build_distance3_graphs(target_graph_rows, target_size, next_target_supplemental);
             }
 
-            // build complement graphs
+            // build complement graphs. these must come last!
             if (params.induced) {
                 build_complement_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
                 build_complement_graphs(target_graph_rows, target_size, next_target_supplemental);
@@ -335,12 +339,12 @@ namespace
                     + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) };
 
             // pattern and target degrees, for supplemental graphs
-            for (int g = 1 ; g < max_graphs ; ++g) {
+            for (unsigned g = 1 ; g < max_graphs ; ++g) {
                 patterns_degrees.at(g).resize(pattern_size);
                 targets_degrees.at(g).resize(target_size);
             }
 
-            for (int g = 1 ; g < max_graphs ; ++g) {
+            for (unsigned g = 1 ; g < max_graphs ; ++g) {
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
                     patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
 
@@ -353,7 +357,7 @@ namespace
 
             // pattern adjacencies, compressed
             pattern_adjacencies_bits.resize(pattern_size * pattern_size);
-            for (int g = 0 ; g < max_graphs ; ++g)
+            for (unsigned g = 0 ; g < max_graphs ; ++g)
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
                     for (unsigned j = 0 ; j < pattern_size ; ++j)
                         if (pattern_graph_rows[i * max_graphs + g].test(j))
@@ -363,7 +367,7 @@ namespace
         }
 
         template <unsigned number_of_exact_path_graphs_, typename PossiblySomeOtherBitSetType_>
-        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
+        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
         {
             vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
@@ -397,7 +401,7 @@ namespace
         }
 
         template <typename PossiblySomeOtherBitSetType_>
-        auto build_distance3_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
+        auto build_distance3_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v) {
                 auto nv = graph_rows[v * max_graphs + 0];
@@ -416,7 +420,7 @@ namespace
         }
 
         template <unsigned number_of_common_neighbour_graphs_, typename PossiblySomeOtherBitSetType_>
-        auto build_common_neighbour_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
+        auto build_common_neighbour_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v) {
                 auto nv = graph_rows[v * max_graphs + 0];
@@ -442,7 +446,7 @@ namespace
         }
 
         template <typename PossiblySomeOtherBitSetType_>
-        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, int & idx) -> void
+        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v)
                 for (unsigned w = 0 ; w < size ; ++w)
@@ -528,10 +532,10 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename ArrayType_>
+    template <typename BitSetType_, typename ArrayType_, typename PatternAdjacencyBitsType_>
     struct Searcher
     {
-        using Model = SubgraphModel<BitSetType_, ArrayType_>;
+        using Model = SubgraphModel<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>;
         using Domain = SubgraphDomain<BitSetType_>;
         using Domains = vector<Domain>;
 
@@ -605,7 +609,7 @@ namespace
             auto pattern_adjacency_bits = model.pattern_adjacencies_bits[model.pattern_size * current_assignment.pattern_vertex + d.v];
 
             // for each graph pair...
-            for (int g = 0 ; g < max_graphs_ ; ++g) {
+            for (unsigned g = 0 ; g < max_graphs_ ; ++g) {
                 // if we're adjacent...
                 if (pattern_adjacency_bits & (1u << g)) {
                     // ...then we can only be mapped to adjacent vertices
@@ -663,14 +667,16 @@ namespace
                 // adjacency
                 if (model.pattern_edge_labels.empty()) {
                     switch (model.max_graphs) {
-                        case 1: propagate_adjacency_constraints<1, false>(d, current_assignment); break;
-                        case 2: propagate_adjacency_constraints<2, false>(d, current_assignment); break;
-                        case 3: propagate_adjacency_constraints<3, false>(d, current_assignment); break;
-                        case 4: propagate_adjacency_constraints<4, false>(d, current_assignment); break;
-                        case 5: propagate_adjacency_constraints<5, false>(d, current_assignment); break;
-                        case 6: propagate_adjacency_constraints<6, false>(d, current_assignment); break;
-                        case 7: propagate_adjacency_constraints<7, false>(d, current_assignment); break;
-                        case 8: propagate_adjacency_constraints<8, false>(d, current_assignment); break;
+                        case 1:  propagate_adjacency_constraints<1, false>(d, current_assignment); break;
+                        case 2:  propagate_adjacency_constraints<2, false>(d, current_assignment); break;
+                        case 3:  propagate_adjacency_constraints<3, false>(d, current_assignment); break;
+                        case 4:  propagate_adjacency_constraints<4, false>(d, current_assignment); break;
+                        case 5:  propagate_adjacency_constraints<5, false>(d, current_assignment); break;
+                        case 6:  propagate_adjacency_constraints<6, false>(d, current_assignment); break;
+                        case 7:  propagate_adjacency_constraints<7, false>(d, current_assignment); break;
+                        case 8:  propagate_adjacency_constraints<8, false>(d, current_assignment); break;
+                        case 9:  propagate_adjacency_constraints<9, false>(d, current_assignment); break;
+                        case 10: propagate_adjacency_constraints<10, false>(d, current_assignment); break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
@@ -678,14 +684,16 @@ namespace
                 }
                 else {
                     switch (model.max_graphs) {
-                        case 1: propagate_adjacency_constraints<1, true>(d, current_assignment); break;
-                        case 2: propagate_adjacency_constraints<2, true>(d, current_assignment); break;
-                        case 3: propagate_adjacency_constraints<3, true>(d, current_assignment); break;
-                        case 4: propagate_adjacency_constraints<4, true>(d, current_assignment); break;
-                        case 5: propagate_adjacency_constraints<5, true>(d, current_assignment); break;
-                        case 6: propagate_adjacency_constraints<6, true>(d, current_assignment); break;
-                        case 7: propagate_adjacency_constraints<7, true>(d, current_assignment); break;
-                        case 8: propagate_adjacency_constraints<8, true>(d, current_assignment); break;
+                        case 1:  propagate_adjacency_constraints<1, true>(d, current_assignment); break;
+                        case 2:  propagate_adjacency_constraints<2, true>(d, current_assignment); break;
+                        case 3:  propagate_adjacency_constraints<3, true>(d, current_assignment); break;
+                        case 4:  propagate_adjacency_constraints<4, true>(d, current_assignment); break;
+                        case 5:  propagate_adjacency_constraints<5, true>(d, current_assignment); break;
+                        case 6:  propagate_adjacency_constraints<6, true>(d, current_assignment); break;
+                        case 7:  propagate_adjacency_constraints<7, true>(d, current_assignment); break;
+                        case 8:  propagate_adjacency_constraints<8, true>(d, current_assignment); break;
+                        case 9:  propagate_adjacency_constraints<9, true>(d, current_assignment); break;
+                        case 10: propagate_adjacency_constraints<10, true>(d, current_assignment); break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
@@ -1209,10 +1217,10 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename ArrayType_>
+    template <typename BitSetType_, typename ArrayType_, typename PatternAdjacencyBitsType_>
     struct BasicSolver
     {
-        using Model = SubgraphModel<BitSetType_, ArrayType_>;
+        using Model = SubgraphModel<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>;
         using Domain = SubgraphDomain<BitSetType_>;
         using Domains = vector<Domain>;
 
@@ -1235,7 +1243,7 @@ namespace
 
         auto check_loop_compatibility(int p, int t) -> bool
         {
-            for (int g = 0 ; g < model.max_graphs ; ++g)
+            for (unsigned g = 0 ; g < model.max_graphs ; ++g)
                 if (model.pattern_graph_rows[p * model.max_graphs + g].test(p) && ! model.target_graph_rows[t * model.max_graphs + g].test(t))
                     return false;
 
@@ -1245,7 +1253,7 @@ namespace
         auto check_degree_compatibility(
                 int p,
                 int t,
-                int graphs_to_consider,
+                unsigned graphs_to_consider,
                 vector<vector<vector<int> > > & patterns_ndss,
                 vector<vector<optional<vector<int> > > > & targets_ndss
                 ) -> bool
@@ -1253,7 +1261,7 @@ namespace
             if (! degree_and_nds_are_preserved(params))
                 return true;
 
-            for (int g = 0 ; g < graphs_to_consider ; ++g) {
+            for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                 if (model.targets_degrees.at(g).at(t) < model.patterns_degrees.at(g).at(p)) {
                     // not ok, degrees differ
                     if (params.proof) {
@@ -1287,7 +1295,7 @@ namespace
 
             // full compare of neighbourhood degree sequences
             if (! targets_ndss.at(0).at(t)) {
-                for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                     targets_ndss.at(g).at(t) = vector<int>{};
                     auto ni = model.target_graph_rows[t * model.max_graphs + g];
                     for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
@@ -1298,7 +1306,7 @@ namespace
                 }
             }
 
-            for (int g = 0 ; g < graphs_to_consider ; ++g) {
+            for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                 for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
                     if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x)) {
                         if (params.proof)
@@ -1316,7 +1324,7 @@ namespace
 
         auto initialise_domains(Domains & domains) -> bool
         {
-            int graphs_to_consider = model.max_graphs;
+            unsigned graphs_to_consider = model.max_graphs;
             if (params.induced) {
                 // when looking at the complement graph, if the largest degree
                 // in the pattern is smaller than the smallest degree in the
@@ -1335,12 +1343,12 @@ namespace
             vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
 
             if (degree_and_nds_are_preserved(params) && ! params.no_nds) {
-                for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                     patterns_ndss.at(g).resize(model.pattern_size);
                     targets_ndss.at(g).resize(model.target_size);
                 }
 
-                for (int g = 0 ; g < graphs_to_consider ; ++g) {
+                for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                     for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
                         auto ni = model.pattern_graph_rows[i * model.max_graphs + g];
                         for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
@@ -1408,20 +1416,20 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename ArrayType_>
+    template <typename BitSetType_, typename ArrayType_, typename PatternAdjacencyBitsType_>
     struct SequentialSolver :
-        BasicSolver<BitSetType_, ArrayType_>
+        BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>
     {
-        using BasicSolver<BitSetType_, ArrayType_>::BasicSolver;
+        using BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::BasicSolver;
 
-        using Model = typename BasicSolver<BitSetType_, ArrayType_>::Model;
-        using Domain = typename BasicSolver<BitSetType_, ArrayType_>::Domain;
-        using Domains = typename BasicSolver<BitSetType_, ArrayType_>::Domains;
+        using Model = typename BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::Model;
+        using Domain = typename BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::Domain;
+        using Domains = typename BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::Domains;
 
-        using BasicSolver<BitSetType_, ArrayType_>::model;
-        using BasicSolver<BitSetType_, ArrayType_>::params;
+        using BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::model;
+        using BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::params;
 
-        using BasicSolver<BitSetType_, ArrayType_>::initialise_domains;
+        using BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::initialise_domains;
 
         auto solve() -> HomomorphismResult
         {
@@ -1445,7 +1453,7 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
-            Searcher<BitSetType_, ArrayType_> searcher(model, params);
+            Searcher<BitSetType_, ArrayType_, PatternAdjacencyBitsType_> searcher(model, params);
 
             while (! done) {
                 ++number_of_restarts;
@@ -1536,23 +1544,23 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename ArrayType_>
+    template <typename BitSetType_, typename ArrayType_, typename PatternAdjacencyBitsType_>
     struct ThreadedSolver :
-        BasicSolver<BitSetType_, ArrayType_>
+        BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>
     {
-        using Model = typename BasicSolver<BitSetType_, ArrayType_>::Model;
-        using Domain = typename BasicSolver<BitSetType_, ArrayType_>::Domain;
-        using Domains = typename BasicSolver<BitSetType_, ArrayType_>::Domains;
+        using Model = typename BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::Model;
+        using Domain = typename BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::Domain;
+        using Domains = typename BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::Domains;
 
-        using BasicSolver<BitSetType_, ArrayType_>::model;
-        using BasicSolver<BitSetType_, ArrayType_>::params;
+        using BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::model;
+        using BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::params;
 
-        using BasicSolver<BitSetType_, ArrayType_>::initialise_domains;
+        using BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>::initialise_domains;
 
         unsigned n_threads;
 
         ThreadedSolver(const Model & m, const HomomorphismParams & p, unsigned t) :
-            BasicSolver<BitSetType_, ArrayType_>(m, p),
+            BasicSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>(m, p),
             n_threads(t)
         {
         }
@@ -1576,7 +1584,7 @@ namespace
             vector<thread> threads;
             threads.reserve(n_threads);
 
-            vector<unique_ptr<Searcher<BitSetType_, ArrayType_> > > searchers{ n_threads };
+            vector<unique_ptr<Searcher<BitSetType_, ArrayType_, PatternAdjacencyBitsType_> > > searchers{ n_threads };
 
             barrier wait_for_new_nogoods_barrier{ n_threads }, synced_nogoods_barrier{ n_threads };
             atomic<bool> restart_synchroniser{ false };
@@ -1591,7 +1599,7 @@ namespace
 
                 bool just_the_first_thread = (0 == t) && params.delay_thread_creation;
 
-                searchers[t] = make_unique<Searcher<BitSetType_, ArrayType_> >(model, params);
+                searchers[t] = make_unique<Searcher<BitSetType_, ArrayType_, PatternAdjacencyBitsType_> >(model, params);
                 if (0 != t)
                     searchers[t]->global_rand.seed(t);
 
@@ -1733,10 +1741,10 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename ArrayType_>
+    template <typename BitSetType_, typename ArrayType_, typename PatternAdjacencyBitsType_>
     struct SubgraphRunner
     {
-        using Model = SubgraphModel<BitSetType_, ArrayType_>;
+        using Model = SubgraphModel<BitSetType_, ArrayType_, PatternAdjacencyBitsType_>;
 
         Model model;
         const HomomorphismParams & params;
@@ -1767,7 +1775,7 @@ namespace
 
             HomomorphismResult result;
             if (1 == params.n_threads) {
-                SequentialSolver<BitSetType_, ArrayType_> solver(model, params);
+                SequentialSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_> solver(model, params);
                 result = solver.solve();
             }
             else {
@@ -1775,13 +1783,58 @@ namespace
                     throw UnsupportedConfiguration{ "Threaded search requires restarts" };
 
                 unsigned n_threads = how_many_threads(params.n_threads);
-                ThreadedSolver<BitSetType_, ArrayType_> solver(model, params, n_threads);
+                ThreadedSolver<BitSetType_, ArrayType_, PatternAdjacencyBitsType_> solver(model, params, n_threads);
                 result = solver.solve();
             }
 
             return result;
         }
     };
+
+    // here be witchcraft. figure out the appropriate fixed size data
+    // structures for whatever size of graph and combination of parameters we
+    // actually have, and run that
+    template <
+        template <typename, typename, typename> class Algorithm_,
+        typename Result_,
+        typename Graph_,
+        unsigned size_,
+        unsigned... other_sizes_,
+        typename... Params_>
+    auto run_with_appropriate_template_parameters(
+            const std::integer_sequence<unsigned, size_, other_sizes_...> &,
+            unsigned n_shape_graphs,
+            const Graph_ & graph,
+            Params_ && ... params) -> Result_
+    {
+        if (graph.size() < int(size_ * bits_per_word)) {
+            if (n_shape_graphs <= 8) {
+                Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1>, uint8_t> algorithm{ graph, std::forward<Params_>(params)... };
+                return algorithm.run();
+            }
+            else {
+                Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1>, uint16_t> algorithm{ graph, std::forward<Params_>(params)... };
+                return algorithm.run();
+            }
+        }
+        else {
+            if constexpr (0 == sizeof...(other_sizes_)) {
+                if (n_shape_graphs <= 8) {
+                    Algorithm_<boost::dynamic_bitset<>, std::vector<int>, uint8_t> algorithm{ graph, std::forward<Params_>(params)... };
+                    return algorithm.run();
+                }
+                else {
+                    Algorithm_<boost::dynamic_bitset<>, std::vector<int>, uint16_t> algorithm{ graph, std::forward<Params_>(params)... };
+                    return algorithm.run();
+                }
+            }
+            else
+                return run_with_appropriate_template_parameters<Algorithm_, Result_, Graph_>(std::integer_sequence<unsigned, other_sizes_...>{},
+                        n_shape_graphs, graph, std::forward<Params_>(params)...);
+        }
+    }
+
+    using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
 }
 
 auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult
@@ -1885,8 +1938,8 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
     else if (params.minimal_unsat_pattern) {
         // if we're finding a minimal unsat pattern, solve the problem
         // repeatedly with shrinking patterns
-        HomomorphismResult result = select_graph_size<SubgraphRunner, HomomorphismResult>(
-                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
+        HomomorphismResult result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
+                AllGraphSizes(), calculate_n_shape_graphs(params), graphs.second, graphs.first, params, set<int>{});
         if (! result.mapping.empty())
             return result;
 
@@ -1894,8 +1947,8 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         set<int> exclude;
         for (int n = 0 ; n < graphs.first.size() ; ++n) {
             exclude.insert(n);
-            result = select_graph_size<SubgraphRunner, HomomorphismResult>(
-                    AllGraphSizes(), graphs.second, graphs.first, params, exclude);
+            result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
+                    AllGraphSizes(), calculate_n_shape_graphs(params), graphs.second, graphs.first, params, exclude);
             if (! result.mapping.empty()) {
                 result.mapping.clear();
                 exclude.erase(n);
@@ -1912,8 +1965,8 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
     }
     else {
         // just solve the problem
-        auto result = select_graph_size<SubgraphRunner, HomomorphismResult>(
-                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
+        auto result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
+                AllGraphSizes(), calculate_n_shape_graphs(params), graphs.second, graphs.first, params, set<int>{});
 
         if (params.proof && result.mapping.empty())
             params.proof->finish_unsat_proof();

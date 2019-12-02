@@ -1,8 +1,8 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "clique.hh"
-#include "template_voodoo.hh"
 #include "watches.hh"
+#include "fixed_bit_set.hh"
 
 #include <algorithm>
 #include <list>
@@ -12,6 +12,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+#include <boost/dynamic_bitset.hpp>
 
 using std::find;
 using std::iota;
@@ -26,6 +28,8 @@ using std::sort;
 using std::swap;
 using std::to_string;
 using std::vector;
+
+using boost::dynamic_bitset;
 
 namespace
 {
@@ -443,10 +447,29 @@ namespace
             return result;
         }
     };
+
+    template <template <typename, typename> class Algorithm_, typename Result_, typename Graph_, unsigned size_, unsigned... other_sizes_, typename... Params_>
+    auto run_with_appropriate_template_parameters(const std::integer_sequence<unsigned, size_, other_sizes_...> &, const Graph_ & graph, Params_ && ... params) -> Result_
+    {
+        if (graph.size() < int(size_ * bits_per_word)) {
+            Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1> > algorithm{ graph, std::forward<Params_>(params)... };
+            return algorithm.run();
+        }
+        else {
+            if constexpr (0 == sizeof...(other_sizes_)) {
+                Algorithm_<boost::dynamic_bitset<>, std::vector<int> > algorithm{ graph, std::forward<Params_>(params)... };
+                return algorithm.run();
+            }
+            else
+                return run_with_appropriate_template_parameters<Algorithm_, Result_, Graph_>(std::integer_sequence<unsigned, other_sizes_...>{}, graph, std::forward<Params_>(params)...);
+        }
+    }
+
+    using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
 }
 
 auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
 {
-    return select_graph_size<CliqueRunner, CliqueResult>(AllGraphSizes(), graph, params);
+    return run_with_appropriate_template_parameters<CliqueRunner, CliqueResult>(AllGraphSizes(), graph, params);
 }
 
