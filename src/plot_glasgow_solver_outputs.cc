@@ -103,7 +103,7 @@ auto main(int argc, char * argv[]) -> int
                 continue;
 
             for (auto & [ _, f ] : output_files)
-                *f << instance_name << " ";
+                *f << instance_name;
 
             for (auto & d : results_dirs) {
                 string instance_result_file_name{ d + "/" + instance_name + ".out" };
@@ -114,6 +114,7 @@ auto main(int argc, char * argv[]) -> int
                 }
 
                 map<string, string> keys;
+                bool aborted = false;
                 string key_line;
                 while (getline(result_file, key_line)) {
                     auto pos = key_line.find('=');
@@ -127,6 +128,20 @@ auto main(int argc, char * argv[]) -> int
                     auto v = key_line.substr(pos + 1);
                     v.erase(0, v.find_first_not_of(" "));
                     keys.emplace(k, v);
+
+                    if (k == "status") {
+                        if (v == "true") {
+                        }
+                        else if (v == "false") {
+                        }
+                        else if (v == "aborted") {
+                            aborted = true;
+                        }
+                        else {
+                            cerr << "Couldn't parse status value '" << v << " in " << instance_result_file_name << endl;
+                            return EXIT_FAILURE;
+                        }
+                    }
                 }
 
                 for (auto & [ k, f ] : output_files) {
@@ -135,7 +150,10 @@ auto main(int argc, char * argv[]) -> int
                         return EXIT_FAILURE;
                     }
 
-                    *f << " " << keys.find(k)->second;
+                    if (aborted && (k == "runtime" || k == "nodes"))
+                        *f << " " << "NaN";
+                    else
+                        *f << " " << keys.find(k)->second;
                 }
             }
 
