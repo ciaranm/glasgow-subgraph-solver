@@ -77,6 +77,12 @@ struct HomomorphismParams
     /// Use distance 3 filtering?
     bool distance3 = false;
 
+    /// Use k4 filtering?
+    bool k4 = false;
+
+    /// Use diamond filtering?
+    bool diamond = false;
+
     /// Disable all supplemental graphs?
     bool no_supplementals = false;
 

@@ -16,6 +16,16 @@ auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
     return (! params.no_supplementals) && (params.injectivity != Injectivity::NonInjective);
 }
 
+auto supports_k4_graphs(const HomomorphismParams & params) -> bool
+{
+    return (! params.no_supplementals) && params.k4 && (params.injectivity != Injectivity::NonInjective);
+}
+
+auto supports_diamond_graphs(const HomomorphismParams & params) -> bool
+{
+    return (! params.no_supplementals) && params.diamond && (params.injectivity != Injectivity::NonInjective);
+}
+
 auto supports_distance3_graphs(const HomomorphismParams & params) -> bool
 {
     return (! params.no_supplementals) && params.distance3 && (params.injectivity == Injectivity::Injective);

@@ -77,6 +77,8 @@ namespace
             (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
             (supports_common_neighbour_shapes(params) ? params.number_of_common_neighbour_graphs : 0) +
             (supports_distance3_graphs(params) ? 1 : 0) +
+            (supports_k4_graphs(params) ? 1 : 0) +
+            (supports_diamond_graphs(params) ? 1 : 0) +
             (params.induced ? 1 : 0);
     }
 
@@ -328,6 +330,16 @@ namespace
                 build_distance3_graphs(target_graph_rows, target_size, next_target_supplemental);
             }
 
+            if (supports_k4_graphs(params)) {
+                build_k4_or_diamond_graphs(true, pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                build_k4_or_diamond_graphs(true, target_graph_rows, target_size, next_target_supplemental);
+            }
+
+            if (supports_diamond_graphs(params)) {
+                build_k4_or_diamond_graphs(false, pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                build_k4_or_diamond_graphs(false, target_graph_rows, target_size, next_target_supplemental);
+            }
+
             // build complement graphs. these must come last!
             if (params.induced) {
                 build_complement_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
@@ -412,6 +424,43 @@ namespace
                         nc.reset(w);
                         // v--c--w so v is within distance 3 of w's neighbours
                         graph_rows[v * max_graphs + idx] |= graph_rows[w * max_graphs + 0];
+                    }
+                }
+            }
+
+            ++idx;
+        }
+
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_k4_or_diamond_graphs(bool k4, vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
+        {
+            for (unsigned v = 0 ; v < size ; ++v) {
+                auto nv = graph_rows[v * max_graphs + 0];
+                for (unsigned w = 0 ; w < v ; ++w) {
+                    // in k4, v -- w, but in a diamond we don't mind
+                    if ((! k4) || (nv.test(w))) {
+                        // are there two common neighbours with an edge between them?
+                        auto common_neighbours = graph_rows[w * max_graphs + 0];
+                        common_neighbours &= nv;
+                        common_neighbours.reset(v);
+                        common_neighbours.reset(w);
+                        auto count = common_neighbours.count();
+                        if (count >= 2) {
+                            bool done = false;
+                            auto cn1 = common_neighbours;
+                            for (auto x = cn1.find_first() ; x != decltype(cn1)::npos && ! done ; x = cn1.find_first()) {
+                                cn1.reset(x);
+                                auto cn2 = common_neighbours;
+                                for (auto y = cn2.find_first() ; y != decltype(cn2)::npos && ! done ; y = cn2.find_first()) {
+                                    cn2.reset(y);
+                                    if (v != w && v != x && v != y && w != x && w != y && graph_rows[x * max_graphs + 0].test(y)) {
+                                        graph_rows[v * max_graphs + idx].set(w);
+                                        graph_rows[w * max_graphs + idx].set(v);
+                                        done = true;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
