@@ -92,6 +92,9 @@ struct HomomorphismParams
     /// How many common neighbourhood graphs do we have, if we have any?
     int number_of_common_neighbour_graphs = 1;
 
+    /// How many common neighbourhood graphs do we skip?
+    int skip_common_neighbour_graphs = 0;
+
     /// Disable neighbourhood degree sequence processing?
     bool no_nds = false;
 

@@ -75,7 +75,7 @@ namespace
     {
         return 1 +
             (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
-            (supports_common_neighbour_shapes(params) ? params.number_of_common_neighbour_graphs : 0) +
+            (supports_common_neighbour_shapes(params) ? params.number_of_common_neighbour_graphs - params.skip_common_neighbour_graphs : 0) +
             (supports_distance3_graphs(params) ? 1 : 0) +
             (supports_k4_graphs(params) ? 1 : 0) +
             (supports_diamond_graphs(params) ? 1 : 0) +
@@ -306,22 +306,10 @@ namespace
                 }
 
                 if (supports_common_neighbour_shapes(params)) {
-                    switch (params.number_of_common_neighbour_graphs) {
-                        case 1:
-                            build_common_neighbour_graphs<1>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                            build_common_neighbour_graphs<1>(target_graph_rows, target_size, next_target_supplemental);
-                            break;
-                        case 2:
-                            build_common_neighbour_graphs<2>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                            build_common_neighbour_graphs<2>(target_graph_rows, target_size, next_target_supplemental);
-                            break;
-                        case 3:
-                            build_common_neighbour_graphs<3>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                            build_common_neighbour_graphs<3>(target_graph_rows, target_size, next_target_supplemental);
-                            break;
-                        default:
-                            throw UnsupportedConfiguration{ "Unsupported number of common neighbourhood graphs" };
-                    }
+                    build_common_neighbour_graphs(params.number_of_common_neighbour_graphs,
+                            params.skip_common_neighbour_graphs, pattern_graph_rows, pattern_size, next_pattern_supplemental);
+                    build_common_neighbour_graphs(params.number_of_common_neighbour_graphs,
+                            params.skip_common_neighbour_graphs, target_graph_rows, target_size, next_target_supplemental);
                 }
             }
 
@@ -468,8 +456,11 @@ namespace
             ++idx;
         }
 
-        template <unsigned number_of_common_neighbour_graphs_, typename PossiblySomeOtherBitSetType_>
-        auto build_common_neighbour_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_common_neighbour_graphs(
+                unsigned number_of_common_neighbour_graphs,
+                unsigned skip_common_neighbour_graphs,
+                vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v) {
                 auto nv = graph_rows[v * max_graphs + 0];
@@ -481,17 +472,17 @@ namespace
                         common_neighbours.reset(w);
                         auto count = common_neighbours.count();
 
-                        for (unsigned p = 1 ; p <= number_of_common_neighbour_graphs_ ; ++p) {
+                        for (unsigned p = 1 + skip_common_neighbour_graphs ; p <= number_of_common_neighbour_graphs ; ++p) {
                             if (count >= p) {
-                                graph_rows[v * max_graphs + idx + p - 1].set(w);
-                                graph_rows[w * max_graphs + idx + p - 1].set(v);
+                                graph_rows[v * max_graphs + idx + p - 1 - skip_common_neighbour_graphs].set(w);
+                                graph_rows[w * max_graphs + idx + p - 1 - skip_common_neighbour_graphs].set(v);
                             }
                         }
                     }
                 }
             }
 
-            idx += number_of_common_neighbour_graphs_;
+            idx += number_of_common_neighbour_graphs - skip_common_neighbour_graphs;
         }
 
         template <typename PossiblySomeOtherBitSetType_>
