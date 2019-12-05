@@ -32,6 +32,9 @@ auto InputGraph::resize(int size) -> void
     _size = size;
     _vertex_labels.resize(size);
     _vertex_names.resize(size);
+    _vertex_pattern_constraints.resize(size);
+    _vertex_in_degrees.resize(size);
+    _vertex_out_degrees.resize(size);
 }
 
 auto InputGraph::add_edge(int a, int b) -> void
@@ -46,6 +49,8 @@ auto InputGraph::add_directed_edge(int a, int b, string_view label) -> void
 {
     _edges.emplace(make_pair(a, b), label).first->second = label;
     _edges.emplace(make_pair(b, a), "unlabelled");
+    _vertex_in_degrees[a]++;
+    _vertex_out_degrees[b]++;
     if (a == b)
         _loopy = true;
 }
@@ -77,6 +82,16 @@ auto InputGraph::degree(int a) const -> int
     return distance(lower, upper);
 }
 
+auto InputGraph::in_degree(int a) const -> int
+{
+    return _vertex_in_degrees[a];
+}
+
+auto InputGraph::out_degree(int a) const -> int
+{
+    return _vertex_out_degrees[a];    
+}
+
 auto InputGraph::set_vertex_label(int v, string_view l) -> void
 {
     _vertex_labels[v] = l;
@@ -90,6 +105,25 @@ auto InputGraph::vertex_label(int v) const -> string_view
 auto InputGraph::set_vertex_name(int v, string_view l) -> void
 {
     _vertex_names[v] = l;
+}
+
+auto InputGraph::set_child_of_root(int v) -> void
+{
+    if(_vertex_pattern_constraints[v] == 2) _vertex_pattern_constraints[v] = 3;
+    else if (_vertex_pattern_constraints[v] == 3) return;
+    else _vertex_pattern_constraints[v] = 1;
+}
+
+auto InputGraph::set_parent_of_site(int v) -> void
+{
+    if(_vertex_pattern_constraints[v] == 1) _vertex_pattern_constraints[v] = 3;
+    else if (_vertex_pattern_constraints[v] == 3) return;
+    else _vertex_pattern_constraints[v] = 2;
+}
+
+auto InputGraph::get_big_constraint(int v) const -> int
+{
+    return _vertex_pattern_constraints[v];
 }
 
 auto InputGraph::vertex_name(int v) const -> string

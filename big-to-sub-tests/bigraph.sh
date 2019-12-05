@@ -2,7 +2,7 @@
 input="tests.txt"
 while IFS=' ' read -r p t
 do
-  lol=$(../glasgow_subgraph_solver big/$t.big big/$p.big --format bigraph --print-all-solutions --induced)
+  lol=$(../glasgow_bigraph_solver big/$t.big big/$p.big --print-all-solutions )
   readarray -t y <<<"$lol"
   echo "$p $t"
   n=5

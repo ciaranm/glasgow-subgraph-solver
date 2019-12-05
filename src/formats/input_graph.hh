@@ -26,6 +26,11 @@ class InputGraph
         std::map<std::pair<int, int>, std::string> _edges;
         std::vector<std::string> _vertex_labels;
         std::vector<std::string> _vertex_names;
+
+        std::vector<int> _vertex_in_degrees;
+        std::vector<int> _vertex_out_degrees;
+        std::vector<int> _vertex_pattern_constraints;
+    
         bool _loopy = false;
 
     public:
@@ -79,9 +84,36 @@ class InputGraph
         auto degree(int a) const -> int;
 
         /**
+         * What is the in-degree of a given vertex?
+         */
+        auto in_degree(int a) const -> int;
+
+        /**
+         * What is the out-degree of a given vertex?
+         */
+        auto out_degree(int a) const -> int;
+
+        /**
          * Set a vertex label.
          */
         auto set_vertex_label(int v, std::string_view label) -> void;
+
+
+        /**
+         * Set a flag to tell the solver this graph is the child of a root bigraph node.
+         */
+        auto set_child_of_root(int v) -> void;
+
+
+        /**
+         * Set a flag to tell the solver this graph is the parent of a site bigraph node.
+         */
+        auto set_parent_of_site(int v) -> void;
+
+        /**
+         * Get the bigraph constraint status of a node
+         */
+        auto get_big_constraint(int v) const -> int;
 
         /**
          * What is the label associated with a given vertex?

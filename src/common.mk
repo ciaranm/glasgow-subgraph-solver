@@ -1,6 +1,7 @@
 TARGET := libcommon.a
 
 SOURCES := \
+    formats/bigraph.cc \
     formats/csv.cc \
     formats/dimacs.cc \
     formats/graph_file_error.cc \

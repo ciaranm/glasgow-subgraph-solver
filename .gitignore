@@ -4,3 +4,4 @@ glasgow_clique_solver
 plot_glasgow_solver_outputs
 sip_to_opb
 libcommon.a
+glasgow_bigraph_solver
