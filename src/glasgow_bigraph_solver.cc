@@ -142,6 +142,7 @@ auto main(int argc, char * argv[]) -> int
 
         params.injectivity = Injectivity::Injective;
         params.induced = true;
+        params.bigraph = true;
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
         params.minimal_unsat_pattern = false;
 

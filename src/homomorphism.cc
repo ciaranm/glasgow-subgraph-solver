@@ -244,20 +244,21 @@ namespace
                 }
             }
 
-            pattern_dir_degrees.resize(pattern_size);
-            pattern_big_constraints.resize(pattern_size);
-            target_dir_degrees.resize(target_size);
+            if (params.bigraph) {
+                pattern_dir_degrees.resize(pattern_size);
+                pattern_big_constraints.resize(pattern_size);
+                target_dir_degrees.resize(target_size);
 
-            for(unsigned int a=0; a<pattern_size;a++) {
-                pattern_dir_degrees[a].first = pattern.in_degree(a);
-                pattern_dir_degrees[a].second = pattern.out_degree(a);
-                pattern_big_constraints[a] = pattern.get_big_constraint(a);
+                for(unsigned int a=0; a<pattern_size;a++) {
+                    pattern_dir_degrees[a].first = pattern.in_degree(a);
+                    pattern_dir_degrees[a].second = pattern.out_degree(a);
+                    pattern_big_constraints[a] = pattern.get_big_constraint(a);
+                }
+                for(unsigned int a=0; a<target_size;a++) {
+                    target_dir_degrees[a].first = target.in_degree(a);
+                    target_dir_degrees[a].second = target.out_degree(a);
+                }
             }
-            for(unsigned int a=0; a<target_size;a++) {
-                target_dir_degrees[a].first = target.in_degree(a);
-                target_dir_degrees[a].second = target.out_degree(a);
-            }
-
         }
 
         auto pattern_vertex_for_proof(int v) const -> NamedVertex
@@ -1444,7 +1445,7 @@ namespace
                         ok = false;
                     else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss))
                         ok = false;
-                    else if (! check_bigraph_degree_compatibility(i, j))
+                    else if (params.bigraph && ! check_bigraph_degree_compatibility(i, j))
                         ok = false;
                     if (ok)
                         domains.at(i).values.set(j);

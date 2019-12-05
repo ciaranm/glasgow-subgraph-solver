@@ -34,6 +34,9 @@ struct HomomorphismParams
     /// Induced?
     bool induced = false;
 
+    /// Is a bigraph?
+    bool bigraph = false;
+
     /// Noninjective?
     Injectivity injectivity = Injectivity::Injective;
 
