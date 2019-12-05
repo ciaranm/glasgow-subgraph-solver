@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bigraph">
+<testsuite name="test_match" tests="39">
+<testcase name="T1 &gt; P1" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 2)} -- {}
+{(0, 0), (1, 3)} -- {}
+}</system-out></testcase>
+<testcase name="T2 &gt; P3" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T2 &gt; P2" class="Test_match">
+<system-out>
+Result: {
+{(0, 0)} -- {}
+}</system-out></testcase>
+<testcase name="T3 &gt; P4" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T3 &gt; P5" class="Test_match">
+<system-out>
+Result: {
+{(0, 1), (1, 0)} -- {}
+}</system-out></testcase>
+<testcase name="T4 &gt; P6" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T5 &gt; P7" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T5 &gt; P8" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T5 &gt; P9" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1)} -- {}
+}</system-out></testcase>
+<testcase name="T6 &gt; P10" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1)} -- {(0, 0)}
+}</system-out></testcase>
+<testcase name="T7 &gt; P11" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1)} -- {}
+}</system-out></testcase>
+<testcase name="T8 &gt; P12" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1)} -- {(0, 0)}
+}</system-out></testcase>
+<testcase name="T9 &gt; P13" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1)} -- {}
+}</system-out></testcase>
+<testcase name="T9 &gt; P14" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1)} -- {(0, 0)}
+}</system-out></testcase>
+<testcase name="T9 &gt; P15" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T10 &gt; P16" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T11 &gt; P17" class="Test_match">
+<system-out>
+Result: {
+{(0, 0)} -- {}
+{(0, 1)} -- {}
+}</system-out></testcase>
+<testcase name="T11 &gt; P18" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T12 &gt; P19" class="Test_match">
+<system-out>
+Result: {
+{(0, 1)} -- {}
+{(0, 2)} -- {}
+}</system-out></testcase>
+<testcase name="T12 &gt; P20" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T12 &gt; P21" class="Test_match">
+<system-out>
+Result: {
+{(0, 0)} -- {}
+}</system-out></testcase>
+<testcase name="T12 &gt; P12" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T13 &gt; P23" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T13 &gt; P24" class="Test_match">
+<system-out>
+Result: {
+{(0, 0)} -- {}
+}</system-out></testcase>
+<testcase name="T14 &gt; P25" class="Test_match">
+<system-out>
+Result: {
+{(0, 2), (1, 3)} -- {}
+}</system-out></testcase>
+<testcase name="T15 &gt; P26" class="Test_match">
+<system-out>
+Result: {
+{(0, 2), (1, 3), (2, 4), (3, 5), (4, 6)} -- {}
+{(0, 2), (1, 3), (2, 5), (3, 4), (4, 6)} -- {}
+}</system-out></testcase>
+<testcase name="T16 &gt; T16" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)} -- {}
+}</system-out></testcase>
+<testcase name="T17 &gt; P27" class="Test_match">
+<system-out>
+Result: {
+{(0, 1), (1, 2)} -- {(0, 0)}
+}</system-out></testcase>
+<testcase name="T18 &gt; P27" class="Test_match">
+<system-out>
+Result: {
+{(0, 1), (1, 5)} -- {(0, 0)}
+}</system-out></testcase>
+<testcase name="T19 &gt; P27" class="Test_match">
+<system-out>
+Result: {
+{(0, 4), (1, 8)} -- {(0, 2)}
+}</system-out></testcase>
+<testcase name="T19 &gt; P28" class="Test_match">
+<system-out>
+Result: {
+{(0, 0)} -- {}
+{(0, 4)} -- {}
+{(0, 5)} -- {}
+}</system-out></testcase>
+<testcase name="T20 &gt; P29" class="Test_match">
+<system-out>
+Result: {
+{(0, 2), (1, 3)} -- {}
+}</system-out></testcase>
+<testcase name="T21 &gt; P30" class="Test_match">
+<system-out>
+Result: {
+{(0, 1), (1, 2)} -- {}
+}</system-out></testcase>
+<testcase name="T22 &gt; P31" class="Test_match">
+<system-out>
+Result: {
+{(0, 3), (1, 6)} -- {}
+}</system-out></testcase>
+<testcase name="T22 &gt; P32" class="Test_match">
+<system-out>
+Result: {
+{(0, 0), (1, 1), (2, 4)} -- {}
+{(0, 0), (1, 2), (2, 5)} -- {}
+}</system-out></testcase>
+<testcase name="T22 &gt; P33" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T23 &gt; P34" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T26 &gt; P37" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase>
+<testcase name="T27 &gt; P38" class="Test_match">
+<system-out>
+Result: { }</system-out></testcase></testsuite>
+</testsuites>
