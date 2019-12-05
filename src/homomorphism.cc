@@ -717,6 +717,8 @@ namespace
                         case 8:  propagate_adjacency_constraints<8, false>(d, current_assignment); break;
                         case 9:  propagate_adjacency_constraints<9, false>(d, current_assignment); break;
                         case 10: propagate_adjacency_constraints<10, false>(d, current_assignment); break;
+                        case 11: propagate_adjacency_constraints<11, false>(d, current_assignment); break;
+                        case 12: propagate_adjacency_constraints<12, false>(d, current_assignment); break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
@@ -734,6 +736,8 @@ namespace
                         case 8:  propagate_adjacency_constraints<8, true>(d, current_assignment); break;
                         case 9:  propagate_adjacency_constraints<9, true>(d, current_assignment); break;
                         case 10: propagate_adjacency_constraints<10, true>(d, current_assignment); break;
+                        case 11: propagate_adjacency_constraints<11, true>(d, current_assignment); break;
+                        case 12: propagate_adjacency_constraints<12, true>(d, current_assignment); break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
