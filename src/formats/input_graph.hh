@@ -27,9 +27,8 @@ class InputGraph
         std::vector<std::string> _vertex_labels;
         std::vector<std::string> _vertex_names;
 
-        std::vector<int> _vertex_in_degrees;
-        std::vector<int> _vertex_out_degrees;
-        std::vector<int> _vertex_pattern_constraints;
+        std::vector<std::pair<int, int> > _vertex_directed_degrees;
+        std::vector<std::pair<bool, bool> > _vertex_pattern_constraints;
     
         bool _loopy = false;
 
@@ -113,7 +112,7 @@ class InputGraph
         /**
          * Get the bigraph constraint status of a node
          */
-        auto get_big_constraint(int v) const -> int;
+        auto get_big_constraint(int v) const -> std::pair<bool, bool>;
 
         /**
          * What is the label associated with a given vertex?

@@ -42,12 +42,23 @@ auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGr
     int r = read_num(infile); 
     int n = read_num(infile);
     int s = read_num(infile); 
-    int h = read_num(infile);
+    [[ maybe_unused ]] int h = read_num(infile);
     result.resize(r+n+s);
 
-    for (int i=0; i<r; i++) result.set_vertex_label(i, "{ROOT}");
-    for (int i=r; i<(r+n); i++) result.set_vertex_label(i, read_str(infile));
-    for (int i=(r+n); i<(r+n+s); i++) result.set_vertex_label(i, "{SITE}");
+    for (int i=0; i<r; i++) {
+        result.set_vertex_label(i, "ROOT");
+        result.set_vertex_name(i, "ROOT" + to_string(i));
+    }
+
+    for (int i=r; i<(r+n); i++) {
+        result.set_vertex_label(i, read_str(infile));
+        result.set_vertex_name(i, to_string(i-r));
+    }
+
+    for (int i=(r+n); i<(r+n+s); i++) {
+        result.set_vertex_label(i, "SITE");
+        result.set_vertex_name(i, "SITE" + to_string(i));
+    }
  
     for (int i=0; i<(r+n); i++) for(int j=r; j<(n+s+r); j++) {
         char x = read_char(infile);
@@ -63,7 +74,7 @@ auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputG
     int r = read_num(infile); 
     int n = read_num(infile);
     int s = read_num(infile); 
-    int h = read_num(infile);
+    [[ maybe_unused ]] int h = read_num(infile);
     result.resize(n);
 
     for (int i=0; i<n; i++) result.set_vertex_label(i, read_str(infile));
@@ -71,8 +82,8 @@ auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputG
     for (int i=0; i<(r+n); i++) for(int j=0; j<(n+s); j++) {
         char x = read_char(infile);
         if (i >= r && j < n && x == '1') result.add_directed_edge(i-r, j, "dir");
-        if (i < r && x == '1') result.set_child_of_root(j);
-        if (j >= n && x == '1') result.set_parent_of_site(i-r);
+        if (i < r && j < n && x == '1') result.set_child_of_root(j);
+        if (j >= n && i >= r && x == '1') result.set_parent_of_site(i-r);
     }
     return result;
 }

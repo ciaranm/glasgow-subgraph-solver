@@ -100,7 +100,8 @@ namespace
 
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
 
-        vector<int> pattern_in_degrees, pattern_out_degrees, pattern_big_constraints, target_in_degrees, target_out_degrees;
+        vector<pair<int, int> > pattern_dir_degrees, target_dir_degrees;
+        vector<pair<bool, bool> > pattern_big_constraints;
 
         vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
@@ -243,20 +244,18 @@ namespace
                 }
             }
 
-            pattern_in_degrees.resize(pattern_size);
-            pattern_out_degrees.resize(pattern_size);
+            pattern_dir_degrees.resize(pattern_size);
             pattern_big_constraints.resize(pattern_size);
-            target_in_degrees.resize(target_size);
-            target_out_degrees.resize(target_size);
+            target_dir_degrees.resize(target_size);
 
             for(unsigned int a=0; a<pattern_size;a++) {
-                pattern_in_degrees[a] = pattern.in_degree(a);
-                pattern_out_degrees[a] = pattern.out_degree(a);
+                pattern_dir_degrees[a].first = pattern.in_degree(a);
+                pattern_dir_degrees[a].second = pattern.out_degree(a);
                 pattern_big_constraints[a] = pattern.get_big_constraint(a);
             }
             for(unsigned int a=0; a<target_size;a++) {
-                target_in_degrees[a] = target.in_degree(a);
-                target_out_degrees[a] = target.out_degree(a);
+                target_dir_degrees[a].first = target.in_degree(a);
+                target_dir_degrees[a].second = target.out_degree(a);
             }
 
         }
@@ -1310,16 +1309,16 @@ namespace
         }
 
         auto check_bigraph_degree_compatibility(int p, int t) -> bool
-        {    
-           if(model.pattern_big_constraints[p] == 0 && (model.pattern_in_degrees[p] != model.target_in_degrees[t] ||
-           model.pattern_out_degrees[p] != model.target_out_degrees[t])) return false;
-           if(model.pattern_big_constraints[p] == 1 && (model.pattern_in_degrees[p] != model.target_in_degrees[t] ||
-           model.pattern_out_degrees[p] > model.target_out_degrees[t])) return false;
-           if(model.pattern_big_constraints[p] == 2 && (model.pattern_in_degrees[p] > model.target_in_degrees[t] ||
-           model.pattern_out_degrees[p] != model.target_out_degrees[t])) return false;
-           if(model.pattern_big_constraints[p] == 3 && (model.pattern_in_degrees[p] > model.target_in_degrees[t] ||
-           model.pattern_out_degrees[p] > model.target_out_degrees[t])) return false;
-           return true;
+        {
+            if ((! model.pattern_big_constraints[p].first) && (model.pattern_dir_degrees[p].first != model.target_dir_degrees[t].first))
+                return false;
+            if (model.pattern_big_constraints[p].first && (model.pattern_dir_degrees[p].first > model.target_dir_degrees[t].first))
+                return false;
+            if ((! model.pattern_big_constraints[p].second) && (model.pattern_dir_degrees[p].second != model.target_dir_degrees[t].second))
+                return false;
+            if (model.pattern_big_constraints[p].second && (model.pattern_dir_degrees[p].second > model.target_dir_degrees[t].second))
+                return false;
+            return true;
         }
 
         auto check_degree_compatibility(
