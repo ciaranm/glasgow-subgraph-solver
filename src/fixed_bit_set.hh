@@ -113,7 +113,7 @@ class FixedBitSet
                 _bits[i] = _bits[i] | other._bits[i];
         }
 
-        auto operator~ () -> FixedBitSet<words_> const
+        auto operator~ () const -> FixedBitSet<words_>
         {
             FixedBitSet<words_> result;
             for (typename Bits::size_type i = 0 ; i < words_ ; ++i)
