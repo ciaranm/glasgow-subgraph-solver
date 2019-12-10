@@ -78,8 +78,7 @@ namespace
             (supports_common_neighbour_shapes(params) ? params.number_of_common_neighbour_graphs - params.skip_common_neighbour_graphs : 0) +
             (supports_distance3_graphs(params) ? 1 : 0) +
             (supports_k4_graphs(params) ? 1 : 0) +
-            (supports_diamond_graphs(params) ? 1 : 0) +
-            (params.induced ? 1 : 0);
+            (supports_diamond_graphs(params) ? 1 : 0);
     }
 
     template <typename BitSetType_, typename ArrayType_, typename PatternAdjacencyBitsType_>
@@ -328,12 +327,6 @@ namespace
                 build_k4_or_diamond_graphs(false, target_graph_rows, target_size, next_target_supplemental);
             }
 
-            // build complement graphs. these must come last!
-            if (params.induced) {
-                build_complement_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                build_complement_graphs(target_graph_rows, target_size, next_target_supplemental);
-            }
-
             if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs)
                 throw UnsupportedConfiguration{ "something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental)
                     + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) };
@@ -484,17 +477,6 @@ namespace
 
             idx += number_of_common_neighbour_graphs - skip_common_neighbour_graphs;
         }
-
-        template <typename PossiblySomeOtherBitSetType_>
-        auto build_complement_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
-        {
-            for (unsigned v = 0 ; v < size ; ++v)
-                for (unsigned w = 0 ; w < size ; ++w)
-                    if (! graph_rows[v * max_graphs + 0].test(w))
-                        graph_rows[v * max_graphs + idx].set(w);
-
-            ++idx;
-        }
     };
 
     enum class SearchResult
@@ -643,13 +625,25 @@ namespace
         // pair loop gets unrolled, which makes an annoyingly large difference
         // to performance. Note that for larger target graphs, half of the
         // total runtime is spent in this function.
-        template <int max_graphs_, bool has_edge_labels_>
+        template <int max_graphs_, bool has_edge_labels_, bool induced_>
         auto propagate_adjacency_constraints(Domain & d, const Assignment & current_assignment) -> void
         {
             auto pattern_adjacency_bits = model.pattern_adjacencies_bits[model.pattern_size * current_assignment.pattern_vertex + d.v];
 
-            // for each graph pair...
-            for (unsigned g = 0 ; g < max_graphs_ ; ++g) {
+            // for the original graph pair, if we're adjacent...
+            if (pattern_adjacency_bits & (1u << 0)) {
+                // ...then we can only be mapped to adjacent vertices
+                d.values &= model.target_graph_rows[current_assignment.target_vertex * max_graphs_ + 0];
+            }
+            else {
+                if constexpr (induced_) {
+                    // ...otherwise we can only be mapped to adjacent vertices
+                    d.values &= ~model.target_graph_rows[current_assignment.target_vertex * max_graphs_ + 0];
+                }
+            }
+
+            // and for each remaining graph pair...
+            for (unsigned g = 1 ; g < max_graphs_ ; ++g) {
                 // if we're adjacent...
                 if (pattern_adjacency_bits & (1u << g)) {
                     // ...then we can only be mapped to adjacent vertices
@@ -707,18 +701,78 @@ namespace
                 // adjacency
                 if (model.pattern_edge_labels.empty()) {
                     switch (model.max_graphs) {
-                        case 1:  propagate_adjacency_constraints<1, false>(d, current_assignment); break;
-                        case 2:  propagate_adjacency_constraints<2, false>(d, current_assignment); break;
-                        case 3:  propagate_adjacency_constraints<3, false>(d, current_assignment); break;
-                        case 4:  propagate_adjacency_constraints<4, false>(d, current_assignment); break;
-                        case 5:  propagate_adjacency_constraints<5, false>(d, current_assignment); break;
-                        case 6:  propagate_adjacency_constraints<6, false>(d, current_assignment); break;
-                        case 7:  propagate_adjacency_constraints<7, false>(d, current_assignment); break;
-                        case 8:  propagate_adjacency_constraints<8, false>(d, current_assignment); break;
-                        case 9:  propagate_adjacency_constraints<9, false>(d, current_assignment); break;
-                        case 10: propagate_adjacency_constraints<10, false>(d, current_assignment); break;
-                        case 11: propagate_adjacency_constraints<11, false>(d, current_assignment); break;
-                        case 12: propagate_adjacency_constraints<12, false>(d, current_assignment); break;
+                        case 1:
+                            if (params.induced)
+                                propagate_adjacency_constraints<1, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<1, false, false>(d, current_assignment);
+                            break;
+                        case 2:
+                            if (params.induced)
+                                propagate_adjacency_constraints<2, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<2, false, false>(d, current_assignment);
+                            break;
+                        case 3:
+                            if (params.induced)
+                                propagate_adjacency_constraints<3, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<3, false, false>(d, current_assignment);
+                            break;
+                        case 4:
+                            if (params.induced)
+                                propagate_adjacency_constraints<4, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<4, false, false>(d, current_assignment);
+                            break;
+                        case 5:
+                            if (params.induced)
+                                propagate_adjacency_constraints<5, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<5, false, false>(d, current_assignment);
+                            break;
+                        case 6:
+                            if (params.induced)
+                                propagate_adjacency_constraints<6, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<6, false, false>(d, current_assignment);
+                            break;
+                        case 7:
+                            if (params.induced)
+                                propagate_adjacency_constraints<7, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<7, false, false>(d, current_assignment);
+                            break;
+                        case 8:
+                            if (params.induced)
+                                propagate_adjacency_constraints<8, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<8, false, false>(d, current_assignment);
+                            break;
+                        case 9:
+                            if (params.induced)
+                                propagate_adjacency_constraints<9, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<9, false, false>(d, current_assignment);
+                            break;
+                        case 10:
+                            if (params.induced)
+                                propagate_adjacency_constraints<10, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<10, false, false>(d, current_assignment);
+                            break;
+                        case 11:
+                            if (params.induced)
+                                propagate_adjacency_constraints<11, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<11, false, false>(d, current_assignment);
+                            break;
+                        case 12:
+                            if (params.induced)
+                                propagate_adjacency_constraints<12, false, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<12, false, false>(d, current_assignment);
+                            break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
@@ -726,18 +780,78 @@ namespace
                 }
                 else {
                     switch (model.max_graphs) {
-                        case 1:  propagate_adjacency_constraints<1, true>(d, current_assignment); break;
-                        case 2:  propagate_adjacency_constraints<2, true>(d, current_assignment); break;
-                        case 3:  propagate_adjacency_constraints<3, true>(d, current_assignment); break;
-                        case 4:  propagate_adjacency_constraints<4, true>(d, current_assignment); break;
-                        case 5:  propagate_adjacency_constraints<5, true>(d, current_assignment); break;
-                        case 6:  propagate_adjacency_constraints<6, true>(d, current_assignment); break;
-                        case 7:  propagate_adjacency_constraints<7, true>(d, current_assignment); break;
-                        case 8:  propagate_adjacency_constraints<8, true>(d, current_assignment); break;
-                        case 9:  propagate_adjacency_constraints<9, true>(d, current_assignment); break;
-                        case 10: propagate_adjacency_constraints<10, true>(d, current_assignment); break;
-                        case 11: propagate_adjacency_constraints<11, true>(d, current_assignment); break;
-                        case 12: propagate_adjacency_constraints<12, true>(d, current_assignment); break;
+                        case 1:
+                            if (params.induced)
+                                propagate_adjacency_constraints<1, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<1, true, false>(d, current_assignment);
+                            break;
+                        case 2:
+                            if (params.induced)
+                                propagate_adjacency_constraints<2, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<2, true, false>(d, current_assignment);
+                            break;
+                        case 3:
+                            if (params.induced)
+                                propagate_adjacency_constraints<3, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<3, true, false>(d, current_assignment);
+                            break;
+                        case 4:
+                            if (params.induced)
+                                propagate_adjacency_constraints<4, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<4, true, false>(d, current_assignment);
+                            break;
+                        case 5:
+                            if (params.induced)
+                                propagate_adjacency_constraints<5, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<5, true, false>(d, current_assignment);
+                            break;
+                        case 6:
+                            if (params.induced)
+                                propagate_adjacency_constraints<6, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<6, true, false>(d, current_assignment);
+                            break;
+                        case 7:
+                            if (params.induced)
+                                propagate_adjacency_constraints<7, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<7, true, false>(d, current_assignment);
+                            break;
+                        case 8:
+                            if (params.induced)
+                                propagate_adjacency_constraints<8, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<8, true, false>(d, current_assignment);
+                            break;
+                        case 9:
+                            if (params.induced)
+                                propagate_adjacency_constraints<9, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<9, true, false>(d, current_assignment);
+                            break;
+                        case 10:
+                            if (params.induced)
+                                propagate_adjacency_constraints<10, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<10, true, false>(d, current_assignment);
+                            break;
+                        case 11:
+                            if (params.induced)
+                                propagate_adjacency_constraints<11, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<11, true, false>(d, current_assignment);
+                            break;
+                        case 12:
+                            if (params.induced)
+                                propagate_adjacency_constraints<12, true, true>(d, current_assignment);
+                            else
+                                propagate_adjacency_constraints<12, true, false>(d, current_assignment);
+                            break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
@@ -1291,6 +1405,10 @@ namespace
                 if (model.pattern_graph_rows[p * model.max_graphs + g].test(p) && ! model.target_graph_rows[t * model.max_graphs + g].test(t))
                     return false;
 
+            if (params.induced && (
+                        model.pattern_graph_rows[p * model.max_graphs + 0].test(p) != model.target_graph_rows[t * model.max_graphs + 0].test(t)))
+                return false;
+
             return true;
         }
 
@@ -1369,18 +1487,6 @@ namespace
         auto initialise_domains(Domains & domains) -> bool
         {
             unsigned graphs_to_consider = model.max_graphs;
-            if (params.induced) {
-                // when looking at the complement graph, if the largest degree
-                // in the pattern is smaller than the smallest degree in the
-                // target, then we're going to spend a lot of time doing
-                // nothing useful
-                auto largest_pattern_c_degree = max_element(model.patterns_degrees[model.max_graphs - 1].begin(), model.patterns_degrees[model.max_graphs - 1].end());
-                auto smallest_target_c_degree = min_element(model.targets_degrees[model.max_graphs - 1].begin(), model.targets_degrees[model.max_graphs - 1].end());
-                if (largest_pattern_c_degree != model.patterns_degrees[model.max_graphs - 1].end() &&
-                        smallest_target_c_degree != model.targets_degrees[model.max_graphs - 1].end() &&
-                        *largest_pattern_c_degree < *smallest_target_c_degree)
-                    --graphs_to_consider;
-            }
 
             /* pattern and target neighbourhood degree sequences */
             vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
