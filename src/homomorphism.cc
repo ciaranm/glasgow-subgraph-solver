@@ -98,6 +98,7 @@ namespace
         bool has_less_thans;
 
         vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
+        vector<int> pattern_loops, target_loops;
 
         vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
@@ -138,12 +139,19 @@ namespace
                     pattern_permutation.push_back(v);
             }
 
-            // recode pattern to a bit graph
+            // recode pattern to a bit graph, and strip out loops
             pattern_graph_rows.resize(pattern_size * max_graphs, dynamic_bitset<>(pattern_size));
-            for (unsigned i = 0 ; i < pattern_size ; ++i)
-                for (unsigned j = 0 ; j < pattern_size ; ++j)
-                    if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
+            pattern_loops.resize(pattern_size);
+            for (unsigned i = 0 ; i < pattern_size ; ++i) {
+                for (unsigned j = 0 ; j < pattern_size ; ++j) {
+                    if (i == j) {
+                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
+                            pattern_loops[i] = 1;
+                    }
+                    else if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
                         pattern_graph_rows[i * max_graphs + 0].set(j);
+                }
+            }
 
             // re-encode and store pattern labels
             map<string, int> vertex_labels_map;
@@ -174,10 +182,15 @@ namespace
                         }
             }
 
-            // recode target to a bit graph
+            // recode target to a bit graph, and take out loops
             target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
-            for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e)
-                target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
+            target_loops.resize(target_size);
+            for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
+                if (e->first.first == e->first.second)
+                    target_loops[e->first.first] = 1;
+                else
+                    target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
+            }
 
             // target vertex labels
             if (pattern.has_vertex_labels()) {
@@ -1401,12 +1414,9 @@ namespace
 
         auto check_loop_compatibility(int p, int t) -> bool
         {
-            for (unsigned g = 0 ; g < model.max_graphs ; ++g)
-                if (model.pattern_graph_rows[p * model.max_graphs + g].test(p) && ! model.target_graph_rows[t * model.max_graphs + g].test(t))
-                    return false;
-
-            if (params.induced && (
-                        model.pattern_graph_rows[p * model.max_graphs + 0].test(p) != model.target_graph_rows[t * model.max_graphs + 0].test(t)))
+            if (model.pattern_loops[p] && ! model.target_loops[t])
+                return false;
+            else if (params.induced && (model.pattern_loops[p] != model.target_loops[t]))
                 return false;
 
             return true;
