@@ -137,18 +137,10 @@ auto Proof::finalise_model() -> void
         throw ProofError{ "Error writing opb file to '" + _imp->opb_filename + "'" };
 
     _imp->proof_stream = ofstream{ _imp->log_filename };
-    string commands = "f l p u c";
-    if (_imp->levels)
-        commands += " lvlset lvlclear";
-    if (_imp->solutions)
-        commands += " v";
-
-    _imp->proof_stream << "refutation using " << commands << " 0" << endl;
+    _imp->proof_stream << "pseudo-Boolean proof version 1.0" << endl;
 
     _imp->proof_stream << "f " << _imp->nb_constraints << " 0" << endl;
     _imp->proof_line += _imp->nb_constraints;
-    _imp->proof_stream << "l " << _imp->variable_mappings.size() << " 0" << endl;
-    _imp->proof_line += _imp->variable_mappings.size() * 2;
 
     if (! _imp->proof_stream)
         throw ProofError{ "Error writing proof file to '" + _imp->log_filename + "'" };
@@ -157,7 +149,7 @@ auto Proof::finalise_model() -> void
 auto Proof::finish_unsat_proof() -> void
 {
     _imp->proof_stream << "* asserting that we've proved unsat" << endl;
-    _imp->proof_stream << "u opb >= 1 ;" << endl;
+    _imp->proof_stream << "u >= 1 ;" << endl;
     ++_imp->proof_line;
     _imp->proof_stream << "c " << _imp->proof_line << " 0" << endl;
 }
@@ -227,7 +219,7 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
 auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
     _imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << endl;
-    _imp->proof_stream << "u opb";
+    _imp->proof_stream << "u ";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
     _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
@@ -241,7 +233,7 @@ auto Proof::incorrect_guess(const vector<pair<int, int> > & decisions, bool fail
     else
         _imp->proof_stream << "* [" << decisions.size() << "] backtracking" << endl;
 
-    _imp->proof_stream << "u opb";
+    _imp->proof_stream << "u ";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
     _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
@@ -261,27 +253,27 @@ auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -
 auto Proof::start_level(int level) -> void
 {
     if (_imp->levels) {
-        _imp->proof_stream << "lvlset " << level << endl;
-        _imp->proof_stream << "lvlclear " << level << endl;
+        _imp->proof_stream << "# " << level << endl;
+        _imp->proof_stream << "w " << level << endl;
     }
 }
 
 auto Proof::back_up_to_level(int level) -> void
 {
     if (_imp->levels)
-        _imp->proof_stream << "lvlset " << level << endl;
+        _imp->proof_stream << "# " << level << endl;
 }
 
 auto Proof::back_up_to_top() -> void
 {
     if (_imp->levels)
-        _imp->proof_stream << "lvlset " << 0 << endl;
+        _imp->proof_stream << "# " << 0 << endl;
 }
 
 auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> void
 {
     _imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
-    _imp->proof_stream << "u opb";
+    _imp->proof_stream << "u ";
     for (auto & [ var, val ] : decisions)
         _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
     _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
