@@ -718,30 +718,6 @@ namespace
                             else
                                 propagate_adjacency_constraints<8, false, false>(d, current_assignment);
                             break;
-                        case 9:
-                            if (params.induced)
-                                propagate_adjacency_constraints<9, false, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<9, false, false>(d, current_assignment);
-                            break;
-                        case 10:
-                            if (params.induced)
-                                propagate_adjacency_constraints<10, false, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<10, false, false>(d, current_assignment);
-                            break;
-                        case 11:
-                            if (params.induced)
-                                propagate_adjacency_constraints<11, false, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<11, false, false>(d, current_assignment);
-                            break;
-                        case 12:
-                            if (params.induced)
-                                propagate_adjacency_constraints<12, false, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<12, false, false>(d, current_assignment);
-                            break;
 
                         default:
                             throw "you forgot to update the ugly max_graphs hack";
@@ -796,30 +772,6 @@ namespace
                                 propagate_adjacency_constraints<8, true, true>(d, current_assignment);
                             else
                                 propagate_adjacency_constraints<8, true, false>(d, current_assignment);
-                            break;
-                        case 9:
-                            if (params.induced)
-                                propagate_adjacency_constraints<9, true, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<9, true, false>(d, current_assignment);
-                            break;
-                        case 10:
-                            if (params.induced)
-                                propagate_adjacency_constraints<10, true, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<10, true, false>(d, current_assignment);
-                            break;
-                        case 11:
-                            if (params.induced)
-                                propagate_adjacency_constraints<11, true, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<11, true, false>(d, current_assignment);
-                            break;
-                        case 12:
-                            if (params.induced)
-                                propagate_adjacency_constraints<12, true, true>(d, current_assignment);
-                            else
-                                propagate_adjacency_constraints<12, true, false>(d, current_assignment);
                             break;
 
                         default:
@@ -1924,25 +1876,13 @@ namespace
             Params_ && ... params) -> Result_
     {
         if (graph.size() < int(size_ * bits_per_word)) {
-            if (n_shape_graphs <= 8) {
-                Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1>, uint8_t> algorithm{ graph, std::forward<Params_>(params)... };
-                return algorithm.run();
-            }
-            else {
-                Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1>, uint16_t> algorithm{ graph, std::forward<Params_>(params)... };
-                return algorithm.run();
-            }
+            Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1>, uint8_t> algorithm{ graph, std::forward<Params_>(params)... };
+            return algorithm.run();
         }
         else {
             if constexpr (0 == sizeof...(other_sizes_)) {
-                if (n_shape_graphs <= 8) {
-                    Algorithm_<boost::dynamic_bitset<>, std::vector<int>, uint8_t> algorithm{ graph, std::forward<Params_>(params)... };
-                    return algorithm.run();
-                }
-                else {
-                    Algorithm_<boost::dynamic_bitset<>, std::vector<int>, uint16_t> algorithm{ graph, std::forward<Params_>(params)... };
-                    return algorithm.run();
-                }
+                Algorithm_<boost::dynamic_bitset<>, std::vector<int>, uint8_t> algorithm{ graph, std::forward<Params_>(params)... };
+                return algorithm.run();
             }
             else
                 return run_with_appropriate_template_parameters<Algorithm_, Result_, Graph_>(std::integer_sequence<unsigned, other_sizes_...>{},
