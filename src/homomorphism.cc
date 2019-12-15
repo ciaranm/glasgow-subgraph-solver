@@ -1335,7 +1335,8 @@ namespace
                 int t,
                 unsigned graphs_to_consider,
                 vector<vector<vector<int> > > & patterns_ndss,
-                vector<vector<optional<vector<int> > > > & targets_ndss
+                vector<vector<optional<vector<int> > > > & targets_ndss,
+                bool do_not_do_nds
                 ) -> bool
         {
             if (! degree_and_nds_are_preserved(params))
@@ -1372,7 +1373,7 @@ namespace
                     return false;
                 }
             }
-            if (params.no_nds)
+            if (params.no_nds || do_not_do_nds)
                 return true;
 
             // full compare of neighbourhood degree sequences
@@ -1391,8 +1392,43 @@ namespace
             for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                 for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
                     if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x)) {
-                        if (params.proof)
-                            params.proof->incompatible_by_nds(g, p, t);
+                        if (params.proof) {
+                            vector<int> p_subsequence, t_subsequence, t_remaining, unused_pattern_vertices;
+
+                            // need to know the NDS together with the actual vertices
+                            vector<pair<int, int> > p_nds, t_nds;
+
+                            auto np = model.pattern_graph_rows[p * model.max_graphs + g];
+                            for (auto w = np.find_first() ; w != decltype(np)::npos ; w = np.find_first()) {
+                                np.reset(w);
+                                p_nds.emplace_back(model.pattern_permutation[w], model.pattern_graph_rows[w * model.max_graphs + g].count());
+                            }
+
+                            auto nt = model.target_graph_rows[t * model.max_graphs + g];
+                            for (auto w = nt.find_first() ; w != decltype(nt)::npos ; w = nt.find_first()) {
+                                nt.reset(w);
+                                t_nds.emplace_back(w, model.target_graph_rows[w * model.max_graphs + g].count());
+                            }
+
+                            sort(p_nds.begin(), p_nds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
+                                    return a.second > b.second; });
+                            sort(t_nds.begin(), t_nds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
+                                    return a.second > b.second; });
+
+                            for (unsigned y = 0 ; y <= x ; ++y) {
+                                p_subsequence.push_back(p_nds[y].first);
+                                t_subsequence.push_back(t_nds[y].first);
+                            }
+                            for (unsigned y = x + 1 ; y < t_nds.size() ; ++y)
+                                t_remaining.push_back(t_nds[y].first);
+
+                            for (unsigned v = 0 ; v < model.pattern_size ; ++v)
+                                if (p_subsequence.end() == find(p_subsequence.begin(), p_subsequence.end(), model.pattern_permutation[v]))
+                                    unused_pattern_vertices.push_back(model.pattern_permutation[v]);
+
+                            params.proof->incompatible_by_nds(g, model.pattern_vertex_for_proof(p), model.target_vertex_for_proof(t),
+                                    p_subsequence, t_subsequence, t_remaining, unused_pattern_vertices);
+                        }
                         return false;
                     }
                     else if (degree_and_nds_are_exact(params, model.full_pattern_size, model.target_size)
@@ -1441,7 +1477,7 @@ namespace
                         ok = false;
                     else if (! check_loop_compatibility(i, j))
                         ok = false;
-                    else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss))
+                    else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, params.proof.get()))
                         ok = false;
 
                     if (ok)
@@ -1453,6 +1489,23 @@ namespace
                     if (params.proof)
                         params.proof->initial_domain_is_empty(i);
                     return false;
+                }
+            }
+
+            // if we're doing proof logging, can't do nds until we've done all degree eliminations
+            if (params.proof) {
+                for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
+                    for (unsigned j = 0 ; j < model.target_size ; ++j) {
+                        if (domains.at(i).values.test(j)) {
+                            if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, false)) {
+                                domains.at(i).values.reset(j);
+                                if (0 == --domains.at(i).count) {
+                                    params.proof->initial_domain_is_empty(i);
+                                    return false;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1891,7 +1944,8 @@ namespace
         }
     }
 
-    using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
+    using AllGraphSizes = std::integer_sequence<unsigned, 1, 2>;
+    //using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
 }
 
 auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult
@@ -1902,8 +1956,6 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         // but can be adapted to support most of them
         if (1 != params.n_threads)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with threads" };
-        if (! params.no_nds)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with neighbourhood degree sequences" };
         if (! params.no_supplementals)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with supplemental graphs" };
         if (params.clique_detection)

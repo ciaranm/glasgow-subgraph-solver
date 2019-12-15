@@ -44,6 +44,7 @@ struct Proof::Imp
     map<pair<int, int>, string> variable_mappings;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<int, int, int, int>, int> adjacency_lines;
+    map<pair<int, int>, int> degree_eliminations;
 
     int nb_constraints = 0;
     int proof_line = 0;
@@ -205,13 +206,65 @@ auto Proof::incompatible_by_degrees(
 
     _imp->proof_stream << " " << (n_p.size()) << " d 0" << endl;
     ++_imp->proof_line;
+    _imp->degree_eliminations.emplace(pair{ p.first, t.first }, _imp->proof_line);
 
     _imp->proof_stream << "e " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
 }
 
-auto Proof::incompatible_by_nds(int g, int p, int t) -> void
+auto Proof::incompatible_by_nds(
+        int g,
+        const NamedVertex & p,
+        const NamedVertex & t,
+        const vector<int> & p_subsequence,
+        const vector<int> & t_subsequence,
+        const vector<int> & t_remaining,
+        const vector<int> & unused_pattern_vertices) -> void
 {
-    _imp->proof_stream << "* cannot map " << p << " to " << t << " due to nds in graph pairs " << g << endl;
+    _imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << endl;
+
+    // summing up horizontally
+    _imp->proof_stream << "p";
+    bool first = true;
+    for (auto & n : p_subsequence) {
+        if (first) {
+            first = false;
+            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+        }
+        else
+            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+    }
+
+    // block to the right of the failing square
+    for (auto & n : p_subsequence) {
+        for (auto & u : t_remaining) {
+            /* n -> t is already eliminated by degree */
+            _imp->proof_stream << " " << _imp->degree_eliminations[pair{ n, u }] << " +";
+        }
+    }
+
+    // final column
+    for (auto & n : p_subsequence) {
+        /* n -> t is already eliminated by degree */
+        _imp->proof_stream << " " << _imp->degree_eliminations[pair{ n, t_subsequence.back() }] << " +";
+    }
+
+    // injectivity in the square
+    for (auto & t : t_subsequence) {
+        if (t != t_subsequence.back())
+            _imp->proof_stream << " " << _imp->injectivity_constraints.find(t)->second << " +";
+    }
+
+    // cancel out any stray variables
+    for (auto & n : unused_pattern_vertices)
+        for (auto & u : t_subsequence)
+            if (u != t_subsequence.back())
+                _imp->proof_stream << " x" << _imp->variable_mappings[pair{ n, u }] << " +";
+
+    _imp->proof_stream << " " << p_subsequence.size() << " d 0" << endl;
+    ++_imp->proof_line;
+
+    _imp->proof_stream << "* sanity check" << endl;
+    _imp->proof_stream << "e " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
 }
 
 auto Proof::initial_domain_is_empty(int p) -> void

@@ -65,7 +65,14 @@ class Proof
                 const NamedVertex & t,
                 const std::vector<int> & n_t) -> void;
 
-        auto incompatible_by_nds(int g, int p, int t) -> void;
+        auto incompatible_by_nds(
+                int g,
+                const NamedVertex & p,
+                const NamedVertex & t,
+                const std::vector<int> & p_subsequence,
+                const std::vector<int> & t_subsequence,
+                const std::vector<int> & t_remaining,
+                const std::vector<int> & unused_pattern_vertices) -> void;
 
         auto initial_domain_is_empty(int p) -> void;
 
