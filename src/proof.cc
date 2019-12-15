@@ -263,7 +263,6 @@ auto Proof::incompatible_by_nds(
     _imp->proof_stream << " " << p_subsequence.size() << " d 0" << endl;
     ++_imp->proof_line;
 
-    _imp->proof_stream << "* sanity check" << endl;
     _imp->proof_stream << "e " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
 }
 
