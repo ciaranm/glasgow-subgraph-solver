@@ -114,8 +114,6 @@ auto main(int argc, char * argv[]) -> int
         po::options_description proof_logging_options{ "Proof logging options" };
         proof_logging_options.add_options()
             ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .log)")
-            ("proof-levels",                                   "Generate lvlset and lvlclear commands in the proof")
-            ("proof-solutions",                                "Generate v commands for sat instances in the proof")
             ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...");
         display_options.add(proof_logging_options);
 
@@ -331,11 +329,9 @@ auto main(int argc, char * argv[]) -> int
         }
 
         if (options_vars.count("prove")) {
-            bool levels = options_vars.count("proof-levels");
-            bool solutions = options_vars.count("proof-solutions");
             bool friendly_names = options_vars.count("proof-names");
             string fn = options_vars["prove"].as<string>();
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", levels, solutions, friendly_names);
+            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names);
             cout << "proof_model = " << fn << ".opb" << endl;
             cout << "proof_log = " << fn << ".log" << endl;
         }

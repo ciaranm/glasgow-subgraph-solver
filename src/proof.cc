@@ -39,8 +39,6 @@ struct Proof::Imp
     string opb_filename, log_filename;
     stringstream model_stream;
     ofstream proof_stream;
-    bool levels;
-    bool solutions;
     bool friendly_names;
 
     map<pair<int, int>, string> variable_mappings;
@@ -51,13 +49,11 @@ struct Proof::Imp
     int proof_line = 0;
 };
 
-Proof::Proof(const string & opb_file, const string & log_file, bool l, bool s, bool f) :
+Proof::Proof(const string & opb_file, const string & log_file, bool f) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
     _imp->log_filename = log_file;
-    _imp->levels = l;
-    _imp->solutions = s;
     _imp->friendly_names = f;
 }
 
@@ -252,22 +248,18 @@ auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -
 
 auto Proof::start_level(int level) -> void
 {
-    if (_imp->levels) {
-        _imp->proof_stream << "# " << level << endl;
-        _imp->proof_stream << "w " << level << endl;
-    }
+    _imp->proof_stream << "# " << level << endl;
+    _imp->proof_stream << "w " << level << endl;
 }
 
 auto Proof::back_up_to_level(int level) -> void
 {
-    if (_imp->levels)
-        _imp->proof_stream << "# " << level << endl;
+    _imp->proof_stream << "# " << level << endl;
 }
 
 auto Proof::back_up_to_top() -> void
 {
-    if (_imp->levels)
-        _imp->proof_stream << "# " << 0 << endl;
+    _imp->proof_stream << "# " << 0 << endl;
 }
 
 auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> void
@@ -287,12 +279,10 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisi
         _imp->proof_stream << " " << var.second << "=" << val.second;
     _imp->proof_stream << endl;
 
-    if (_imp->solutions) {
-        _imp->proof_stream << "v";
-        for (auto & [ var, val ] : decisions)
-            _imp->proof_stream << " x" << _imp->variable_mappings[pair{ var.first, val.first }];
-        _imp->proof_stream << endl;
-        ++_imp->proof_line;
-    }
+    _imp->proof_stream << "v";
+    for (auto & [ var, val ] : decisions)
+        _imp->proof_stream << " x" << _imp->variable_mappings[pair{ var.first, val.first }];
+    _imp->proof_stream << endl;
+    ++_imp->proof_line;
 }
 

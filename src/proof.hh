@@ -32,7 +32,7 @@ class Proof
         std::unique_ptr<Imp> _imp;
 
     public:
-        Proof(const std::string & opb_file, const std::string & log_file, bool levels, bool solutions, bool friendly_names);
+        Proof(const std::string & opb_file, const std::string & log_file, bool friendly_names);
         Proof(Proof &&);
         ~Proof();
         auto operator= (Proof &&) -> Proof &;
