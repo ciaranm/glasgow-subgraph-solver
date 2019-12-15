@@ -100,7 +100,7 @@ And then you can produce and verify a log like this:
 ```shell session
 $ ./glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
     --prove myproof --proof-solutions pattern-file target-file
-$ refpy myproof.opb myproof.log
+$ veripb myproof.opb myproof.log
 ```
 
 Note that most features are not yet supported with proof logging. This is a "not yet implemented"
