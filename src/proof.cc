@@ -155,9 +155,18 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
     _imp->proof_stream << "* failure due to the pattern being bigger than the target" << endl;
 
     // we get a hall violator by adding up all of the things
-    _imp->proof_stream << "p 0";
-    for (auto & [ _, line ] : _imp->at_least_one_value_constraints)
-        _imp->proof_stream << " " << line << " +";
+    _imp->proof_stream << "p";
+    bool first = true;
+
+    for (auto & [ _, line ] : _imp->at_least_one_value_constraints) {
+        if (first) {
+            _imp->proof_stream << " " << line;
+            first = false;
+        }
+        else
+            _imp->proof_stream << " " << line << " +";
+    }
+
     for (auto & [ _, line ] : _imp->injectivity_constraints)
         _imp->proof_stream << " " << line << " +";
     _imp->proof_stream << " 0" << endl;
@@ -168,9 +177,16 @@ auto Proof::incompatible_by_degrees(int g, const NamedVertex & p, const vector<i
 {
     _imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << endl;
 
-    _imp->proof_stream << "p 0";
-    for (auto & n : n_p)
-        _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+    _imp->proof_stream << "p";
+    bool first = true;
+    for (auto & n : n_p) {
+        if (first) {
+            first = false;
+            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+        }
+        else
+            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+    }
 
     // if I map p to t, I have to map the neighbours of p to neighbours of t
     for (auto & n : n_t)
@@ -193,9 +209,16 @@ auto Proof::initial_domain_is_empty(int p) -> void
 auto Proof::emit_hall_set_or_violator(const vector<int> & lhs, const vector<int> & rhs) -> void
 {
     _imp->proof_stream << "* hall set or violator size " << lhs.size() << "/" << rhs.size() << endl;
-    _imp->proof_stream << "p 0";
-    for (auto & l : lhs)
-        _imp->proof_stream << " " << _imp->at_least_one_value_constraints[l] << " +";
+    _imp->proof_stream << "p";
+    bool first = true;
+    for (auto & l : lhs) {
+        if (first) {
+            first = false;
+            _imp->proof_stream << " " << _imp->at_least_one_value_constraints[l];
+        }
+        else
+            _imp->proof_stream << " " << _imp->at_least_one_value_constraints[l] << " +";
+    }
     for (auto & r : rhs)
         _imp->proof_stream << " " << _imp->injectivity_constraints[r] << " +";
     _imp->proof_stream << " 0" << endl;
