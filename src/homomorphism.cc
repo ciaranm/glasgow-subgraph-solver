@@ -1346,13 +1346,14 @@ namespace
                     // not ok, degrees differ
                     if (params.proof) {
                         // get the actual neighbours of p and t, in their original terms
-                        vector<int> n_p, n_t;
+                        vector<int> n_p, c_n_p, n_t;
 
                         auto np = model.pattern_graph_rows[p * model.max_graphs + g];
-                        for (auto j = np.find_first() ; j != decltype(np)::npos ; j = np.find_first()) {
-                            np.reset(j);
-                            n_p.push_back(model.pattern_permutation[j]);
-                        }
+                        for (unsigned j = 0 ; j < model.pattern_size ; ++j)
+                            if (np.test(j))
+                                n_p.push_back(model.pattern_permutation[j]);
+                            else
+                                c_n_p.push_back(model.pattern_permutation[j]);
 
                         auto nt = model.target_graph_rows[t * model.max_graphs + g];
                         for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
@@ -1360,7 +1361,8 @@ namespace
                             n_t.push_back(j);
                         }
 
-                        params.proof->incompatible_by_degrees(g, model.pattern_vertex_for_proof(p), n_p, model.target_vertex_for_proof(t), n_t);
+                        params.proof->incompatible_by_degrees(g, model.pattern_vertex_for_proof(p), n_p, c_n_p,
+                                model.target_vertex_for_proof(t), n_t);
                     }
                     return false;
                 }

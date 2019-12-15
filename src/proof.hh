@@ -57,8 +57,16 @@ class Proof
         auto failure_due_to_pattern_bigger_than_target() -> void;
 
         // domain initialisation
-        auto incompatible_by_degrees(int g, const NamedVertex & p, const std::vector<int> & n_p, const NamedVertex & t, const std::vector<int> & n_t) -> void;
+        auto incompatible_by_degrees(
+                int g,
+                const NamedVertex & p,
+                const std::vector<int> & n_p,
+                const std::vector<int> & c_n_p,
+                const NamedVertex & t,
+                const std::vector<int> & n_t) -> void;
+
         auto incompatible_by_nds(int g, int p, int t) -> void;
+
         auto initial_domain_is_empty(int p) -> void;
 
         // new constraints

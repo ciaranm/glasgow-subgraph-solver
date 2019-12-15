@@ -173,7 +173,13 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
     ++_imp->proof_line;
 }
 
-auto Proof::incompatible_by_degrees(int g, const NamedVertex & p, const vector<int> & n_p, const NamedVertex & t, const vector<int> & n_t) -> void
+auto Proof::incompatible_by_degrees(
+        int g,
+        const NamedVertex & p,
+        const vector<int> & n_p,
+        const vector<int> & c_n_p,
+        const NamedVertex & t,
+        const vector<int> & n_t) -> void
 {
     _imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << endl;
 
@@ -192,8 +198,15 @@ auto Proof::incompatible_by_degrees(int g, const NamedVertex & p, const vector<i
     for (auto & n : n_t)
         _imp->proof_stream << " " << _imp->injectivity_constraints[n] << " +";
 
-    _imp->proof_stream << " 0" << endl;
+    // cancel out any stray variables
+    for (auto & v : c_n_p)
+        for (auto & w : n_t)
+            _imp->proof_stream << " x" << _imp->variable_mappings[pair{ v, w }] << " +";
+
+    _imp->proof_stream << " " << (n_p.size()) << " d 0" << endl;
     ++_imp->proof_line;
+
+    _imp->proof_stream << "e " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
 }
 
 auto Proof::incompatible_by_nds(int g, int p, int t) -> void
