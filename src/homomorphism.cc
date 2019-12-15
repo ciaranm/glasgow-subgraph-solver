@@ -1871,7 +1871,6 @@ namespace
         typename... Params_>
     auto run_with_appropriate_template_parameters(
             const std::integer_sequence<unsigned, size_, other_sizes_...> &,
-            unsigned n_shape_graphs,
             const Graph_ & graph,
             Params_ && ... params) -> Result_
     {
@@ -1886,7 +1885,7 @@ namespace
             }
             else
                 return run_with_appropriate_template_parameters<Algorithm_, Result_, Graph_>(std::integer_sequence<unsigned, other_sizes_...>{},
-                        n_shape_graphs, graph, std::forward<Params_>(params)...);
+                        graph, std::forward<Params_>(params)...);
         }
     }
 
@@ -1995,7 +1994,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         // if we're finding a minimal unsat pattern, solve the problem
         // repeatedly with shrinking patterns
         HomomorphismResult result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
-                AllGraphSizes(), calculate_n_shape_graphs(params), graphs.second, graphs.first, params, set<int>{});
+                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
         if (! result.mapping.empty())
             return result;
 
@@ -2004,7 +2003,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         for (int n = 0 ; n < graphs.first.size() ; ++n) {
             exclude.insert(n);
             result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
-                    AllGraphSizes(), calculate_n_shape_graphs(params), graphs.second, graphs.first, params, exclude);
+                    AllGraphSizes(), graphs.second, graphs.first, params, exclude);
             if (! result.mapping.empty()) {
                 result.mapping.clear();
                 exclude.erase(n);
@@ -2022,7 +2021,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
     else {
         // just solve the problem
         auto result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
-                AllGraphSizes(), calculate_n_shape_graphs(params), graphs.second, graphs.first, params, set<int>{});
+                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
 
         if (params.proof && result.mapping.empty())
             params.proof->finish_unsat_proof();
