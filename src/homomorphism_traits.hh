@@ -21,21 +21,9 @@ auto supports_k4_graphs(const HomomorphismParams & params) -> bool
     return (! params.no_supplementals) && params.k4 && (params.injectivity != Injectivity::NonInjective);
 }
 
-auto supports_diamond_graphs(const HomomorphismParams & params) -> bool
-{
-    return (! params.no_supplementals) && params.diamond && (params.injectivity != Injectivity::NonInjective);
-}
-
 auto supports_distance3_graphs(const HomomorphismParams & params) -> bool
 {
     return (! params.no_supplementals) && params.distance3 && (params.injectivity == Injectivity::Injective);
-}
-
-auto supports_common_neighbour_shapes(const HomomorphismParams & params) -> bool
-{
-    return (! params.no_supplementals) &&
-        params.common_neighbour_shapes &&
-        params.injectivity != Injectivity::NonInjective;
 }
 
 auto might_have_watches(const HomomorphismParams & params) -> bool

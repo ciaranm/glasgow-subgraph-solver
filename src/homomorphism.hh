@@ -71,29 +71,17 @@ struct HomomorphismParams
     /// Are we allowed to remove isolated vertices?
     bool remove_isolated_vertices = true;
 
-    /// Use common neighbour shape filtering?
-    bool common_neighbour_shapes = false;
-
     /// Use distance 3 filtering?
     bool distance3 = false;
 
     /// Use k4 filtering?
     bool k4 = false;
 
-    /// Use diamond filtering?
-    bool diamond = false;
-
     /// Disable all supplemental graphs?
     bool no_supplementals = false;
 
     /// How many exact path graphs do we have, if we have any?
     int number_of_exact_path_graphs = 4;
-
-    /// How many common neighbourhood graphs do we have, if we have any?
-    int number_of_common_neighbour_graphs = 1;
-
-    /// How many common neighbourhood graphs do we skip?
-    int skip_common_neighbour_graphs = 0;
 
     /// Disable neighbourhood degree sequence processing?
     bool no_nds = false;
