@@ -178,7 +178,6 @@ auto Proof::incompatible_by_degrees(
         int g,
         const NamedVertex & p,
         const vector<int> & n_p,
-        const vector<int> & c_n_p,
         const NamedVertex & t,
         const vector<int> & n_t) -> void
 {
@@ -199,16 +198,12 @@ auto Proof::incompatible_by_degrees(
     for (auto & n : n_t)
         _imp->proof_stream << " " << _imp->injectivity_constraints[n] << " +";
 
-    // cancel out any stray variables
-    for (auto & v : c_n_p)
-        for (auto & w : n_t)
-            _imp->proof_stream << " x" << _imp->variable_mappings[pair{ v, w }] << " +";
+    _imp->proof_stream << " 0" << endl;
+    ++_imp->proof_line;
 
-    _imp->proof_stream << " " << (n_p.size()) << " d 0" << endl;
+    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
     ++_imp->proof_line;
     _imp->degree_eliminations.emplace(pair{ p.first, t.first }, _imp->proof_line);
-
-    _imp->proof_stream << "e " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
 }
 
 auto Proof::incompatible_by_nds(
@@ -217,8 +212,7 @@ auto Proof::incompatible_by_nds(
         const NamedVertex & t,
         const vector<int> & p_subsequence,
         const vector<int> & t_subsequence,
-        const vector<int> & t_remaining,
-        const vector<int> & unused_pattern_vertices) -> void
+        const vector<int> & t_remaining) -> void
 {
     _imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << endl;
 
@@ -254,16 +248,11 @@ auto Proof::incompatible_by_nds(
             _imp->proof_stream << " " << _imp->injectivity_constraints.find(t)->second << " +";
     }
 
-    // cancel out any stray variables
-    for (auto & n : unused_pattern_vertices)
-        for (auto & u : t_subsequence)
-            if (u != t_subsequence.back())
-                _imp->proof_stream << " x" << _imp->variable_mappings[pair{ n, u }] << " +";
-
-    _imp->proof_stream << " " << p_subsequence.size() << " d 0" << endl;
+    _imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 
-    _imp->proof_stream << "e " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    ++_imp->proof_line;
 }
 
 auto Proof::initial_domain_is_empty(int p) -> void

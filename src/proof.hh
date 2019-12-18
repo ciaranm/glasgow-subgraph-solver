@@ -61,7 +61,6 @@ class Proof
                 int g,
                 const NamedVertex & p,
                 const std::vector<int> & n_p,
-                const std::vector<int> & c_n_p,
                 const NamedVertex & t,
                 const std::vector<int> & n_t) -> void;
 
@@ -71,8 +70,7 @@ class Proof
                 const NamedVertex & t,
                 const std::vector<int> & p_subsequence,
                 const std::vector<int> & t_subsequence,
-                const std::vector<int> & t_remaining,
-                const std::vector<int> & unused_pattern_vertices) -> void;
+                const std::vector<int> & t_remaining) -> void;
 
         auto initial_domain_is_empty(int p) -> void;
 

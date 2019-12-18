@@ -1347,14 +1347,12 @@ namespace
                     // not ok, degrees differ
                     if (params.proof) {
                         // get the actual neighbours of p and t, in their original terms
-                        vector<int> n_p, c_n_p, n_t;
+                        vector<int> n_p, n_t;
 
                         auto np = model.pattern_graph_rows[p * model.max_graphs + g];
                         for (unsigned j = 0 ; j < model.pattern_size ; ++j)
                             if (np.test(j))
                                 n_p.push_back(model.pattern_permutation[j]);
-                            else
-                                c_n_p.push_back(model.pattern_permutation[j]);
 
                         auto nt = model.target_graph_rows[t * model.max_graphs + g];
                         for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
@@ -1362,7 +1360,7 @@ namespace
                             n_t.push_back(j);
                         }
 
-                        params.proof->incompatible_by_degrees(g, model.pattern_vertex_for_proof(p), n_p, c_n_p,
+                        params.proof->incompatible_by_degrees(g, model.pattern_vertex_for_proof(p), n_p,
                                 model.target_vertex_for_proof(t), n_t);
                     }
                     return false;
@@ -1393,7 +1391,7 @@ namespace
                 for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
                     if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x)) {
                         if (params.proof) {
-                            vector<int> p_subsequence, t_subsequence, t_remaining, unused_pattern_vertices;
+                            vector<int> p_subsequence, t_subsequence, t_remaining;
 
                             // need to know the NDS together with the actual vertices
                             vector<pair<int, int> > p_nds, t_nds;
@@ -1422,12 +1420,8 @@ namespace
                             for (unsigned y = x + 1 ; y < t_nds.size() ; ++y)
                                 t_remaining.push_back(t_nds[y].first);
 
-                            for (unsigned v = 0 ; v < model.pattern_size ; ++v)
-                                if (p_subsequence.end() == find(p_subsequence.begin(), p_subsequence.end(), model.pattern_permutation[v]))
-                                    unused_pattern_vertices.push_back(model.pattern_permutation[v]);
-
                             params.proof->incompatible_by_nds(g, model.pattern_vertex_for_proof(p), model.target_vertex_for_proof(t),
-                                    p_subsequence, t_subsequence, t_remaining, unused_pattern_vertices);
+                                    p_subsequence, t_subsequence, t_remaining);
                         }
                         return false;
                     }
@@ -1955,8 +1949,8 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         // but can be adapted to support most of them
         if (1 != params.n_threads)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with threads" };
-        if (! params.no_supplementals)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with supplemental graphs" };
+        if ((! params.no_supplementals) && (1 != params.number_of_exact_path_graphs))
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with more than one exact path graph" };
         if (params.clique_detection)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with clique detection" };
         if (params.lackey)
