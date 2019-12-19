@@ -323,20 +323,16 @@ auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -
     _imp->proof_stream << "* unit propagating " << var.second << "=" << val.second << endl;
 }
 
-auto Proof::start_level(int level) -> void
+auto Proof::start_level(int) -> void
 {
-    _imp->proof_stream << "# " << level << endl;
-    _imp->proof_stream << "w " << level << endl;
 }
 
-auto Proof::back_up_to_level(int level) -> void
+auto Proof::back_up_to_level(int) -> void
 {
-    _imp->proof_stream << "# " << level << endl;
 }
 
 auto Proof::back_up_to_top() -> void
 {
-    _imp->proof_stream << "# " << 0 << endl;
 }
 
 auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> void
