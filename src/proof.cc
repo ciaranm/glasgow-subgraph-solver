@@ -294,8 +294,8 @@ auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, const
     _imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << endl;
     _imp->proof_stream << "u ";
     for (auto & [ var, val ] : decisions)
-        _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
+        _imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{ var, val }];
+    _imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 }
 
@@ -308,14 +308,13 @@ auto Proof::incorrect_guess(const vector<pair<int, int> > & decisions, bool fail
 
     _imp->proof_stream << "u ";
     for (auto & [ var, val ] : decisions)
-        _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
+        _imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{ var, val }];
+    _imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 }
 
-auto Proof::out_of_guesses(const vector<pair<int, int> > & decisions) -> void
+auto Proof::out_of_guesses(const vector<pair<int, int> > &) -> void
 {
-    _imp->proof_stream << "* [" << decisions.size() << "] out of guesses" << endl;
 }
 
 auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void
@@ -338,10 +337,10 @@ auto Proof::back_up_to_top() -> void
 auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> void
 {
     _imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
-    _imp->proof_stream << "u ";
+    _imp->proof_stream << "u";
     for (auto & [ var, val ] : decisions)
-        _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
+        _imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{ var, val }];
+    _imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 }
 
