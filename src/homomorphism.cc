@@ -1335,8 +1335,7 @@ namespace
                 int t,
                 unsigned graphs_to_consider,
                 vector<vector<vector<int> > > & patterns_ndss,
-                vector<vector<optional<vector<int> > > > & targets_ndss,
-                bool do_not_do_nds
+                vector<vector<optional<vector<int> > > > & targets_ndss
                 ) -> bool
         {
             if (! degree_and_nds_are_preserved(params))
@@ -1371,7 +1370,7 @@ namespace
                     return false;
                 }
             }
-            if (params.no_nds || do_not_do_nds)
+            if (params.no_nds)
                 return true;
 
             // full compare of neighbourhood degree sequences
@@ -1417,11 +1416,8 @@ namespace
                                 p_subsequence.push_back(p_nds[y].first);
                                 t_subsequence.push_back(t_nds[y].first);
                             }
-                            for (unsigned y = x + 1 ; y < t_nds.size() ; ++y)
-                                t_remaining.push_back(t_nds[y].first);
-
                             params.proof->incompatible_by_nds(g, model.pattern_vertex_for_proof(p), model.target_vertex_for_proof(t),
-                                    p_subsequence, t_subsequence, t_remaining);
+                                    p_subsequence, t_subsequence);
                         }
                         return false;
                     }
@@ -1471,7 +1467,7 @@ namespace
                         ok = false;
                     else if (! check_loop_compatibility(i, j))
                         ok = false;
-                    else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, params.proof.get()))
+                    else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss))
                         ok = false;
 
                     if (ok)
@@ -1483,23 +1479,6 @@ namespace
                     if (params.proof)
                         params.proof->initial_domain_is_empty(i);
                     return false;
-                }
-            }
-
-            // if we're doing proof logging, can't do nds until we've done all degree eliminations
-            if (params.proof) {
-                for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
-                    for (unsigned j = 0 ; j < model.target_size ; ++j) {
-                        if (domains.at(i).values.test(j)) {
-                            if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, false)) {
-                                domains.at(i).values.reset(j);
-                                if (0 == --domains.at(i).count) {
-                                    params.proof->initial_domain_is_empty(i);
-                                    return false;
-                                }
-                            }
-                        }
-                    }
                 }
             }
 

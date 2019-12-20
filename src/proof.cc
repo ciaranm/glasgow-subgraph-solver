@@ -44,7 +44,6 @@ struct Proof::Imp
     map<pair<int, int>, string> variable_mappings;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<int, int, int, int>, int> adjacency_lines;
-    map<pair<int, int>, int> degree_eliminations;
 
     int nb_constraints = 0;
     int proof_line = 0;
@@ -200,10 +199,6 @@ auto Proof::incompatible_by_degrees(
 
     _imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
-
-    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
-    ++_imp->proof_line;
-    _imp->degree_eliminations.emplace(pair{ p.first, t.first }, _imp->proof_line);
 }
 
 auto Proof::incompatible_by_nds(
@@ -211,8 +206,7 @@ auto Proof::incompatible_by_nds(
         const NamedVertex & p,
         const NamedVertex & t,
         const vector<int> & p_subsequence,
-        const vector<int> & t_subsequence,
-        const vector<int> & t_remaining) -> void
+        const vector<int> & t_subsequence) -> void
 {
     _imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << endl;
 
@@ -228,20 +222,6 @@ auto Proof::incompatible_by_nds(
             _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
     }
 
-    // block to the right of the failing square
-    for (auto & n : p_subsequence) {
-        for (auto & u : t_remaining) {
-            /* n -> t is already eliminated by degree */
-            _imp->proof_stream << " " << _imp->degree_eliminations[pair{ n, u }] << " +";
-        }
-    }
-
-    // final column
-    for (auto & n : p_subsequence) {
-        /* n -> t is already eliminated by degree */
-        _imp->proof_stream << " " << _imp->degree_eliminations[pair{ n, t_subsequence.back() }] << " +";
-    }
-
     // injectivity in the square
     for (auto & t : t_subsequence) {
         if (t != t_subsequence.back())
@@ -249,9 +229,6 @@ auto Proof::incompatible_by_nds(
     }
 
     _imp->proof_stream << " 0" << endl;
-    ++_imp->proof_line;
-
-    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
     ++_imp->proof_line;
 }
 
