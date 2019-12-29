@@ -338,6 +338,11 @@ auto main(int argc, char * argv[]) -> int
             cout << "proof_log = " << fn << ".log" << endl;
         }
 
+        cout << "pattern_vertices = " << graphs.first.size() << endl;
+        cout << "pattern_directed_edges = " << graphs.first.number_of_directed_edges() << endl;
+        cout << "target_vertices = " << graphs.second.size() << endl;
+        cout << "target_directed_edges = " << graphs.second.number_of_directed_edges() << endl;
+
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
 
