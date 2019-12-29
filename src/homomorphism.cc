@@ -2054,7 +2054,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         auto result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
                 AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
 
-        if (params.proof && result.mapping.empty())
+        if (params.proof && result.complete && result.mapping.empty())
             params.proof->finish_unsat_proof();
 
         return result;
