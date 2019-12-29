@@ -1416,8 +1416,8 @@ namespace
                                 p_subsequence.push_back(p_nds[y].first);
                                 t_subsequence.push_back(t_nds[y].first);
                             }
-                            params.proof->incompatible_by_nds(g, model.pattern_vertex_for_proof(p), model.target_vertex_for_proof(t),
-                                    p_subsequence, t_subsequence);
+                            params.proof->incompatible_by_nds(g, model.pattern_vertex_for_proof(p),
+                                    model.target_vertex_for_proof(t), p_subsequence, t_subsequence);
                         }
                         return false;
                     }
@@ -1475,9 +1475,9 @@ namespace
                 }
 
                 domains.at(i).count = domains.at(i).values.count();
-                if (0 == domains.at(i).count) {
-                    if (params.proof)
-                        params.proof->initial_domain_is_empty(i);
+                if (0 == domains.at(i).count && ! params.proof) {
+                    // if we're doing proof logging, we might be relying upon nds,
+                    // which needs all of the degree constraints to be written out
                     return false;
                 }
             }
@@ -1505,8 +1505,13 @@ namespace
                 }
             }
 
-            for (auto & d : domains)
+            for (auto & d : domains) {
                 d.count = d.values.count();
+                if (0 == d.count && params.proof) {
+                    params.proof->initial_domain_is_empty(d.v);
+                    return false;
+                }
+            }
 
             return true;
         }
