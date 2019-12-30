@@ -335,3 +335,29 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisi
     ++_imp->proof_line;
 }
 
+auto Proof::create_exact_path_graphs(
+        const NamedVertex & p,
+        const NamedVertex & q,
+        const NamedVertex & between_p_and_q,
+        const NamedVertex & t,
+        const vector<NamedVertex> & n_t,
+        const vector<NamedVertex> & d2_n_t
+        ) -> void
+{
+    _imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " in G^2 then " << q.second << " maps to one of..." << endl;
+
+    _imp->proof_stream << "p " << _imp->adjacency_lines[tuple{ 0, p.first, between_p_and_q.first, t.first }];
+
+    for (auto & w : n_t)
+        _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, between_p_and_q.first, q.first, w.first }] << " +";
+    _imp->proof_stream << " 0" << endl;
+    ++_imp->proof_line;
+
+    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d2_n_t)
+        _imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    _imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+    _imp->adjacency_lines.emplace(tuple{ 1, p.first, q.first, t.first }, _imp->proof_line);
+}
+

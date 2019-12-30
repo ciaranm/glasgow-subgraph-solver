@@ -314,6 +314,43 @@ namespace
                     default:
                         throw UnsupportedConfiguration{ "Unsupported number of exact path graphs" };
                 }
+
+                if (params.proof) {
+                    for (unsigned p = 0 ; p < pattern_size ; ++p) {
+                        for (unsigned q = 0 ; q < pattern_size ; ++q) {
+                            if (p == q || ! pattern_graph_rows[p * max_graphs + 1].test(q))
+                                continue;
+
+                            auto named_p = pattern_vertex_for_proof(p);
+                            auto named_q = pattern_vertex_for_proof(q);
+
+                            auto n_p = pattern_graph_rows[p * max_graphs + 0];
+                            auto n_q = pattern_graph_rows[q * max_graphs + 0];
+                            auto n_p_q = n_p & n_q;
+                            auto between_p_and_q = pattern_vertex_for_proof(n_p_q.find_first());
+
+                            for (unsigned t = 0 ; t < target_size ; ++t) {
+                                auto named_t = target_vertex_for_proof(t);
+
+                                vector<NamedVertex> named_n_t, named_d2_n_t;
+                                auto n_t = target_graph_rows[t * max_graphs + 0];
+                                for (auto w = n_t.find_first() ; w != decltype(n_t)::npos ; w = n_t.find_first()) {
+                                    n_t.reset(w);
+                                    named_n_t.push_back(target_vertex_for_proof(w));
+                                }
+
+                                auto n2_t = target_graph_rows[t * max_graphs + 1];
+                                for (auto w = n2_t.find_first() ; w != decltype(n2_t)::npos ; w = n2_t.find_first()) {
+                                    n2_t.reset(w);
+                                    named_d2_n_t.push_back(target_vertex_for_proof(w));
+                                }
+
+                                params.proof->create_exact_path_graphs(named_p, named_q, between_p_and_q,
+                                        named_t, named_n_t, named_d2_n_t);
+                            }
+                        }
+                    }
+                }
             }
 
             if (supports_distance3_graphs(params)) {

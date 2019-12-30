@@ -73,6 +73,16 @@ class Proof
 
         auto initial_domain_is_empty(int p) -> void;
 
+        // distance 2 graphs
+        auto create_exact_path_graphs(
+                const NamedVertex & p,
+                const NamedVertex & q,
+                const NamedVertex & between_p_and_q,
+                const NamedVertex & t,
+                const std::vector<NamedVertex> & n_t,
+                const std::vector<NamedVertex> & d2_n_t
+                ) -> void;
+
         // new constraints
         auto emit_hall_set_or_violator(const std::vector<int> & lhs, const std::vector<int> & rhs) -> void;
 
