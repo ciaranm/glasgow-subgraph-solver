@@ -344,12 +344,17 @@ auto Proof::create_exact_path_graphs(
         const vector<NamedVertex> & d2_n_t
         ) -> void
 {
-    _imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " in G^2 then " << q.second << " maps to one of..." << endl;
+    _imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " via " << between_p_and_q.first <<
+        " in G^2 so " << q.second << " maps to one of..." << endl;
 
     _imp->proof_stream << "p " << _imp->adjacency_lines[tuple{ 0, p.first, between_p_and_q.first, t.first }];
 
-    for (auto & w : n_t)
-        _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, between_p_and_q.first, q.first, w.first }] << " +";
+    for (auto & w : n_t) {
+        // due to loops or labels, it might not be possible to map to w
+        auto i = _imp->adjacency_lines.find(tuple{ 0, between_p_and_q.first, q.first, w.first });
+        if (i != _imp->adjacency_lines.end())
+            _imp->proof_stream << " " << i->second << " +";
+    }
     _imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 

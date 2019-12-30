@@ -2002,19 +2002,21 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
             for (int t = 0 ; t < graphs.second.size() ; ++t) {
                 if (graphs.first.adjacent(p, p) && ! graphs.second.adjacent(t, t))
                     params.proof->create_forbidden_assignment_constraint(p, t);
-                else {
-                    params.proof->start_adjacency_constraints_for(p, t);
-                    // if p can be mapped to t, then each neighbour of p...
-                    for (int q = 0 ; q < graphs.first.size() ; ++q)
-                        if (q != p && graphs.first.adjacent(p, q)) {
-                            // ... must be mapped to a neighbour of t
-                            vector<int> permitted;
-                            for (int u = 0 ; u < graphs.second.size() ; ++u)
-                                if (t != u && graphs.second.adjacent(t, u))
-                                    permitted.push_back(u);
-                            params.proof->create_adjacency_constraint(p, q, t, permitted);
-                        }
-                }
+
+                // it's simpler to always have the adjacency constraints, even
+                // if the assignment is forbidden
+                params.proof->start_adjacency_constraints_for(p, t);
+
+                // if p can be mapped to t, then each neighbour of p...
+                for (int q = 0 ; q < graphs.first.size() ; ++q)
+                    if (q != p && graphs.first.adjacent(p, q)) {
+                        // ... must be mapped to a neighbour of t
+                        vector<int> permitted;
+                        for (int u = 0 ; u < graphs.second.size() ; ++u)
+                            if (t != u && graphs.second.adjacent(t, u))
+                                permitted.push_back(u);
+                        params.proof->create_adjacency_constraint(p, q, t, permitted);
+                    }
             }
         }
 
