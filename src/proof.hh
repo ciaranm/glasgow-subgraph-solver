@@ -75,12 +75,14 @@ class Proof
 
         // distance 2 graphs
         auto create_exact_path_graphs(
+                int g,
                 const NamedVertex & p,
                 const NamedVertex & q,
-                const NamedVertex & between_p_and_q,
+                const std::vector<NamedVertex> & between_p_and_q,
                 const NamedVertex & t,
                 const std::vector<NamedVertex> & n_t,
-                const std::vector<NamedVertex> & d2_n_t
+                const std::vector<std::pair<NamedVertex, std::vector<NamedVertex> > > & two_away_from_t,
+                const std::vector<NamedVertex> & d_n_t
                 ) -> void;
 
         // new constraints

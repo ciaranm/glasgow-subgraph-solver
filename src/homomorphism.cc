@@ -254,11 +254,15 @@ namespace
 
         auto pattern_vertex_for_proof(int v) const -> NamedVertex
         {
+            if (v < 0 || unsigned(v) >= pattern_vertex_proof_names.size())
+                throw ProofError{ "Oops, there's a bug: v out of range in pattern" };
             return pair{ v, pattern_vertex_proof_names[pattern_permutation[v]] };
         }
 
         auto target_vertex_for_proof(int v) const -> NamedVertex
         {
+            if (v < 0 || unsigned(v) >= target_vertex_proof_names.size())
+                throw ProofError{ "Oops, there's a bug: v out of range in target" };
             return pair{ v, target_vertex_proof_names[v] };
         }
 
@@ -316,37 +320,58 @@ namespace
                 }
 
                 if (params.proof) {
-                    for (unsigned p = 0 ; p < pattern_size ; ++p) {
-                        for (unsigned q = 0 ; q < pattern_size ; ++q) {
-                            if (p == q || ! pattern_graph_rows[p * max_graphs + 1].test(q))
-                                continue;
+                    for (int g = 1 ; g <= params.number_of_exact_path_graphs ; ++g) {
+                        for (unsigned p = 0 ; p < pattern_size ; ++p) {
+                            for (unsigned q = 0 ; q < pattern_size ; ++q) {
+                                if (p == q || ! pattern_graph_rows[p * max_graphs + g].test(q))
+                                    continue;
 
-                            auto named_p = pattern_vertex_for_proof(p);
-                            auto named_q = pattern_vertex_for_proof(q);
+                                auto named_p = pattern_vertex_for_proof(p);
+                                auto named_q = pattern_vertex_for_proof(q);
 
-                            auto n_p = pattern_graph_rows[p * max_graphs + 0];
-                            auto n_q = pattern_graph_rows[q * max_graphs + 0];
-                            auto n_p_q = n_p & n_q;
-                            auto between_p_and_q = pattern_vertex_for_proof(n_p_q.find_first());
-
-                            for (unsigned t = 0 ; t < target_size ; ++t) {
-                                auto named_t = target_vertex_for_proof(t);
-
-                                vector<NamedVertex> named_n_t, named_d2_n_t;
-                                auto n_t = target_graph_rows[t * max_graphs + 0];
-                                for (auto w = n_t.find_first() ; w != decltype(n_t)::npos ; w = n_t.find_first()) {
-                                    n_t.reset(w);
-                                    named_n_t.push_back(target_vertex_for_proof(w));
+                                auto n_p_q = pattern_graph_rows[p * max_graphs + 0];
+                                n_p_q &= pattern_graph_rows[q * max_graphs + 0];
+                                vector<NamedVertex> between_p_and_q;
+                                for (auto v = n_p_q.find_first() ; v != decltype(n_p_q)::npos ; v = n_p_q.find_first()) {
+                                    n_p_q.reset(v);
+                                    between_p_and_q.push_back(pattern_vertex_for_proof(v));
+                                    if (between_p_and_q.size() >= unsigned(g))
+                                        break;
                                 }
 
-                                auto n2_t = target_graph_rows[t * max_graphs + 1];
-                                for (auto w = n2_t.find_first() ; w != decltype(n2_t)::npos ; w = n2_t.find_first()) {
-                                    n2_t.reset(w);
-                                    named_d2_n_t.push_back(target_vertex_for_proof(w));
-                                }
+                                for (unsigned t = 0 ; t < target_size ; ++t) {
+                                    auto named_t = target_vertex_for_proof(t);
 
-                                params.proof->create_exact_path_graphs(named_p, named_q, between_p_and_q,
-                                        named_t, named_n_t, named_d2_n_t);
+                                    vector<NamedVertex> named_n_t, named_d_n_t;
+                                    vector<pair<NamedVertex, vector<NamedVertex> > > named_two_away_from_t;
+                                    auto n_t = target_graph_rows[t * max_graphs + 0];
+                                    for (auto w = n_t.find_first() ; w != decltype(n_t)::npos ; w = n_t.find_first()) {
+                                        n_t.reset(w);
+                                        named_n_t.push_back(target_vertex_for_proof(w));
+                                    }
+
+                                    auto nd_t = target_graph_rows[t * max_graphs + g];
+                                    for (auto w = nd_t.find_first() ; w != decltype(nd_t)::npos ; w = nd_t.find_first()) {
+                                        nd_t.reset(w);
+                                        named_d_n_t.push_back(target_vertex_for_proof(w));
+                                    }
+
+                                    auto n2_t = target_graph_rows[t * max_graphs + 1];
+                                    for (auto w = n2_t.find_first() ; w != decltype(n2_t)::npos ; w = n2_t.find_first()) {
+                                        n2_t.reset(w);
+                                        auto n_t_w = target_graph_rows[w * max_graphs + 0];
+                                        n_t_w &= target_graph_rows[t * max_graphs + 0];
+                                        vector<NamedVertex> named_n_t_w;
+                                        for (auto x = n_t_w.find_first() ; x != decltype(n_t_w)::npos ; x = n_t_w.find_first()) {
+                                            n_t_w.reset(x);
+                                            named_n_t_w.push_back(target_vertex_for_proof(x));
+                                        }
+                                        named_two_away_from_t.emplace_back(target_vertex_for_proof(w), named_n_t_w);
+                                    }
+
+                                    params.proof->create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
+                                            named_t, named_n_t, named_two_away_from_t, named_d_n_t);
+                                }
                             }
                         }
                     }
@@ -1970,8 +1995,6 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         // but can be adapted to support most of them
         if (1 != params.n_threads)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with threads" };
-        if ((! params.no_supplementals) && (1 != params.number_of_exact_path_graphs))
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with more than one exact path graph" };
         if (params.clique_detection)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with clique detection" };
         if (params.lackey)

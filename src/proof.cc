@@ -11,6 +11,7 @@
 
 using std::copy;
 using std::endl;
+using std::find;
 using std::function;
 using std::istreambuf_iterator;
 using std::map;
@@ -336,33 +337,121 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisi
 }
 
 auto Proof::create_exact_path_graphs(
+        int g,
         const NamedVertex & p,
         const NamedVertex & q,
-        const NamedVertex & between_p_and_q,
+        const vector<NamedVertex> & between_p_and_q,
         const NamedVertex & t,
         const vector<NamedVertex> & n_t,
-        const vector<NamedVertex> & d2_n_t
+        const vector<pair<NamedVertex, vector<NamedVertex> > > & two_away_from_t,
+        const vector<NamedVertex> & d_n_t
         ) -> void
 {
-    _imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " via " << between_p_and_q.first <<
-        " in G^2 so " << q.second << " maps to one of..." << endl;
+    _imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
+        " in G^[" << g << "x2] so " << q.second << " maps to one of..." << endl;
 
-    _imp->proof_stream << "p " << _imp->adjacency_lines[tuple{ 0, p.first, between_p_and_q.first, t.first }];
+    _imp->proof_stream << "# 1" << endl;
 
-    for (auto & w : n_t) {
-        // due to loops or labels, it might not be possible to map to w
-        auto i = _imp->adjacency_lines.find(tuple{ 0, between_p_and_q.first, q.first, w.first });
-        if (i != _imp->adjacency_lines.end())
-            _imp->proof_stream << " " << i->second << " +";
+    _imp->proof_stream << "p";
+
+    // if p maps to t then things in between_p_and_q have to go to one of these...
+    bool first = true;
+    for (auto & b : between_p_and_q) {
+        _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }];
+        if (! first)
+            _imp->proof_stream << " +";
+        first = false;
     }
+
+    // now go two hops out: cancel between_p_and_q things with where can q go
+    for (auto & b : between_p_and_q) {
+        for (auto & w : n_t) {
+            // due to loops or labels, it might not be possible to map to w
+            auto i = _imp->adjacency_lines.find(tuple{ 0, b.first, q.first, w.first });
+            if (i != _imp->adjacency_lines.end())
+                _imp->proof_stream << " " << i->second << " +";
+        }
+    }
+
     _imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 
+    // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
     _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
-    for (auto & u : d2_n_t)
-        _imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    for (auto & u : two_away_from_t)
+        _imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first.first }];
     _imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
+
+    // if p maps to t then q does not map to t
+    _imp->proof_stream << "p " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + 0" << endl;
+    ++_imp->proof_line;
+
+    // and cancel out stray extras from injectivity
+    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : two_away_from_t)
+        if (u.first != t)
+            _imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first.first }];
+    _imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    vector<int> things_to_add_up;
+    things_to_add_up.push_back(_imp->proof_line);
+
+    // cancel out anything that is two away from t, but by insufficiently many paths
+    for (auto & u : two_away_from_t) {
+        if ((u.first == t) || (d_n_t.end() != find(d_n_t.begin(), d_n_t.end(), u.first)))
+            continue;
+
+        _imp->proof_stream << "p";
+        bool first = true;
+        for (auto & b : between_p_and_q) {
+            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }];
+            if (! first)
+                _imp->proof_stream << " +";
+            first = false;
+            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, q.first, b.first, u.first.first }] << " +";
+            _imp->proof_stream << " " << _imp->at_most_one_value_constraints[b.first] << " +";
+        }
+
+        for (auto & z : u.second)
+            _imp->proof_stream << " " << _imp->injectivity_constraints[z.first] << " +";
+
+        _imp->proof_stream << " 0" << endl;
+        ++_imp->proof_line;
+
+        // want: ~x_p_t + ~x_q_u >= 1
+        _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }]
+            << " 1 ~x" << _imp->variable_mappings[pair{ q.first, u.first.first }] << " >= 1 ;" << endl;
+        things_to_add_up.push_back(++_imp->proof_line);
+    }
+
+    // do the getting rid of
+    if (things_to_add_up.size() > 1) {
+        bool first = true;
+        _imp->proof_stream << "p";
+        for (auto & t : things_to_add_up) {
+            _imp->proof_stream << " " << t;
+            if (! first)
+                _imp->proof_stream << " +";
+            first = false;
+        }
+        _imp->proof_stream << " 0" << endl;
+        ++_imp->proof_line;
+    }
+
+    _imp->proof_stream << "# 0" << endl;
+
+    // and finally, tidy up to get what we wanted
+    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d_n_t)
+        if (u != t)
+            _imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    _imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
     _imp->adjacency_lines.emplace(tuple{ 1, p.first, q.first, t.first }, _imp->proof_line);
+
+    _imp->proof_stream << "w 1" << endl;
 }
 
