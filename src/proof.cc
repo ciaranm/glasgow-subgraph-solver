@@ -450,7 +450,7 @@ auto Proof::create_exact_path_graphs(
     _imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{ 1, p.first, q.first, t.first }, _imp->proof_line);
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
 
     _imp->proof_stream << "w 1" << endl;
 }
