@@ -50,14 +50,14 @@ auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGr
         result.set_vertex_name(i, "ROOT" + to_string(i));
     }
 
-    for (int i=r; i<(r+n); i++) {
-        result.set_vertex_label(i, read_str(infile));
-        result.set_vertex_name(i, to_string(i-r));
-    }
-
     for (int i=(r+n); i<(r+n+s); i++) {
         result.set_vertex_label(i, "SITE");
         result.set_vertex_name(i, "SITE" + to_string(i));
+    }
+
+    for (int i=r; i<(r+n); i++) {
+        result.set_vertex_label(i, read_str(infile));
+        result.set_vertex_name(i, to_string(i-r));
     }
  
     for (int i=0; i<(r+n); i++) for(int j=r; j<(n+s+r); j++) {

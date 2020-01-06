@@ -20,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <queue> 
 #include <random>
 #include <thread>
 #include <tuple>
@@ -47,6 +48,7 @@ using std::mutex;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
+using std::queue;
 using std::set;
 using std::sort;
 using std::stable_sort;
@@ -68,6 +70,9 @@ using std::chrono::operator""ms;
 
 using boost::barrier;
 using boost::dynamic_bitset;
+
+#include <iostream>
+using std::cout;
 
 namespace
 {
@@ -104,6 +109,8 @@ namespace
         vector<pair<bool, bool> > pattern_big_constraints;
 
         vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
+
+        vector<dynamic_bitset<> > target_graph_reachability, pattern_graph_reachability;
 
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
                 const set<int> & exclude_pattern_vertices) :
@@ -249,15 +256,55 @@ namespace
                 pattern_big_constraints.resize(pattern_size);
                 target_dir_degrees.resize(target_size);
 
+                pattern_graph_reachability.resize(pattern_size, dynamic_bitset<>(pattern_size));
+                target_graph_reachability.resize(target_size, dynamic_bitset<>(target_size));
+                
+                std::set<int> pattern_unique;
+                std::queue<int> pattern_reach;
+
+                std::set<int> target_unique;
+                std::queue<int> target_reach;
+
+                // Set in-out degrees of each vertex for bigraph root and site constraints
                 for(unsigned int a=0; a<pattern_size;a++) {
                     pattern_dir_degrees[a].first = pattern.in_degree(a);
                     pattern_dir_degrees[a].second = pattern.out_degree(a);
                     pattern_big_constraints[a] = pattern.get_big_constraint(a);
+
+                    pattern_graph_reachability[a][a] = 1;                
+                    if(pattern.out_degree(a) == 0) pattern_reach.push(a);
                 }
+
                 for(unsigned int a=0; a<target_size;a++) {
                     target_dir_degrees[a].first = target.in_degree(a);
                     target_dir_degrees[a].second = target.out_degree(a);
+
+                    target_graph_reachability[a][a] = 1;
+                    if(target.out_degree(a) == 0) target_reach.push(a);            
                 }
+
+                // Build reachability matrices by bubbling up from sink nodes and performing BFS
+                while(!pattern_reach.empty()){
+                    int v = pattern_reach.front();
+                    pattern_reach.pop();
+                    pattern_unique.erase(v);
+                    for(unsigned int a=0;a<pattern_size;a++) 
+                        if(pattern.adjacent(v,a) && pattern.edge_label(v,a) == "unlabelled") {
+                            for(unsigned int b=0;b<pattern_size;b++) pattern_graph_reachability[a][b] = pattern_graph_reachability[v][b];
+                            if(pattern_unique.insert(a).second) pattern_reach.push(a);
+                        }
+                }
+                while(!target_reach.empty()){
+                    int v = target_reach.front();
+                    target_reach.pop();
+                    target_unique.erase(v);
+                    for(unsigned int a=0;a<target_size;a++) 
+                        if(target.adjacent(v,a) && target.edge_label(v,a) == "unlabelled") {
+                            for(unsigned int b=0;b<target_size;b++) target_graph_reachability[a][b] |= target_graph_reachability[v][b];
+                            if(target_unique.insert(a).second) target_reach.push(a);
+                        }
+                }
+
             }
         }
 
@@ -768,6 +815,13 @@ namespace
             return true;
         }
 
+        auto propagate_bigraph_constraints(Domains & new_domains, const Assignment & current_assignment) -> bool
+        {
+            cout << current_assignment.pattern_vertex[0];
+            cout << new_domains[0].values;
+            return true;
+        }
+
         auto propagate_less_thans(Domains & new_domains) -> bool
         {
             ArrayType_ find_domain;
@@ -875,6 +929,10 @@ namespace
 
                 // propagate simple all different and adjacency
                 if (! propagate_simple_constraints(new_domains, current_assignment))
+                    return false;
+
+                // propagate bigraph transitive closure and neighbourhoods
+                if (params.bigraph && ! propagate_bigraph_constraints(new_domains, current_assignment))
                     return false;
 
                 // propagate less than
