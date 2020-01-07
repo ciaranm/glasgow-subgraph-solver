@@ -41,7 +41,7 @@ struct HomomorphismParams
     bool count_solutions = false;
 
     /// Find a minimal unsat pattern?
-    bool minimal_unsat_pattern = false;
+    std::function<auto (const std::list<int> &, bool is_sat) -> void> minimal_unsat_pattern;
 
     /// Print solutions, for enumerating
     std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;

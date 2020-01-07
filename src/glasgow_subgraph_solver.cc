@@ -29,6 +29,7 @@ using std::cout;
 using std::endl;
 using std::exception;
 using std::function;
+using std::list;
 using std::localtime;
 using std::make_pair;
 using std::make_shared;
@@ -177,7 +178,6 @@ auto main(int argc, char * argv[]) -> int
 
         params.induced = options_vars.count("induced");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions");
-        params.minimal_unsat_pattern = options_vars.count("minimal-unsat-pattern");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
@@ -314,6 +314,18 @@ auto main(int argc, char * argv[]) -> int
                 cout << "mapping = ";
                 for (auto v : mapping)
                     cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+                cout << endl;
+            };
+        }
+
+        if (options_vars.count("minimal-unsat-pattern")) {
+            params.minimal_unsat_pattern = [&] (const list<int> & vv, bool is_sat) {
+                if (is_sat)
+                    cout << "sat_pattern =";
+                else
+                    cout << "unsat_pattern =";
+                for (auto v : vv)
+                    cout << " " << graphs.first.vertex_name(v);
                 cout << endl;
             };
         }

@@ -2093,10 +2093,20 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
 
         // try to exclude each vertex in turn
         set<int> exclude;
+        auto what_is_left = [&] () -> list<int> {
+            list<int> result;
+            for (int n = 0 ; n < graphs.first.size() ; ++n)
+                if (! exclude.count(n))
+                    result.push_back(n);
+            return result;
+        };
+
+        params.minimal_unsat_pattern(what_is_left(), false);
         for (int n = 0 ; n < graphs.first.size() ; ++n) {
             exclude.insert(n);
             result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
                     AllGraphSizes(), graphs.second, graphs.first, params, exclude);
+            params.minimal_unsat_pattern(what_is_left(), ! result.mapping.empty());
             if (! result.mapping.empty()) {
                 result.mapping.clear();
                 exclude.erase(n);
@@ -2104,10 +2114,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         }
 
         // build up the minimal unsat pattern
-        for (int n = 0 ; n < graphs.first.size() ; ++n) {
-            if (! exclude.count(n))
-                result.minimal_unsat_pattern.push_back(n);
-        }
+        result.minimal_unsat_pattern = what_is_left();
 
         return result;
     }
