@@ -200,6 +200,11 @@ auto Proof::incompatible_by_degrees(
 
     _imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
+
+    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    _imp->proof_stream << "d " << _imp->proof_line - 1 << " 0" << endl;;
 }
 
 auto Proof::incompatible_by_nds(
@@ -231,6 +236,11 @@ auto Proof::incompatible_by_nds(
 
     _imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
+
+    _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    _imp->proof_stream << "d " << _imp->proof_line - 1 << " 0" << endl;
 }
 
 auto Proof::initial_domain_is_empty(int p) -> void
