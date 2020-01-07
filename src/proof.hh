@@ -100,6 +100,7 @@ class Proof
         // proof levels
         auto start_level(int level) -> void;
         auto back_up_to_level(int level) -> void;
+        auto forget_level(int level) -> void;
         auto back_up_to_top() -> void;
         auto post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void;
 

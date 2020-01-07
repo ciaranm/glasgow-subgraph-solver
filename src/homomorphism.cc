@@ -1207,6 +1207,7 @@ namespace
                         if (params.proof) {
                             params.proof->back_up_to_level(depth + 1);
                             params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
+                            params.proof->forget_level(depth + 2);
                         }
 
                         // restore assignments
@@ -1217,6 +1218,7 @@ namespace
                         if (params.proof) {
                             params.proof->back_up_to_level(depth + 1);
                             params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
+                            params.proof->forget_level(depth + 2);
                         }
 
                         // restore assignments
