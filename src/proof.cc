@@ -45,7 +45,7 @@ struct Proof::Imp
     map<pair<int, int>, string> variable_mappings;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<int, int, int, int>, int> adjacency_lines;
-    map<pair<int, int>, int> degree_eliminations;
+    map<pair<int, int>, int> eliminations;
 
     int nb_constraints = 0;
     int proof_line = 0;
@@ -107,6 +107,7 @@ auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
     _imp->model_stream << "* forbidden assignment" << endl;
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{ p, t }] << " >= 1 ;" << endl;
     ++_imp->nb_constraints;
+    _imp->eliminations.emplace(pair{ p, t }, _imp->nb_constraints);
 }
 
 auto Proof::start_adjacency_constraints_for(int p, int t) -> void
@@ -187,12 +188,15 @@ auto Proof::incompatible_by_degrees(
     _imp->proof_stream << "p";
     bool first = true;
     for (auto & n : n_p) {
-        if (first) {
-            first = false;
-            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+        // due to loops or labels, it might not be possible to map n to t.first
+        if (_imp->adjacency_lines.count(tuple{ g, p.first, n, t.first })) {
+            if (first) {
+                first = false;
+                _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+            }
+            else
+                _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
         }
-        else
-            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
     }
 
     // if I map p to t, I have to map the neighbours of p to neighbours of t
@@ -204,7 +208,7 @@ auto Proof::incompatible_by_degrees(
 
     _imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
     ++_imp->proof_line;
-    _imp->degree_eliminations.emplace(pair{ p.first, t.first }, _imp->proof_line);
+    _imp->eliminations.emplace(pair{ p.first, t.first }, _imp->proof_line);
 
     _imp->proof_stream << "d " << _imp->proof_line - 1 << " 0" << endl;
 }
@@ -223,12 +227,15 @@ auto Proof::incompatible_by_nds(
     _imp->proof_stream << "p";
     bool first = true;
     for (auto & n : p_subsequence) {
-        if (first) {
-            first = false;
-            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+        // due to loops or labels, it might not be possible to map n to t.first
+        if (_imp->adjacency_lines.count(tuple{ g, p.first, n, t.first })) {
+            if (first) {
+                first = false;
+                _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+            }
+            else
+                _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
         }
-        else
-            _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
     }
 
     // injectivity in the square
@@ -240,15 +247,15 @@ auto Proof::incompatible_by_nds(
     // block to the right of the failing square
     for (auto & n : p_subsequence) {
         for (auto & u : t_remaining) {
-            /* n -> t is already eliminated by degree */
-            _imp->proof_stream << " " << _imp->degree_eliminations[pair{ n, u }] << " +";
+            /* n -> t is already eliminated by degree or loop */
+            _imp->proof_stream << " " << _imp->eliminations[pair{ n, u }] << " +";
         }
     }
 
     // final column
     for (auto & n : p_subsequence) {
-        /* n -> t is already eliminated by degree */
-        _imp->proof_stream << " " << _imp->degree_eliminations[pair{ n, t_subsequence.back() }] << " +";
+        /* n -> t is already eliminated by degree or loop */
+        _imp->proof_stream << " " << _imp->eliminations[pair{ n, t_subsequence.back() }] << " +";
     }
 
     _imp->proof_stream << " 0" << endl;
