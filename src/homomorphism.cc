@@ -266,7 +266,6 @@ namespace
             return pair{ v, target_vertex_proof_names[v] };
         }
 
-
         auto prepare(const HomomorphismParams & params) -> bool
         {
             // pattern and target degrees, for the main graph
@@ -279,13 +278,52 @@ namespace
             for (unsigned i = 0 ; i < target_size ; ++i)
                 targets_degrees.at(0).at(i) = target_graph_rows[i * max_graphs + 0].count();
 
-            if (global_degree_is_preserved(params) && ! params.proof) {
-                auto pattern_degrees_sorted = patterns_degrees.at(0), target_degrees_sorted = targets_degrees.at(0);
-                sort(pattern_degrees_sorted.begin(), pattern_degrees_sorted.end(), greater<int>());
-                sort(target_degrees_sorted.begin(), target_degrees_sorted.end(), greater<int>());
-                for (unsigned i = 0 ; i < pattern_degrees_sorted.size() ; ++i)
-                    if (pattern_degrees_sorted.at(i) > target_degrees_sorted.at(i))
+            if (global_degree_is_preserved(params)) {
+                vector<pair<int, int> > p_gds, t_gds;
+                for (unsigned i = 0 ; i < pattern_size ; ++i)
+                    p_gds.emplace_back(i, patterns_degrees.at(0).at(i));
+                for (unsigned i = 0 ; i < target_size ; ++i)
+                    t_gds.emplace_back(i, targets_degrees.at(0).at(i));
+
+                sort(p_gds.begin(), p_gds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
+                        return a.second > b.second; });
+                sort(t_gds.begin(), t_gds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
+                        return a.second > b.second; });
+
+                for (unsigned i = 0 ; i < p_gds.size() ; ++i)
+                    if (p_gds.at(i).second > t_gds.at(i).second) {
+                        if (params.proof) {
+                            for (unsigned p = 0 ; p <= i ; ++p) {
+                                vector<int> n_p;
+                                auto np = pattern_graph_rows[p_gds.at(p).first * max_graphs + 0];
+                                for (unsigned j = 0 ; j < pattern_size ; ++j)
+                                    if (np.test(j))
+                                        n_p.push_back(pattern_permutation[j]);
+
+                                for (unsigned t = i ; t < t_gds.size() ; ++t) {
+                                    vector<int> n_t;
+                                    auto nt = target_graph_rows[t_gds.at(t).first * max_graphs + 0];
+                                    for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
+                                        nt.reset(j);
+                                        n_t.push_back(j);
+                                    }
+
+                                    params.proof->incompatible_by_degrees(0,
+                                            pattern_vertex_for_proof(p_gds.at(p).first), n_p,
+                                            target_vertex_for_proof(t_gds.at(t).first), n_t);
+                                }
+                            }
+
+                            vector<int> patterns, targets;
+                            for (unsigned p = 0 ; p <= i ; ++p)
+                                patterns.push_back(pattern_permutation[p_gds.at(i).first]);
+                            for (unsigned t = 0 ; t < i ; ++t)
+                                targets.push_back(t_gds.at(i).first);
+
+                            params.proof->emit_hall_set_or_violator(patterns, targets);
+                        }
                         return false;
+                    }
             }
 
             for (unsigned i = 0 ; i < target_size ; ++i)
