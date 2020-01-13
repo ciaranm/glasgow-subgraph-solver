@@ -13,8 +13,8 @@ override CXXFLAGS += -O3 -march=native -std=c++17 -Isrc/ -W -Wall -g -ggdb3 -pth
 
 ifeq ($(shell uname -s), Linux)
 override LDFLAGS += -pthread -lstdc++fs
-boost_ldlibs := -lboost_thread -lboost_system -lboost_program_options
+boost_ldlibs := -lboost_thread -lboost_system -lboost_program_options -lboost_iostreams
 else
 override LDFLAGS += -pthread
-boost_ldlibs := -lboost_thread-mt -lboost_system-mt -lboost_program_options-mt -lboost_filesystem-mt
+boost_ldlibs := -lboost_thread-mt -lboost_system-mt -lboost_program_options-mt -lboost_filesystem-mt -lboost_iostreams-mt
 endif

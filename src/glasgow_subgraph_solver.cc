@@ -115,7 +115,8 @@ auto main(int argc, char * argv[]) -> int
         po::options_description proof_logging_options{ "Proof logging options" };
         proof_logging_options.add_options()
             ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .log)")
-            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...");
+            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
+            ("compress-proof",                                 "Compress the proof using bz2");
         display_options.add(proof_logging_options);
 
         po::options_description hidden_options{ "Hidden options" };
@@ -332,10 +333,12 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("prove")) {
             bool friendly_names = options_vars.count("proof-names");
+            bool compress_proof = options_vars.count("compress-proof");
             string fn = options_vars["prove"].as<string>();
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names);
-            cout << "proof_model = " << fn << ".opb" << endl;
-            cout << "proof_log = " << fn << ".log" << endl;
+            string suffix = compress_proof ? ".bz2" : "";
+            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names, compress_proof);
+            cout << "proof_model = " << fn << ".opb" << suffix << endl;
+            cout << "proof_log = " << fn << ".log" << suffix << endl;
         }
 
         cout << "pattern_vertices = " << graphs.first.size() << endl;
