@@ -316,9 +316,9 @@ namespace
 
                             vector<int> patterns, targets;
                             for (unsigned p = 0 ; p <= i ; ++p)
-                                patterns.push_back(pattern_permutation[p_gds.at(i).first]);
+                                patterns.push_back(pattern_permutation[p_gds.at(p).first]);
                             for (unsigned t = 0 ; t < i ; ++t)
-                                targets.push_back(t_gds.at(i).first);
+                                targets.push_back(t_gds.at(t).first);
 
                             params.proof->emit_hall_set_or_violator(patterns, targets);
                         }
