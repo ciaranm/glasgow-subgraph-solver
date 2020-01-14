@@ -10,6 +10,7 @@
 using std::ifstream;
 using std::string;
 using std::to_string;
+using std::cout;
 
 namespace
 {
@@ -42,7 +43,7 @@ auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGr
     int r = read_num(infile); 
     int n = read_num(infile);
     int s = read_num(infile); 
-    [[ maybe_unused ]] int h = read_num(infile);
+    int h = read_num(infile);
     result.resize(r+n+s);
 
     for (int i=0; i<r; i++) {
@@ -64,6 +65,23 @@ auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGr
         char x = read_char(infile);
         if (x == '1') result.add_directed_edge(i, j, "dir");
     }
+
+    for (int i=0; i<h; i++) {
+        std::pair<bool, std::vector<int> > he;
+        he.second.resize(r+n+s);
+        char x = read_char(infile);
+
+        while(x != 'f' && x != 't') {
+            int index = x - '0';
+            he.second[index-1+r]++;
+            x = read_char(infile);
+        }   
+        if(x == 't') he.first = true;
+        else he.first = false;
+
+        result.add_hyperedge(he);
+    }
+
     return result;
 }
 
@@ -74,7 +92,7 @@ auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputG
     int r = read_num(infile); 
     int n = read_num(infile);
     int s = read_num(infile); 
-    [[ maybe_unused ]] int h = read_num(infile);
+    int h = read_num(infile);
     result.resize(n);
 
     for (int i=0; i<n; i++) result.set_vertex_label(i, read_str(infile));
@@ -85,6 +103,23 @@ auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputG
         if (i < r && j < n && x == '1') result.set_child_of_root(j);
         if (j >= n && i >= r && x == '1') result.set_parent_of_site(i-r);
     }
+
+    for (int i=0; i<h; i++) {
+        std::pair<bool, std::vector<int> > he;
+        he.second.resize(r+n+s);
+        char x = read_char(infile);
+
+        while(x != 'f' && x != 't') {
+            int index = x - '0';
+            he.second[index-1]++;
+            x = read_char(infile);
+        }   
+        if(x == 't') he.first = true;
+        else he.first = false;
+
+        result.add_hyperedge(he);
+    }
+
     return result;
 }
 

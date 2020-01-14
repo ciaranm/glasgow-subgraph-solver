@@ -111,6 +111,9 @@ namespace
         vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
         vector<dynamic_bitset<> > target_graph_reachability, pattern_graph_reachability;
+        std::vector<std::pair<bool, std::vector<int> > > target_hyperedges, pattern_hyperedges;
+
+        
 
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
                 const set<int> & exclude_pattern_vertices) :
@@ -259,6 +262,21 @@ namespace
                 pattern_graph_reachability.resize(pattern_size, dynamic_bitset<>(pattern_size));
                 target_graph_reachability.resize(target_size, dynamic_bitset<>(target_size));
                 
+                
+                target_hyperedges.resize(target.number_of_hyperedges());
+                pattern_hyperedges.resize(pattern.number_of_hyperedges());
+
+                for(unsigned int a=0; a<target.number_of_hyperedges();a++) {
+                    target_hyperedges[a].second.resize(target_size);
+                    target_hyperedges[a] = target.get_hyperedge(a);
+                }
+                for(unsigned int a=0; a<pattern.number_of_hyperedges();a++) {
+                    pattern_hyperedges[a].second.resize(pattern_size);
+                    pattern_hyperedges[a] = pattern.get_hyperedge(a);
+                }
+                
+
+
                 std::set<int> pattern_unique;
                 std::queue<int> pattern_reach;
 
@@ -283,6 +301,7 @@ namespace
                     if(target.out_degree(a) == 0) target_reach.push(a);            
                 }
 
+                
                 // Build reachability matrices by bubbling up from sink nodes and performing BFS
                 while(!pattern_reach.empty()){
                     int v = pattern_reach.front();
@@ -290,7 +309,7 @@ namespace
                     pattern_unique.erase(v);
                     for(unsigned int a=0;a<pattern_size;a++) 
                         if(pattern.adjacent(v,a) && pattern.edge_label(v,a) == "unlabelled") {
-                            for(unsigned int b=0;b<pattern_size;b++) pattern_graph_reachability[a][b] = pattern_graph_reachability[v][b];
+                            for(unsigned int b=0;b<pattern_size;b++) pattern_graph_reachability[a][b] |= pattern_graph_reachability[v][b];
                             if(pattern_unique.insert(a).second) pattern_reach.push(a);
                         }
                 }
@@ -304,7 +323,6 @@ namespace
                             if(target_unique.insert(a).second) target_reach.push(a);
                         }
                 }
-
             }
         }
 
@@ -815,13 +833,6 @@ namespace
             return true;
         }
 
-        auto propagate_bigraph_constraints(Domains & new_domains, const Assignment & current_assignment) -> bool
-        {
-            cout << current_assignment.pattern_vertex[0];
-            cout << new_domains[0].values;
-            return true;
-        }
-
         auto propagate_less_thans(Domains & new_domains) -> bool
         {
             ArrayType_ find_domain;
@@ -929,10 +940,6 @@ namespace
 
                 // propagate simple all different and adjacency
                 if (! propagate_simple_constraints(new_domains, current_assignment))
-                    return false;
-
-                // propagate bigraph transitive closure and neighbourhoods
-                if (params.bigraph && ! propagate_bigraph_constraints(new_domains, current_assignment))
                     return false;
 
                 // propagate less than
@@ -1050,6 +1057,27 @@ namespace
                     });
         }
 
+        auto bigraph_link_match(
+            std::pair<bool, std::vector<int> > pattern_hyperedge,
+            std::pair<bool, std::vector<int> > target_hyperedge,
+            VertexToVertexMapping mapping) -> bool
+        {
+            // If pattern is closed and target is open, cannot ever match
+            if (target_hyperedge.first && !pattern_hyperedge.first) return false;
+
+            // Closed pattern hyperedge must match exactly with the target hyperedge
+            if (!pattern_hyperedge.first)
+                for(unsigned i=0; i<pattern_hyperedge.second.size(); i++)
+                    if(pattern_hyperedge.second[i] != target_hyperedge.second[mapping[i]]) return false;
+
+            // Open pattern hyperedges can be subsets of the target hyperedge
+            for(unsigned i=0; i<pattern_hyperedge.second.size(); i++)
+                if(pattern_hyperedge.second[i] > target_hyperedge.second[mapping[i]]) return false;
+
+            return true;
+        }
+
+
         auto restarting_search(
                 Assignments & assignments,
                 const Domains & domains,
@@ -1067,6 +1095,79 @@ namespace
             // find ourselves a domain, or succeed if we're all assigned
             const Domain * branch_domain = find_branch_domain(domains);
             if (! branch_domain) {
+
+                // do stuff here
+                // assignments -> contains complete set of everything
+                // return SearchResult::Unsatisfiable if transitive closure violated
+                //  - or if site/root neighbourhood check is violated
+                //  - or if link graph is violated
+
+                if (params.bigraph) {
+
+                    VertexToVertexMapping mapping;
+                    expand_to_full_result(assignments, mapping);
+
+                    bool lazy_flag;
+                    std::set<int> mapped_targets;
+
+                    // Eliminate closed-pattern/closed-target hyperedges first
+                    for(unsigned i=0; i<model.pattern_hyperedges.size(); i++){
+                        if(!model.pattern_hyperedges[i].first) {
+                            lazy_flag = false;
+                            for(unsigned j=0; j<model.target_hyperedges.size(); j++) {
+                                if(mapped_targets.find(j) == mapped_targets.end() && 
+                                   bigraph_link_match(model.pattern_hyperedges[i], model.target_hyperedges[j], mapping)) {
+                                    mapped_targets.insert(j);
+                                    lazy_flag = true;             
+                                    break;
+                                }             
+                            }
+                            if (!lazy_flag) return SearchResult::Unsatisfiable;
+                        }
+                    }  
+                             
+                    // Clean up open pattern hyperedges by matching arbitrarily on remaining target hyperedges    
+                    // (by nature of bigraphs, this should be sound)     
+                    for(unsigned i=0; i<model.pattern_hyperedges.size(); i++){
+                        if(model.pattern_hyperedges[i].first) {
+                            lazy_flag = false;
+                            for(unsigned j=0; j<model.target_hyperedges.size(); j++) {
+                                if(mapped_targets.find(j) == mapped_targets.end() && 
+                                   bigraph_link_match(model.pattern_hyperedges[i], model.target_hyperedges[j], mapping)) {
+                                   lazy_flag = true;             
+                                   break;
+                                }             
+                            }
+                            if (!lazy_flag) return SearchResult::Unsatisfiable;
+                        }
+                    }
+
+                    //Find transitive closure violations
+                    for(unsigned i=0; i<model.pattern_size; i++){
+                        if(model.pattern_big_constraints[i].second) { 
+                            std::set<int> child_mappings;
+
+                            // Get all corresponding target node's children with a mapping
+                            for(unsigned j=0; j<model.pattern_size; j++) 
+                                if(i != j &&
+                                    model.pattern_graph_rows[i].test(j) && 
+                                    model.pattern_graph_reachability[i][j])
+                                        child_mappings.insert(mapping[j]);
+             
+
+                            // For all target node's children without a mapping, check if it can reach any children of a root node
+                            for(unsigned j=0; j<model.target_size; j++)
+                                if(mapping[i] != j && 
+                                    model.target_graph_rows[mapping[i]].test(j) && 
+                                    model.target_graph_reachability[mapping[i]][j] &&
+                                    child_mappings.find(j) == child_mappings.end())
+                                        for(unsigned k=0; k<model.pattern_size; k++) 
+                                            if(model.pattern_big_constraints[k].first && model.target_graph_reachability[j][mapping[k]])
+                                                return SearchResult::Unsatisfiable;                                   
+                        }
+                    }
+               }    
+
                 if (params.lackey) {
                     VertexToVertexMapping mapping;
                     expand_to_full_result(assignments, mapping);

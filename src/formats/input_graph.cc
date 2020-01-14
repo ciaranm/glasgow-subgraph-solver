@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <limits>
 #include <string_view>
+#include <vector>
 
 using std::distance;
 using std::find;
@@ -18,6 +19,7 @@ using std::pair;
 using std::string;
 using std::string_view;
 using std::to_string;
+using std::vector;
 
 InputGraph::InputGraph(int size, bool v, bool e) :
     _has_vertex_labels(v),
@@ -35,6 +37,7 @@ auto InputGraph::resize(int size) -> void
     _vertex_names.resize(size);
     _vertex_pattern_constraints.resize(size);
     _vertex_directed_degrees.resize(size);
+   
 }
 
 auto InputGraph::add_edge(int a, int b) -> void
@@ -55,6 +58,11 @@ auto InputGraph::add_directed_edge(int a, int b, string_view label) -> void
         _loopy = true;
 }
 
+auto InputGraph::add_hyperedge(std::pair<bool, std::vector<int> > he) -> void
+{
+    _hyperedges.push_back(he);
+}
+
 auto InputGraph::adjacent(int a, int b) const -> bool
 {
     return _edges.count({ a, b });
@@ -68,6 +76,16 @@ auto InputGraph::size() const -> int
 auto InputGraph::number_of_directed_edges() const -> int
 {
     return _edges.size();
+}
+
+auto InputGraph::number_of_hyperedges() const -> int
+{
+    return _hyperedges.size();
+}
+
+auto InputGraph::get_hyperedge(int v) const -> std::pair<bool, std::vector<int> >
+{
+    return _hyperedges[v];
 }
 
 auto InputGraph::loopy() const -> bool

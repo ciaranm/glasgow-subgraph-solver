@@ -29,6 +29,8 @@ class InputGraph
 
         std::vector<std::pair<int, int> > _vertex_directed_degrees;
         std::vector<std::pair<bool, bool> > _vertex_pattern_constraints;
+
+        std::vector<std::pair<bool, std::vector<int> > > _hyperedges;
     
         bool _loopy = false;
 
@@ -71,6 +73,21 @@ class InputGraph
          * Add a directed edge from a to b, with a label.
          */
         auto add_directed_edge(int a, int b, std::string_view label) -> void;
+
+        /**
+         * Add a bigraph hyperedge to a subset of vertices (open or closed)
+         */
+        auto add_hyperedge(std::pair<bool, std::vector<int> > he) -> void;
+
+        /**
+         * Number of bigraph hyperedges.
+         */
+        auto number_of_hyperedges() const -> int;
+
+        /**
+         * Return the bigraph hyperedge of index v.
+         */
+        auto get_hyperedge(int v) const -> std::pair<bool, std::vector<int> >;
 
         /**
          * Are vertices a and b adjacent?
