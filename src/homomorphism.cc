@@ -1066,14 +1066,15 @@ namespace
             if (target_hyperedge.first && !pattern_hyperedge.first) return false;
 
             // Closed pattern hyperedge must match exactly with the target hyperedge
-            if (!pattern_hyperedge.first)
+            if (!pattern_hyperedge.first) {
                 for(unsigned i=0; i<pattern_hyperedge.second.size(); i++)
                     if(pattern_hyperedge.second[i] != target_hyperedge.second[mapping[i]]) return false;
-
+            }
             // Open pattern hyperedges can be subsets of the target hyperedge
-            for(unsigned i=0; i<pattern_hyperedge.second.size(); i++)
-                if(pattern_hyperedge.second[i] > target_hyperedge.second[mapping[i]]) return false;
-
+            else{          
+                for(unsigned i=0; i<pattern_hyperedge.second.size(); i++)
+                    if(pattern_hyperedge.second[i] > target_hyperedge.second[mapping[i]]) return false;
+            }
             return true;
         }
 
@@ -1128,6 +1129,7 @@ namespace
                              
                     // Clean up open pattern hyperedges by matching arbitrarily on remaining target hyperedges    
                     // (by nature of bigraphs, this should be sound)     
+
                     for(unsigned i=0; i<model.pattern_hyperedges.size(); i++){
                         if(model.pattern_hyperedges[i].first) {
                             lazy_flag = false;

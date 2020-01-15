@@ -69,14 +69,14 @@ auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGr
     for (int i=0; i<h; i++) {
         std::pair<bool, std::vector<int> > he;
         he.second.resize(r+n+s);
-        char x = read_char(infile);
+        string x = read_str(infile);
 
-        while(x != 'f' && x != 't') {
-            int index = x - '0';
+        while(x != "f" && x != "t") {
+            int index = std::stoi(x);
             he.second[index-1+r]++;
-            x = read_char(infile);
+            x = read_str(infile);
         }   
-        if(x == 't') he.first = true;
+        if(x == "t") he.first = true;
         else he.first = false;
 
         result.add_hyperedge(he);
@@ -106,17 +106,17 @@ auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputG
 
     for (int i=0; i<h; i++) {
         std::pair<bool, std::vector<int> > he;
-        he.second.resize(r+n+s);
-        char x = read_char(infile);
+        he.second.resize(n);
+        string x = read_str(infile);
 
-        while(x != 'f' && x != 't') {
-            int index = x - '0';
+        while(x != "f" && x != "t") {
+            int index = std::stoi(x);
             he.second[index-1]++;
-            x = read_char(infile);
+            x = read_str(infile);
         }   
-        if(x == 't') he.first = true;
+        if(x == "t") he.first = true;
         else he.first = false;
-
+        
         result.add_hyperedge(he);
     }
 
