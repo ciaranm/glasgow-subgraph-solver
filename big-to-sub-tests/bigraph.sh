@@ -8,7 +8,7 @@ do
   n=5
   a=(${y[n]})
   d="${a[0]}"
-  while [ $d != "status" ]
+  while [[ $d != "status" ]]
   do
     echo ${y[n]}
     (( n++ ))
