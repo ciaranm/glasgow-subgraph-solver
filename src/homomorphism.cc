@@ -110,10 +110,8 @@ namespace
 
         vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
-        vector<dynamic_bitset<> > target_graph_reachability, pattern_graph_reachability;
+        vector<dynamic_bitset<> > target_graph_reachability, pattern_graph_reachability, pattern_site_reachability;
         std::vector<std::pair<bool, std::vector<int> > > target_hyperedges, pattern_hyperedges;
-
-        
 
         SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
                 const set<int> & exclude_pattern_vertices) :
@@ -259,10 +257,20 @@ namespace
                 pattern_big_constraints.resize(pattern_size);
                 target_dir_degrees.resize(target_size);
 
-                pattern_graph_reachability.resize(pattern_size, dynamic_bitset<>(pattern_size));
-                target_graph_reachability.resize(target_size, dynamic_bitset<>(target_size));
-                
-                
+                pattern_graph_reachability.resize(pattern_size, dynamic_bitset<>(pattern_size));           
+                target_graph_reachability.resize(target_size, dynamic_bitset<>(target_size));    
+
+                int site_size = 0;
+                for(unsigned int a=0; a<pattern.no_pattern_site_edges();a++)
+                    if(pattern.get_pattern_site_edge(a).first+1 > site_size) 
+                        site_size = pattern.get_pattern_site_edge(a).first+1;                          
+                pattern_site_reachability.resize(site_size, dynamic_bitset<>(pattern_size)); 
+               
+                for(unsigned int a=0; a<pattern.no_pattern_site_edges();a++)
+                    pattern_site_reachability[pattern.get_pattern_site_edge(a).first][pattern.get_pattern_site_edge(a).second] = 1;
+
+                    
+
                 target_hyperedges.resize(target.number_of_hyperedges());
                 pattern_hyperedges.resize(pattern.number_of_hyperedges());
 
@@ -274,9 +282,7 @@ namespace
                     pattern_hyperedges[a].second.resize(pattern_size);
                     pattern_hyperedges[a] = pattern.get_hyperedge(a);
                 }
-                
-
-
+                                
                 std::set<int> pattern_unique;
                 std::queue<int> pattern_reach;
 
@@ -1078,7 +1084,6 @@ namespace
             return true;
         }
 
-
         auto restarting_search(
                 Assignments & assignments,
                 const Domains & domains,
@@ -1157,16 +1162,44 @@ namespace
                                         child_mappings.insert(mapping[j]);
              
 
+                            // Check if pattern node only points to shared sites
+                            bool sites_okay = false;
+                            std::set<int> site_mappings;
+                            for(unsigned j=0;j<model.pattern_site_reachability.size();j++) {                                
+                                if(model.pattern_site_reachability[j][i] == 1 && model.pattern_site_reachability[j].count() == 1) {
+                                    sites_okay = true;
+                                    break;
+                                }
+                                if(model.pattern_site_reachability[j][i] == 1) site_mappings.insert(j);                           
+                            }   
+
                             // For all target node's children without a mapping, check if it can reach any children of a root node
-                            for(unsigned j=0; j<model.target_size; j++)
+                            for(unsigned j=0; j<model.target_size; j++) {
                                 if(mapping[i] != j && 
-                                    model.target_graph_rows[mapping[i]].test(j) && 
+                                    model.target_graph_rows[j].test(mapping[i]) && 
                                     model.target_graph_reachability[mapping[i]][j] &&
-                                    child_mappings.find(j) == child_mappings.end())
+                                    child_mappings.find(j) == child_mappings.end()) {
                                         for(unsigned k=0; k<model.pattern_size; k++) 
                                             if(model.pattern_big_constraints[k].first && model.target_graph_reachability[j][mapping[k]])
-                                                return SearchResult::Unsatisfiable;                                   
+                                                return SearchResult::Unsatisfiable;
+
+                                        if(!sites_okay) {
+                                            for(unsigned k=0; k<site_mappings.size();k++){
+                                                bool site_sat = true;
+                                                for(unsigned l=0; l<model.pattern_size;l++){
+                                                    if(l != j && 
+                                                        model.pattern_site_reachability[k][l] != model.target_graph_rows[j].test(mapping[l])) 
+                                                            {site_sat = false; break;}
+                                                }
+                                                if(site_sat) break;
+                                                if(k+1 == site_mappings.size()) return SearchResult::Unsatisfiable;
+                                            }
+                    
+                                        }
+                                }  
+                            }                                                   
                         }
+
                     }
                }    
 

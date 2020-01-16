@@ -31,7 +31,8 @@ class InputGraph
         std::vector<std::pair<bool, bool> > _vertex_pattern_constraints;
 
         std::vector<std::pair<bool, std::vector<int> > > _hyperedges;
-    
+        std::vector<std::pair<int, int> > _pattern_site_edges;
+
         bool _loopy = false;
 
     public:
@@ -88,6 +89,15 @@ class InputGraph
          * Return the bigraph hyperedge of index v.
          */
         auto get_hyperedge(int v) const -> std::pair<bool, std::vector<int> >;
+
+        /**
+         * Keep track of pattern site edges for dealing with that one annoying edge case
+         */
+        auto add_pattern_site_edge(int a, int b) -> void;
+
+        auto get_pattern_site_edge(int s) const -> std::pair<int, int>;
+
+        auto no_pattern_site_edges() const -> int;
 
         /**
          * Are vertices a and b adjacent?

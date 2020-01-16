@@ -36,8 +36,7 @@ auto InputGraph::resize(int size) -> void
     _vertex_labels.resize(size);
     _vertex_names.resize(size);
     _vertex_pattern_constraints.resize(size);
-    _vertex_directed_degrees.resize(size);
-   
+    _vertex_directed_degrees.resize(size);   
 }
 
 auto InputGraph::add_edge(int a, int b) -> void
@@ -86,6 +85,21 @@ auto InputGraph::number_of_hyperedges() const -> int
 auto InputGraph::get_hyperedge(int v) const -> std::pair<bool, std::vector<int> >
 {
     return _hyperedges[v];
+}
+
+auto InputGraph::add_pattern_site_edge(int a, int b) -> void
+{
+    _pattern_site_edges.push_back(make_pair(a, b));
+}
+
+auto InputGraph::get_pattern_site_edge(int s) const -> std::pair<int, int>
+{
+    return _pattern_site_edges[s];
+}
+
+auto InputGraph::no_pattern_site_edges() const -> int
+{
+    return _pattern_site_edges.size();
 }
 
 auto InputGraph::loopy() const -> bool
