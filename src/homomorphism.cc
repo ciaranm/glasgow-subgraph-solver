@@ -1157,7 +1157,7 @@ namespace
                             // Get all corresponding target node's children with a mapping
                             for(unsigned j=0; j<model.pattern_size; j++) 
                                 if(i != j &&
-                                    model.pattern_graph_rows[i].test(j) && 
+                                    model.pattern_graph_rows[i * model.max_graphs].test(j) && 
                                     model.pattern_graph_reachability[i][j])
                                         child_mappings.insert(mapping[j]);
              
@@ -1176,7 +1176,7 @@ namespace
                             // For all target node's children without a mapping, check if it can reach any children of a root node
                             for(unsigned j=0; j<model.target_size; j++) {
                                 if(mapping[i] != j && 
-                                    model.target_graph_rows[j].test(mapping[i]) && 
+                                    model.target_graph_rows[mapping[i]*model.max_graphs].test(j) && 
                                     model.target_graph_reachability[mapping[i]][j] &&
                                     child_mappings.find(j) == child_mappings.end()) {
                                         for(unsigned k=0; k<model.pattern_size; k++) 
@@ -1188,7 +1188,7 @@ namespace
                                                 bool site_sat = true;
                                                 for(unsigned l=0; l<model.pattern_size;l++){
                                                     if(l != j && 
-                                                        model.pattern_site_reachability[k][l] != model.target_graph_rows[j].test(mapping[l])) 
+                                               model.pattern_site_reachability[k][l] != model.target_graph_rows[j* model.max_graphs].test(mapping[l])) 
                                                             {site_sat = false; break;}
                                                 }
                                                 if(site_sat) break;
