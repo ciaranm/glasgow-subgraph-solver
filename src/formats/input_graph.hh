@@ -32,6 +32,7 @@ class InputGraph
 
         std::vector<std::pair<bool, std::vector<int> > > _hyperedges;
         std::vector<std::pair<int, int> > _pattern_site_edges;
+        std::vector<std::pair<int, int> > _pattern_root_edges;
 
         bool _loopy = false;
 
@@ -98,6 +99,15 @@ class InputGraph
         auto get_pattern_site_edge(int s) const -> std::pair<int, int>;
 
         auto no_pattern_site_edges() const -> int;
+
+        /**
+         * Keep track of pattern root edges for dealing with that one annoying edge case
+         */
+        auto add_pattern_root_edge(int a, int b) -> void;
+
+        auto get_pattern_root_edge(int s) const -> std::pair<int, int>;
+
+        auto no_pattern_root_edges() const -> int;
 
         /**
          * Are vertices a and b adjacent?

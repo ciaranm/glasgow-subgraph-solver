@@ -102,6 +102,23 @@ auto InputGraph::no_pattern_site_edges() const -> int
     return _pattern_site_edges.size();
 }
 
+
+auto InputGraph::add_pattern_root_edge(int a, int b) -> void
+{
+    _pattern_root_edges.push_back(make_pair(a, b));
+}
+
+auto InputGraph::get_pattern_root_edge(int r) const -> std::pair<int, int>
+{
+    return _pattern_root_edges[r];
+}
+
+auto InputGraph::no_pattern_root_edges() const -> int
+{
+    return _pattern_root_edges.size();
+}
+
+
 auto InputGraph::loopy() const -> bool
 {
     return _loopy;

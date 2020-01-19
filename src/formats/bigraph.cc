@@ -100,7 +100,10 @@ auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputG
     for (int i=0; i<(r+n); i++) for(int j=0; j<(n+s); j++) {
         char x = read_char(infile);
         if (i >= r && j < n && x == '1') result.add_directed_edge(i-r, j, "dir");
-        if (i < r && j < n && x == '1') result.set_child_of_root(j);
+        if (i < r && j < n && x == '1') {
+            result.set_child_of_root(j);
+            result.add_pattern_root_edge(i, j);
+        }
         if (j >= n && i >= r && x == '1') {
             result.set_parent_of_site(i-r);
             result.add_pattern_site_edge(j-n, i-r);
