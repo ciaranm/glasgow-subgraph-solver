@@ -90,7 +90,6 @@ namespace
         vector<BitSetType_> target_graph_rows;
         vector<pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;
 
-        vector<int> pattern_permutation, isolated_vertices;
         vector<vector<int> > patterns_degrees, targets_degrees;
         int largest_target_degree;
         bool has_less_thans;
@@ -100,8 +99,7 @@ namespace
 
         vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
-        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-                const set<int> & exclude_pattern_vertices) :
+        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
             max_graphs(calculate_n_shape_graphs(params)),
             pattern_size(pattern.size()),
             full_pattern_size(pattern.size()),
@@ -124,30 +122,17 @@ namespace
                     target_vertex_proof_names.push_back(target.vertex_name(v));
             }
 
-            // strip out isolated vertices in the pattern, and build pattern_permutation
-            for (unsigned v = 0 ; v < full_pattern_size ; ++v) {
-                if (exclude_pattern_vertices.count(v)) {
-                    --pattern_size;
-                }
-                else if (can_strip_isolated_vertices(params) && 0 == pattern.degree(v)) {
-                    isolated_vertices.push_back(v);
-                    --pattern_size;
-                }
-                else
-                    pattern_permutation.push_back(v);
-            }
-
             // recode pattern to a bit graph, and strip out loops
             pattern_graph_rows.resize(pattern_size * max_graphs, dynamic_bitset<>(pattern_size));
             pattern_loops.resize(pattern_size);
             for (unsigned i = 0 ; i < pattern_size ; ++i) {
                 for (unsigned j = 0 ; j < pattern_size ; ++j) {
-                    if (i == j) {
-                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
+                    if (pattern.adjacent(i, j)) {
+                        if (i == j)
                             pattern_loops[i] = 1;
+                        else
+                            pattern_graph_rows[i * max_graphs + 0].set(j);
                     }
-                    else if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j)))
-                        pattern_graph_rows[i * max_graphs + 0].set(j);
                 }
             }
 
@@ -156,13 +141,13 @@ namespace
             int next_vertex_label = 0;
             if (pattern.has_vertex_labels()) {
                 for (unsigned i = 0 ; i < pattern_size ; ++i) {
-                    if (vertex_labels_map.emplace(pattern.vertex_label(pattern_permutation.at(i)), next_vertex_label).second)
+                    if (vertex_labels_map.emplace(pattern.vertex_label(i), next_vertex_label).second)
                         ++next_vertex_label;
                 }
 
                 pattern_vertex_labels.resize(pattern_size);
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    pattern_vertex_labels[pattern_permutation[i]] = vertex_labels_map.find(string{ pattern.vertex_label(pattern_permutation[i]) })->second;
+                    pattern_vertex_labels[i] = vertex_labels_map.find(string{ pattern.vertex_label(i) })->second;
             }
 
             // re-encode and store edge labels
@@ -172,11 +157,11 @@ namespace
                 pattern_edge_labels.resize(pattern_size * pattern_size);
                 for (unsigned i = 0 ; i < pattern_size ; ++i)
                     for (unsigned j = 0 ; j < pattern_size ; ++j)
-                        if (pattern.adjacent(pattern_permutation.at(i), pattern_permutation.at(j))) {
-                            auto r = edge_labels_map.emplace(pattern.edge_label(pattern_permutation.at(i), pattern_permutation.at(j)), next_edge_label);
+                        if (pattern.adjacent(i, j)) {
+                            auto r = edge_labels_map.emplace(pattern.edge_label(i, j), next_edge_label);
                             if (r.second)
                                 ++next_edge_label;
-                            pattern_edge_labels[pattern_permutation.at(i) * pattern_size + pattern_permutation.at(j)] = r.first->second;
+                            pattern_edge_labels[i * pattern_size + j] = r.first->second;
                         }
             }
 
@@ -256,7 +241,7 @@ namespace
         {
             if (v < 0 || unsigned(v) >= pattern_vertex_proof_names.size())
                 throw ProofError{ "Oops, there's a bug: v out of range in pattern" };
-            return pair{ v, pattern_vertex_proof_names[pattern_permutation[v]] };
+            return pair{ v, pattern_vertex_proof_names[v] };
         }
 
         auto target_vertex_for_proof(int v) const -> NamedVertex
@@ -298,7 +283,7 @@ namespace
                                 auto np = pattern_graph_rows[p_gds.at(p).first * max_graphs + 0];
                                 for (unsigned j = 0 ; j < pattern_size ; ++j)
                                     if (np.test(j))
-                                        n_p.push_back(pattern_permutation[j]);
+                                        n_p.push_back(j);
 
                                 for (unsigned t = i ; t < t_gds.size() ; ++t) {
                                     vector<int> n_t;
@@ -316,7 +301,7 @@ namespace
 
                             vector<int> patterns, targets;
                             for (unsigned p = 0 ; p <= i ; ++p)
-                                patterns.push_back(pattern_permutation[p_gds.at(p).first]);
+                                patterns.push_back(p_gds.at(p).first);
                             for (unsigned t = 0 ; t < i ; ++t)
                                 targets.push_back(t_gds.at(t).first);
 
@@ -653,8 +638,7 @@ namespace
             vector<pair<int, int> > trail;
             for (auto & a : assignments.values)
                 if (a.is_decision)
-                    trail.emplace_back(model.pattern_permutation[a.assignment.pattern_vertex],
-                            a.assignment.target_vertex);
+                    trail.emplace_back(a.assignment.pattern_vertex, a.assignment.target_vertex);
             return trail;
         }
 
@@ -663,24 +647,17 @@ namespace
             vector<pair<NamedVertex, NamedVertex> > solution;
             for (auto & a : assignments.values)
                 if (solution.end() == find_if(solution.begin(), solution.end(),
-                            [&] (const auto & t) { return t.first.first == model.pattern_permutation[a.assignment.pattern_vertex]; }))
-                    solution.emplace_back(model.pattern_vertex_for_proof(a.assignment.pattern_vertex), model.target_vertex_for_proof(a.assignment.target_vertex));
+                            [&] (const auto & t) { return unsigned(t.first.first) == a.assignment.pattern_vertex; }))
+                    solution.emplace_back(
+                            model.pattern_vertex_for_proof(a.assignment.pattern_vertex),
+                            model.target_vertex_for_proof(a.assignment.target_vertex));
             return solution;
         }
 
         auto expand_to_full_result(const Assignments & assignments, VertexToVertexMapping & mapping) -> void
         {
             for (auto & a : assignments.values)
-                mapping.emplace(model.pattern_permutation.at(a.assignment.pattern_vertex), a.assignment.target_vertex);
-
-            // re-add isolated vertices
-            int t = 0;
-            for (auto & v : model.isolated_vertices) {
-                while (mapping.end() != find_if(mapping.begin(), mapping.end(),
-                            [&t] (const pair<int, int> & p) { return p.second == t; }))
-                        ++t;
-                mapping.emplace(v, t);
-            }
+                mapping.emplace(a.assignment.pattern_vertex, a.assignment.target_vertex);
         }
 
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
@@ -1331,7 +1308,7 @@ namespace
                     auto & d = domains.at(domain_index);
 
                     if constexpr (proof_)
-                        lhs.push_back(model.pattern_permutation[d.v]);
+                        lhs.push_back(d.v);
 
                     [[ maybe_unused ]] conditional_t<proof_, unsigned, tuple<> > old_d_values_count;
                     if constexpr (proof_)
@@ -1454,7 +1431,7 @@ namespace
                         auto np = model.pattern_graph_rows[p * model.max_graphs + g];
                         for (unsigned j = 0 ; j < model.pattern_size ; ++j)
                             if (np.test(j))
-                                n_p.push_back(model.pattern_permutation[j]);
+                                n_p.push_back(j);
 
                         auto nt = model.target_graph_rows[t * model.max_graphs + g];
                         for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
@@ -1501,7 +1478,7 @@ namespace
                             auto np = model.pattern_graph_rows[p * model.max_graphs + g];
                             for (auto w = np.find_first() ; w != decltype(np)::npos ; w = np.find_first()) {
                                 np.reset(w);
-                                p_nds.emplace_back(model.pattern_permutation[w], model.pattern_graph_rows[w * model.max_graphs + g].count());
+                                p_nds.emplace_back(w, model.pattern_graph_rows[w * model.max_graphs + g].count());
                             }
 
                             auto nt = model.target_graph_rows[t * model.max_graphs + g];
@@ -1610,7 +1587,7 @@ namespace
                     if (params.proof) {
                         vector<int> hall_lhs, hall_rhs;
                         for (auto & d : domains)
-                            hall_lhs.push_back(model.pattern_permutation[d.v]);
+                            hall_lhs.push_back(d.v);
                         auto dd = domains_union;
                         for (auto v = dd.find_first() ; v != decltype(dd)::npos ; v = dd.find_first()) {
                             dd.reset(v);
@@ -1754,9 +1731,6 @@ namespace
                 }
                 result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
             }
-
-            if (can_strip_isolated_vertices(params) && ! model.isolated_vertices.empty())
-                result.extra_stats.emplace_back("isolated_vertices_removed = " + to_string(model.isolated_vertices.size()));
 
             return result;
         }
@@ -1952,9 +1926,6 @@ namespace
             common_result.extra_stats.emplace_back("search_time = " + to_string(
                         duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
 
-            if (can_strip_isolated_vertices(params) && ! model.isolated_vertices.empty())
-                common_result.extra_stats.emplace_back("isolated_vertices_removed = " + to_string(model.isolated_vertices.size()));
-
             return common_result;
         }
     };
@@ -1967,8 +1938,8 @@ namespace
         Model model;
         const HomomorphismParams & params;
 
-        SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & p, const set<int> & x) :
-            model(target, pattern, p, x),
+        SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & p) :
+            model(target, pattern, p),
             params(p)
         {
         }
@@ -2139,7 +2110,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
     else {
         // just solve the problem
         auto result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
-                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
+                AllGraphSizes(), graphs.second, graphs.first, params);
 
         if (params.proof && result.complete && result.mapping.empty())
             params.proof->finish_unsat_proof();
