@@ -40,9 +40,6 @@ struct HomomorphismParams
     /// Enumerate?
     bool count_solutions = false;
 
-    /// Find a minimal unsat pattern?
-    std::function<auto (const std::list<int> &, bool is_sat) -> void> minimal_unsat_pattern;
-
     /// Print solutions, for enumerating
     std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;
 
@@ -100,9 +97,6 @@ struct HomomorphismResult
 {
     /// The mapping, empty if none found.
     VertexToVertexMapping mapping;
-
-    /// Vertices in a minimal unsat pattern, if requested.
-    std::list<int> minimal_unsat_pattern;
 
     /// Total number of nodes processed (recursive calls).
     unsigned long long nodes = 0;

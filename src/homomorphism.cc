@@ -2060,8 +2060,6 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
             throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity" };
         if (params.induced)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used for induced problems" };
-        if (params.minimal_unsat_pattern)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used for finding a minimal unsat pattern" };
         if (graphs.first.has_vertex_labels() || graphs.first.has_edge_labels())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
 
@@ -2135,41 +2133,6 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         result.extra_stats = move(clique_result.extra_stats);
         result.extra_stats.emplace_back("used_clique_solver = true");
         result.complete = clique_result.complete;
-
-        return result;
-    }
-    else if (params.minimal_unsat_pattern) {
-        // if we're finding a minimal unsat pattern, solve the problem
-        // repeatedly with shrinking patterns
-        HomomorphismResult result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
-                AllGraphSizes(), graphs.second, graphs.first, params, set<int>{});
-        if (! result.mapping.empty())
-            return result;
-
-        // try to exclude each vertex in turn
-        set<int> exclude;
-        auto what_is_left = [&] () -> list<int> {
-            list<int> result;
-            for (int n = 0 ; n < graphs.first.size() ; ++n)
-                if (! exclude.count(n))
-                    result.push_back(n);
-            return result;
-        };
-
-        params.minimal_unsat_pattern(what_is_left(), false);
-        for (int n = 0 ; n < graphs.first.size() ; ++n) {
-            exclude.insert(n);
-            result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
-                    AllGraphSizes(), graphs.second, graphs.first, params, exclude);
-            params.minimal_unsat_pattern(what_is_left(), ! result.mapping.empty());
-            if (! result.mapping.empty()) {
-                result.mapping.clear();
-                exclude.erase(n);
-            }
-        }
-
-        // build up the minimal unsat pattern
-        result.minimal_unsat_pattern = what_is_left();
 
         return result;
     }

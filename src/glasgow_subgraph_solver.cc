@@ -122,7 +122,6 @@ auto main(int argc, char * argv[]) -> int
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
-            ("minimal-unsat-pattern",                          "Find a minimal unsat pattern graph, if unsat (experimental)")
             ("distance3",                                      "Use distance 3 filtering (experimental)")
             ("k4",                                             "Use 4-clique filtering (experimental)")
             ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs");
@@ -319,18 +318,6 @@ auto main(int argc, char * argv[]) -> int
             };
         }
 
-        if (options_vars.count("minimal-unsat-pattern")) {
-            params.minimal_unsat_pattern = [&] (const list<int> & vv, bool is_sat) {
-                if (is_sat)
-                    cout << "sat_pattern =";
-                else
-                    cout << "unsat_pattern =";
-                for (auto v : vv)
-                    cout << " " << graphs.first.vertex_name(v);
-                cout << endl;
-            };
-        }
-
         if (options_vars.count("prove")) {
             bool friendly_names = options_vars.count("proof-names");
             bool compress_proof = options_vars.count("compress-proof");
@@ -386,13 +373,6 @@ auto main(int argc, char * argv[]) -> int
             cout << "mapping = ";
             for (auto v : result.mapping)
                 cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
-            cout << endl;
-        }
-
-        if (! result.minimal_unsat_pattern.empty()) {
-            cout << "minimal_unsat_pattern =";
-            for (auto v : result.minimal_unsat_pattern)
-                cout << " " << graphs.first.vertex_name(v);
             cout << endl;
         }
 
