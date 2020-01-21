@@ -288,11 +288,12 @@ namespace
                     target_hyperedges[a].second.resize(target_size);
                     target_hyperedges[a] = target.get_hyperedge(a);
                 }
+
                 for(unsigned int a=0; a<pattern.number_of_hyperedges();a++) {
                     pattern_hyperedges[a].second.resize(pattern_size);
                     pattern_hyperedges[a] = pattern.get_hyperedge(a);
                 }
-                                
+
                 std::set<int> pattern_unique;
                 std::queue<int> pattern_reach;
 
@@ -1124,7 +1125,7 @@ namespace
                     expand_to_full_result(assignments, mapping);
 
                     bool lazy_flag;
-                    std::set<int> mapped_targets;
+                    std::set<int> mapped_patterns, mapped_targets;              
 
                     // Eliminate closed-pattern/closed-target hyperedges first
                     for(unsigned i=0; i<model.pattern_hyperedges.size(); i++){
@@ -1133,6 +1134,7 @@ namespace
                             for(unsigned j=0; j<model.target_hyperedges.size(); j++) {
                                 if(mapped_targets.find(j) == mapped_targets.end() && 
                                    bigraph_link_match(model.pattern_hyperedges[i], model.target_hyperedges[j], mapping)) {
+                                    mapped_patterns.insert(i);
                                     mapped_targets.insert(j);
                                     lazy_flag = true;             
                                     break;
@@ -1142,9 +1144,7 @@ namespace
                         }
                     }  
                              
-                    // Clean up open pattern hyperedges by matching arbitrarily on remaining target hyperedges    
-                    // (by nature of bigraphs and their ports, this should be sound)     
-
+                    // Clean up open pattern hyperedges by matching on remaining target hyperedges   
                     for(unsigned i=0; i<model.pattern_hyperedges.size(); i++){
                         if(model.pattern_hyperedges[i].first) {
                             lazy_flag = false;
@@ -1174,13 +1174,13 @@ namespace
 
                             // Check if pattern node only points to sites that are shared
                             bool sites_okay = false;
-                            std::set<int> site_mappings;
+                            std::vector<int> site_mappings;
                             for(unsigned j=0;j<model.pattern_site_reachability.size();j++) {                                
                                 if(model.pattern_site_reachability[j][i] == 1 && model.pattern_site_reachability[j].count() == 1) {
                                     sites_okay = true;
                                     break;
                                 }
-                                if(model.pattern_site_reachability[j][i] == 1) site_mappings.insert(j);                           
+                                if(model.pattern_site_reachability[j][i] == 1) site_mappings.push_back(j);                           
                             }   
 
                             // For all target node's children without a mapping, check if it can reach any children of a root node
@@ -1195,11 +1195,11 @@ namespace
 
                                         // If only points to shared sites, check that all unmapped children have an adjacency superset of a site
                                         if(!sites_okay) { 
-                                            bool site_sat;                                           
+                                            bool site_sat = true;                                           
                                             for(unsigned k=0; k<site_mappings.size();k++){
                                                 site_sat = true;
                                                 for(unsigned l=0; l<model.pattern_size;l++){
-                                                    if(l != i && model.pattern_site_reachability[k][l] && 
+                                                    if(l != i && model.pattern_site_reachability[site_mappings[k]][l] && 
                                                        !(model.target_graph_rows[mapping[l]*model.max_graphs].test(j) &&
                                                             model.target_graph_reachability[mapping[l]][j])) {
                                                                 site_sat = false;
@@ -1214,37 +1214,39 @@ namespace
                             }                                                   
                         }
 
-                        // Check if pattern node only points to roots that are shared
+                        // Check if pattern node only is pointed to by roots that are shared
                         if(model.pattern_big_constraints[i].first) { 
-                            std::set<int> root_mappings;
+                            std::vector<int> root_mappings;
                             bool roots_okay = false;
                             for(unsigned j=0;j<model.pattern_root_reachability.size();j++) {                                
                                 if(model.pattern_root_reachability[j][i] == 1 && model.pattern_root_reachability[j].count() == 1) {
                                     roots_okay = true;
                                     break;
                                 }
-                                if(model.pattern_root_reachability[j][i] == 1) root_mappings.insert(j);
-                            }           
+                                if(model.pattern_root_reachability[j][i] == 1) root_mappings.push_back(j);
+                            }                                       
+
+                            
 
                             if(!roots_okay) {
                                 std::set<int> parent_mappings;
                                 for(unsigned j=0; j<model.pattern_size; j++) 
                                     if(i != j &&
-                                        model.pattern_graph_rows[j * model.max_graphs].test(i) && 
+                                        model.pattern_graph_rows[i * model.max_graphs].test(j) && 
                                         model.pattern_graph_reachability[j][i])
                                             parent_mappings.insert(mapping[j]);
-                      
-                                // If only points to shared roots, check that all unmapped children have an adjacency superset of a root
+
+                                // If only points to shared roots, check that all unmapped parents have an adjacency superset of a root
                                 for(unsigned j=0; j<model.target_size; j++) {
                                     if(mapping[i] != j && 
                                         model.target_graph_rows[j*model.max_graphs].test(mapping[i]) && 
                                         model.target_graph_reachability[j][mapping[i]] &&
                                         parent_mappings.find(j) == parent_mappings.end()) {
-                                          bool root_sat;                                           
+                                            bool root_sat = true;                                           
                                             for(unsigned k=0; k<root_mappings.size();k++){
                                                 root_sat = true;
                                                 for(unsigned l=0; l<model.pattern_size;l++){
-                                                    if(l != i && model.pattern_root_reachability[k][l] && 
+                                                    if(l != i && model.pattern_root_reachability[root_mappings[k]][l] && 
                                                        !(model.target_graph_rows[j*model.max_graphs].test(mapping[l]) &&
                                                             model.target_graph_reachability[j][mapping[l]])) {
                                                                 root_sat = false;
