@@ -111,6 +111,9 @@ struct HomomorphismResult
     bool complete = false;
 };
 
-auto solve_homomorphism_problem(const std::pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult;
+auto solve_homomorphism_problem(
+        const InputGraph & pattern,
+        const InputGraph & target,
+        const HomomorphismParams & params) -> HomomorphismResult;
 
 #endif

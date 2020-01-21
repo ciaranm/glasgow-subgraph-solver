@@ -2013,7 +2013,10 @@ namespace
     using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
 }
 
-auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult
+auto solve_homomorphism_problem(
+        const InputGraph & pattern,
+        const InputGraph & target,
+        const HomomorphismParams & params) -> HomomorphismResult
 {
     // start by setting up proof logging, if necessary
     if (params.proof) {
@@ -2031,23 +2034,23 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
             throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity" };
         if (params.induced)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used for induced problems" };
-        if (graphs.first.has_vertex_labels() || graphs.first.has_edge_labels())
+        if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
 
         // set up our model file, with a set of OPB variables for each CP variable
-        for (int n = 0 ; n < graphs.first.size() ; ++n) {
-            params.proof->create_cp_variable(n, graphs.second.size(),
-                    [&] (int v) { return graphs.first.vertex_name(v); },
-                    [&] (int v) { return graphs.second.vertex_name(v); });
+        for (int n = 0 ; n < pattern.size() ; ++n) {
+            params.proof->create_cp_variable(n, target.size(),
+                    [&] (int v) { return pattern.vertex_name(v); },
+                    [&] (int v) { return target.vertex_name(v); });
         }
 
         // generate constraints for injectivity
-        params.proof->create_injectivity_constraints(graphs.first.size(), graphs.second.size());
+        params.proof->create_injectivity_constraints(pattern.size(), target.size());
 
         // generate edge constraints, and also handle loops here
-        for (int p = 0 ; p < graphs.first.size() ; ++p) {
-            for (int t = 0 ; t < graphs.second.size() ; ++t) {
-                if (graphs.first.adjacent(p, p) && ! graphs.second.adjacent(t, t))
+        for (int p = 0 ; p < pattern.size() ; ++p) {
+            for (int t = 0 ; t < target.size() ; ++t) {
+                if (pattern.adjacent(p, p) && ! target.adjacent(t, t))
                     params.proof->create_forbidden_assignment_constraint(p, t);
 
                 // it's simpler to always have the adjacency constraints, even
@@ -2055,12 +2058,12 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
                 params.proof->start_adjacency_constraints_for(p, t);
 
                 // if p can be mapped to t, then each neighbour of p...
-                for (int q = 0 ; q < graphs.first.size() ; ++q)
-                    if (q != p && graphs.first.adjacent(p, q)) {
+                for (int q = 0 ; q < pattern.size() ; ++q)
+                    if (q != p && pattern.adjacent(p, q)) {
                         // ... must be mapped to a neighbour of t
                         vector<int> permitted;
-                        for (int u = 0 ; u < graphs.second.size() ; ++u)
-                            if (t != u && graphs.second.adjacent(t, u))
+                        for (int u = 0 ; u < target.size() ; ++u)
+                            if (t != u && target.adjacent(t, u))
                                 permitted.push_back(u);
                         params.proof->create_adjacency_constraint(p, q, t, permitted);
                     }
@@ -2073,7 +2076,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
 
     // first sanity check: if we're finding an injective mapping, and there
     // aren't enough vertices, fail immediately.
-    if (is_nonshrinking(params) && (graphs.first.size() > graphs.second.size())) {
+    if (is_nonshrinking(params) && (pattern.size() > target.size())) {
         if (params.proof) {
             params.proof->failure_due_to_pattern_bigger_than_target();
             params.proof->finish_unsat_proof();
@@ -2083,13 +2086,13 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
     }
 
     // is the pattern a clique? if so, use a clique algorithm instead
-    if (can_use_clique(params) && is_simple_clique(graphs.first)) {
+    if (can_use_clique(params) && is_simple_clique(pattern)) {
         CliqueParams clique_params;
         clique_params.timeout = params.timeout;
         clique_params.start_time = params.start_time;
-        clique_params.decide = make_optional(graphs.first.size());
+        clique_params.decide = make_optional(pattern.size());
         clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
-        auto clique_result = solve_clique_problem(graphs.second, clique_params);
+        auto clique_result = solve_clique_problem(target, clique_params);
 
         // now translate the result back into what we expect
         HomomorphismResult result;
@@ -2097,7 +2100,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
         for (auto & m : clique_result.clique) {
             result.mapping.emplace(v++, m);
             // the clique solver can find a bigger clique than we ask for
-            if (v >= graphs.first.size())
+            if (v >= pattern.size())
                 break;
         }
         result.nodes = clique_result.nodes;
@@ -2110,7 +2113,7 @@ auto solve_homomorphism_problem(const pair<InputGraph, InputGraph> & graphs, con
     else {
         // just solve the problem
         auto result = run_with_appropriate_template_parameters<SubgraphRunner, HomomorphismResult>(
-                AllGraphSizes(), graphs.second, graphs.first, params);
+                AllGraphSizes(), target, pattern, params);
 
         if (params.proof && result.complete && result.mapping.empty())
             params.proof->finish_unsat_proof();

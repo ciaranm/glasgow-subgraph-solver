@@ -292,9 +292,8 @@ auto main(int argc, char * argv[]) -> int
         string default_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
         string pattern_format_name = options_vars.count("pattern-format") ? options_vars["pattern-format"].as<string>() : default_format_name;
         string target_format_name = options_vars.count("target-format") ? options_vars["target-format"].as<string>() : default_format_name;
-        auto graphs = make_pair(
-            read_file_format(pattern_format_name, options_vars["pattern-file"].as<string>()),
-            read_file_format(target_format_name, options_vars["target-file"].as<string>()));
+        auto pattern = read_file_format(pattern_format_name, options_vars["pattern-file"].as<string>());
+        auto target = read_file_format(target_format_name, options_vars["target-file"].as<string>());
 
         cout << "pattern_file = " << options_vars["pattern-file"].as<string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
@@ -303,15 +302,14 @@ auto main(int argc, char * argv[]) -> int
             params.lackey = make_unique<Lackey>(
                     options_vars["send-to-lackey"].as<string>(),
                     options_vars["receive-from-lackey"].as<string>(),
-                    graphs.first,
-                    graphs.second);
+                    pattern, target);
         }
 
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
                 cout << "mapping = ";
                 for (auto v : mapping)
-                    cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+                    cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
                 cout << endl;
             };
         }
@@ -326,10 +324,10 @@ auto main(int argc, char * argv[]) -> int
             cout << "proof_log = " << fn << ".log" << suffix << endl;
         }
 
-        cout << "pattern_vertices = " << graphs.first.size() << endl;
-        cout << "pattern_directed_edges = " << graphs.first.number_of_directed_edges() << endl;
-        cout << "target_vertices = " << graphs.second.size() << endl;
-        cout << "target_directed_edges = " << graphs.second.number_of_directed_edges() << endl;
+        cout << "pattern_vertices = " << pattern.size() << endl;
+        cout << "pattern_directed_edges = " << pattern.number_of_directed_edges() << endl;
+        cout << "target_vertices = " << target.size() << endl;
+        cout << "target_directed_edges = " << target.number_of_directed_edges() << endl;
 
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
@@ -339,7 +337,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("pattern-symmetries")) {
             auto gap_start_time = steady_clock::now();
-            find_symmetries(argv[0], graphs.first, params.pattern_less_constraints, pattern_automorphism_group_size);
+            find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
             was_given_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
         }
@@ -347,7 +345,7 @@ auto main(int argc, char * argv[]) -> int
         if (was_given_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
 
-        auto result = solve_homomorphism_problem(graphs, params);
+        auto result = solve_homomorphism_problem(pattern, target, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
@@ -370,7 +368,7 @@ auto main(int argc, char * argv[]) -> int
         if (! result.mapping.empty() && ! options_vars.count("print-all-solutions")) {
             cout << "mapping = ";
             for (auto v : result.mapping)
-                cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+                cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
             cout << endl;
         }
 
@@ -379,7 +377,7 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
-        verify_homomorphism(graphs, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
+        verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
                 params.induced, result.mapping);
 
         return EXIT_SUCCESS;

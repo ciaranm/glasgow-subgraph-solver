@@ -9,7 +9,9 @@
 #include <map>
 #include <utility>
 
-auto verify_homomorphism(const std::pair<InputGraph, InputGraph> & graphs,
+auto verify_homomorphism(
+        const InputGraph & pattern,
+        const InputGraph & target,
         bool injective,
         bool locally_injective,
         bool induced,
