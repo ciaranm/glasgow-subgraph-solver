@@ -66,7 +66,7 @@ auto HomomorphismSearcher::restarting_search(
         const Domains & domains,
         unsigned long long & nodes,
         unsigned long long & propagations,
-        unsigned long long & solution_count,
+        boost::multiprecision::cpp_int & solution_count,
         int depth,
         RestartsSchedule & restarts_schedule) -> SearchResult
 {

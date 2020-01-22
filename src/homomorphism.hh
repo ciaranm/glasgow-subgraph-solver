@@ -16,6 +16,8 @@
 #include <memory>
 #include <string>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
 enum class Injectivity
 {
     Injective,
@@ -105,7 +107,7 @@ struct HomomorphismResult
     std::list<std::string> extra_stats;
 
     /// Number of solutions, only if enumerating
-    unsigned long long solution_count = 0;
+    boost::multiprecision::cpp_int solution_count = 0;
 
     /// Did we perform a complete search?
     bool complete = false;
