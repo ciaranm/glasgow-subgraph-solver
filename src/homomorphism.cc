@@ -2010,7 +2010,7 @@ namespace
         }
     }
 
-    using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
+    using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128>;
 }
 
 auto solve_homomorphism_problem(
