@@ -2,6 +2,7 @@
 
 #include "formats/read_file_format.hh"
 #include "homomorphism.hh"
+#include "sip_decomposer.hh"
 #include "lackey.hh"
 #include "symmetries.hh"
 #include "restarts.hh"
@@ -123,7 +124,8 @@ auto main(int argc, char * argv[]) -> int
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
             ("distance3",                                      "Use distance 3 filtering (experimental)")
             ("k4",                                             "Use 4-clique filtering (experimental)")
-            ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs");
+            ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
+            ("decomposition",                                  "Use decomposition");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -345,7 +347,9 @@ auto main(int argc, char * argv[]) -> int
         if (was_given_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
 
-        auto result = solve_homomorphism_problem(pattern, target, params);
+        auto result = options_vars.count("decomposition") ?
+            solve_sip_by_decomposition(pattern, target, params) :
+            solve_homomorphism_problem(pattern, target, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
