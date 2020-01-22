@@ -30,9 +30,13 @@ auto read_csv(ifstream && infile, const string & filename) -> InputGraph
         if (string::npos == pos)
             throw GraphFileError{ filename, "expected a comma but didn't get one", true };
         string left = line.substr(0, pos), right = line.substr(pos + 1);
-        int left_idx = vertices.emplace(left, vertices.size()).first->second;
-        int right_idx = vertices.emplace(right, vertices.size()).first->second;
-        edges.emplace_back(left_idx, right_idx);
+        if (right.empty() && ! left.empty() && ! vertices.count(left))
+            vertices.emplace(left, vertices.size());
+        else {
+            int left_idx = vertices.emplace(left, vertices.size()).first->second;
+            int right_idx = vertices.emplace(right, vertices.size()).first->second;
+            edges.emplace_back(left_idx, right_idx);
+        }
     }
 
     result.resize(vertices.size());
