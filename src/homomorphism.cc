@@ -1084,6 +1084,9 @@ namespace
 
             // Closed pattern hyperedge must match exactly with the target hyperedge
             if (!pattern_hyperedge.first) {
+                if(std::accumulate(pattern_hyperedge.second.begin(), pattern_hyperedge.second.end(), 0) != 
+                   std::accumulate(target_hyperedge.second.begin(), target_hyperedge.second.end(), 0)) return false;
+
                 for(unsigned i=0; i<pattern_hyperedge.second.size(); i++)
                     if(pattern_hyperedge.second[i] != target_hyperedge.second[mapping[i]]) return false;
             }
@@ -1094,6 +1097,49 @@ namespace
             }
             return true;
         }
+
+        // We want to put this in the main search process because doing it this way is horribly inefficient but for now lets aim for correctness
+        auto backtracking_open_link_matching(
+            std::vector<std::pair<bool, vector<int> > > pattern_links,
+            std::vector<std::pair<bool, vector<int> > > target_links,
+            VertexToVertexMapping mapping) -> bool
+        {
+            for(int i=0; i<pattern_links.size();i++) {
+                std::vector<int> valid_mappings;
+                for(unsigned j=0; j<target_links.size(); j++)
+                    if(bigraph_link_match(pattern_links[i], target_links[j], mapping))
+                        valid_mappings.push_back(j);
+        
+                if(valid_mappings.size() == 0) return false;
+                if(valid_mappings.size() == 1) {
+                    target_links.erase(target_links.begin()+valid_mappings[0]);
+                    continue;
+                }
+                else for(int j=0; j<valid_mappings.size();j++) {
+                    std::vector<std::pair<bool, vector<int> > > pattern_copy, target_copy;
+
+                    for(unsigned k=i+1; k<pattern_links.size(); k++) {
+                            std::pair<bool, vector<int> > p;
+                            p.first = pattern_links[k].first;
+                            copy(pattern_links[k].second.begin(), pattern_links[k].second.end(), back_inserter(p.second));
+                            pattern_copy.push_back(p);
+                    }
+                    for(unsigned k=0; k<target_links.size(); k++) {
+                        std::pair<bool, vector<int> > t;
+                        t.first = target_links[k].first;
+                        copy(target_links[k].second.begin(), target_links[k].second.end(), back_inserter(t.second));
+                        target_copy.push_back(t);
+                    }
+                    for(unsigned k=0; k<pattern_links[i].second.size();k++)
+                        target_copy[j].second[mapping[k]] -= pattern_links[i].second[k];
+         
+                    if(backtracking_open_link_matching(pattern_copy, target_copy, mapping)) return true;
+                }  
+                return false;
+            }
+            return true;
+        }
+                    
 
         auto restarting_search(
                 Assignments & assignments,
@@ -1143,21 +1189,26 @@ namespace
                             if (!lazy_flag) return SearchResult::Unsatisfiable;
                         }
                     }  
+
+                    std::vector<std::pair<bool, vector<int> > > open_pattern_links, target_domains;
                              
                     // Clean up open pattern hyperedges by matching on remaining target hyperedges   
-                    for(unsigned i=0; i<model.pattern_hyperedges.size(); i++){
+                    for(unsigned i=0; i<model.pattern_hyperedges.size(); i++)
                         if(model.pattern_hyperedges[i].first) {
-                            lazy_flag = false;
-                            for(unsigned j=0; j<model.target_hyperedges.size(); j++) {
-                                if(mapped_targets.find(j) == mapped_targets.end() && 
-                                   bigraph_link_match(model.pattern_hyperedges[i], model.target_hyperedges[j], mapping)) {
-                                   lazy_flag = true;             
-                                   break;
-                                }             
-                            }
-                            if (!lazy_flag) return SearchResult::Unsatisfiable;
+                            std::pair<bool, vector<int> > p;
+                            p.first = true;
+                            copy(model.pattern_hyperedges[i].second.begin(), model.pattern_hyperedges[i].second.end(), back_inserter(p.second));
+                            open_pattern_links.push_back(p);
                         }
-                    }
+                    for(unsigned i=0; i<model.target_hyperedges.size(); i++)
+                        if(mapped_targets.find(i) == mapped_targets.end()) {
+                            std::pair<bool, vector<int> > t;
+                            t.first = model.target_hyperedges[i].first;
+                            copy(model.target_hyperedges[i].second.begin(), model.target_hyperedges[i].second.end(), back_inserter(t.second));
+                            target_domains.push_back(t);
+                        }
+
+                    if(!backtracking_open_link_matching(open_pattern_links, target_domains, mapping)) return SearchResult::Unsatisfiable;
 
                     //Find transitive closure violations
                     for(unsigned i=0; i<model.pattern_size; i++){
