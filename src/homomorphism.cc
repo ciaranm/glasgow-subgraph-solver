@@ -317,30 +317,8 @@ namespace
             unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
             // build exact path graphs
             if (supports_exact_path_graphs(params)) {
-                switch (params.number_of_exact_path_graphs) {
-                    case 1:
-                        build_exact_path_graphs<1>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                        build_exact_path_graphs<1>(target_graph_rows, target_size, next_target_supplemental);
-                        break;
-                    case 2:
-                        build_exact_path_graphs<2>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                        build_exact_path_graphs<2>(target_graph_rows, target_size, next_target_supplemental);
-                        break;
-                    case 3:
-                        build_exact_path_graphs<3>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                        build_exact_path_graphs<3>(target_graph_rows, target_size, next_target_supplemental);
-                        break;
-                    case 4:
-                        build_exact_path_graphs<4>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                        build_exact_path_graphs<4>(target_graph_rows, target_size, next_target_supplemental);
-                        break;
-                    case 5:
-                        build_exact_path_graphs<5>(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                        build_exact_path_graphs<5>(target_graph_rows, target_size, next_target_supplemental);
-                        break;
-                    default:
-                        throw UnsupportedConfiguration{ "Unsupported number of exact path graphs" };
-                }
+                build_exact_path_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental, params.number_of_exact_path_graphs);
+                build_exact_path_graphs(target_graph_rows, target_size, next_target_supplemental, params.number_of_exact_path_graphs);
 
                 if (params.proof) {
                     for (int g = 1 ; g <= params.number_of_exact_path_graphs ; ++g) {
@@ -443,8 +421,9 @@ namespace
             return true;
         }
 
-        template <unsigned number_of_exact_path_graphs_, typename PossiblySomeOtherBitSetType_>
-        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
+        template <typename PossiblySomeOtherBitSetType_>
+        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx,
+                unsigned number_of_exact_path_graphs) -> void
         {
             vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
@@ -465,7 +444,7 @@ namespace
                 for (unsigned w = v ; w < size ; ++w) {
                     // w to v, not v to w, see above
                     unsigned path_count = path_counts[w][v];
-                    for (unsigned p = 1 ; p <= number_of_exact_path_graphs_ ; ++p) {
+                    for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
                         if (path_count >= p) {
                             graph_rows[v * max_graphs + idx + p - 1].set(w);
                             graph_rows[w * max_graphs + idx + p - 1].set(v);
@@ -474,7 +453,7 @@ namespace
                 }
             }
 
-            idx += number_of_exact_path_graphs_;
+            idx += number_of_exact_path_graphs;
         }
 
         template <typename PossiblySomeOtherBitSetType_>
