@@ -9,13 +9,13 @@
 #include "watches.hh"
 #include "proof.hh"
 #include "svo_bitset.hh"
+#include "subgraph_model.hh"
 
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <functional>
 #include <limits>
-#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -35,7 +35,6 @@ using std::find_if;
 using std::function;
 using std::greater;
 using std::is_same;
-using std::list;
 using std::make_optional;
 using std::make_unique;
 using std::max;
@@ -46,11 +45,9 @@ using std::mutex;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
-using std::set;
 using std::sort;
 using std::stable_sort;
 using std::string;
-using std::string_view;
 using std::swap;
 using std::thread;
 using std::to_string;
@@ -67,447 +64,8 @@ using std::chrono::operator""ms;
 
 using boost::barrier;
 
-using PatternAdjacencyBitsType = uint8_t;
-
 namespace
 {
-    auto calculate_n_shape_graphs(const HomomorphismParams & params) -> unsigned
-    {
-        return 1 +
-            (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
-            (supports_distance3_graphs(params) ? 1 : 0) +
-            (supports_k4_graphs(params) ? 1 : 0);
-    }
-
-    struct SubgraphModel
-    {
-        const unsigned max_graphs;
-        unsigned pattern_size, full_pattern_size, target_size;
-
-        vector<PatternAdjacencyBitsType> pattern_adjacencies_bits;
-        vector<SVOBitset> pattern_graph_rows;
-        vector<SVOBitset> target_graph_rows;
-        vector<pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;
-
-        vector<vector<int> > patterns_degrees, targets_degrees;
-        int largest_target_degree;
-        bool has_less_thans;
-
-        vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
-        vector<int> pattern_loops, target_loops;
-
-        vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
-
-        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
-            max_graphs(calculate_n_shape_graphs(params)),
-            pattern_size(pattern.size()),
-            full_pattern_size(pattern.size()),
-            target_size(target.size()),
-            patterns_degrees(max_graphs),
-            targets_degrees(max_graphs),
-            largest_target_degree(0),
-            has_less_thans(false)
-        {
-            if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
-                throw UnsupportedConfiguration{ "Supplemental graphs won't fit in the chosen bitset size" };
-
-            if (pattern.has_edge_labels() && ! params.induced)
-                throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
-
-            if (params.proof) {
-                for (int v = 0 ; v < pattern.size() ; ++v)
-                    pattern_vertex_proof_names.push_back(pattern.vertex_name(v));
-                for (int v = 0 ; v < target.size() ; ++v)
-                    target_vertex_proof_names.push_back(target.vertex_name(v));
-            }
-
-            // recode pattern to a bit graph, and strip out loops
-            pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
-            pattern_loops.resize(pattern_size);
-            for (unsigned i = 0 ; i < pattern_size ; ++i) {
-                for (unsigned j = 0 ; j < pattern_size ; ++j) {
-                    if (pattern.adjacent(i, j)) {
-                        if (i == j)
-                            pattern_loops[i] = 1;
-                        else
-                            pattern_graph_rows[i * max_graphs + 0].set(j);
-                    }
-                }
-            }
-
-            // re-encode and store pattern labels
-            map<string, int> vertex_labels_map;
-            int next_vertex_label = 0;
-            if (pattern.has_vertex_labels()) {
-                for (unsigned i = 0 ; i < pattern_size ; ++i) {
-                    if (vertex_labels_map.emplace(pattern.vertex_label(i), next_vertex_label).second)
-                        ++next_vertex_label;
-                }
-
-                pattern_vertex_labels.resize(pattern_size);
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    pattern_vertex_labels[i] = vertex_labels_map.find(string{ pattern.vertex_label(i) })->second;
-            }
-
-            // re-encode and store edge labels
-            map<string, int> edge_labels_map;
-            int next_edge_label = 0;
-            if (pattern.has_edge_labels()) {
-                pattern_edge_labels.resize(pattern_size * pattern_size);
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    for (unsigned j = 0 ; j < pattern_size ; ++j)
-                        if (pattern.adjacent(i, j)) {
-                            auto r = edge_labels_map.emplace(pattern.edge_label(i, j), next_edge_label);
-                            if (r.second)
-                                ++next_edge_label;
-                            pattern_edge_labels[i * pattern_size + j] = r.first->second;
-                        }
-            }
-
-            // recode target to a bit graph, and take out loops
-            target_graph_rows.resize(target_size * max_graphs, SVOBitset{ target_size, 0 });
-            target_loops.resize(target_size);
-            for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
-                if (e->first.first == e->first.second)
-                    target_loops[e->first.first] = 1;
-                else
-                    target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
-            }
-
-            // target vertex labels
-            if (pattern.has_vertex_labels()) {
-                for (unsigned i = 0 ; i < target_size ; ++i) {
-                    if (vertex_labels_map.emplace(target.vertex_label(i), next_vertex_label).second)
-                        ++next_vertex_label;
-                }
-
-                target_vertex_labels.resize(target_size);
-                for (unsigned i = 0 ; i < target_size ; ++i)
-                    target_vertex_labels[i] = vertex_labels_map.find(string{ target.vertex_label(i) })->second;
-            }
-
-            // target edge labels
-            if (pattern.has_edge_labels()) {
-                target_edge_labels.resize(target_size * target_size);
-                for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
-                    auto r = edge_labels_map.emplace(e->second, next_edge_label);
-                    if (r.second)
-                        ++next_edge_label;
-
-                    target_edge_labels[e->first.first * target_size + e->first.second] = r.first->second;
-                }
-            }
-
-            auto decode = [&] (string_view s) -> int {
-                auto n = pattern.vertex_from_name(s);
-                if (! n)
-                    throw UnsupportedConfiguration{ "No vertex named '" + string{ s } + "'" };
-                return *n;
-            };
-
-            // pattern less than constraints
-            if (! params.pattern_less_constraints.empty()) {
-                has_less_thans = true;
-                list<pair<unsigned, unsigned> > pattern_less_thans_in_wrong_order;
-                for (auto & [ a, b ] : params.pattern_less_constraints) {
-                    auto a_decoded = decode(a), b_decoded = decode(b);
-                    pattern_less_thans_in_wrong_order.emplace_back(a_decoded, b_decoded);
-                }
-
-                // put them in a convenient order, so we don't need a propagation loop
-                while (! pattern_less_thans_in_wrong_order.empty()) {
-                    bool loop_detect = true;
-                    set<unsigned> cannot_order_yet;
-                    for (auto & [ _, b ] : pattern_less_thans_in_wrong_order)
-                        cannot_order_yet.emplace(b);
-                    for (auto p = pattern_less_thans_in_wrong_order.begin() ; p != pattern_less_thans_in_wrong_order.end() ; ) {
-                        if (cannot_order_yet.count(p->first))
-                            ++p;
-                        else {
-                            loop_detect = false;
-                            pattern_less_thans_in_convenient_order.push_back(*p);
-                            pattern_less_thans_in_wrong_order.erase(p++);
-                        }
-                    }
-
-                    if (loop_detect)
-                        throw UnsupportedConfiguration{ "Pattern less than constraints form a loop" };
-                }
-            }
-        }
-
-        auto pattern_vertex_for_proof(int v) const -> NamedVertex
-        {
-            if (v < 0 || unsigned(v) >= pattern_vertex_proof_names.size())
-                throw ProofError{ "Oops, there's a bug: v out of range in pattern" };
-            return pair{ v, pattern_vertex_proof_names[v] };
-        }
-
-        auto target_vertex_for_proof(int v) const -> NamedVertex
-        {
-            if (v < 0 || unsigned(v) >= target_vertex_proof_names.size())
-                throw ProofError{ "Oops, there's a bug: v out of range in target" };
-            return pair{ v, target_vertex_proof_names[v] };
-        }
-
-        auto prepare(const HomomorphismParams & params) -> bool
-        {
-            // pattern and target degrees, for the main graph
-            patterns_degrees.at(0).resize(pattern_size);
-            targets_degrees.at(0).resize(target_size);
-
-            for (unsigned i = 0 ; i < pattern_size ; ++i)
-                patterns_degrees.at(0).at(i) = pattern_graph_rows[i * max_graphs + 0].count();
-
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                targets_degrees.at(0).at(i) = target_graph_rows[i * max_graphs + 0].count();
-
-            if (global_degree_is_preserved(params)) {
-                vector<pair<int, int> > p_gds, t_gds;
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    p_gds.emplace_back(i, patterns_degrees.at(0).at(i));
-                for (unsigned i = 0 ; i < target_size ; ++i)
-                    t_gds.emplace_back(i, targets_degrees.at(0).at(i));
-
-                sort(p_gds.begin(), p_gds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
-                        return a.second > b.second; });
-                sort(t_gds.begin(), t_gds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
-                        return a.second > b.second; });
-
-                for (unsigned i = 0 ; i < p_gds.size() ; ++i)
-                    if (p_gds.at(i).second > t_gds.at(i).second) {
-                        if (params.proof) {
-                            for (unsigned p = 0 ; p <= i ; ++p) {
-                                vector<int> n_p;
-                                auto np = pattern_graph_rows[p_gds.at(p).first * max_graphs + 0];
-                                for (unsigned j = 0 ; j < pattern_size ; ++j)
-                                    if (np.test(j))
-                                        n_p.push_back(j);
-
-                                for (unsigned t = i ; t < t_gds.size() ; ++t) {
-                                    vector<int> n_t;
-                                    auto nt = target_graph_rows[t_gds.at(t).first * max_graphs + 0];
-                                    for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
-                                        nt.reset(j);
-                                        n_t.push_back(j);
-                                    }
-
-                                    params.proof->incompatible_by_degrees(0,
-                                            pattern_vertex_for_proof(p_gds.at(p).first), n_p,
-                                            target_vertex_for_proof(t_gds.at(t).first), n_t);
-                                }
-                            }
-
-                            vector<int> patterns, targets;
-                            for (unsigned p = 0 ; p <= i ; ++p)
-                                patterns.push_back(p_gds.at(p).first);
-                            for (unsigned t = 0 ; t < i ; ++t)
-                                targets.push_back(t_gds.at(t).first);
-
-                            params.proof->emit_hall_set_or_violator(patterns, targets);
-                        }
-                        return false;
-                    }
-            }
-
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
-
-            unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
-            // build exact path graphs
-            if (supports_exact_path_graphs(params)) {
-                build_exact_path_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental, params.number_of_exact_path_graphs);
-                build_exact_path_graphs(target_graph_rows, target_size, next_target_supplemental, params.number_of_exact_path_graphs);
-
-                if (params.proof) {
-                    for (int g = 1 ; g <= params.number_of_exact_path_graphs ; ++g) {
-                        for (unsigned p = 0 ; p < pattern_size ; ++p) {
-                            for (unsigned q = 0 ; q < pattern_size ; ++q) {
-                                if (p == q || ! pattern_graph_rows[p * max_graphs + g].test(q))
-                                    continue;
-
-                                auto named_p = pattern_vertex_for_proof(p);
-                                auto named_q = pattern_vertex_for_proof(q);
-
-                                auto n_p_q = pattern_graph_rows[p * max_graphs + 0];
-                                n_p_q &= pattern_graph_rows[q * max_graphs + 0];
-                                vector<NamedVertex> between_p_and_q;
-                                for (auto v = n_p_q.find_first() ; v != decltype(n_p_q)::npos ; v = n_p_q.find_first()) {
-                                    n_p_q.reset(v);
-                                    between_p_and_q.push_back(pattern_vertex_for_proof(v));
-                                    if (between_p_and_q.size() >= unsigned(g))
-                                        break;
-                                }
-
-                                for (unsigned t = 0 ; t < target_size ; ++t) {
-                                    auto named_t = target_vertex_for_proof(t);
-
-                                    vector<NamedVertex> named_n_t, named_d_n_t;
-                                    vector<pair<NamedVertex, vector<NamedVertex> > > named_two_away_from_t;
-                                    auto n_t = target_graph_rows[t * max_graphs + 0];
-                                    for (auto w = n_t.find_first() ; w != decltype(n_t)::npos ; w = n_t.find_first()) {
-                                        n_t.reset(w);
-                                        named_n_t.push_back(target_vertex_for_proof(w));
-                                    }
-
-                                    auto nd_t = target_graph_rows[t * max_graphs + g];
-                                    for (auto w = nd_t.find_first() ; w != decltype(nd_t)::npos ; w = nd_t.find_first()) {
-                                        nd_t.reset(w);
-                                        named_d_n_t.push_back(target_vertex_for_proof(w));
-                                    }
-
-                                    auto n2_t = target_graph_rows[t * max_graphs + 1];
-                                    for (auto w = n2_t.find_first() ; w != decltype(n2_t)::npos ; w = n2_t.find_first()) {
-                                        n2_t.reset(w);
-                                        auto n_t_w = target_graph_rows[w * max_graphs + 0];
-                                        n_t_w &= target_graph_rows[t * max_graphs + 0];
-                                        vector<NamedVertex> named_n_t_w;
-                                        for (auto x = n_t_w.find_first() ; x != decltype(n_t_w)::npos ; x = n_t_w.find_first()) {
-                                            n_t_w.reset(x);
-                                            named_n_t_w.push_back(target_vertex_for_proof(x));
-                                        }
-                                        named_two_away_from_t.emplace_back(target_vertex_for_proof(w), named_n_t_w);
-                                    }
-
-                                    params.proof->create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
-                                            named_t, named_n_t, named_two_away_from_t, named_d_n_t);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (supports_distance3_graphs(params)) {
-                build_distance3_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                build_distance3_graphs(target_graph_rows, target_size, next_target_supplemental);
-            }
-
-            if (supports_k4_graphs(params)) {
-                build_k4_graphs(pattern_graph_rows, pattern_size, next_pattern_supplemental);
-                build_k4_graphs(target_graph_rows, target_size, next_target_supplemental);
-            }
-
-            if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs)
-                throw UnsupportedConfiguration{ "something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental)
-                    + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) };
-
-            // pattern and target degrees, for supplemental graphs
-            for (unsigned g = 1 ; g < max_graphs ; ++g) {
-                patterns_degrees.at(g).resize(pattern_size);
-                targets_degrees.at(g).resize(target_size);
-            }
-
-            for (unsigned g = 1 ; g < max_graphs ; ++g) {
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    patterns_degrees.at(g).at(i) = pattern_graph_rows[i * max_graphs + g].count();
-
-                for (unsigned i = 0 ; i < target_size ; ++i)
-                    targets_degrees.at(g).at(i) = target_graph_rows[i * max_graphs + g].count();
-            }
-
-            for (unsigned i = 0 ; i < target_size ; ++i)
-                largest_target_degree = max(largest_target_degree, targets_degrees[0][i]);
-
-            // pattern adjacencies, compressed
-            pattern_adjacencies_bits.resize(pattern_size * pattern_size);
-            for (unsigned g = 0 ; g < max_graphs ; ++g)
-                for (unsigned i = 0 ; i < pattern_size ; ++i)
-                    for (unsigned j = 0 ; j < pattern_size ; ++j)
-                        if (pattern_graph_rows[i * max_graphs + g].test(j))
-                            pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
-
-            return true;
-        }
-
-        auto build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-                unsigned number_of_exact_path_graphs) -> void
-        {
-            vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
-
-            // count number of paths from w to v (only w >= v, so not v to w)
-            for (unsigned v = 0 ; v < size ; ++v) {
-                auto nv = graph_rows[v * max_graphs + 0];
-                for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
-                    nv.reset(c);
-                    auto nc = graph_rows[c * max_graphs + 0];
-                    for (auto w = nc.find_first() ; w != decltype(nc)::npos && w <= v ; w = nc.find_first()) {
-                        nc.reset(w);
-                        ++path_counts[v][w];
-                    }
-                }
-            }
-
-            for (unsigned v = 0 ; v < size ; ++v) {
-                for (unsigned w = v ; w < size ; ++w) {
-                    // w to v, not v to w, see above
-                    unsigned path_count = path_counts[w][v];
-                    for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
-                        if (path_count >= p) {
-                            graph_rows[v * max_graphs + idx + p - 1].set(w);
-                            graph_rows[w * max_graphs + idx + p - 1].set(v);
-                        }
-                    }
-                }
-            }
-
-            idx += number_of_exact_path_graphs;
-        }
-
-        auto build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
-        {
-            for (unsigned v = 0 ; v < size ; ++v) {
-                auto nv = graph_rows[v * max_graphs + 0];
-                for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
-                    nv.reset(c);
-                    auto nc = graph_rows[c * max_graphs + 0];
-                    for (auto w = nc.find_first() ; w != decltype(nc)::npos ; w = nc.find_first()) {
-                        nc.reset(w);
-                        // v--c--w so v is within distance 3 of w's neighbours
-                        graph_rows[v * max_graphs + idx] |= graph_rows[w * max_graphs + 0];
-                    }
-                }
-            }
-
-            ++idx;
-        }
-
-        auto build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
-        {
-            for (unsigned v = 0 ; v < size ; ++v) {
-                auto nv = graph_rows[v * max_graphs + 0];
-                for (unsigned w = 0 ; w < v ; ++w) {
-                    if (nv.test(w)) {
-                        // are there two common neighbours with an edge between them?
-                        auto common_neighbours = graph_rows[w * max_graphs + 0];
-                        common_neighbours &= nv;
-                        common_neighbours.reset(v);
-                        common_neighbours.reset(w);
-                        auto count = common_neighbours.count();
-                        if (count >= 2) {
-                            bool done = false;
-                            auto cn1 = common_neighbours;
-                            for (auto x = cn1.find_first() ; x != decltype(cn1)::npos && ! done ; x = cn1.find_first()) {
-                                cn1.reset(x);
-                                auto cn2 = common_neighbours;
-                                for (auto y = cn2.find_first() ; y != decltype(cn2)::npos && ! done ; y = cn2.find_first()) {
-                                    cn2.reset(y);
-                                    if (v != w && v != x && v != y && w != x && w != y && graph_rows[x * max_graphs + 0].test(y)) {
-                                        graph_rows[v * max_graphs + idx].set(w);
-                                        graph_rows[w * max_graphs + idx].set(v);
-                                        done = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            ++idx;
-        }
-    };
-
     enum class SearchResult
     {
         Aborted,
@@ -641,41 +199,41 @@ namespace
         template <bool has_edge_labels_, bool induced_>
         auto propagate_adjacency_constraints(SubgraphDomain & d, const Assignment & current_assignment) -> void
         {
-            auto pattern_adjacency_bits = model.pattern_adjacencies_bits[model.pattern_size * current_assignment.pattern_vertex + d.v];
+            auto graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
 
             // for the original graph pair, if we're adjacent...
-            if (pattern_adjacency_bits & (1u << 0)) {
+            if (graph_pairs_to_consider & (1u << 0)) {
                 // ...then we can only be mapped to adjacent vertices
-                d.values &= model.target_graph_rows[current_assignment.target_vertex * model.max_graphs + 0];
+                d.values &= model.target_graph_row(0, current_assignment.target_vertex);
             }
             else {
                 if constexpr (induced_) {
                     // ...otherwise we can only be mapped to adjacent vertices
-                    d.values.intersect_with_complement(model.target_graph_rows[current_assignment.target_vertex * model.max_graphs + 0]);
+                    d.values.intersect_with_complement(model.target_graph_row(0, current_assignment.target_vertex));
                 }
             }
 
             // and for each remaining graph pair...
             for (unsigned g = 1 ; g < model.max_graphs ; ++g) {
                 // if we're adjacent...
-                if (pattern_adjacency_bits & (1u << g)) {
+                if (graph_pairs_to_consider & (1u << g)) {
                     // ...then we can only be mapped to adjacent vertices
-                    d.values &= model.target_graph_rows[current_assignment.target_vertex * model.max_graphs + g];
+                    d.values &= model.target_graph_row(g, current_assignment.target_vertex);
                 }
             }
 
             if constexpr (has_edge_labels_) {
                 // if we're adjacent in the original graph, additionally the edge labels need to match up
-                if (pattern_adjacency_bits & (1u << 0)) {
+                if (graph_pairs_to_consider & (1u << 0)) {
                     auto check_d_values = d.values;
 
-                    auto want_forward_label = model.pattern_edge_labels.at(model.pattern_size * d.v + current_assignment.pattern_vertex);
-                    auto want_reverse_label = model.pattern_edge_labels.at(model.pattern_size * current_assignment.pattern_vertex + d.v);
+                    auto want_forward_label = model.pattern_edge_label(d.v, current_assignment.pattern_vertex);
+                    auto want_reverse_label = model.pattern_edge_label(current_assignment.pattern_vertex, d.v);
                     for (auto c = check_d_values.find_first() ; c != decltype(check_d_values)::npos ; c = check_d_values.find_first()) {
                         check_d_values.reset(c);
 
-                        auto got_forward_label = model.target_edge_labels.at(model.target_size * c + current_assignment.target_vertex);
-                        auto got_reverse_label = model.target_edge_labels.at(model.target_size * current_assignment.target_vertex + c);
+                        auto got_forward_label = model.target_edge_label(c, current_assignment.target_vertex);
+                        auto got_reverse_label = model.target_edge_label(current_assignment.target_vertex, c);
 
                         if (got_forward_label != want_forward_label || got_reverse_label != want_reverse_label)
                             d.values.reset(c);
@@ -686,8 +244,8 @@ namespace
 
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool
         {
-            auto i = model.pattern_graph_rows[v * model.max_graphs + 0];
-            i &= model.pattern_graph_rows[w * model.max_graphs + 0];
+            auto i = model.pattern_graph_row(0, v);
+            i &= model.pattern_graph_row(0, w);
             return i.any();
         }
 
@@ -712,7 +270,7 @@ namespace
                 }
 
                 // adjacency
-                if (model.pattern_edge_labels.empty()) {
+                if (! model.has_edge_labels()) {
                     if (params.induced)
                         propagate_adjacency_constraints<false, true>(d, current_assignment);
                     else
@@ -842,7 +400,7 @@ namespace
                     return false;
 
                 // propagate less than
-                if (model.has_less_thans && ! propagate_less_thans(new_domains))
+                if (model.has_less_thans() && ! propagate_less_thans(new_domains))
                     return false;
 
                 // propagate all different
@@ -861,7 +419,7 @@ namespace
                 if (! d.fixed)
                     if ((! result) ||
                             (d.count < result->count) ||
-                            (d.count == result->count && model.patterns_degrees[0][d.v] > model.patterns_degrees[0][result->v]))
+                            (d.count == result->count && model.pattern_degree(0, d.v) > model.pattern_degree(0, result->v)))
                         result = &d;
             return result;
         }
@@ -916,7 +474,7 @@ namespace
             // Using floating point here turned out to be way too slow. Fortunately the base
             // of softmax doesn't seem to matter, so we use 2 instead of e, and do everything
             // using bit voodoo.
-            auto expish = [largest_target_degree = this->model.largest_target_degree] (int degree) {
+            auto expish = [largest_target_degree = this->model.largest_target_degree()] (int degree) {
                 constexpr int sufficient_space_for_adding_up = numeric_limits<long long>::digits - 18;
                 auto shift = max<int>(degree - largest_target_degree + sufficient_space_for_adding_up, 0);
                 return 1ll << shift;
@@ -924,7 +482,7 @@ namespace
 
             long long total = 0;
             for (unsigned v = 0 ; v < branch_v_end ; ++v)
-                total += expish(model.targets_degrees[0][branch_v[v]]);
+                total += expish(model.target_degree(0, branch_v[v]));
 
             for (unsigned start = 0 ; start < branch_v_end ; ++start) {
                 // pick a random number between 1 and total inclusive
@@ -934,13 +492,13 @@ namespace
                 // go over the list until we hit the score
                 unsigned select_element = start;
                 for ( ; select_element + 1 < branch_v_end ; ++select_element) {
-                    select_score -= expish(model.targets_degrees[0][branch_v[select_element]]);
+                    select_score -= expish(model.target_degree(0, branch_v[select_element]));
                     if (select_score <= 0)
                         break;
                 }
 
                 // move to front
-                total -= expish(model.targets_degrees[0][branch_v[select_element]]);
+                total -= expish(model.target_degree(0, branch_v[select_element]));
                 swap(branch_v[select_element], branch_v[start]);
             }
         }
@@ -952,7 +510,7 @@ namespace
                 ) -> void
         {
             stable_sort(branch_v.begin(), branch_v.begin() + branch_v_end, [&] (int a, int b) -> bool {
-                    return (model.targets_degrees[0][a] >= model.targets_degrees[0][b]) ^ reverse;
+                    return (model.target_degree(0, a) >= model.target_degree(0, b)) ^ reverse;
                     });
         }
 
@@ -1247,17 +805,17 @@ namespace
 
         auto check_label_compatibility(int p, int t) -> bool
         {
-            if (model.pattern_vertex_labels.empty())
+            if (! model.has_vertex_labels())
                 return true;
             else
-                return model.pattern_vertex_labels[p] == model.target_vertex_labels[t];
+                return model.pattern_vertex_label(p) == model.target_vertex_label(t);
         }
 
         auto check_loop_compatibility(int p, int t) -> bool
         {
-            if (model.pattern_loops[p] && ! model.target_loops[t])
+            if (model.pattern_has_loop(p) && ! model.target_has_loop(t))
                 return false;
-            else if (params.induced && (model.pattern_loops[p] != model.target_loops[t]))
+            else if (params.induced && (model.pattern_has_loop(p) != model.target_has_loop(t)))
                 return false;
 
             return true;
@@ -1276,18 +834,18 @@ namespace
                 return true;
 
             for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
-                if (model.targets_degrees.at(g).at(t) < model.patterns_degrees.at(g).at(p)) {
+                if (model.target_degree(g, t) < model.pattern_degree(g, p)) {
                     // not ok, degrees differ
                     if (params.proof) {
                         // get the actual neighbours of p and t, in their original terms
                         vector<int> n_p, n_t;
 
-                        auto np = model.pattern_graph_rows[p * model.max_graphs + g];
+                        auto np = model.pattern_graph_row(g, p);
                         for (unsigned j = 0 ; j < model.pattern_size ; ++j)
                             if (np.test(j))
                                 n_p.push_back(j);
 
-                        auto nt = model.target_graph_rows[t * model.max_graphs + g];
+                        auto nt = model.target_graph_row(g, t);
                         for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
                             nt.reset(j);
                             n_t.push_back(j);
@@ -1298,8 +856,8 @@ namespace
                     }
                     return false;
                 }
-                else if (degree_and_nds_are_exact(params, model.full_pattern_size, model.target_size)
-                        && model.targets_degrees.at(g).at(t) != model.patterns_degrees.at(g).at(p)) {
+                else if (degree_and_nds_are_exact(params, model.pattern_size, model.target_size)
+                        && model.target_degree(g, t) != model.pattern_degree(g, p)) {
                     // not ok, degrees must be exactly the same
                     return false;
                 }
@@ -1311,10 +869,10 @@ namespace
             if (! targets_ndss.at(0).at(t)) {
                 for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                     targets_ndss.at(g).at(t) = vector<int>{};
-                    auto ni = model.target_graph_rows[t * model.max_graphs + g];
+                    auto ni = model.target_graph_row(g, t);
                     for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
                         ni.reset(j);
-                        targets_ndss.at(g).at(t)->push_back(model.targets_degrees.at(g).at(j));
+                        targets_ndss.at(g).at(t)->push_back(model.target_degree(g, j));
                     }
                     sort(targets_ndss.at(g).at(t)->begin(), targets_ndss.at(g).at(t)->end(), greater<int>());
                 }
@@ -1329,16 +887,16 @@ namespace
                             // need to know the NDS together with the actual vertices
                             vector<pair<int, int> > p_nds, t_nds;
 
-                            auto np = model.pattern_graph_rows[p * model.max_graphs + g];
+                            auto np = model.pattern_graph_row(g, p);
                             for (auto w = np.find_first() ; w != decltype(np)::npos ; w = np.find_first()) {
                                 np.reset(w);
-                                p_nds.emplace_back(w, model.pattern_graph_rows[w * model.max_graphs + g].count());
+                                p_nds.emplace_back(w, model.pattern_graph_row(g, w).count());
                             }
 
-                            auto nt = model.target_graph_rows[t * model.max_graphs + g];
+                            auto nt = model.target_graph_row(g, t);
                             for (auto w = nt.find_first() ; w != decltype(nt)::npos ; w = nt.find_first()) {
                                 nt.reset(w);
-                                t_nds.emplace_back(w, model.target_graph_rows[w * model.max_graphs + g].count());
+                                t_nds.emplace_back(w, model.target_graph_row(g, w).count());
                             }
 
                             sort(p_nds.begin(), p_nds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
@@ -1358,7 +916,7 @@ namespace
                         }
                         return false;
                     }
-                    else if (degree_and_nds_are_exact(params, model.full_pattern_size, model.target_size)
+                    else if (degree_and_nds_are_exact(params, model.pattern_size, model.target_size)
                             && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x))
                         return false;
                 }
@@ -1383,10 +941,10 @@ namespace
 
                 for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
                     for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
-                        auto ni = model.pattern_graph_rows[i * model.max_graphs + g];
+                        auto ni = model.pattern_graph_row(g, i);
                         for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
                             ni.reset(j);
-                            patterns_ndss.at(g).at(i).push_back(model.patterns_degrees.at(g).at(j));
+                            patterns_ndss.at(g).at(i).push_back(model.pattern_degree(g, j));
                         }
                         sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
                     }
@@ -1777,7 +1335,7 @@ namespace
         auto run() -> HomomorphismResult
         {
             // quick check for size
-            if (is_nonshrinking(params) && (model.full_pattern_size > model.target_size)) {
+            if (is_nonshrinking(params) && (model.pattern_size > model.target_size)) {
                 HomomorphismResult result;
                 result.extra_stats.emplace_back("nonshrinking = false");
                 if (params.proof)
