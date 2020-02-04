@@ -27,7 +27,6 @@
 #include <utility>
 
 #include <boost/thread/barrier.hpp>
-#include <boost/dynamic_bitset.hpp>
 
 using std::atomic;
 using std::conditional_t;
@@ -67,7 +66,8 @@ using std::chrono::steady_clock;
 using std::chrono::operator""ms;
 
 using boost::barrier;
-using boost::dynamic_bitset;
+
+using PatternAdjacencyBitsType = uint8_t;
 
 namespace
 {
@@ -79,15 +79,14 @@ namespace
             (supports_k4_graphs(params) ? 1 : 0);
     }
 
-    template <typename BitSetType_, typename PatternAdjacencyBitsType_>
     struct SubgraphModel
     {
         const unsigned max_graphs;
         unsigned pattern_size, full_pattern_size, target_size;
 
-        vector<PatternAdjacencyBitsType_> pattern_adjacencies_bits;
-        vector<dynamic_bitset<> > pattern_graph_rows;
-        vector<BitSetType_> target_graph_rows;
+        vector<PatternAdjacencyBitsType> pattern_adjacencies_bits;
+        vector<SVOBitset> pattern_graph_rows;
+        vector<SVOBitset> target_graph_rows;
         vector<pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;
 
         vector<vector<int> > patterns_degrees, targets_degrees;
@@ -109,7 +108,7 @@ namespace
             largest_target_degree(0),
             has_less_thans(false)
         {
-            if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType_))
+            if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
                 throw UnsupportedConfiguration{ "Supplemental graphs won't fit in the chosen bitset size" };
 
             if (pattern.has_edge_labels() && ! params.induced)
@@ -123,7 +122,7 @@ namespace
             }
 
             // recode pattern to a bit graph, and strip out loops
-            pattern_graph_rows.resize(pattern_size * max_graphs, dynamic_bitset<>(pattern_size));
+            pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
             pattern_loops.resize(pattern_size);
             for (unsigned i = 0 ; i < pattern_size ; ++i) {
                 for (unsigned j = 0 ; j < pattern_size ; ++j) {
@@ -166,7 +165,7 @@ namespace
             }
 
             // recode target to a bit graph, and take out loops
-            target_graph_rows.resize(target_size * max_graphs, BitSetType_{ target_size, 0 });
+            target_graph_rows.resize(target_size * max_graphs, SVOBitset{ target_size, 0 });
             target_loops.resize(target_size);
             for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
                 if (e->first.first == e->first.second)
@@ -421,8 +420,7 @@ namespace
             return true;
         }
 
-        template <typename PossiblySomeOtherBitSetType_>
-        auto build_exact_path_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx,
+        auto build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
                 unsigned number_of_exact_path_graphs) -> void
         {
             vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
@@ -456,8 +454,7 @@ namespace
             idx += number_of_exact_path_graphs;
         }
 
-        template <typename PossiblySomeOtherBitSetType_>
-        auto build_distance3_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
+        auto build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v) {
                 auto nv = graph_rows[v * max_graphs + 0];
@@ -475,8 +472,7 @@ namespace
             ++idx;
         }
 
-        template <typename PossiblySomeOtherBitSetType_>
-        auto build_k4_graphs(vector<PossiblySomeOtherBitSetType_> & graph_rows, unsigned size, unsigned & idx) -> void
+        auto build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
         {
             for (unsigned v = 0 ; v < size ; ++v) {
                 auto nv = graph_rows[v * max_graphs + 0];
@@ -558,13 +554,12 @@ namespace
         }
     };
 
-    template <typename BitSetType_>
     struct SubgraphDomain
     {
         unsigned v;
         unsigned count;
         bool fixed = false;
-        BitSetType_ values;
+        SVOBitset values;
 
         explicit SubgraphDomain(unsigned s) :
             values(s, 0)
@@ -587,21 +582,18 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename PatternAdjacencyBitsType_>
     struct Searcher
     {
-        using Model = SubgraphModel<BitSetType_, PatternAdjacencyBitsType_>;
-        using Domain = SubgraphDomain<BitSetType_>;
-        using Domains = vector<Domain>;
+        using Domains = vector<SubgraphDomain>;
 
-        const Model & model;
+        const SubgraphModel & model;
         const HomomorphismParams & params;
 
         Watches<Assignment, AssignmentWatchTable> watches;
 
         mt19937 global_rand;
 
-        Searcher(const Model & m, const HomomorphismParams & p) :
+        Searcher(const SubgraphModel & m, const HomomorphismParams & p) :
             model(m),
             params(p)
         {
@@ -641,13 +633,13 @@ namespace
 
         auto find_unit_domain(Domains & domains) -> typename Domains::iterator
         {
-            return find_if(domains.begin(), domains.end(), [] (Domain & d) {
+            return find_if(domains.begin(), domains.end(), [] (SubgraphDomain & d) {
                     return (! d.fixed) && 1 == d.count;
                     });
         }
 
         template <bool has_edge_labels_, bool induced_>
-        auto propagate_adjacency_constraints(Domain & d, const Assignment & current_assignment) -> void
+        auto propagate_adjacency_constraints(SubgraphDomain & d, const Assignment & current_assignment) -> void
         {
             auto pattern_adjacency_bits = model.pattern_adjacencies_bits[model.pattern_size * current_assignment.pattern_vertex + d.v];
 
@@ -694,9 +686,9 @@ namespace
 
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool
         {
-            auto & nv = model.pattern_graph_rows[v * model.max_graphs + 0];
-            auto & nw = model.pattern_graph_rows[w * model.max_graphs + 0];
-            return ! (nv & nw).empty();
+            auto i = model.pattern_graph_rows[v * model.max_graphs + 0];
+            i &= model.pattern_graph_rows[w * model.max_graphs + 0];
+            return i.any();
         }
 
         auto propagate_simple_constraints(Domains & new_domains, const Assignment & current_assignment) -> bool
@@ -862,9 +854,9 @@ namespace
             return true;
         }
 
-        auto find_branch_domain(const Domains & domains) -> const Domain *
+        auto find_branch_domain(const Domains & domains) -> const SubgraphDomain *
         {
-            const Domain * result = nullptr;
+            const SubgraphDomain * result = nullptr;
             for (auto & d : domains)
                 if (! d.fixed)
                     if ((! result) ||
@@ -979,7 +971,7 @@ namespace
             ++nodes;
 
             // find ourselves a domain, or succeed if we're all assigned
-            const Domain * branch_domain = find_branch_domain(domains);
+            const SubgraphDomain * branch_domain = find_branch_domain(domains);
             if (! branch_domain) {
                 if (params.lackey) {
                     VertexToVertexMapping mapping;
@@ -1161,7 +1153,7 @@ namespace
             }
 
             // counting all-different
-            BitSetType_ domains_so_far{ model.target_size, 0 }, hall{ model.target_size, 0 };
+            SVOBitset domains_so_far{ model.target_size, 0 }, hall{ model.target_size, 0 };
             unsigned neighbours_so_far = 0;
 
             [[ maybe_unused ]] conditional_t<proof_, unsigned, tuple<> > last_outputted_hall_size{};
@@ -1240,17 +1232,14 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename PatternAdjacencyBitsType_>
     struct BasicSolver
     {
-        using Model = SubgraphModel<BitSetType_, PatternAdjacencyBitsType_>;
-        using Domain = SubgraphDomain<BitSetType_>;
-        using Domains = vector<Domain>;
+        using Domains = vector<SubgraphDomain>;
 
-        const Model & model;
+        const SubgraphModel & model;
         const HomomorphismParams & params;
 
-        BasicSolver(const Model & m, const HomomorphismParams & p) :
+        BasicSolver(const SubgraphModel & m, const HomomorphismParams & p) :
             model(m),
             params(p)
         {
@@ -1443,7 +1432,7 @@ namespace
 
             // quick sanity check that we have enough values
             if (is_nonshrinking(params)) {
-                BitSetType_ domains_union{ model.target_size, 0 };
+                SVOBitset domains_union{ model.target_size, 0 };
                 for (auto & d : domains)
                     domains_union |= d.values;
 
@@ -1476,27 +1465,17 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename PatternAdjacencyBitsType_>
     struct SequentialSolver :
-        BasicSolver<BitSetType_, PatternAdjacencyBitsType_>
+        BasicSolver
     {
-        using BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::BasicSolver;
-
-        using Model = typename BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::Model;
-        using Domain = typename BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::Domain;
-        using Domains = typename BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::Domains;
-
-        using BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::model;
-        using BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::params;
-
-        using BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::initialise_domains;
+        using BasicSolver::BasicSolver;
 
         auto solve() -> HomomorphismResult
         {
             HomomorphismResult result;
 
             // domains
-            Domains domains(model.pattern_size, Domain{ model.target_size });
+            Domains domains(model.pattern_size, SubgraphDomain{ model.target_size });
             if (! initialise_domains(domains)) {
                 result.complete = true;
                 return result;
@@ -1513,7 +1492,7 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
-            Searcher<BitSetType_, PatternAdjacencyBitsType_> searcher(model, params);
+            Searcher searcher(model, params);
 
             while (! done) {
                 ++number_of_restarts;
@@ -1601,23 +1580,12 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename PatternAdjacencyBitsType_>
-    struct ThreadedSolver :
-        BasicSolver<BitSetType_, PatternAdjacencyBitsType_>
+    struct ThreadedSolver : BasicSolver
     {
-        using Model = typename BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::Model;
-        using Domain = typename BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::Domain;
-        using Domains = typename BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::Domains;
-
-        using BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::model;
-        using BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::params;
-
-        using BasicSolver<BitSetType_, PatternAdjacencyBitsType_>::initialise_domains;
-
         unsigned n_threads;
 
-        ThreadedSolver(const Model & m, const HomomorphismParams & p, unsigned t) :
-            BasicSolver<BitSetType_, PatternAdjacencyBitsType_>(m, p),
+        ThreadedSolver(const SubgraphModel & m, const HomomorphismParams & p, unsigned t) :
+            BasicSolver(m, p),
             n_threads(t)
         {
         }
@@ -1629,7 +1597,7 @@ namespace
             string by_thread_nodes, by_thread_propagations;
 
             // domains
-            Domains common_domains(model.pattern_size, Domain{ model.target_size });
+            Domains common_domains(model.pattern_size, SubgraphDomain{ model.target_size });
             if (! initialise_domains(common_domains)) {
                 common_result.complete = true;
                 return common_result;
@@ -1641,7 +1609,7 @@ namespace
             vector<thread> threads;
             threads.reserve(n_threads);
 
-            vector<unique_ptr<Searcher<BitSetType_, PatternAdjacencyBitsType_> > > searchers{ n_threads };
+            vector<unique_ptr<Searcher> > searchers{ n_threads };
 
             barrier wait_for_new_nogoods_barrier{ n_threads }, synced_nogoods_barrier{ n_threads };
             atomic<bool> restart_synchroniser{ false };
@@ -1656,7 +1624,7 @@ namespace
 
                 bool just_the_first_thread = (0 == t) && params.delay_thread_creation;
 
-                searchers[t] = make_unique<Searcher<BitSetType_, PatternAdjacencyBitsType_> >(model, params);
+                searchers[t] = make_unique<Searcher>(model, params);
                 if (0 != t)
                     searchers[t]->global_rand.seed(t);
 
@@ -1795,12 +1763,9 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename PatternAdjacencyBitsType_>
     struct SubgraphRunner
     {
-        using Model = SubgraphModel<BitSetType_, PatternAdjacencyBitsType_>;
-
-        Model model;
+        SubgraphModel model;
         const HomomorphismParams & params;
 
         SubgraphRunner(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & p) :
@@ -1829,7 +1794,7 @@ namespace
 
             HomomorphismResult result;
             if (1 == params.n_threads) {
-                SequentialSolver<BitSetType_, PatternAdjacencyBitsType_> solver(model, params);
+                SequentialSolver solver(model, params);
                 result = solver.solve();
             }
             else {
@@ -1837,7 +1802,7 @@ namespace
                     throw UnsupportedConfiguration{ "Threaded search requires restarts" };
 
                 unsigned n_threads = how_many_threads(params.n_threads);
-                ThreadedSolver<BitSetType_, PatternAdjacencyBitsType_> solver(model, params, n_threads);
+                ThreadedSolver solver(model, params, n_threads);
                 result = solver.solve();
             }
 
@@ -1945,7 +1910,7 @@ auto solve_homomorphism_problem(
     }
     else {
         // just solve the problem
-        SubgraphRunner<SVOBitset, uint8_t> algorithm{ target, pattern, params };
+        SubgraphRunner algorithm{ target, pattern, params };
         auto result = algorithm.run();
 
         if (params.proof && result.complete && result.mapping.empty())
