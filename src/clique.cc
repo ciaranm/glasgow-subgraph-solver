@@ -2,7 +2,7 @@
 
 #include "clique.hh"
 #include "watches.hh"
-#include "fixed_bit_set.hh"
+#include "svo_bitset.hh"
 
 #include <algorithm>
 #include <list>
@@ -12,8 +12,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-
-#include <boost/dynamic_bitset.hpp>
 
 using std::find;
 using std::iota;
@@ -28,8 +26,6 @@ using std::sort;
 using std::swap;
 using std::to_string;
 using std::vector;
-
-using boost::dynamic_bitset;
 
 namespace
 {
@@ -68,7 +64,7 @@ namespace
         }
     };
 
-    template <typename BitSetType_, typename ArrayType_>
+    template <typename BitSetType_>
     struct CliqueRunner
     {
         const CliqueParams & params;
@@ -82,13 +78,18 @@ namespace
 
         mt19937 global_rand;
 
+        int * space;
+
         CliqueRunner(const InputGraph & g, const CliqueParams & p) :
             params(p),
             size(g.size()),
             adj(g.size(), BitSetType_{ unsigned(size), 0 }),
             order(size),
-            invorder(size)
+            invorder(size),
+            space(nullptr)
         {
+            space = new int[size * (size + 1) * 2];
+
             if (params.restarts_schedule->might_restart())
                 watches.table.data.resize(g.size());
 
@@ -112,10 +113,15 @@ namespace
                 adj[invorder[e->first.first]].set(invorder[e->first.second]);
         }
 
+        ~CliqueRunner()
+        {
+            delete[] space;
+        }
+
         auto colour_class_order(
                 const BitSetType_ & p,
-                ArrayType_ & p_order,
-                ArrayType_ & p_bounds,
+                int * p_order,
+                int * p_bounds,
                 int & p_end) -> void
         {
             BitSetType_ p_left = p;      // not coloured yet
@@ -137,7 +143,7 @@ namespace
                     q.reset(v);
 
                     // can't give anything adjacent to this the same colour
-                    q &= ~adj[v];
+                    q.intersect_with_complement(adj[v]);
 
                     // record in result
                     p_bounds[p_end] = colour;
@@ -149,8 +155,9 @@ namespace
 
         auto colour_class_order_2df(
                 const BitSetType_ & p,
-                ArrayType_ & p_order,
-                ArrayType_ & p_bounds,
+                int * p_order,
+                int * p_bounds,
+                int * defer,
                 int & p_end) -> void
         {
             BitSetType_ p_left = p;      // not coloured yet
@@ -158,9 +165,6 @@ namespace
             p_end = 0;
 
             unsigned d = 0;             // number deferred
-            ArrayType_ defer;
-            if constexpr (is_same<ArrayType_, vector<int> >::value)
-                defer.resize(size);
 
             // while we've things left to colour
             while (p_left.any()) {
@@ -178,7 +182,7 @@ namespace
                     q.reset(v);
 
                     // can't give anything adjacent to this the same colour
-                    q &= ~adj[v];
+                    q.intersect_with_complement(adj[v]);
 
                     // record in result
                     p_bounds[p_end] = colour;
@@ -205,24 +209,18 @@ namespace
 
         auto colour_class_order_sorted(
                 const BitSetType_ & p,
-                ArrayType_ & p_order,
-                ArrayType_ & p_bounds,
+                int * p_order,
+                int * p_bounds,
                 int & p_end) -> void
         {
             BitSetType_ p_left = p;      // not coloured yet
             unsigned colour = 0;         // current colour
             p_end = 0;
 
-            ArrayType_ p_order_prelim;
-            ArrayType_ colour_sizes;
-            ArrayType_ colour_start;
-            ArrayType_ sorted_order;
-            if constexpr (is_same<ArrayType_, vector<int> >::value) {
-                p_order_prelim.resize(size);
-                colour_sizes.resize(size);
-                colour_start.resize(size);
-                sorted_order.resize(size);
-            }
+            std::vector<int> p_order_prelim(size);
+            std::vector<int> colour_sizes(size);
+            std::vector<int> colour_start(size);
+            std::vector<int> sorted_order(size);
 
             // while we've things left to colour
             while (p_left.any()) {
@@ -242,7 +240,7 @@ namespace
                     q.reset(v);
 
                     // can't give anything adjacent to this the same colour
-                    q &= ~adj[v];
+                    q.intersect_with_complement(adj[v]);
 
                     // record in result
                     p_order_prelim[p_end] = v;
@@ -281,23 +279,20 @@ namespace
                 unsigned long long & find_nodes,
                 unsigned long long & prove_nodes,
                 vector<int> & c,
-                BitSetType_ & p) -> SearchResult
+                BitSetType_ & p,
+                int spacepos) -> SearchResult
         {
             ++nodes;
             ++prove_nodes;
 
             // initial colouring
-            ArrayType_ p_order;
-            ArrayType_ p_bounds;
-            if constexpr (is_same<ArrayType_, vector<int> >::value) {
-                p_order.resize(size);
-                p_bounds.resize(size);
-            }
+            int * p_order = &space[spacepos];
+            int * p_bounds = &space[spacepos + size];
 
             int p_end = 0;
             switch (params.colour_class_order) {
                 case ColourClassOrder::ColourOrder:     colour_class_order(p, p_order, p_bounds, p_end); break;
-                case ColourClassOrder::SingletonsFirst: colour_class_order_2df(p, p_order, p_bounds, p_end); break;
+                case ColourClassOrder::SingletonsFirst: colour_class_order_2df(p, p_order, p_bounds, &space[spacepos + 2 * size], p_end); break;
                 case ColourClassOrder::Sorted:          colour_class_order_sorted(p, p_order, p_bounds, p_end); break;
             }
 
@@ -346,7 +341,7 @@ namespace
                             );
 
                 if (new_p.any()) {
-                    switch (expand(nodes, find_nodes, prove_nodes, c, new_p)) {
+                    switch (expand(nodes, find_nodes, prove_nodes, c, new_p, spacepos + 2 * size)) {
                         case SearchResult::Aborted:
                             return SearchResult::Aborted;
 
@@ -417,7 +412,7 @@ namespace
 
                 auto new_p = p;
                 vector<int> c;
-                switch (expand(result.nodes, result.find_nodes, result.prove_nodes, c, new_p)) {
+                switch (expand(result.nodes, result.find_nodes, result.prove_nodes, c, new_p, 0)) {
                     case SearchResult::Complete:
                         done = true;
                         break;
@@ -447,29 +442,11 @@ namespace
             return result;
         }
     };
-
-    template <template <typename, typename> class Algorithm_, typename Result_, typename Graph_, unsigned size_, unsigned... other_sizes_, typename... Params_>
-    auto run_with_appropriate_template_parameters(const std::integer_sequence<unsigned, size_, other_sizes_...> &, const Graph_ & graph, Params_ && ... params) -> Result_
-    {
-        if (graph.size() < int(size_ * bits_per_word)) {
-            Algorithm_<FixedBitSet<size_>, std::array<int, size_ * bits_per_word + 1> > algorithm{ graph, std::forward<Params_>(params)... };
-            return algorithm.run();
-        }
-        else {
-            if constexpr (0 == sizeof...(other_sizes_)) {
-                Algorithm_<boost::dynamic_bitset<>, std::vector<int> > algorithm{ graph, std::forward<Params_>(params)... };
-                return algorithm.run();
-            }
-            else
-                return run_with_appropriate_template_parameters<Algorithm_, Result_, Graph_>(std::integer_sequence<unsigned, other_sizes_...>{}, graph, std::forward<Params_>(params)...);
-        }
-    }
-
-    using AllGraphSizes = std::integer_sequence<unsigned, 1, 2, 3, 4, 5, 6, 7, 8, 16, 20, 24, 28, 32, 64, 128, 256, 512, 1024>;
 }
 
 auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
 {
-    return run_with_appropriate_template_parameters<CliqueRunner, CliqueResult>(AllGraphSizes(), graph, params);
+    CliqueRunner<SVOBitset> runner{ graph, params };
+    return runner.run();
 }
 

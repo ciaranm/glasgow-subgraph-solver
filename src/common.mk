@@ -9,12 +9,12 @@ SOURCES := \
     formats/read_file_format.cc \
     clique.cc \
     configuration.cc \
-    fixed_bit_set.cc \
     graph_traits.cc \
     homomorphism.cc \
     lackey.cc \
     proof.cc \
     restarts.cc \
+    svo_bitset.cc \
     symmetries.cc \
     thread_utils.cc \
     timeout.cc \
