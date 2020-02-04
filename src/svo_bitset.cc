@@ -5,7 +5,6 @@
 #include <algorithm>
 
 using std::copy;
-using std::vector;
 
 SVOBitset::SVOBitset(unsigned size, unsigned bits)
 {
