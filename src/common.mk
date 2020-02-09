@@ -7,10 +7,12 @@ SOURCES := \
     formats/input_graph.cc \
     formats/lad.cc \
     formats/read_file_format.cc \
+    cheap_all_different.cc \
     clique.cc \
     configuration.cc \
     graph_traits.cc \
     homomorphism.cc \
+    homomorphism_domain.cc \
     homomorphism_traits.cc \
     lackey.cc \
     proof.cc \

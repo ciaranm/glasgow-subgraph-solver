@@ -203,6 +203,9 @@ auto SubgraphModel::target_vertex_for_proof(int v) const -> NamedVertex
 
 auto SubgraphModel::prepare(const HomomorphismParams & params) -> bool
 {
+    if (is_nonshrinking(params) && (pattern_size > target_size))
+        return false;
+
     // pattern and target degrees, for the main graph
     _imp->patterns_degrees.at(0).resize(pattern_size);
     _imp->targets_degrees.at(0).resize(target_size);
