@@ -13,11 +13,11 @@ SOURCES := \
     graph_traits.cc \
     homomorphism.cc \
     homomorphism_domain.cc \
+    homomorphism_model.cc \
     homomorphism_traits.cc \
     lackey.cc \
     proof.cc \
     restarts.cc \
-    subgraph_model.cc \
     svo_bitset.cc \
     symmetries.cc \
     thread_utils.cc \

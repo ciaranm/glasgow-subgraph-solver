@@ -1,6 +1,6 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "subgraph_model.hh"
+#include "homomorphism_model.hh"
 #include "homomorphism_traits.hh"
 #include "configuration.hh"
 
@@ -32,7 +32,7 @@ namespace
     }
 }
 
-struct SubgraphModel::Imp
+struct HomomorphismModel::Imp
 {
     vector<PatternAdjacencyBitsType> pattern_adjacencies_bits;
     vector<SVOBitset> pattern_graph_rows;
@@ -48,7 +48,7 @@ struct SubgraphModel::Imp
     vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 };
 
-SubgraphModel::SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
+HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
     _imp(new Imp),
     max_graphs(calculate_n_shape_graphs(params)),
     pattern_size(pattern.size()),
@@ -185,23 +185,23 @@ SubgraphModel::SubgraphModel(const InputGraph & target, const InputGraph & patte
     }
 }
 
-SubgraphModel::~SubgraphModel() = default;
+HomomorphismModel::~HomomorphismModel() = default;
 
-auto SubgraphModel::pattern_vertex_for_proof(int v) const -> NamedVertex
+auto HomomorphismModel::pattern_vertex_for_proof(int v) const -> NamedVertex
 {
     if (v < 0 || unsigned(v) >= _imp->pattern_vertex_proof_names.size())
         throw ProofError{ "Oops, there's a bug: v out of range in pattern" };
     return pair{ v, _imp->pattern_vertex_proof_names[v] };
 }
 
-auto SubgraphModel::target_vertex_for_proof(int v) const -> NamedVertex
+auto HomomorphismModel::target_vertex_for_proof(int v) const -> NamedVertex
 {
     if (v < 0 || unsigned(v) >= _imp->target_vertex_proof_names.size())
         throw ProofError{ "Oops, there's a bug: v out of range in target" };
     return pair{ v, _imp->target_vertex_proof_names[v] };
 }
 
-auto SubgraphModel::prepare(const HomomorphismParams & params) -> bool
+auto HomomorphismModel::prepare(const HomomorphismParams & params) -> bool
 {
     if (is_nonshrinking(params) && (pattern_size > target_size))
         return false;
@@ -371,7 +371,7 @@ auto SubgraphModel::prepare(const HomomorphismParams & params) -> bool
     return true;
 }
 
-auto SubgraphModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
+auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
         unsigned number_of_exact_path_graphs) -> void
 {
     vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
@@ -405,7 +405,7 @@ auto SubgraphModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, uns
     idx += number_of_exact_path_graphs;
 }
 
-auto SubgraphModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
+auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
 {
     for (unsigned v = 0 ; v < size ; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];
@@ -423,7 +423,7 @@ auto SubgraphModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, unsi
     ++idx;
 }
 
-auto SubgraphModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
+auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
 {
     for (unsigned v = 0 ; v < size ; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];
@@ -458,77 +458,77 @@ auto SubgraphModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned si
     ++idx;
 }
 
-auto SubgraphModel::pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType
+auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType
 {
     return _imp->pattern_adjacencies_bits[pattern_size * p + q];
 }
 
-auto SubgraphModel::pattern_graph_row(int g, int p) const -> const SVOBitset &
+auto HomomorphismModel::pattern_graph_row(int g, int p) const -> const SVOBitset &
 {
     return _imp->pattern_graph_rows[p * max_graphs + g];
 }
 
-auto SubgraphModel::target_graph_row(int g, int t) const -> const SVOBitset &
+auto HomomorphismModel::target_graph_row(int g, int t) const -> const SVOBitset &
 {
     return _imp->target_graph_rows[t * max_graphs + g];
 }
 
-auto SubgraphModel::pattern_degree(int g, int p) const -> unsigned
+auto HomomorphismModel::pattern_degree(int g, int p) const -> unsigned
 {
     return _imp->patterns_degrees[g][p];
 }
 
-auto SubgraphModel::target_degree(int g, int t) const -> unsigned
+auto HomomorphismModel::target_degree(int g, int t) const -> unsigned
 {
     return _imp->targets_degrees[g][t];
 }
 
-auto SubgraphModel::largest_target_degree() const -> unsigned
+auto HomomorphismModel::largest_target_degree() const -> unsigned
 {
     return _imp->largest_target_degree;
 }
 
-auto SubgraphModel::has_vertex_labels() const -> bool
+auto HomomorphismModel::has_vertex_labels() const -> bool
 {
     return ! _imp->pattern_vertex_labels.empty();
 }
 
-auto SubgraphModel::has_edge_labels() const -> bool
+auto HomomorphismModel::has_edge_labels() const -> bool
 {
     return ! _imp->pattern_edge_labels.empty();
 }
 
-auto SubgraphModel::pattern_vertex_label(int p) const -> int
+auto HomomorphismModel::pattern_vertex_label(int p) const -> int
 {
     return _imp->pattern_vertex_labels[p];
 }
 
-auto SubgraphModel::target_vertex_label(int t) const -> int
+auto HomomorphismModel::target_vertex_label(int t) const -> int
 {
     return _imp->target_vertex_labels[t];
 }
 
-auto SubgraphModel::pattern_edge_label(int p, int q) const -> int
+auto HomomorphismModel::pattern_edge_label(int p, int q) const -> int
 {
     return _imp->pattern_edge_labels[p * pattern_size + q];
 }
 
-auto SubgraphModel::target_edge_label(int t, int u) const -> int
+auto HomomorphismModel::target_edge_label(int t, int u) const -> int
 {
     return _imp->target_edge_labels[t * target_size + u];
 }
 
-auto SubgraphModel::pattern_has_loop(int p) const -> bool
+auto HomomorphismModel::pattern_has_loop(int p) const -> bool
 {
     return _imp->pattern_loops[p];
 }
 
-auto SubgraphModel::target_has_loop(int t) const -> bool
+auto HomomorphismModel::target_has_loop(int t) const -> bool
 {
     return _imp->target_loops[t];
 }
 
-auto SubgraphModel::has_less_thans() const -> bool
+auto HomomorphismModel::has_less_thans() const -> bool
 {
     return _imp->has_less_thans;
 }

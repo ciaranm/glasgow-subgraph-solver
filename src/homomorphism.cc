@@ -11,7 +11,7 @@
 #include "watches.hh"
 #include "proof.hh"
 #include "svo_bitset.hh"
-#include "subgraph_model.hh"
+#include "homomorphism_model.hh"
 
 #include <algorithm>
 #include <atomic>
@@ -130,14 +130,14 @@ namespace
     {
         using Domains = vector<HomomorphismDomain>;
 
-        const SubgraphModel & model;
+        const HomomorphismModel & model;
         const HomomorphismParams & params;
 
         Watches<Assignment, AssignmentWatchTable> watches;
 
         mt19937 global_rand;
 
-        Searcher(const SubgraphModel & m, const HomomorphismParams & p) :
+        Searcher(const HomomorphismModel & m, const HomomorphismParams & p) :
             model(m),
             params(p)
         {
@@ -687,10 +687,10 @@ namespace
     {
         using Domains = vector<HomomorphismDomain>;
 
-        const SubgraphModel & model;
+        const HomomorphismModel & model;
         const HomomorphismParams & params;
 
-        HomomorphismSolver(const SubgraphModel & m, const HomomorphismParams & p) :
+        HomomorphismSolver(const HomomorphismModel & m, const HomomorphismParams & p) :
             model(m),
             params(p)
         {
@@ -1035,7 +1035,7 @@ namespace
     {
         unsigned n_threads;
 
-        ThreadedSolver(const SubgraphModel & m, const HomomorphismParams & p, unsigned t) :
+        ThreadedSolver(const HomomorphismModel & m, const HomomorphismParams & p, unsigned t) :
             HomomorphismSolver(m, p),
             n_threads(t)
         {
@@ -1314,7 +1314,7 @@ auto solve_homomorphism_problem(
     }
     else {
         // just solve the problem
-        SubgraphModel model(target, pattern, params);
+        HomomorphismModel model(target, pattern, params);
 
         if (! model.prepare(params)) {
             HomomorphismResult result;

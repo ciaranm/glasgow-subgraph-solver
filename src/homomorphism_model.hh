@@ -1,7 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_SUBGRAPH_MODEL_HH
-#define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_SUBGRAPH_MODEL_HH 1
+#ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_MODEL_HH
+#define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_MODEL_HH 1
 
 #include "formats/input_graph.hh"
 #include "svo_bitset.hh"
@@ -10,7 +10,7 @@
 
 #include <memory>
 
-class SubgraphModel
+class HomomorphismModel
 {
     private:
         struct Imp;
@@ -32,8 +32,8 @@ class SubgraphModel
         auto has_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;
 
-        SubgraphModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params);
-        ~SubgraphModel();
+        HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params);
+        ~HomomorphismModel();
 
         auto pattern_vertex_for_proof(int v) const -> NamedVertex;
         auto target_vertex_for_proof(int v) const -> NamedVertex;
