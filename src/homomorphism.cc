@@ -778,6 +778,11 @@ namespace
             }
         }
 
+        auto propagate_hyperedge_constraints(Domains & new_domains, const Assignment & current_assignment) -> bool
+        {
+            return true;
+        }
+
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool
         {
             auto & nv = model.pattern_graph_rows[v * model.max_graphs + 0];
@@ -957,6 +962,10 @@ namespace
 
                 // propagate simple all different and adjacency
                 if (! propagate_simple_constraints(new_domains, current_assignment))
+                    return false;
+
+                // propagate bigraph stuff
+                if (params.bigraph && !propagate_hyperedge_constraints(new_domains, current_assignment))
                     return false;
 
                 // propagate less than
@@ -1605,6 +1614,32 @@ namespace
                 return model.pattern_vertex_labels[p] == model.target_vertex_labels[t];
         }
 
+        auto check_closed_link_compatibility(int p, int t) -> bool
+        {
+            std::set<int> mapped;
+            bool lazy_flag;
+
+            for (unsigned i = 0; i < model.pattern_hyperedges.size(); i++) {
+                lazy_flag = false;
+                if (!model.pattern_hyperedges[i].first && model.pattern_hyperedges[i].second[p] > 0) {
+                    for (unsigned j = 0; j < model.target_hyperedges.size(); j++) {
+                        if(!model.target_hyperedges[j].first 
+                            && model.pattern_hyperedges[i].second[p] == model.target_hyperedges[j].second[t] 
+                            && mapped.find(j) == mapped.end()
+                            && std::accumulate(model.pattern_hyperedges[i].second.begin(), model.pattern_hyperedges[i].second.end(), 0) == 
+                               std::accumulate(model.target_hyperedges[j].second.begin(), model.target_hyperedges[j].second.end(), 0)){
+                            mapped.insert(j);
+                            lazy_flag = true;
+                            break;
+                        }
+                    }
+                    if(!lazy_flag) return false;
+                }
+            }
+            return true;
+        }
+
+
         auto check_loop_compatibility(int p, int t) -> bool
         {
             for (unsigned g = 0 ; g < model.max_graphs ; ++g)
@@ -1751,6 +1786,8 @@ namespace
                     else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss))
                         ok = false;
                     else if (params.bigraph && ! check_bigraph_degree_compatibility(i, j))
+                        ok = false;
+                    else if (params.bigraph && ! check_closed_link_compatibility(i, j))
                         ok = false;
                     if (ok)
                         domains.at(i).values.set(j);
