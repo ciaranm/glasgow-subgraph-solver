@@ -1,60 +1,42 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "homomorphism.hh"
-#include "cheap_all_different.hh"
 #include "clique.hh"
 #include "configuration.hh"
 #include "graph_traits.hh"
 #include "homomorphism_domain.hh"
+#include "homomorphism_model.hh"
 #include "homomorphism_searcher.hh"
 #include "homomorphism_traits.hh"
 #include "thread_utils.hh"
 #include "proof.hh"
-#include "svo_bitset.hh"
-#include "homomorphism_model.hh"
 
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
-#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <random>
 #include <thread>
-#include <tuple>
-#include <type_traits>
 #include <utility>
 
 #include <boost/thread/barrier.hpp>
 
 using std::atomic;
-using std::conditional_t;
-using std::fill;
-using std::find_if;
 using std::function;
-using std::greater;
-using std::is_same;
 using std::make_optional;
 using std::make_unique;
-using std::max;
 using std::map;
 using std::move;
-using std::mt19937;
 using std::mutex;
-using std::numeric_limits;
 using std::optional;
 using std::pair;
 using std::sort;
-using std::stable_sort;
 using std::string;
-using std::swap;
 using std::thread;
 using std::to_string;
-using std::tuple;
-using std::uniform_int_distribution;
 using std::unique_lock;
 using std::unique_ptr;
 using std::vector;
@@ -80,225 +62,6 @@ namespace
             params(p)
         {
         }
-
-        auto check_label_compatibility(int p, int t) -> bool
-        {
-            if (! model.has_vertex_labels())
-                return true;
-            else
-                return model.pattern_vertex_label(p) == model.target_vertex_label(t);
-        }
-
-        auto check_loop_compatibility(int p, int t) -> bool
-        {
-            if (model.pattern_has_loop(p) && ! model.target_has_loop(t))
-                return false;
-            else if (params.induced && (model.pattern_has_loop(p) != model.target_has_loop(t)))
-                return false;
-
-            return true;
-        }
-
-        auto check_degree_compatibility(
-                int p,
-                int t,
-                unsigned graphs_to_consider,
-                vector<vector<vector<int> > > & patterns_ndss,
-                vector<vector<optional<vector<int> > > > & targets_ndss,
-                bool do_not_do_nds_yet
-                ) -> bool
-        {
-            if (! degree_and_nds_are_preserved(params))
-                return true;
-
-            for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
-                if (model.target_degree(g, t) < model.pattern_degree(g, p)) {
-                    // not ok, degrees differ
-                    if (params.proof) {
-                        // get the actual neighbours of p and t, in their original terms
-                        vector<int> n_p, n_t;
-
-                        auto np = model.pattern_graph_row(g, p);
-                        for (unsigned j = 0 ; j < model.pattern_size ; ++j)
-                            if (np.test(j))
-                                n_p.push_back(j);
-
-                        auto nt = model.target_graph_row(g, t);
-                        for (auto j = nt.find_first() ; j != decltype(nt)::npos ; j = nt.find_first()) {
-                            nt.reset(j);
-                            n_t.push_back(j);
-                        }
-
-                        params.proof->incompatible_by_degrees(g, model.pattern_vertex_for_proof(p), n_p,
-                                model.target_vertex_for_proof(t), n_t);
-                    }
-                    return false;
-                }
-                else if (degree_and_nds_are_exact(params, model.pattern_size, model.target_size)
-                        && model.target_degree(g, t) != model.pattern_degree(g, p)) {
-                    // not ok, degrees must be exactly the same
-                    return false;
-                }
-            }
-            if (params.no_nds || do_not_do_nds_yet)
-                return true;
-
-            // full compare of neighbourhood degree sequences
-            if (! targets_ndss.at(0).at(t)) {
-                for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
-                    targets_ndss.at(g).at(t) = vector<int>{};
-                    auto ni = model.target_graph_row(g, t);
-                    for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                        ni.reset(j);
-                        targets_ndss.at(g).at(t)->push_back(model.target_degree(g, j));
-                    }
-                    sort(targets_ndss.at(g).at(t)->begin(), targets_ndss.at(g).at(t)->end(), greater<int>());
-                }
-            }
-
-            for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
-                for (unsigned x = 0 ; x < patterns_ndss.at(g).at(p).size() ; ++x) {
-                    if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x)) {
-                        if (params.proof) {
-                            vector<int> p_subsequence, t_subsequence, t_remaining;
-
-                            // need to know the NDS together with the actual vertices
-                            vector<pair<int, int> > p_nds, t_nds;
-
-                            auto np = model.pattern_graph_row(g, p);
-                            for (auto w = np.find_first() ; w != decltype(np)::npos ; w = np.find_first()) {
-                                np.reset(w);
-                                p_nds.emplace_back(w, model.pattern_graph_row(g, w).count());
-                            }
-
-                            auto nt = model.target_graph_row(g, t);
-                            for (auto w = nt.find_first() ; w != decltype(nt)::npos ; w = nt.find_first()) {
-                                nt.reset(w);
-                                t_nds.emplace_back(w, model.target_graph_row(g, w).count());
-                            }
-
-                            sort(p_nds.begin(), p_nds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
-                                    return a.second > b.second; });
-                            sort(t_nds.begin(), t_nds.end(), [] (const pair<int, int> & a, const pair<int, int> & b) {
-                                    return a.second > b.second; });
-
-                            for (unsigned y = 0 ; y <= x ; ++y) {
-                                p_subsequence.push_back(p_nds[y].first);
-                                t_subsequence.push_back(t_nds[y].first);
-                            }
-                            for (unsigned y = x + 1 ; y < t_nds.size() ; ++y)
-                                t_remaining.push_back(t_nds[y].first);
-
-                            params.proof->incompatible_by_nds(g, model.pattern_vertex_for_proof(p),
-                                    model.target_vertex_for_proof(t), p_subsequence, t_subsequence, t_remaining);
-                        }
-                        return false;
-                    }
-                    else if (degree_and_nds_are_exact(params, model.pattern_size, model.target_size)
-                            && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x))
-                        return false;
-                }
-            }
-
-            return true;
-        }
-
-        auto initialise_domains(Domains & domains) -> bool
-        {
-            unsigned graphs_to_consider = model.max_graphs;
-
-            /* pattern and target neighbourhood degree sequences */
-            vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
-            vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
-
-            if (degree_and_nds_are_preserved(params) && ! params.no_nds) {
-                for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
-                    patterns_ndss.at(g).resize(model.pattern_size);
-                    targets_ndss.at(g).resize(model.target_size);
-                }
-
-                for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
-                    for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
-                        auto ni = model.pattern_graph_row(g, i);
-                        for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
-                            ni.reset(j);
-                            patterns_ndss.at(g).at(i).push_back(model.pattern_degree(g, j));
-                        }
-                        sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
-                    }
-                }
-            }
-
-            for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
-                domains.at(i).v = i;
-                domains.at(i).values.reset();
-
-                for (unsigned j = 0 ; j < model.target_size ; ++j) {
-                    bool ok = true;
-
-                    if (! check_label_compatibility(i, j))
-                        ok = false;
-                    else if (! check_loop_compatibility(i, j))
-                        ok = false;
-                    else if (! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, params.proof.get()))
-                        ok = false;
-
-                    if (ok)
-                        domains.at(i).values.set(j);
-                }
-
-                domains.at(i).count = domains.at(i).values.count();
-                if (0 == domains.at(i).count)
-                    return false;
-            }
-
-            // for proof logging, we need degree information before we can output nds proofs
-            if (params.proof && degree_and_nds_are_preserved(params) && ! params.no_nds) {
-                for (unsigned i = 0 ; i < model.pattern_size ; ++i) {
-                    for (unsigned j = 0 ; j < model.target_size ; ++j) {
-                        if (domains.at(i).values.test(j) &&
-                                ! check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, false)) {
-                            domains.at(i).values.reset(j);
-                            if (0 == --domains.at(i).count)
-                                return false;
-                        }
-                    }
-                }
-            }
-
-            // quick sanity check that we have enough values
-            if (is_nonshrinking(params)) {
-                SVOBitset domains_union{ model.target_size, 0 };
-                for (auto & d : domains)
-                    domains_union |= d.values;
-
-                unsigned domains_union_popcount = domains_union.count();
-                if (domains_union_popcount < unsigned(model.pattern_size)) {
-                    if (params.proof) {
-                        vector<int> hall_lhs, hall_rhs;
-                        for (auto & d : domains)
-                            hall_lhs.push_back(d.v);
-                        auto dd = domains_union;
-                        for (auto v = dd.find_first() ; v != decltype(dd)::npos ; v = dd.find_first()) {
-                            dd.reset(v);
-                            hall_rhs.push_back(v);
-                        }
-                        params.proof->emit_hall_set_or_violator(hall_lhs, hall_rhs);
-                    }
-                    return false;
-                }
-            }
-
-            for (auto & d : domains) {
-                d.count = d.values.count();
-                if (0 == d.count && params.proof) {
-                    params.proof->initial_domain_is_empty(d.v);
-                    return false;
-                }
-            }
-
-            return true;
-        }
     };
 
     struct SequentialSolver :
@@ -312,7 +75,7 @@ namespace
 
             // domains
             Domains domains(model.pattern_size, HomomorphismDomain{ model.target_size });
-            if (! initialise_domains(domains)) {
+            if (! model.initialise_domains(domains)) {
                 result.complete = true;
                 return result;
             }
@@ -434,7 +197,7 @@ namespace
 
             // domains
             Domains common_domains(model.pattern_size, HomomorphismDomain{ model.target_size });
-            if (! initialise_domains(common_domains)) {
+            if (! model.initialise_domains(common_domains)) {
                 common_result.complete = true;
                 return common_result;
             }
@@ -701,7 +464,7 @@ auto solve_homomorphism_problem(
         // just solve the problem
         HomomorphismModel model(target, pattern, params);
 
-        if (! model.prepare(params)) {
+        if (! model.prepare()) {
             HomomorphismResult result;
             result.extra_stats.emplace_back("model_consistent = false");
             result.complete = true;

@@ -6,6 +6,7 @@
 #include "formats/input_graph.hh"
 #include "svo_bitset.hh"
 #include "homomorphism.hh"
+#include "homomorphism_domain.hh"
 #include "proof.hh"
 
 #include <memory>
@@ -23,6 +24,19 @@ class HomomorphismModel
 
         auto _build_k4_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void;
 
+        auto _check_degree_compatibility(
+                int p,
+                int t,
+                unsigned graphs_to_consider,
+                std::vector<std::vector<std::vector<int> > > & patterns_ndss,
+                std::vector<std::vector<std::optional<std::vector<int> > > > & targets_ndss,
+                bool do_not_do_nds_yet
+                ) const -> bool;
+
+        auto _check_loop_compatibility(int p, int t) const -> bool;
+
+        auto _check_label_compatibility(int p, int t) const -> bool;
+
     public:
         using PatternAdjacencyBitsType = uint8_t;
 
@@ -38,7 +52,7 @@ class HomomorphismModel
         auto pattern_vertex_for_proof(int v) const -> NamedVertex;
         auto target_vertex_for_proof(int v) const -> NamedVertex;
 
-        auto prepare(const HomomorphismParams & params) -> bool;
+        auto prepare() -> bool;
 
         auto pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType;
         auto pattern_graph_row(int g, int p) const -> const SVOBitset &;
@@ -57,6 +71,8 @@ class HomomorphismModel
 
         auto pattern_has_loop(int p) const -> bool;
         auto target_has_loop(int t) const -> bool;
+
+        auto initialise_domains(std::vector<HomomorphismDomain> & domains) const -> bool;
 };
 
 #endif
