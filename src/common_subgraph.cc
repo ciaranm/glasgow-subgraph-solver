@@ -22,7 +22,8 @@ namespace
     enum class SearchResult
     {
         Aborted,
-        Complete
+        Complete,
+        DecidedTrue
     };
 
     struct SplitDomains
@@ -129,8 +130,16 @@ namespace
 
             auto branch_domains = find_branch_partition(domains);
             if (branch_domains == domains.partitions.end()) {
-                if (assignments.assigned.size() > incumbent.assigned.size())
-                    incumbent = assignments;
+                if (assignments.assigned.size() > incumbent.assigned.size()) {
+                    if (params.decide) {
+                       if (assignments.assigned.size() >= *params.decide) {
+                           incumbent = assignments;
+                           return SearchResult::DecidedTrue;
+                       }
+                    }
+                    else
+                        incumbent = assignments;
+                }
             }
             else {
                 int left_branch = *branch_domains->first.begin();
@@ -139,8 +148,11 @@ namespace
                     auto new_domains = branch_assigning(domains, left_branch, right_branch);
                     if (assignments.assigned.size() + bound(new_domains) + 1 > incumbent.assigned.size()) {
                         assignments.assigned.emplace_back(left_branch, right_branch);
-                        if (SearchResult::Aborted == search(assignments, incumbent, new_domains, nodes))
-                            return SearchResult::Aborted;
+                        switch (search(assignments, incumbent, new_domains, nodes)) {
+                            case SearchResult::Aborted:     return SearchResult::Aborted;
+                            case SearchResult::DecidedTrue: return SearchResult::DecidedTrue;
+                            case SearchResult::Complete:    break;
+                        }
                         assignments.assigned.pop_back();
                     }
                 }
@@ -148,8 +160,11 @@ namespace
                 // now with left_branch assigned to null
                 auto new_domains = branch_rejecting(domains, left_branch);
                 if (assignments.assigned.size() + bound(new_domains) > incumbent.assigned.size()) {
-                    if (SearchResult::Aborted == search(assignments, incumbent, new_domains, nodes))
-                        return SearchResult::Aborted;
+                    switch (search(assignments, incumbent, new_domains, nodes)) {
+                        case SearchResult::Aborted:     return SearchResult::Aborted;
+                        case SearchResult::DecidedTrue: return SearchResult::DecidedTrue;
+                        case SearchResult::Complete:    break;
+                    }
                 }
             }
 
@@ -175,14 +190,27 @@ namespace
             }
 
             Assignments assignments, incumbent;
+
+            if (params.decide)
+                for (unsigned i = 1 ; i <= *params.decide - 1 ; ++i)
+                    incumbent.assigned.emplace_back(-int(i), -int(i));
+
             switch (search(assignments, incumbent, domains, result.nodes)) {
                 case SearchResult::Aborted:
                     break;
 
-                case SearchResult::Complete:
+                case SearchResult::DecidedTrue:
                     result.complete = true;
                     for (auto & [ f, s ] : incumbent.assigned)
                         result.mapping.emplace(f, s);
+                    break;
+
+                case SearchResult::Complete:
+                    result.complete = true;
+                    if (! params.decide) {
+                        for (auto & [ f, s ] : incumbent.assigned)
+                            result.mapping.emplace(f, s);
+                    }
                     break;
             }
 
