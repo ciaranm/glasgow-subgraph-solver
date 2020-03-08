@@ -5,3 +5,7 @@ plot_glasgow_solver_outputs
 plot_glasgow_solver_proofs
 sip_to_opb
 libcommon.a
+perf.data
+perf.data.old
+*.log
+*.opb
