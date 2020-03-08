@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <tuple>
+#include <utility>
 
 #include <boost/iostreams/device/file.hpp>
 #include <boost/iostreams/filter/bzip2.hpp>
@@ -68,9 +69,12 @@ struct Proof::Imp
     bool bz2 = false;
 
     map<pair<int, int>, string> variable_mappings;
+    map<int, string> binary_variable_mappings;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<int, int, int, int>, int> adjacency_lines;
     map<pair<int, int>, int> eliminations;
+    map<pair<int, int>, int> non_edge_constraints;
+    int objective_line = 0;
 
     int nb_constraints = 0;
     int proof_line = 0;
@@ -154,7 +158,8 @@ auto Proof::finalise_model() -> void
 {
     unique_ptr<ostream> f = (_imp->bz2 ? make_compressed_ostream(_imp->opb_filename + ".bz2") : make_unique<ofstream>(_imp->opb_filename));
 
-    *f << "* #variable= " << _imp->variable_mappings.size() << " #constraint= " << _imp->nb_constraints << endl;
+    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size())
+        << " #constraint= " << _imp->nb_constraints << endl;
     copy(istreambuf_iterator<char>{ _imp->model_stream }, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{ *f });
     _imp->model_stream.clear();
 
@@ -405,6 +410,15 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisi
     ++_imp->proof_line;
 }
 
+auto Proof::post_solution(const std::vector<int> & solution) -> void
+{
+    *_imp->proof_stream << "v";
+    for (auto & v : solution)
+        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[v];
+    *_imp->proof_stream << endl;
+    ++_imp->proof_line;
+}
+
 auto Proof::create_exact_path_graphs(
         int g,
         const NamedVertex & p,
@@ -522,5 +536,69 @@ auto Proof::create_exact_path_graphs(
     _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
 
     *_imp->proof_stream << "w 1" << endl;
+}
+
+auto Proof::create_binary_variable(int vertex,
+                const std::function<auto (int) -> std::string> & name) -> void
+{
+    if (_imp->friendly_names)
+        _imp->binary_variable_mappings.emplace(vertex, name(vertex));
+    else
+        _imp->binary_variable_mappings.emplace(vertex, to_string(_imp->binary_variable_mappings.size() + 1));
+}
+
+auto Proof::create_objective(int n, int d) -> void
+{
+    _imp->model_stream << "* objective" << endl;
+    for (int v = 0 ; v < n ; ++ v)
+        _imp->model_stream << "1 x" << _imp->binary_variable_mappings[v] << " ";
+    _imp->model_stream << ">= " << d << ";" << endl;
+    _imp->objective_line = ++_imp->nb_constraints;
+}
+
+auto Proof::create_non_edge_constraint(int p, int q) -> void
+{
+    _imp->model_stream << "-1 x" << _imp->binary_variable_mappings[p] << " -1 x" << _imp->binary_variable_mappings[q] << " >= -1 ;" << endl;
+
+    ++_imp->nb_constraints;
+    _imp->non_edge_constraints.emplace(pair{ p, q }, _imp->nb_constraints);
+    _imp->non_edge_constraints.emplace(pair{ q, p }, _imp->nb_constraints);
+}
+
+auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
+{
+    *_imp->proof_stream << "u";
+    for (auto & w : v)
+        *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+}
+
+auto Proof::colour_bound(const vector<int> & t, const vector<vector<int> > & ccs) -> void
+{
+    *_imp->proof_stream << "* bound using " << ccs.size() << " colour classes, c has " << t.size() << " vertices" << endl;
+
+    vector<string> to_sum;
+    for (auto & cc : ccs) {
+        if (cc.size() > 1) {
+            *_imp->proof_stream << "p 0";
+
+            for (unsigned i = 1 ; i < cc.size() ; ++i) {
+                *_imp->proof_stream << " " << i << " *";
+                for (unsigned j = 0 ; j < i ; ++j)
+                    *_imp->proof_stream << " " << _imp->non_edge_constraints[pair{ cc[i], cc[j] }] << " +";
+                *_imp->proof_stream << " " << (i + 1) << " d";
+            }
+
+            *_imp->proof_stream << endl;
+            to_sum.push_back(to_string(++_imp->proof_line));
+        }
+    }
+
+    *_imp->proof_stream << "p " << _imp->objective_line;
+    for (auto & t : to_sum)
+        *_imp->proof_stream << " " << t << " +";
+    *_imp->proof_stream << endl;
+    ++_imp->proof_line;
 }
 

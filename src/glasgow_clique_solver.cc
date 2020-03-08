@@ -3,6 +3,7 @@
 #include "formats/read_file_format.hh"
 #include "clique.hh"
 #include "configuration.hh"
+#include "proof.hh"
 
 #include <boost/program_options.hpp>
 
@@ -69,6 +70,13 @@ auto main(int argc, char * argv[]) -> int
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (disabled by default)")
             ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)");
         display_options.add(configuration_options);
+
+        po::options_description proof_logging_options{ "Proof logging options" };
+        proof_logging_options.add_options()
+            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .log)")
+            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
+            ("compress-proof",                                 "Compress the proof using bz2");
+        display_options.add(proof_logging_options);
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -144,6 +152,16 @@ auto main(int argc, char * argv[]) -> int
         auto graph = read_file_format(pattern_format_name, options_vars["graph-file"].as<string>());
 
         cout << "file = " << options_vars["graph-file"].as<string>() << endl;
+
+        if (options_vars.count("prove")) {
+            bool friendly_names = options_vars.count("proof-names");
+            bool compress_proof = options_vars.count("compress-proof");
+            string fn = options_vars["prove"].as<string>();
+            string suffix = compress_proof ? ".bz2" : "";
+            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names, compress_proof);
+            cout << "proof_model = " << fn << ".opb" << suffix << endl;
+            cout << "proof_log = " << fn << ".log" << suffix << endl;
+        }
 
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);

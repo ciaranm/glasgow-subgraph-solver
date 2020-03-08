@@ -6,6 +6,7 @@
 #include "formats/input_graph.hh"
 #include "restarts.hh"
 #include "timeout.hh"
+#include "proof-fwd.hh"
 
 #include <chrono>
 #include <list>
@@ -39,6 +40,9 @@ struct CliqueParams
 
     /// Which colour order to use?
     ColourClassOrder colour_class_order = ColourClassOrder::SingletonsFirst;
+
+    /// Optional proof handler
+    std::unique_ptr<Proof> proof;
 };
 
 struct CliqueResult

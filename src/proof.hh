@@ -44,10 +44,12 @@ class Proof
         auto create_cp_variable(int pattern_vertex, int target_size,
                 const std::function<auto (int) -> std::string> & pattern_name,
                 const std::function<auto (int) -> std::string> & target_name) -> void;
+
         auto create_injectivity_constraints(int pattern_size, int target_size) -> void;
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
         auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u) -> void;
+
         auto finalise_model() -> void;
 
         // when we're done
@@ -104,8 +106,17 @@ class Proof
         auto back_up_to_top() -> void;
         auto post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void;
 
+        // cliques
+        auto create_binary_variable(int vertex,
+                const std::function<auto (int) -> std::string> & name) -> void;
+        auto create_objective(int n, int d) -> void;
+        auto create_non_edge_constraint(int p, int q) -> void;
+        auto backtrack_from_binary_variables(const std::vector<int> &) -> void;
+        auto colour_bound(const std::vector<int> &, const std::vector<std::vector<int> > &) -> void;
+
         // enumeration
         auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex> > & decisions) -> void;
+        auto post_solution(const std::vector<int> & solution) -> void;
 };
 
 #endif
