@@ -350,7 +350,7 @@ auto Proof::incorrect_guess(const vector<pair<int, int> > & decisions, bool fail
     else
         *_imp->proof_stream << "* [" << decisions.size() << "] backtracking" << endl;
 
-    *_imp->proof_stream << "u ";
+    *_imp->proof_stream << "u";
     for (auto & [ var, val ] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{ var, val }];
     *_imp->proof_stream << " >= 1 ;" << endl;
@@ -615,19 +615,12 @@ auto Proof::colour_bound(const vector<int> & t, const vector<vector<int> > & ccs
 auto Proof::mcs_bound(
         const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void
 {
+    *_imp->proof_stream << "* failed bound" << endl;
+
     vector<string> to_sum;
     for (auto & [ l, r ] : partitions) {
-        *_imp->proof_stream << "* failed bound, partition sizes are " << l.size() << " " << r.size() << endl;
         if (r.size() >= l.size())
             continue;
-
-        *_imp->proof_stream << "* partition [";
-        for (auto & v : l)
-            *_imp->proof_stream << " " << v;
-        *_imp->proof_stream << " ] [";
-        for (auto & v : r)
-            *_imp->proof_stream << " " << v;
-        *_imp->proof_stream << " ]" << endl;
 
         *_imp->proof_stream << "p";
         bool first = true;
@@ -645,12 +638,13 @@ auto Proof::mcs_bound(
         to_sum.push_back(to_string(++_imp->proof_line));
     }
 
-    *_imp->proof_stream << "* failed bound, objective violation" << endl;
-    *_imp->proof_stream << "p " << _imp->objective_line;
-    for (auto & t : to_sum)
-        *_imp->proof_stream << " " << t << " +";
-    *_imp->proof_stream << endl;
-    ++_imp->proof_line;
+    if (! to_sum.empty()) {
+        *_imp->proof_stream << "p " << _imp->objective_line;
+        for (auto & t : to_sum)
+            *_imp->proof_stream << " " << t << " +";
+        *_imp->proof_stream << endl;
+        ++_imp->proof_line;
+    }
 }
 
 auto Proof::rewrite_mcs_objective(int pattern_size) -> void
