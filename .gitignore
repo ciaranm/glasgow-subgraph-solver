@@ -1,6 +1,7 @@
 intermediate
 glasgow_subgraph_solver
 glasgow_clique_solver
+glasgow_common_subgraph_solver
 plot_glasgow_solver_outputs
 plot_glasgow_solver_proofs
 sip_to_opb
