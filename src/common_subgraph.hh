@@ -6,6 +6,7 @@
 #include "formats/input_graph.hh"
 #include "timeout.hh"
 #include "vertex_to_vertex_mapping.hh"
+#include "proof-fwd.hh"
 
 #include <functional>
 #include <list>
@@ -24,6 +25,9 @@ struct CommonSubgraphParams
 
     /// Decide instead of maximise?
     std::optional<unsigned> decide;
+
+    /// Optional proof handler
+    std::unique_ptr<Proof> proof;
 };
 
 struct CommonSubgraphResult

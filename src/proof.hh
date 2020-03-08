@@ -9,6 +9,7 @@
 #include <functional>
 #include <iosfwd>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -113,6 +114,12 @@ class Proof
         auto create_non_edge_constraint(int p, int q) -> void;
         auto backtrack_from_binary_variables(const std::vector<int> &) -> void;
         auto colour_bound(const std::vector<int> &, const std::vector<std::vector<int> > &) -> void;
+
+        // common subgraphs
+        auto create_non_null_decision_bound(int p, int t, int d) -> void;
+        auto rewrite_mcs_objective(int pattern_size) -> void;
+        auto mcs_bound(
+                const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void;
 
         // enumeration
         auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex> > & decisions) -> void;

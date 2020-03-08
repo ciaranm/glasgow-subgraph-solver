@@ -565,6 +565,16 @@ auto Proof::create_non_edge_constraint(int p, int q) -> void
     _imp->non_edge_constraints.emplace(pair{ q, p }, _imp->nb_constraints);
 }
 
+auto Proof::create_non_null_decision_bound(int p, int t, int d) -> void
+{
+    _imp->model_stream << "* objective" << endl;
+    for (int v = 0 ; v < p ; ++v)
+        for (int w = 0 ; w < t ; ++w)
+            _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, w }] << " ";
+    _imp->model_stream << ">= " << d << " ;" << endl;
+    _imp->objective_line = ++_imp->nb_constraints;
+}
+
 auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
 {
     *_imp->proof_stream << "u";
@@ -600,5 +610,56 @@ auto Proof::colour_bound(const vector<int> & t, const vector<vector<int> > & ccs
         *_imp->proof_stream << " " << t << " +";
     *_imp->proof_stream << endl;
     ++_imp->proof_line;
+}
+
+auto Proof::mcs_bound(
+        const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void
+{
+    vector<string> to_sum;
+    for (auto & [ l, r ] : partitions) {
+        *_imp->proof_stream << "* failed bound, partition sizes are " << l.size() << " " << r.size() << endl;
+        if (r.size() >= l.size())
+            continue;
+
+        *_imp->proof_stream << "* partition [";
+        for (auto & v : l)
+            *_imp->proof_stream << " " << v;
+        *_imp->proof_stream << " ] [";
+        for (auto & v : r)
+            *_imp->proof_stream << " " << v;
+        *_imp->proof_stream << " ]" << endl;
+
+        *_imp->proof_stream << "p";
+        bool first = true;
+        for (auto & v : l) {
+            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[v];
+           if (first)
+              first = false;
+           else
+              *_imp->proof_stream << " +";
+        }
+        for (auto & v : r)
+            *_imp->proof_stream << " " << _imp->injectivity_constraints[v] << " +";
+
+        *_imp->proof_stream << endl;
+        to_sum.push_back(to_string(++_imp->proof_line));
+    }
+
+    *_imp->proof_stream << "* failed bound, objective violation" << endl;
+    *_imp->proof_stream << "p " << _imp->objective_line;
+    for (auto & t : to_sum)
+        *_imp->proof_stream << " " << t << " +";
+    *_imp->proof_stream << endl;
+    ++_imp->proof_line;
+}
+
+auto Proof::rewrite_mcs_objective(int pattern_size) -> void
+{
+    *_imp->proof_stream << "* get the objective function to talk about nulls, not non-nulls" << endl;
+    *_imp->proof_stream << "p " << _imp->objective_line;
+    for (int v = 0 ; v < pattern_size ; ++v)
+        *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[v] << " +";
+    *_imp->proof_stream << endl;
+    _imp->objective_line = ++_imp->proof_line;
 }
 
