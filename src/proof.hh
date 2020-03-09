@@ -120,6 +120,7 @@ class Proof
         auto rewrite_mcs_objective(int pattern_size) -> void;
         auto mcs_bound(
                 const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void;
+        auto create_connected_constraints(int p, int t, const std::function<auto (int, int) -> bool> & adj) -> void;
 
         // enumeration
         auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex> > & decisions) -> void;

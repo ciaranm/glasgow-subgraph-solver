@@ -6,14 +6,17 @@
 
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+using std::make_optional;
 using std::map;
 using std::min;
 using std::nullopt;
+using std::optional;
 using std::pair;
 using std::set;
 using std::string;
@@ -121,13 +124,16 @@ namespace
             return result;
         };
 
-        auto find_branch_partition(const SplitDomains & d) -> vector<pair<set<int>, set<int> > >::const_iterator
+        auto find_branch_partition(
+                const SplitDomains & d,
+                const optional<set<int> > & permitted_branch_variables) -> vector<pair<set<int>, set<int> > >::const_iterator
         {
-            auto result = d.partitions.begin();
+            auto result = d.partitions.end();
 
             for (auto b = d.partitions.begin(), b_end = d.partitions.end() ; b != b_end ; ++b)
-                if (b->first.size() < result->first.size())
-                    result = b;
+                if ((! permitted_branch_variables) || (permitted_branch_variables->count(*b->first.begin())))
+                    if (result == d.partitions.end() || b->first.size() < result->first.size())
+                        result = b;
 
             return result;
         };
@@ -137,11 +143,12 @@ namespace
                 Assignments & assignments,
                 Assignments & incumbent,
                 const SplitDomains & domains,
-                unsigned long long & nodes) -> SearchResult
+                unsigned long long & nodes,
+                const optional<set<int> > & permitted_branch_variables) -> SearchResult
         {
             ++nodes;
 
-            auto branch_domains = find_branch_partition(domains);
+            auto branch_domains = find_branch_partition(domains, permitted_branch_variables);
             if (branch_domains == domains.partitions.end()) {
                 if (assignments.assigned.size() > incumbent.assigned.size()) {
                     if (params.decide) {
@@ -167,7 +174,17 @@ namespace
                     auto new_domains = branch_assigning(domains, left_branch, right_branch);
                     assignments.assigned.emplace_back(left_branch, right_branch);
                     if (assignments.assigned.size() + bound(new_domains) > incumbent.assigned.size()) {
-                        switch (search(depth + 1, assignments, incumbent, new_domains, nodes)) {
+                        optional<set<int> > new_permitted_branch_variables = nullopt;
+                        if (params.connected) {
+                            new_permitted_branch_variables = make_optional<set<int> >();
+                            if (permitted_branch_variables)
+                                new_permitted_branch_variables->insert(permitted_branch_variables->begin(), permitted_branch_variables->end());
+                            for (int v = 0 ; v < first.size() ; ++v)
+                                if (v != left_branch && first.adjacent(left_branch, v))
+                                    new_permitted_branch_variables->emplace(v);
+                        }
+
+                        switch (search(depth + 1, assignments, incumbent, new_domains, nodes, new_permitted_branch_variables)) {
                             case SearchResult::Aborted:     return SearchResult::Aborted;
                             case SearchResult::DecidedTrue: return SearchResult::DecidedTrue;
                             case SearchResult::Complete:    break;
@@ -195,7 +212,7 @@ namespace
                 auto new_domains = branch_rejecting(domains, left_branch);
                 assignments.rejected.emplace_back(left_branch);
                 if (assignments.assigned.size() + bound(new_domains) > incumbent.assigned.size()) {
-                    switch (search(depth + 1, assignments, incumbent, new_domains, nodes)) {
+                    switch (search(depth + 1, assignments, incumbent, new_domains, nodes, permitted_branch_variables)) {
                         case SearchResult::Aborted:     return SearchResult::Aborted;
                         case SearchResult::DecidedTrue: return SearchResult::DecidedTrue;
                         case SearchResult::Complete:    break;
@@ -247,7 +264,7 @@ namespace
                     params.proof->mcs_bound(domains.partitions);
             }
             else {
-                switch (search(0, assignments, incumbent, domains, result.nodes)) {
+                switch (search(0, assignments, incumbent, domains, result.nodes, nullopt)) {
                     case SearchResult::Aborted:
                         break;
 
@@ -317,6 +334,9 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         }
 
         params.proof->create_non_null_decision_bound(first.size(), second.size(), *params.decide);
+
+        if (params.connected)
+            params.proof->create_connected_constraints(first.size(), second.size(), [&] (int a, int b) { return first.adjacent(a, b); });
 
         // output the model file
         params.proof->finalise_model();

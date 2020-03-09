@@ -49,7 +49,9 @@ auto main(int argc, char * argv[]) -> int
         display_options.add_options()
             ("help",                                         "Display help information")
             ("timeout",            po::value<int>(),         "Abort after this many seconds")
-            ("decide",             po::value<int>(),         "Solve this decision problem");
+            ("decide",             po::value<int>(),         "Solve this decision problem")
+            ("connected",                                    "Only find connected graphs")
+            ;
 
         po::options_description input_options{ "Input file options" };
         input_options.add_options()
@@ -105,6 +107,8 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("decide"))
             params.decide = make_optional(options_vars["decide"].as<int>());
+
+        params.connected = options_vars.count("connected");
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))

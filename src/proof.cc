@@ -70,6 +70,8 @@ struct Proof::Imp
 
     map<pair<int, int>, string> variable_mappings;
     map<int, string> binary_variable_mappings;
+    map<tuple<int, int, int>, string> connected_variable_mappings;
+    map<tuple<int, int, int, int>, string> connected_variable_mappings_aux;
     map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<int, int, int, int>, int> adjacency_lines;
     map<pair<int, int>, int> eliminations;
@@ -158,7 +160,8 @@ auto Proof::finalise_model() -> void
 {
     unique_ptr<ostream> f = (_imp->bz2 ? make_compressed_ostream(_imp->opb_filename + ".bz2") : make_unique<ofstream>(_imp->opb_filename));
 
-    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size())
+    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size()
+            + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
         << " #constraint= " << _imp->nb_constraints << endl;
     copy(istreambuf_iterator<char>{ _imp->model_stream }, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{ *f });
     _imp->model_stream.clear();
@@ -655,5 +658,73 @@ auto Proof::rewrite_mcs_objective(int pattern_size) -> void
         *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[v] << " +";
     *_imp->proof_stream << endl;
     _imp->objective_line = ++_imp->proof_line;
+}
+
+auto Proof::create_connected_constraints(int p, int t, const function<auto (int, int) -> bool> & adj) -> void
+{
+    _imp->model_stream << "* selected vertices must be connected, walk 1" << endl;
+
+    for (int v = 0 ; v < p ; ++v)
+        for (int w = 0 ; w < p ; ++w) {
+            string n = "conn1_" + to_string(v) + "_" + to_string(w);
+            _imp->connected_variable_mappings.emplace(tuple{ 1, v, w }, n);
+            if (v == w) {
+                _imp->model_stream << "1 x" << n << " >= 1 ;" << endl;
+                ++_imp->nb_constraints;
+            }
+            else if (! adj(v, w)) {
+                _imp->model_stream << "1 ~x" << n << " >= 1 ;" << endl;
+                ++_imp->nb_constraints;
+            }
+            else {
+                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ v, t }] << " >= 1 ;" << endl;
+                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ w, t }] << " >= 1 ;" << endl;
+                _imp->model_stream << "1 x" << n << " 1 x" << _imp->variable_mappings[pair{ v, t }]
+                    << " 1 x" << _imp->variable_mappings[pair{ w, t }] << " >= 1 ;" << endl;
+                _imp->nb_constraints += 3;
+            }
+        }
+
+    int last_k = 0;
+    for (int k = 2 ; k < 2 * t ; k *= 2) {
+        last_k = k;
+        _imp->model_stream << "* selected vertices must be connected, walk " << k << endl;
+        for (int v = 0 ; v < p ; ++v)
+            for (int w = 0 ; w < p ; ++w) {
+                vector<string> ors;
+                for (int u = 0 ; u < p ; ++u) {
+                    string m = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u);
+                    ors.push_back(m);
+                    _imp->connected_variable_mappings_aux.emplace(tuple{ k, v, w, u }, m);
+                    _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }] << " 1 ~x" << m << " >= 1 ;" << endl;
+                    _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " 1 ~x" << m << " >= 1 ;" << endl;
+                    _imp->model_stream << "1 x" << m << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }]
+                        << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " >= 1 ;" << endl;
+                    _imp->nb_constraints += 3;
+                }
+
+                string n = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w);
+                _imp->connected_variable_mappings.emplace(tuple{ k, v, w }, n);
+
+                _imp->model_stream << "1 x" << n;
+                for (auto & o : ors)
+                    _imp->model_stream << " 1 ~x" << o;
+                _imp->model_stream << " >= 1 ;" << endl;
+                ++_imp->nb_constraints;
+
+                for (auto & o : ors) {
+                    _imp->model_stream << "1 ~x" << n << " 1 x" << o << " >= 1 ;" << endl;
+                    ++_imp->nb_constraints;
+                }
+            }
+    }
+
+    _imp->model_stream << "* if two vertices are used, they must be connected" << endl;
+    for (int v = 0 ; v < p ; ++v)
+        for (int w = 0 ; w < t ; ++w) {
+            _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, t }] << " 1 x" << _imp->variable_mappings[pair{ w, t }]
+                << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
+            ++_imp->nb_constraints;
+        }
 }
 

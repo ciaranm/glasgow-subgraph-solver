@@ -28,6 +28,9 @@ struct CommonSubgraphParams
 
     /// Optional proof handler
     std::unique_ptr<Proof> proof;
+
+    /// Connected?
+    bool connected = false;
 };
 
 struct CommonSubgraphResult
