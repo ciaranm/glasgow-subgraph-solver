@@ -693,14 +693,16 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto (int,
             for (int w = 0 ; w < p ; ++w) {
                 vector<string> ors;
                 for (int u = 0 ; u < p ; ++u) {
-                    string m = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u);
-                    ors.push_back(m);
-                    _imp->connected_variable_mappings_aux.emplace(tuple{ k, v, w, u }, m);
-                    _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }] << " 1 ~x" << m << " >= 1 ;" << endl;
-                    _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " 1 ~x" << m << " >= 1 ;" << endl;
-                    _imp->model_stream << "1 x" << m << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }]
-                        << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " >= 1 ;" << endl;
-                    _imp->nb_constraints += 3;
+                    if (v != w && v != u && u != w) {
+                        string m = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u);
+                        ors.push_back(m);
+                        _imp->connected_variable_mappings_aux.emplace(tuple{ k, v, w, u }, m);
+                        _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }] << " 1 ~x" << m << " >= 1 ;" << endl;
+                        _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " 1 ~x" << m << " >= 1 ;" << endl;
+                        _imp->model_stream << "1 x" << m << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }]
+                            << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " >= 1 ;" << endl;
+                        _imp->nb_constraints += 3;
+                    }
                 }
 
                 string n = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w);
@@ -722,9 +724,11 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto (int,
     _imp->model_stream << "* if two vertices are used, they must be connected" << endl;
     for (int v = 0 ; v < p ; ++v)
         for (int w = 0 ; w < t ; ++w) {
-            _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, t }] << " 1 x" << _imp->variable_mappings[pair{ w, t }]
-                << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
-            ++_imp->nb_constraints;
+            if (v != w) {
+                _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, t }] << " 1 x" << _imp->variable_mappings[pair{ w, t }]
+                    << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
+                ++_imp->nb_constraints;
+            }
         }
 }
 
