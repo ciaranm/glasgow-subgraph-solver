@@ -50,6 +50,8 @@ auto main(int argc, char * argv[]) -> int
             ("help",                                         "Display help information")
             ("timeout",            po::value<int>(),         "Abort after this many seconds")
             ("decide",             po::value<int>(),         "Solve this decision problem")
+            ("count-solutions",                              "Count the number of solutions (--decide only)")
+            ("print-all-solutions",                          "Print out every solution, rather than one (--decide only)")
             ("connected",                                    "Only find connected graphs")
             ;
 
@@ -109,6 +111,7 @@ auto main(int argc, char * argv[]) -> int
             params.decide = make_optional(options_vars["decide"].as<int>());
 
         params.connected = options_vars.count("connected");
+        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
@@ -130,6 +133,15 @@ auto main(int argc, char * argv[]) -> int
 
         cout << "first_file = " << options_vars["first-file"].as<string>() << endl;
         cout << "second_file = " << options_vars["second-file"].as<string>() << endl;
+
+        if (options_vars.count("print-all-solutions")) {
+            params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
+                cout << "mapping = ";
+                for (auto v : mapping)
+                    cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
+                cout << endl;
+            };
+        }
 
         if (options_vars.count("prove")) {
             bool friendly_names = options_vars.count("proof-names");
@@ -157,11 +169,14 @@ auto main(int argc, char * argv[]) -> int
         cout << "status = ";
         if (params.timeout->aborted())
             cout << "aborted";
-        else if (! result.mapping.empty())
+        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
             cout << "true";
         else
             cout << "false";
         cout << endl;
+
+        if (params.count_solutions)
+            cout << "solution_count = " << result.solution_count << endl;
 
         cout << "nodes = " << result.nodes << endl;
 

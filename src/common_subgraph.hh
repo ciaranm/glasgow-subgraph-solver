@@ -26,6 +26,12 @@ struct CommonSubgraphParams
     /// Decide instead of maximise?
     std::optional<unsigned> decide;
 
+    /// Enumerate? (Decide only)
+    bool count_solutions = false;
+
+    /// Print solutions, for enumerating
+    std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;
+
     /// Optional proof handler
     std::unique_ptr<Proof> proof;
 
@@ -40,6 +46,9 @@ struct CommonSubgraphResult
 
     /// Total number of nodes processed (recursive calls).
     unsigned long long nodes = 0;
+
+    /// Number of solutions, only if enumerating
+    boost::multiprecision::cpp_int solution_count = 0;
 
     /// Extra stats, to output
     std::list<std::string> extra_stats;

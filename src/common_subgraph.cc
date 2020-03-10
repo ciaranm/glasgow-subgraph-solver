@@ -29,7 +29,8 @@ namespace
     {
         Aborted,
         Complete,
-        DecidedTrue
+        DecidedTrue,
+        SatisfiableButKeepGoing
     };
 
     struct SplitDomains
@@ -144,6 +145,7 @@ namespace
                 Assignments & incumbent,
                 const SplitDomains & domains,
                 unsigned long long & nodes,
+                boost::multiprecision::cpp_int & solution_count,
                 const optional<set<int> > & permitted_branch_variables) -> SearchResult
         {
             ++nodes;
@@ -151,10 +153,31 @@ namespace
             auto branch_domains = find_branch_partition(domains, permitted_branch_variables);
             if (branch_domains == domains.partitions.end()) {
                 if (assignments.assigned.size() > incumbent.assigned.size()) {
+                    if (params.proof) {
+                        vector<pair<NamedVertex, NamedVertex> > solution;
+                        for (auto & [ l, r ] : assignments.assigned)
+                            solution.emplace_back(
+                                    NamedVertex{ l, first.vertex_name(l) },
+                                    NamedVertex{ r, second.vertex_name(r) });
+                        params.proof->post_solution(solution);
+                    }
+
                     if (params.decide) {
                        if (assignments.assigned.size() >= *params.decide) {
-                           incumbent = assignments;
-                           return SearchResult::DecidedTrue;
+                           if (params.count_solutions) {
+                               ++solution_count;
+                               if (params.enumerate_callback) {
+                                   VertexToVertexMapping mapping;
+                                   for (auto & [ f, s ] : assignments.assigned)
+                                       mapping.emplace(f, s);
+                                   params.enumerate_callback(mapping);
+                               }
+                               return SearchResult::SatisfiableButKeepGoing;
+                           }
+                           else {
+                               incumbent = assignments;
+                               return SearchResult::DecidedTrue;
+                           }
                        }
                     }
                     else
@@ -184,10 +207,11 @@ namespace
                                     new_permitted_branch_variables->emplace(v);
                         }
 
-                        switch (search(depth + 1, assignments, incumbent, new_domains, nodes, new_permitted_branch_variables)) {
-                            case SearchResult::Aborted:     return SearchResult::Aborted;
-                            case SearchResult::DecidedTrue: return SearchResult::DecidedTrue;
-                            case SearchResult::Complete:    break;
+                        switch (search(depth + 1, assignments, incumbent, new_domains, nodes, solution_count, new_permitted_branch_variables)) {
+                            case SearchResult::Aborted:                 return SearchResult::Aborted;
+                            case SearchResult::DecidedTrue:             return SearchResult::DecidedTrue;
+                            case SearchResult::SatisfiableButKeepGoing: break;
+                            case SearchResult::Complete:                break;
                         }
                     }
                     else if (params.proof)
@@ -212,10 +236,11 @@ namespace
                 auto new_domains = branch_rejecting(domains, left_branch);
                 assignments.rejected.emplace_back(left_branch);
                 if (assignments.assigned.size() + bound(new_domains) > incumbent.assigned.size()) {
-                    switch (search(depth + 1, assignments, incumbent, new_domains, nodes, permitted_branch_variables)) {
-                        case SearchResult::Aborted:     return SearchResult::Aborted;
-                        case SearchResult::DecidedTrue: return SearchResult::DecidedTrue;
-                        case SearchResult::Complete:    break;
+                    switch (search(depth + 1, assignments, incumbent, new_domains, nodes, solution_count, permitted_branch_variables)) {
+                        case SearchResult::Aborted:                 return SearchResult::Aborted;
+                        case SearchResult::DecidedTrue:             return SearchResult::DecidedTrue;
+                        case SearchResult::SatisfiableButKeepGoing: break;
+                        case SearchResult::Complete:                break;
                     }
                 }
                 else if (params.proof)
@@ -264,7 +289,7 @@ namespace
                     params.proof->mcs_bound(domains.partitions);
             }
             else {
-                switch (search(0, assignments, incumbent, domains, result.nodes, nullopt)) {
+                switch (search(0, assignments, incumbent, domains, result.nodes, result.solution_count, nullopt)) {
                     case SearchResult::Aborted:
                         break;
 
@@ -281,6 +306,10 @@ namespace
                                 result.mapping.emplace(f, s);
                         }
                         break;
+
+                    case SearchResult::SatisfiableButKeepGoing:
+                        result.complete = true;
+                        break;
                 }
             }
 
@@ -294,6 +323,9 @@ namespace
 
 auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & second, const CommonSubgraphParams & params) -> CommonSubgraphResult
 {
+    if (params.count_solutions && ! params.decide)
+        throw UnsupportedConfiguration{ "Solution counting only makes sense for decision problems" };
+
     if (params.proof) {
         if (! params.decide)
             throw UnsupportedConfiguration{ "Proof logging currently only works with decision problems" };
