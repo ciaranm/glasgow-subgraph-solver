@@ -663,24 +663,31 @@ auto Proof::rewrite_mcs_objective(int pattern_size) -> void
 auto Proof::create_connected_constraints(int p, int t, const function<auto (int, int) -> bool> & adj) -> void
 {
     _imp->model_stream << "* selected vertices must be connected, walk 1" << endl;
+    int mapped_to_null = t;
+    int cnum = _imp->variable_mappings.size();
 
     for (int v = 0 ; v < p ; ++v)
         for (int w = 0 ; w < p ; ++w) {
-            string n = "conn1_" + to_string(v) + "_" + to_string(w);
+            string n = _imp->friendly_names ? ("conn1_" + to_string(v) + "_" + to_string(w)) : to_string(++cnum);
             _imp->connected_variable_mappings.emplace(tuple{ 1, v, w }, n);
             if (v == w) {
+                // v is adjacent to v, so the walk exists
                 _imp->model_stream << "1 x" << n << " >= 1 ;" << endl;
                 ++_imp->nb_constraints;
             }
             else if (! adj(v, w)) {
+                // v not adjacent to w, so the walk does not exist
                 _imp->model_stream << "1 ~x" << n << " >= 1 ;" << endl;
                 ++_imp->nb_constraints;
             }
             else {
-                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ v, t }] << " >= 1 ;" << endl;
-                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ w, t }] << " >= 1 ;" << endl;
-                _imp->model_stream << "1 x" << n << " 1 x" << _imp->variable_mappings[pair{ v, t }]
-                    << " 1 x" << _imp->variable_mappings[pair{ w, t }] << " >= 1 ;" << endl;
+                // v = null -> the walk does not exist
+                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ v, mapped_to_null }] << " >= 1 ;" << endl;
+                // w = null -> the walk does not exist
+                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ w, mapped_to_null }] << " >= 1 ;" << endl;
+                // either v = null, or w = null, or the walk exists
+                _imp->model_stream << "1 x" << n << " 1 x" << _imp->variable_mappings[pair{ v, mapped_to_null }]
+                    << " 1 x" << _imp->variable_mappings[pair{ w, mapped_to_null }] << " >= 1 ;" << endl;
                 _imp->nb_constraints += 3;
             }
         }
@@ -691,31 +698,49 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto (int,
         _imp->model_stream << "* selected vertices must be connected, walk " << k << endl;
         for (int v = 0 ; v < p ; ++v)
             for (int w = 0 ; w < p ; ++w) {
-                vector<string> ors;
-                for (int u = 0 ; u < p ; ++u) {
-                    if (v != w && v != u && u != w) {
-                        string m = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u);
-                        ors.push_back(m);
-                        _imp->connected_variable_mappings_aux.emplace(tuple{ k, v, w, u }, m);
-                        _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }] << " 1 ~x" << m << " >= 1 ;" << endl;
-                        _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " 1 ~x" << m << " >= 1 ;" << endl;
-                        _imp->model_stream << "1 x" << m << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }]
-                            << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " >= 1 ;" << endl;
-                        _imp->nb_constraints += 3;
-                    }
-                }
-
-                string n = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w);
+                string n = _imp->friendly_names ? ("conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w)) : to_string(++cnum);
                 _imp->connected_variable_mappings.emplace(tuple{ k, v, w }, n);
 
-                _imp->model_stream << "1 x" << n;
-                for (auto & o : ors)
-                    _imp->model_stream << " 1 ~x" << o;
-                _imp->model_stream << " >= 1 ;" << endl;
-                ++_imp->nb_constraints;
+                if (v == w) {
+                    // v is adjacent to v, so the walk exists
+                    _imp->model_stream << "1 x" << n << " >= 1 ;" << endl;
+                    ++_imp->nb_constraints;
+                }
+                else {
+                    vector<string> ors;
+                    for (int u = 0 ; u < p ; ++u) {
+                        if (v != w && v != u && u != w) {
+                            string m = _imp->friendly_names ?
+                                ("conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u)) :
+                                to_string(++cnum);
+                            ors.push_back(m);
+                            _imp->connected_variable_mappings_aux.emplace(tuple{ k, v, w, u }, m);
+                            // either the first half walk exists, or the via term is false
+                            _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }] << " 1 ~x" << m << " >= 1 ;" << endl;
+                            // either the second half walk exists, or the via term is false
+                            _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " 1 ~x" << m << " >= 1 ;" << endl;
+                            // one of the half walks is false, or the via term must be true
+                            _imp->model_stream << "1 x" << m
+                                << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, v, u }]
+                                << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, u, w }] << " >= 1 ;" << endl;
+                            _imp->nb_constraints += 3;
+                        }
+                    }
 
-                for (auto & o : ors) {
-                    _imp->model_stream << "1 ~x" << n << " 1 x" << o << " >= 1 ;" << endl;
+                    // one of the vias must be true, or a shorter walk exists, or the entry is false
+                    _imp->model_stream << "1 ~x" << n;
+                    for (auto & o : ors)
+                        _imp->model_stream << " 1 x" << o;
+                    _imp->model_stream << " 1 x" << _imp->connected_variable_mappings[tuple{ k / 2, v, w }];
+                    _imp->model_stream << " >= 1 ;" << endl;
+                    ++_imp->nb_constraints;
+
+                    // if the entry is false, then all of the vias must be false and the shorter walk must be false
+                    for (auto & o : ors) {
+                        _imp->model_stream << "1 x" << n << " 1 ~x" << o << " >= 1 ;" << endl;
+                        ++_imp->nb_constraints;
+                    }
+                    _imp->model_stream << "1 x" << n << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, v, w }] << " >= 1 ;" << endl;
                     ++_imp->nb_constraints;
                 }
             }
@@ -725,7 +750,8 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto (int,
     for (int v = 0 ; v < p ; ++v)
         for (int w = 0 ; w < t ; ++w) {
             if (v != w) {
-                _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, t }] << " 1 x" << _imp->variable_mappings[pair{ w, t }]
+                _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, mapped_to_null }]
+                    << " 1 x" << _imp->variable_mappings[pair{ w, mapped_to_null }]
                     << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
                 ++_imp->nb_constraints;
             }
