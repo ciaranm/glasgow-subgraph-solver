@@ -148,6 +148,9 @@ namespace
                 boost::multiprecision::cpp_int & solution_count,
                 const optional<set<int> > & permitted_branch_variables) -> SearchResult
         {
+            if (params.timeout->should_abort())
+                return SearchResult::Aborted;
+
             ++nodes;
 
             auto branch_domains = find_branch_partition(domains, permitted_branch_variables);
