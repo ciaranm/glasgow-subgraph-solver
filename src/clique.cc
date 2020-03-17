@@ -334,13 +334,7 @@ namespace
                                 colour_classes.emplace_back();
                             colour_classes.back().push_back(order[p_order[v]]);
                         }
-                        while (! colour_classes.empty()) {
-                            params.proof->colour_bound(unpermute(c), colour_classes);
-                            if (colour_classes.back().empty())
-                                colour_classes.pop_back();
-                            else
-                                colour_classes.back().pop_back();
-                        }
+                        params.proof->colour_bound(unpermute(c), colour_classes);
                     }
                     break;
                 }

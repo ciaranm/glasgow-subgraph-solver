@@ -628,13 +628,13 @@ auto Proof::colour_bound(const vector<int> & t, const vector<vector<int> > & ccs
             *_imp->proof_stream << endl;
             to_sum.push_back(to_string(++_imp->proof_line));
         }
-    }
 
-    *_imp->proof_stream << "p " << _imp->objective_line;
-    for (auto & t : to_sum)
-        *_imp->proof_stream << " " << t << " +";
-    *_imp->proof_stream << endl;
-    ++_imp->proof_line;
+        *_imp->proof_stream << "p " << _imp->objective_line;
+        for (auto & t : to_sum)
+            *_imp->proof_stream << " " << t << " +";
+        *_imp->proof_stream << endl;
+        ++_imp->proof_line;
+    }
 }
 
 auto Proof::mcs_bound(
