@@ -377,7 +377,8 @@ namespace
                             [&] (int literal) { new_p.reset(literal); }
                             );
 
-                params.proof->start_level(depth + 1);
+                if (params.proof)
+                    params.proof->start_level(depth + 1);
 
                 if (new_p.any()) {
                     switch (expand(depth + 1, nodes, find_nodes, prove_nodes, c, new_p, spacepos + 2 * size)) {
@@ -407,12 +408,11 @@ namespace
                 else
                     incumbent.update(c, find_nodes, prove_nodes);
 
-                params.proof->start_level(depth);
-
-                if (params.proof)
+                if (params.proof) {
+                    params.proof->start_level(depth);
                     params.proof->backtrack_from_binary_variables(unpermute(c));
-
-                params.proof->forget_level(depth + 1);
+                    params.proof->forget_level(depth + 1);
+                }
 
                 // now consider not taking v
                 c.pop_back();
