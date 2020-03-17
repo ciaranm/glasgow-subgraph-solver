@@ -9,6 +9,7 @@
 #include <functional>
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -110,7 +111,7 @@ class Proof
         // cliques
         auto create_binary_variable(int vertex,
                 const std::function<auto (int) -> std::string> & name) -> void;
-        auto create_objective(int n, int d) -> void;
+        auto create_objective(int n, std::optional<int> d) -> void;
         auto create_non_edge_constraint(int p, int q) -> void;
         auto backtrack_from_binary_variables(const std::vector<int> &) -> void;
         auto colour_bound(const std::vector<int> &, const std::vector<std::vector<int> > &) -> void;
@@ -125,6 +126,9 @@ class Proof
         // enumeration
         auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex> > & decisions) -> void;
         auto post_solution(const std::vector<int> & solution) -> void;
+
+        // optimisation
+        auto new_incumbent(const std::vector<std::pair<int, bool> > & solution) -> void;
 };
 
 #endif

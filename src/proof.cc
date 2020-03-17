@@ -27,6 +27,7 @@ using std::max;
 using std::min;
 using std::move;
 using std::ofstream;
+using std::optional;
 using std::ostream;
 using std::ostreambuf_iterator;
 using std::pair;
@@ -425,6 +426,15 @@ auto Proof::post_solution(const vector<int> & solution) -> void
     ++_imp->proof_line;
 }
 
+auto Proof::new_incumbent(const vector<pair<int, bool> > & solution) -> void
+{
+    *_imp->proof_stream << "o";
+    for (auto & [ v, t ] : solution)
+        *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->binary_variable_mappings[v];
+    *_imp->proof_stream << endl;
+    _imp->objective_line = ++_imp->proof_line;
+}
+
 auto Proof::create_exact_path_graphs(
         int g,
         const NamedVertex & p,
@@ -553,13 +563,22 @@ auto Proof::create_binary_variable(int vertex,
         _imp->binary_variable_mappings.emplace(vertex, to_string(_imp->binary_variable_mappings.size() + 1));
 }
 
-auto Proof::create_objective(int n, int d) -> void
+auto Proof::create_objective(int n, optional<int> d) -> void
 {
-    _imp->model_stream << "* objective" << endl;
-    for (int v = 0 ; v < n ; ++ v)
-        _imp->model_stream << "1 x" << _imp->binary_variable_mappings[v] << " ";
-    _imp->model_stream << ">= " << d << ";" << endl;
-    _imp->objective_line = ++_imp->nb_constraints;
+    if (d) {
+        _imp->model_stream << "* objective" << endl;
+        for (int v = 0 ; v < n ; ++ v)
+            _imp->model_stream << "1 x" << _imp->binary_variable_mappings[v] << " ";
+        _imp->model_stream << ">= " << *d << ";" << endl;
+        _imp->objective_line = ++_imp->nb_constraints;
+    }
+    else {
+        _imp->model_stream << "min:";
+        for (int v = 0 ; v < n ; ++ v)
+            _imp->model_stream << " -1 x" << _imp->binary_variable_mappings[v];
+        _imp->model_stream << " ;" << endl;
+        // _imp->objective_line = ++_imp->nb_constraints;
+    }
 }
 
 auto Proof::create_non_edge_constraint(int p, int q) -> void

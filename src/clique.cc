@@ -285,6 +285,18 @@ namespace
             return result;
         }
 
+        auto unpermute_and_finish(
+                vector<int> & v) -> vector<pair<int, bool> >
+        {
+            vector<pair<int, bool> > result;
+            for (auto & w : v)
+                result.emplace_back(order[w], true);
+            for (int w = 0 ; w < size ; ++w)
+                if (result.end() == find_if(result.begin(), result.end(), [&] (auto & x) { return x.first == w; }))
+                    result.emplace_back(w, false);
+            return result;
+        }
+
         auto expand(
                 int depth,
                 unsigned long long & nodes,
@@ -339,6 +351,12 @@ namespace
                     for ( ; n >= 0 ; --n)
                         c.push_back(p_order[n]);
                     incumbent.update(c, find_nodes, prove_nodes);
+
+                    if (params.proof && ! params.decide) {
+                        params.proof->start_level(0);
+                        params.proof->new_incumbent(unpermute_and_finish(c));
+                        params.proof->start_level(depth + 1);
+                    }
 
                     if (params.decide && incumbent.value >= *params.decide) {
                         if (params.proof)
@@ -405,8 +423,14 @@ namespace
                             return SearchResult::Restart;
                     }
                 }
-                else
+                else {
                     incumbent.update(c, find_nodes, prove_nodes);
+                    if (params.proof && ! params.decide) {
+                        params.proof->start_level(0);
+                        params.proof->new_incumbent(unpermute_and_finish(c));
+                        params.proof->start_level(depth + 1);
+                    }
+                }
 
                 if (params.proof) {
                     params.proof->start_level(depth);
@@ -483,6 +507,8 @@ namespace
 
             if (params.proof && params.decide && incumbent.c.empty())
                 params.proof->finish_unsat_proof();
+            else if (params.proof && ! params.decide)
+                params.proof->finish_unsat_proof();
 
             result.clique.clear();
             for (auto & v : incumbent.c)
@@ -499,10 +525,7 @@ auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params)
         for (int q = 0 ; q < graph.size() ; ++q)
             params.proof->create_binary_variable(q, [&] (int v) { return graph.vertex_name(v); });
 
-        if (params.decide)
-            params.proof->create_objective(graph.size(), *params.decide);
-        else
-            throw UnsupportedConfiguration{ "Proof logging only works for decision problems" };
+        params.proof->create_objective(graph.size(), params.decide);
 
         for (int p = 0 ; p < graph.size() ; ++p)
             for (int q = 0 ; q < p ; ++q)
