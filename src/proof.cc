@@ -30,6 +30,7 @@ using std::ofstream;
 using std::ostream;
 using std::ostreambuf_iterator;
 using std::pair;
+using std::set;
 using std::string;
 using std::stringstream;
 using std::to_string;
@@ -415,7 +416,7 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisi
     ++_imp->proof_line;
 }
 
-auto Proof::post_solution(const std::vector<int> & solution) -> void
+auto Proof::post_solution(const vector<int> & solution) -> void
 {
     *_imp->proof_stream << "v";
     for (auto & v : solution)
@@ -544,7 +545,7 @@ auto Proof::create_exact_path_graphs(
 }
 
 auto Proof::create_binary_variable(int vertex,
-                const std::function<auto (int) -> std::string> & name) -> void
+                const function<auto (int) -> string> & name) -> void
 {
     if (_imp->friendly_names)
         _imp->binary_variable_mappings.emplace(vertex, name(vertex));
@@ -618,7 +619,7 @@ auto Proof::colour_bound(const vector<int> & t, const vector<vector<int> > & ccs
 }
 
 auto Proof::mcs_bound(
-        const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void
+        const vector<pair<set<int>, set<int> > > & partitions) -> void
 {
     *_imp->proof_stream << "* failed bound" << endl;
 
