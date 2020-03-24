@@ -12,6 +12,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 class ProofError : public std::exception
@@ -117,7 +118,7 @@ class Proof
         auto colour_bound(const std::vector<int> &, const std::vector<std::vector<int> > &) -> void;
 
         // common subgraphs
-        auto create_non_null_decision_bound(int p, int t, int d) -> void;
+        auto create_non_null_decision_bound(int p, int t, std::optional<int> d) -> void;
         auto rewrite_mcs_objective(int pattern_size) -> void;
         auto mcs_bound(
                 const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void;
@@ -129,6 +130,7 @@ class Proof
 
         // optimisation
         auto new_incumbent(const std::vector<std::pair<int, bool> > & solution) -> void;
+        auto new_incumbent(const std::vector<std::tuple<NamedVertex, NamedVertex, bool> > & solution) -> void;
 };
 
 #endif

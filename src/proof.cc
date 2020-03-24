@@ -67,7 +67,7 @@ auto ProofError::what() const noexcept -> const char *
 struct Proof::Imp
 {
     string opb_filename, log_filename;
-    stringstream model_stream;
+    stringstream model_stream, model_prelude_stream;
     unique_ptr<ostream> proof_stream;
     bool friendly_names;
     bool bz2 = false;
@@ -167,6 +167,8 @@ auto Proof::finalise_model() -> void
     *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size()
             + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
         << " #constraint= " << _imp->nb_constraints << endl;
+    copy(istreambuf_iterator<char>{ _imp->model_prelude_stream }, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{ *f });
+    _imp->model_prelude_stream.clear();
     copy(istreambuf_iterator<char>{ _imp->model_stream }, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{ *f });
     _imp->model_stream.clear();
 
@@ -435,6 +437,15 @@ auto Proof::new_incumbent(const vector<pair<int, bool> > & solution) -> void
     _imp->objective_line = ++_imp->proof_line;
 }
 
+auto Proof::new_incumbent(const vector<tuple<NamedVertex, NamedVertex, bool> > & decisions) -> void
+{
+    *_imp->proof_stream << "o";
+    for (auto & [ var, val, t ] : decisions)
+        *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->variable_mappings[pair{ var.first, val.first }];
+    *_imp->proof_stream << endl;
+    _imp->objective_line = ++_imp->proof_line;
+}
+
 auto Proof::create_exact_path_graphs(
         int g,
         const NamedVertex & p,
@@ -573,11 +584,10 @@ auto Proof::create_objective(int n, optional<int> d) -> void
         _imp->objective_line = ++_imp->nb_constraints;
     }
     else {
-        _imp->model_stream << "min:";
+        _imp->model_prelude_stream << "min:";
         for (int v = 0 ; v < n ; ++ v)
-            _imp->model_stream << " -1 x" << _imp->binary_variable_mappings[v];
-        _imp->model_stream << " ;" << endl;
-        // _imp->objective_line = ++_imp->nb_constraints;
+            _imp->model_prelude_stream << " -1 x" << _imp->binary_variable_mappings[v];
+        _imp->model_prelude_stream << " ;" << endl;
     }
 }
 
@@ -590,14 +600,23 @@ auto Proof::create_non_edge_constraint(int p, int q) -> void
     _imp->non_edge_constraints.emplace(pair{ q, p }, _imp->nb_constraints);
 }
 
-auto Proof::create_non_null_decision_bound(int p, int t, int d) -> void
+auto Proof::create_non_null_decision_bound(int p, int t, optional<int> d) -> void
 {
-    _imp->model_stream << "* objective" << endl;
-    for (int v = 0 ; v < p ; ++v)
-        for (int w = 0 ; w < t ; ++w)
-            _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, w }] << " ";
-    _imp->model_stream << ">= " << d << " ;" << endl;
-    _imp->objective_line = ++_imp->nb_constraints;
+    if (d) {
+        _imp->model_stream << "* objective" << endl;
+        for (int v = 0 ; v < p ; ++v)
+            for (int w = 0 ; w < t ; ++w)
+                _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, w }] << " ";
+        _imp->model_stream << ">= " << *d << " ;" << endl;
+        _imp->objective_line = ++_imp->nb_constraints;
+    }
+    else {
+        _imp->model_prelude_stream << "min:";
+        for (int v = 0 ; v < p ; ++v)
+            for (int w = 0 ; w < t ; ++w)
+                _imp->model_prelude_stream << " -1 x" << _imp->variable_mappings[pair{ v, w }] << " ";
+        _imp->model_prelude_stream << " ;" << endl;
+    }
 }
 
 auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void

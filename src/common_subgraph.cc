@@ -21,6 +21,7 @@ using std::pair;
 using std::set;
 using std::string;
 using std::string_view;
+using std::tuple;
 using std::vector;
 
 namespace
@@ -157,12 +158,30 @@ namespace
             if (branch_domains == domains.partitions.end()) {
                 if (assignments.assigned.size() > incumbent.assigned.size()) {
                     if (params.proof) {
-                        vector<pair<NamedVertex, NamedVertex> > solution;
-                        for (auto & [ l, r ] : assignments.assigned)
-                            solution.emplace_back(
-                                    NamedVertex{ l, first.vertex_name(l) },
-                                    NamedVertex{ r, second.vertex_name(r) });
-                        params.proof->post_solution(solution);
+                        if (params.decide) {
+                            vector<pair<NamedVertex, NamedVertex> > solution;
+                            for (auto & [ l, r ] : assignments.assigned)
+                                solution.emplace_back(
+                                        NamedVertex{ l, first.vertex_name(l) },
+                                        NamedVertex{ r, second.vertex_name(r) });
+                            params.proof->post_solution(solution);
+                        }
+                        else {
+                            vector<tuple<NamedVertex, NamedVertex, bool> > solution;
+                            for (int v = 0 ; v < first.size() ; ++v)
+                                for (int w = 0 ; w < second.size() ; ++w)
+                                    solution.emplace_back(
+                                            NamedVertex{ v, first.vertex_name(v) },
+                                            NamedVertex{ w, second.vertex_name(w) },
+                                            assignments.assigned.end() != find(
+                                                assignments.assigned.begin(),
+                                                assignments.assigned.end(),
+                                                pair{ v, w }));
+                            params.proof->start_level(0);
+                            params.proof->new_incumbent(solution);
+                            params.proof->rewrite_mcs_objective(first.size());
+                            params.proof->start_level(depth);
+                        }
                     }
 
                     if (params.decide) {
@@ -316,7 +335,9 @@ namespace
                 }
             }
 
-            if (params.proof && result.complete && result.mapping.empty())
+            if (params.proof && params.decide && result.complete && result.mapping.empty())
+                params.proof->finish_unsat_proof();
+            else if (params.proof && ! params.decide && result.complete)
                 params.proof->finish_unsat_proof();
 
             return result;
@@ -330,14 +351,13 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         throw UnsupportedConfiguration{ "Solution counting only makes sense for decision problems" };
 
     if (params.proof) {
-        if (! params.decide)
-            throw UnsupportedConfiguration{ "Proof logging currently only works with decision problems" };
-
         for (int n = 0 ; n < first.size() ; ++n) {
             params.proof->create_cp_variable(n, second.size() + 1,
                     [&] (int v) { return first.vertex_name(v); },
                     [&] (int v) { if (v == second.size()) return string("null"); else return second.vertex_name(v); });
         }
+
+        params.proof->create_non_null_decision_bound(first.size(), second.size(), params.decide);
 
         // generate constraints for injectivity
         params.proof->create_injectivity_constraints(first.size(), second.size());
@@ -367,8 +387,6 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
                 }
             }
         }
-
-        params.proof->create_non_null_decision_bound(first.size(), second.size(), *params.decide);
 
         if (params.connected)
             params.proof->create_connected_constraints(first.size(), second.size(), [&] (int a, int b) { return first.adjacent(a, b); });
