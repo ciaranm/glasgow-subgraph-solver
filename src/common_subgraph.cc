@@ -3,6 +3,8 @@
 #include "common_subgraph.hh"
 #include "proof.hh"
 #include "configuration.hh"
+#include "clique.hh"
+#include "proof.hh"
 
 #include <algorithm>
 #include <map>
@@ -13,6 +15,7 @@
 #include <vector>
 
 using std::make_optional;
+using std::make_unique;
 using std::map;
 using std::min;
 using std::nullopt;
@@ -351,6 +354,9 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         throw UnsupportedConfiguration{ "Solution counting only makes sense for decision problems" };
 
     if (params.proof) {
+        if (params.clique)
+            throw UnsupportedConfiguration{ "Proof logging does not yet work with clique" };
+
         for (int n = 0 ; n < first.size() ; ++n) {
             params.proof->create_cp_variable(n, second.size() + 1,
                     [&] (int v) { return first.vertex_name(v); },
@@ -398,7 +404,51 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         params.proof->rewrite_mcs_objective(first.size());
     }
 
-    CommonSubgraphRunner runner{ first, second, params };
-    return runner.run();
+    if (params.clique) {
+        CliqueParams clique_params;
+        clique_params.timeout = params.timeout;
+        clique_params.start_time = params.start_time;
+        clique_params.decide = params.decide;
+        clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
+
+        InputGraph assoc{ 0, false, false };
+        vector<pair<int, int> > assoc_encoding;
+
+        for (int v = 0 ; v < first.size() ; ++v)
+            for (int w = 0 ; w < second.size() ; ++w)
+                if ((first.adjacent(v, v) == second.adjacent(w, w)) && (first.vertex_label(v) == second.vertex_label(w)))
+                    assoc_encoding.emplace_back(v, w);
+
+        assoc.resize(assoc_encoding.size());
+        for (unsigned v = 0 ; v < assoc_encoding.size() ; ++v)
+            for (unsigned w = 0 ; w < assoc_encoding.size() ; ++w)
+                if (v != w) {
+                    auto [ vf, vs ] = assoc_encoding[v];
+                    auto [ wf, ws ] = assoc_encoding[w];
+                    if (vf != wf && vs != ws && first.adjacent(vf, wf) == second.adjacent(vs, ws))
+                        if ((! first.adjacent(vf, wf)) || (first.edge_label(vf, wf) == second.edge_label(vs, ws)))
+                            assoc.add_edge(v, w);
+                }
+
+        if (params.proof) {
+        }
+
+        auto clique_result = solve_clique_problem(assoc, clique_params);
+
+        // now translate the result back into what we expect
+        CommonSubgraphResult result;
+        for (auto & m : clique_result.clique)
+            result.mapping.emplace(assoc_encoding[m]);
+        result.nodes = clique_result.nodes;
+        result.extra_stats = move(clique_result.extra_stats);
+        result.extra_stats.emplace_back("used_clique_solver = true");
+        result.complete = clique_result.complete;
+
+        return result;
+    }
+    else {
+        CommonSubgraphRunner runner{ first, second, params };
+        return runner.run();
+    }
 }
 

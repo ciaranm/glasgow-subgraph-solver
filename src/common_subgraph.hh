@@ -37,6 +37,9 @@ struct CommonSubgraphParams
 
     /// Connected?
     bool connected = false;
+
+    /// Solve using the clique algorithm instead?
+    bool clique = false;
 };
 
 struct CommonSubgraphResult

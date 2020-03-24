@@ -53,6 +53,7 @@ auto main(int argc, char * argv[]) -> int
             ("count-solutions",                              "Count the number of solutions (--decide only)")
             ("print-all-solutions",                          "Print out every solution, rather than one (--decide only)")
             ("connected",                                    "Only find connected graphs")
+            ("clique",                                       "Use the clique solver")
             ;
 
         po::options_description input_options{ "Input file options" };
@@ -112,6 +113,7 @@ auto main(int argc, char * argv[]) -> int
 
         params.connected = options_vars.count("connected");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
+        params.clique = options_vars.count("clique");
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
