@@ -41,6 +41,9 @@ struct CliqueParams
     /// Which colour order to use?
     ColourClassOrder colour_class_order = ColourClassOrder::SingletonsFirst;
 
+    /// Colour in input order, rather than degree order
+    bool input_order = false;
+
     /// Optional proof handler
     std::unique_ptr<Proof> proof;
 };

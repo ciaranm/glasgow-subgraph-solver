@@ -67,6 +67,7 @@ auto main(int argc, char * argv[]) -> int
         po::options_description configuration_options{ "Advanced configuration options" };
         configuration_options.add_options()
             ("colour-ordering",    po::value<string>(),      "Specify colour-ordering (colour / singletons-first / sorted)")
+            ("input-order",                                  "Use the input order for colouring (usually a bad idea)")
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (disabled by default)")
             ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)");
         display_options.add(configuration_options);
@@ -135,6 +136,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("colour-ordering"))
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
+        params.input_order = options_vars.count("input-order");
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
