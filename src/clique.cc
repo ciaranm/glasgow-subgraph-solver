@@ -278,11 +278,26 @@ namespace
         }
 
         auto unpermute(
-                vector<int> & v) -> vector<int>
+                const vector<int> & v) -> vector<int>
         {
             vector<int> result;
             for (auto & w : v)
                 result.push_back(order[w]);
+            return result;
+        }
+
+        auto unpermute(
+                const BitSetType_ & v) -> vector<int>
+        {
+            vector<int> result;
+
+            auto w = v;
+            while (w.any()) {
+                auto p = w.find_first();
+                w.reset(p);
+                result.push_back(order[p]);
+            }
+
             return result;
         }
 
@@ -310,6 +325,9 @@ namespace
             ++nodes;
             ++prove_nodes;
 
+            if (params.proof)
+                params.proof->expanding(depth, unpermute(c), unpermute(p));
+
             // initial colouring
             int * p_order = &space[spacepos];
             int * p_bounds = &space[spacepos + size];
@@ -330,12 +348,12 @@ namespace
                 if (c.size() + p_bounds[n] <= incumbent.value) {
                     if (params.proof) {
                         vector<vector<int> > colour_classes;
-                        for (int v = 0 ; v < n ; ++v) {
+                        for (int v = 0 ; v <= n ; ++v) {
                             if (0 == v || p_bounds[v - 1] != p_bounds[v])
                                 colour_classes.emplace_back();
                             colour_classes.back().push_back(order[p_order[v]]);
                         }
-                        params.proof->colour_bound(unpermute(c), colour_classes);
+                        params.proof->colour_bound(colour_classes);
                     }
                     break;
                 }
@@ -437,6 +455,9 @@ namespace
                 c.pop_back();
                 p.reset(v);
             }
+
+            if (params.proof)
+                params.proof->unexpanding(depth, unpermute(c));
 
             params.restarts_schedule->did_a_backtrack();
             if (params.restarts_schedule->should_restart()) {

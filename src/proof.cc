@@ -342,6 +342,25 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
     *_imp->proof_stream << "* [" << depth << "] guessing " << branch_v.second << "=" << val.second << endl;
 }
 
+auto Proof::expanding(int depth, const vector<int> & accepted, const vector<int> & possible) -> void
+{
+    *_imp->proof_stream << "* [" << depth << "] expanding, accepted";
+    for (auto & a : accepted)
+        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[a];
+    *_imp->proof_stream << ", possible";
+    for (auto & a : possible)
+        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[a];
+    *_imp->proof_stream << endl;
+}
+
+auto Proof::unexpanding(int depth, const vector<int> & accepted) -> void
+{
+    *_imp->proof_stream << "* [" << depth << "] unexpanding";
+    for (auto & a : accepted)
+        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[a];
+    *_imp->proof_stream << endl;
+}
+
 auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
     *_imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << endl;
@@ -628,16 +647,23 @@ auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
     ++_imp->proof_line;
 }
 
-auto Proof::colour_bound(const vector<int> & t, const vector<vector<int> > & ccs) -> void
+auto Proof::colour_bound(const vector<vector<int> > & ccs) -> void
 {
-    *_imp->proof_stream << "* bound using " << ccs.size() << " colour classes, c has " << t.size() << " vertices" << endl;
-
-    vector<string> to_sum;
+    *_imp->proof_stream << "* bound using";
     for (auto & cc : ccs) {
-        if (cc.size() > 1) {
-            *_imp->proof_stream << "p 0";
+        *_imp->proof_stream << " [";
+        for (auto & c : cc)
+            *_imp->proof_stream << " x" << _imp->binary_variable_mappings[c];
+        *_imp->proof_stream << " ]";
+    }
+    *_imp->proof_stream << endl;
 
-            for (unsigned i = 1 ; i < cc.size() ; ++i) {
+    vector<int> to_sum;
+    for (auto & cc : ccs) {
+        if (cc.size() > 2) {
+            *_imp->proof_stream << "p " << _imp->non_edge_constraints[pair{ cc[0], cc[1] }];
+
+            for (unsigned i = 2 ; i < cc.size() ; ++i) {
                 *_imp->proof_stream << " " << i << " *";
                 for (unsigned j = 0 ; j < i ; ++j)
                     *_imp->proof_stream << " " << _imp->non_edge_constraints[pair{ cc[i], cc[j] }] << " +";
@@ -645,7 +671,10 @@ auto Proof::colour_bound(const vector<int> & t, const vector<vector<int> > & ccs
             }
 
             *_imp->proof_stream << endl;
-            to_sum.push_back(to_string(++_imp->proof_line));
+            to_sum.push_back(++_imp->proof_line);
+        }
+        else if (cc.size() == 2) {
+            to_sum.push_back(_imp->non_edge_constraints[pair{ cc[0], cc[1] }]);
         }
 
         *_imp->proof_stream << "p " << _imp->objective_line;
