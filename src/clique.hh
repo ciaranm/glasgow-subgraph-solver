@@ -45,7 +45,7 @@ struct CliqueParams
     bool input_order = false;
 
     /// Optional proof handler
-    std::unique_ptr<Proof> proof;
+    std::shared_ptr<Proof> proof;
 };
 
 struct CliqueResult

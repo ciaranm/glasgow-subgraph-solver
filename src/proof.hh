@@ -126,6 +126,11 @@ class Proof
                 const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void;
         auto create_connected_constraints(int p, int t, const std::function<auto (int, int) -> bool> & adj) -> void;
 
+        // common subgraph to clique
+        auto has_clique_model() const -> bool;
+        auto create_clique_encoding(const std::vector<std::pair<int, int> > &) -> void;
+        auto create_clique_nonedge(int v, int w) -> void;
+
         // enumeration
         auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex> > & decisions) -> void;
         auto post_solution(const std::vector<int> & solution) -> void;

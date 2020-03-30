@@ -538,17 +538,19 @@ namespace
 auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
 {
     if (params.proof) {
-        for (int q = 0 ; q < graph.size() ; ++q)
-            params.proof->create_binary_variable(q, [&] (int v) { return graph.vertex_name(v); });
+        if (! params.proof->has_clique_model()) {
+            for (int q = 0 ; q < graph.size() ; ++q)
+                params.proof->create_binary_variable(q, [&] (int v) { return graph.vertex_name(v); });
 
-        params.proof->create_objective(graph.size(), params.decide);
+            params.proof->create_objective(graph.size(), params.decide);
 
-        for (int p = 0 ; p < graph.size() ; ++p)
-            for (int q = 0 ; q < p ; ++q)
-                if (! graph.adjacent(p, q))
-                    params.proof->create_non_edge_constraint(p, q);
+            for (int p = 0 ; p < graph.size() ; ++p)
+                for (int q = 0 ; q < p ; ++q)
+                    if (! graph.adjacent(p, q))
+                        params.proof->create_non_edge_constraint(p, q);
 
-        params.proof->finalise_model();
+            params.proof->finalise_model();
+        }
     }
 
     CliqueRunner<SVOBitset> runner{ graph, params };

@@ -84,6 +84,8 @@ struct Proof::Imp
 
     int nb_constraints = 0;
     int proof_line = 0;
+
+    bool clique_encoding = false;
 };
 
 Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b) :
@@ -814,5 +816,27 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto (int,
                 << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
             ++_imp->nb_constraints;
         }
+}
+
+auto Proof::has_clique_model() const -> bool
+{
+    return _imp->clique_encoding;
+}
+
+auto Proof::create_clique_encoding(
+        const vector<pair<int, int> > & enc) -> void
+{
+    _imp->clique_encoding = true;
+    for (unsigned i = 0 ; i < enc.size() ; ++i)
+        _imp->binary_variable_mappings.emplace(i, _imp->variable_mappings[enc[i]]);
+}
+
+auto Proof::create_clique_nonedge(int v, int w) -> void
+{
+    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[v] <<
+        " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+    _imp->non_edge_constraints.emplace(pair{ v, w }, _imp->proof_line);
+    _imp->non_edge_constraints.emplace(pair{ w, v }, _imp->proof_line);
 }
 

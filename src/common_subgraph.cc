@@ -354,9 +354,6 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         throw UnsupportedConfiguration{ "Solution counting only makes sense for decision problems" };
 
     if (params.proof) {
-        if (params.clique)
-            throw UnsupportedConfiguration{ "Proof logging does not yet work with clique" };
-
         for (int n = 0 ; n < first.size() ; ++n) {
             params.proof->create_cp_variable(n, second.size() + 1,
                     [&] (int v) { return first.vertex_name(v); },
@@ -405,6 +402,9 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
     }
 
     if (params.clique) {
+        if (params.connected)
+            throw UnsupportedConfiguration{ "Clique encoding for connected not yet implemented" };
+
         CliqueParams clique_params;
         clique_params.timeout = params.timeout;
         clique_params.start_time = params.start_time;
@@ -419,20 +419,28 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
                 if ((first.adjacent(v, v) == second.adjacent(w, w)) && (first.vertex_label(v) == second.vertex_label(w)))
                     assoc_encoding.emplace_back(v, w);
 
+        if (params.proof)
+            params.proof->create_clique_encoding(assoc_encoding);
+
         assoc.resize(assoc_encoding.size());
         for (unsigned v = 0 ; v < assoc_encoding.size() ; ++v)
             for (unsigned w = 0 ; w < assoc_encoding.size() ; ++w)
                 if (v != w) {
                     auto [ vf, vs ] = assoc_encoding[v];
                     auto [ wf, ws ] = assoc_encoding[w];
-                    if (vf != wf && vs != ws && first.adjacent(vf, wf) == second.adjacent(vs, ws))
-                        if ((! first.adjacent(vf, wf)) || (first.edge_label(vf, wf) == second.edge_label(vs, ws)))
+                    bool edge = false;
+                    if (vf != wf && vs != ws && first.adjacent(vf, wf) == second.adjacent(vs, ws)) {
+                        if ((! first.adjacent(vf, wf)) || (first.edge_label(vf, wf) == second.edge_label(vs, ws))) {
+                            edge = true;
                             assoc.add_edge(v, w);
+                        }
+                    }
+
+                    if (params.proof && ! edge)
+                        params.proof->create_clique_nonedge(v, w);
                 }
 
-        if (params.proof) {
-        }
-
+        clique_params.proof = params.proof;
         auto clique_result = solve_clique_problem(assoc, clique_params);
 
         // now translate the result back into what we expect

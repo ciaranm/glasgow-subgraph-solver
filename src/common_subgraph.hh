@@ -33,7 +33,7 @@ struct CommonSubgraphParams
     std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;
 
     /// Optional proof handler
-    std::unique_ptr<Proof> proof;
+    std::shared_ptr<Proof> proof;
 
     /// Connected?
     bool connected = false;
