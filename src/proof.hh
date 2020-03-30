@@ -101,8 +101,6 @@ class Proof
         auto incorrect_guess(const std::vector<std::pair<int, int> > & decisions, bool was_failure) -> void;
         auto out_of_guesses(const std::vector<std::pair<int, int> > & decisions) -> void;
         auto unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void;
-        auto expanding(int depth, const std::vector<int> & accepted, const std::vector<int> & possible) -> void;
-        auto unexpanding(int depth, const std::vector<int> & accepted) -> void;
 
         // proof levels
         auto start_level(int level) -> void;

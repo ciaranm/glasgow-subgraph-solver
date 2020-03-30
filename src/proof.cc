@@ -344,25 +344,6 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
     *_imp->proof_stream << "* [" << depth << "] guessing " << branch_v.second << "=" << val.second << endl;
 }
 
-auto Proof::expanding(int depth, const vector<int> & accepted, const vector<int> & possible) -> void
-{
-    *_imp->proof_stream << "* [" << depth << "] expanding, accepted";
-    for (auto & a : accepted)
-        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[a];
-    *_imp->proof_stream << ", possible";
-    for (auto & a : possible)
-        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[a];
-    *_imp->proof_stream << endl;
-}
-
-auto Proof::unexpanding(int depth, const vector<int> & accepted) -> void
-{
-    *_imp->proof_stream << "* [" << depth << "] unexpanding";
-    for (auto & a : accepted)
-        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[a];
-    *_imp->proof_stream << endl;
-}
-
 auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
     *_imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << endl;

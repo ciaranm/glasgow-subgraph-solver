@@ -286,21 +286,6 @@ namespace
             return result;
         }
 
-        auto unpermute(
-                const BitSetType_ & v) -> vector<int>
-        {
-            vector<int> result;
-
-            auto w = v;
-            while (w.any()) {
-                auto p = w.find_first();
-                w.reset(p);
-                result.push_back(order[p]);
-            }
-
-            return result;
-        }
-
         auto unpermute_and_finish(
                 vector<int> & v) -> vector<pair<int, bool> >
         {
@@ -324,9 +309,6 @@ namespace
         {
             ++nodes;
             ++prove_nodes;
-
-            if (params.proof)
-                params.proof->expanding(depth, unpermute(c), unpermute(p));
 
             // initial colouring
             int * p_order = &space[spacepos];
@@ -455,9 +437,6 @@ namespace
                 c.pop_back();
                 p.reset(v);
             }
-
-            if (params.proof)
-                params.proof->unexpanding(depth, unpermute(c));
 
             params.restarts_schedule->did_a_backtrack();
             if (params.restarts_schedule->should_restart()) {
