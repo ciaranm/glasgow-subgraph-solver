@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+using std::conditional_t;
 using std::find;
 using std::iota;
 using std::is_same;
@@ -66,14 +67,13 @@ namespace
         }
     };
 
-    template <typename BitSetType_>
     struct CliqueRunner
     {
         const CliqueParams & params;
         Incumbent incumbent;
 
         int size;
-        vector<BitSetType_> adj;
+        vector<SVOBitset> adj, connected_table;
         vector<int> order, invorder;
 
         Watches<int, FlatWatchTable> watches;
@@ -85,7 +85,7 @@ namespace
         CliqueRunner(const InputGraph & g, const CliqueParams & p) :
             params(p),
             size(g.size()),
-            adj(g.size(), BitSetType_{ unsigned(size), 0 }),
+            adj(g.size(), SVOBitset{ unsigned(size), 0 }),
             order(size),
             invorder(size),
             space(nullptr)
@@ -114,6 +114,12 @@ namespace
 
             for (auto e = g.begin_edges(), e_end = g.end_edges() ; e != e_end ; ++e)
                 adj[invorder[e->first.first]].set(invorder[e->first.second]);
+
+            if (params.connected) {
+                connected_table.resize(size);
+                for (int v = 0 ; v < size ; ++v)
+                    connected_table[v] = params.connected(order.at(v), [&] (int x) { return invorder.at(x); });
+            }
         }
 
         ~CliqueRunner()
@@ -122,12 +128,12 @@ namespace
         }
 
         auto colour_class_order(
-                const BitSetType_ & p,
+                const SVOBitset & p,
                 int * p_order,
                 int * p_bounds,
                 int & p_end) -> void
         {
-            BitSetType_ p_left = p;      // not coloured yet
+            SVOBitset p_left = p;      // not coloured yet
             unsigned colour = 0;         // current colour
             p_end = 0;
 
@@ -136,7 +142,72 @@ namespace
                 // next colour
                 ++colour;
                 // things that can still be given this colour
-                BitSetType_ q = p_left;
+                SVOBitset q = p_left;
+
+                // while we can still give something this colour
+                while (q.any()) {
+                    // first thing we can colour
+                    int v = q.find_first();
+                    p_left.reset(v);
+                    q.reset(v);
+
+                    // can't give anything adjacent to this the same colour
+                    q.intersect_with_complement(adj[v]);
+
+                    // record in result
+                    p_bounds[p_end] = colour;
+                    p_order[p_end] = v;
+                    ++p_end;
+                }
+            }
+        }
+
+        auto connected_colour_class_order(
+                const SVOBitset & p,
+                const SVOBitset & a,
+                int * p_order,
+                int * p_bounds,
+                int & p_end) -> void
+        {
+            unsigned colour = 0;         // current colour
+            p_end = 0;
+
+            SVOBitset p_left = p; // not coloured yet
+            p_left.intersect_with_complement(a);
+
+            // while we've things left to colour
+            while (p_left.any()) {
+                // next colour
+                ++colour;
+                // things that can still be given this colour
+                SVOBitset q = p_left;
+
+                // while we can still give something this colour
+                while (q.any()) {
+                    // first thing we can colour
+                    int v = q.find_first();
+                    p_left.reset(v);
+                    q.reset(v);
+
+                    // can't give anything adjacent to this the same colour
+                    q.intersect_with_complement(adj[v]);
+
+                    // record in result
+                    p_bounds[p_end] = colour;
+                    p_order[p_end] = v;
+                    ++p_end;
+                }
+            }
+
+            p_left = p;
+            p_left &= a;
+
+            // while we've things left to colour
+            while (p_left.any()) {
+                // next colour
+                ++colour;
+                // things that can still be given this colour
+                SVOBitset q = p_left;
 
                 // while we can still give something this colour
                 while (q.any()) {
@@ -157,13 +228,13 @@ namespace
         }
 
         auto colour_class_order_2df(
-                const BitSetType_ & p,
+                const SVOBitset & p,
                 int * p_order,
                 int * p_bounds,
                 int * defer,
                 int & p_end) -> void
         {
-            BitSetType_ p_left = p;      // not coloured yet
+            SVOBitset p_left = p;      // not coloured yet
             unsigned colour = 0;         // current colour
             p_end = 0;
 
@@ -174,7 +245,7 @@ namespace
                 // next colour
                 ++colour;
                 // things that can still be given this colour
-                BitSetType_ q = p_left;
+                SVOBitset q = p_left;
 
                 // while we can still give something this colour
                 unsigned number_with_this_colour = 0;
@@ -211,12 +282,12 @@ namespace
         }
 
         auto colour_class_order_sorted(
-                const BitSetType_ & p,
+                const SVOBitset & p,
                 int * p_order,
                 int * p_bounds,
                 int & p_end) -> void
         {
-            BitSetType_ p_left = p;      // not coloured yet
+            SVOBitset p_left = p;      // not coloured yet
             unsigned colour = 0;         // current colour
             p_end = 0;
 
@@ -233,7 +304,7 @@ namespace
                 // next colour
                 ++colour;
                 // things that can still be given this colour
-                BitSetType_ q = p_left;
+                SVOBitset q = p_left;
 
                 // while we can still give something this colour
                 while (q.any()) {
@@ -298,13 +369,15 @@ namespace
             return result;
         }
 
+        template <bool connected_>
         auto expand(
                 int depth,
                 unsigned long long & nodes,
                 unsigned long long & find_nodes,
                 unsigned long long & prove_nodes,
                 vector<int> & c,
-                BitSetType_ & p,
+                SVOBitset & p,
+                conditional_t<connected_, const SVOBitset &, int> a,
                 int spacepos) -> SearchResult
         {
             ++nodes;
@@ -315,10 +388,19 @@ namespace
             int * p_bounds = &space[spacepos + size];
 
             int p_end = 0;
-            switch (params.colour_class_order) {
-                case ColourClassOrder::ColourOrder:     colour_class_order(p, p_order, p_bounds, p_end); break;
-                case ColourClassOrder::SingletonsFirst: colour_class_order_2df(p, p_order, p_bounds, &space[spacepos + 2 * size], p_end); break;
-                case ColourClassOrder::Sorted:          colour_class_order_sorted(p, p_order, p_bounds, p_end); break;
+
+            if constexpr (connected_) {
+                if (! c.empty())
+                    connected_colour_class_order(p, a, p_order, p_bounds, p_end);
+                else
+                    colour_class_order(p, p_order, p_bounds, p_end);
+            }
+            else {
+                switch (params.colour_class_order) {
+                    case ColourClassOrder::ColourOrder:     colour_class_order(p, p_order, p_bounds, p_end); break;
+                    case ColourClassOrder::SingletonsFirst: colour_class_order_2df(p, p_order, p_bounds, &space[spacepos + 2 * size], p_end); break;
+                    case ColourClassOrder::Sorted:          colour_class_order_sorted(p, p_order, p_bounds, p_end); break;
+                }
             }
 
             // for each v in p... (v comes later)
@@ -340,48 +422,74 @@ namespace
                     break;
                 }
 
-                // if we've used k colours to colour k vertices, it's a clique
-                if (p_bounds[n] == n + 1) {
-                    auto c_save = c;
-                    for ( ; n >= 0 ; --n)
-                        c.push_back(p_order[n]);
-                    incumbent.update(c, find_nodes, prove_nodes);
+                // if we've used k colours to colour k vertices, it's a clique. this isn't (I think?) a
+                // valid shortcut in the connected case.
+                if constexpr (! connected_) {
+                    if (p_bounds[n] == n + 1) {
+                        auto c_save = c;
+                        for ( ; n >= 0 ; --n)
+                            c.push_back(p_order[n]);
+                        incumbent.update(c, find_nodes, prove_nodes);
 
-                    if (params.proof && ! params.decide) {
-                        params.proof->start_level(0);
-                        params.proof->new_incumbent(unpermute_and_finish(c));
-                        params.proof->start_level(depth + 1);
+                        if (params.proof && ! params.decide) {
+                            params.proof->start_level(0);
+                            params.proof->new_incumbent(unpermute_and_finish(c));
+                            params.proof->start_level(depth + 1);
+                        }
+
+                        if (params.decide && incumbent.value >= *params.decide) {
+                            if (params.proof)
+                                params.proof->post_solution(unpermute(c));
+
+                            return SearchResult::DecidedTrue;
+                        }
+
+                        c = move(c_save);
+
+                        break;
                     }
-
-                    if (params.decide && incumbent.value >= *params.decide) {
-                        if (params.proof)
-                            params.proof->post_solution(unpermute(c));
-
-                        return SearchResult::DecidedTrue;
-                    }
-
-                    c = move(c_save);
-
-                    break;
                 }
 
                 auto v = p_order[n];
+
+                if constexpr (connected_) {
+                    if ((! c.empty()) && (! a.test(v))) {
+                        // none of the remaining vertices can give a connected underlying graph
+                        if (params.proof) {
+                            auto c_unpermuted = unpermute(c);
+                            for (int v = 0 ; v <= n ; ++v)
+                                params.proof->not_connected_in_underlying_graph(unpermute(c), order[p_order[v]]);
+
+                            params.proof->start_level(depth);
+                            params.proof->backtrack_from_binary_variables(unpermute(c));
+                            params.proof->forget_level(depth + 1);
+                        }
+
+                        break;
+                    }
+                }
 
                 // consider taking v
                 c.push_back(v);
 
                 if (params.decide) {
-                    incumbent.update(c, find_nodes, prove_nodes);
                     if (incumbent.value >= *params.decide) {
                         if (params.proof)
                             params.proof->post_solution(unpermute(c));
 
                         return SearchResult::DecidedTrue;
                     }
+                } else {
+                    if (params.proof && c.size() > incumbent.value) {
+                        params.proof->start_level(0);
+                        params.proof->new_incumbent(unpermute_and_finish(c));
+                        params.proof->start_level(depth + 1);
+                    }
+                    incumbent.update(c, find_nodes, prove_nodes);
                 }
 
                 // filter p to contain vertices adjacent to v
-                BitSetType_ new_p = p;
+                SVOBitset new_p = p;
                 new_p &= adj[v];
 
                 if (params.restarts_schedule->might_restart())
@@ -394,7 +502,13 @@ namespace
                     params.proof->start_level(depth + 1);
 
                 if (new_p.any()) {
-                    switch (expand(depth + 1, nodes, find_nodes, prove_nodes, c, new_p, spacepos + 2 * size)) {
+                    auto new_a = a;
+
+                    if constexpr (connected_) {
+                        new_a |= connected_table[v];
+                    }
+
+                    switch (expand<connected_>(depth + 1, nodes, find_nodes, prove_nodes, c, new_p, new_a, spacepos + 2 * size)) {
                         case SearchResult::Aborted:
                             return SearchResult::Aborted;
 
@@ -418,14 +532,6 @@ namespace
                             return SearchResult::Restart;
                     }
                 }
-                else {
-                    incumbent.update(c, find_nodes, prove_nodes);
-                    if (params.proof && ! params.decide) {
-                        params.proof->start_level(0);
-                        params.proof->new_incumbent(unpermute_and_finish(c));
-                        params.proof->start_level(depth + 1);
-                    }
-                }
 
                 if (params.proof) {
                     params.proof->start_level(depth);
@@ -447,6 +553,7 @@ namespace
                 return SearchResult::Complete;
         }
 
+        template <bool connected_>
         auto run() -> CliqueResult
         {
             CliqueResult result;
@@ -458,7 +565,7 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
-            BitSetType_ p{ unsigned(size), 0 };
+            SVOBitset p{ unsigned(size), 0 };
             for (int i = 0 ; i < size ; ++i)
                 p.set(i);
 
@@ -477,7 +584,11 @@ namespace
 
                 auto new_p = p;
                 vector<int> c;
-                switch (expand(0, result.nodes, result.find_nodes, result.prove_nodes, c, new_p, 0)) {
+                conditional_t<connected_, SVOBitset, int> a{ };
+                if constexpr (connected_)
+                    a = SVOBitset{ unsigned(size), 0 };
+
+                switch (expand<connected_>(0, result.nodes, result.find_nodes, result.prove_nodes, c, new_p, a, 0)) {
                     case SearchResult::Complete:
                         done = true;
                         break;
@@ -532,7 +643,7 @@ auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params)
         }
     }
 
-    CliqueRunner<SVOBitset> runner{ graph, params };
-    return runner.run();
+    CliqueRunner runner{ graph, params };
+    return params.connected ? runner.run<true>() : runner.run<false>();
 }
 

@@ -84,6 +84,7 @@ struct Proof::Imp
 
     int nb_constraints = 0;
     int proof_line = 0;
+    int largest_level_set = 0;
 
     bool clique_encoding = false;
 };
@@ -380,16 +381,19 @@ auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -
 auto Proof::start_level(int l) -> void
 {
     *_imp->proof_stream << "# " << l << endl;
+    _imp->largest_level_set = max(_imp->largest_level_set, l);
 }
 
 auto Proof::back_up_to_level(int l) -> void
 {
     *_imp->proof_stream << "# " << l << endl;
+    _imp->largest_level_set = max(_imp->largest_level_set, l);
 }
 
 auto Proof::forget_level(int l) -> void
 {
-    *_imp->proof_stream << "w " << l << endl;
+    if (_imp->largest_level_set >= l)
+        *_imp->proof_stream << "w " << l << endl;
 }
 
 auto Proof::back_up_to_top() -> void
@@ -797,6 +801,15 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto (int,
                 << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
             ++_imp->nb_constraints;
         }
+}
+
+auto Proof::not_connected_in_underlying_graph(const std::vector<int> & x, int y) -> void
+{
+    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[y];
+    for (auto & v : x)
+        *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[v];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
 }
 
 auto Proof::has_clique_model() const -> bool

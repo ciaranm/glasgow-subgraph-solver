@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+using std::function;
 using std::make_optional;
 using std::make_unique;
 using std::map;
@@ -402,9 +403,6 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
     }
 
     if (params.clique) {
-        if (params.connected)
-            throw UnsupportedConfiguration{ "Clique encoding for connected not yet implemented" };
-
         CliqueParams clique_params;
         clique_params.timeout = params.timeout;
         clique_params.start_time = params.start_time;
@@ -441,6 +439,19 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
                 }
 
         clique_params.proof = params.proof;
+
+        if (params.connected) {
+            clique_params.connected = [&] (int x, const function<auto (int) -> int> & invorder) -> SVOBitset {
+                auto [ f, _ ] = assoc_encoding[x];
+                SVOBitset v(assoc_encoding.size(), 0);
+                v.reset();
+                for (unsigned y = 0 ; y < assoc_encoding.size() ; ++y)
+                    if (first.adjacent(f, assoc_encoding[y].first))
+                        v.set(invorder(y));
+                return v;
+            };
+        }
+
         auto clique_result = solve_clique_problem(assoc, clique_params);
 
         // now translate the result back into what we expect
