@@ -39,7 +39,7 @@ class Lackey
         Lackey(const Lackey &) = delete;
         Lackey & operator= (const Lackey &) = delete;
 
-        auto check_solution(const VertexToVertexMapping &) -> bool;
+        auto check_solution(const VertexToVertexMapping &, bool partial) -> bool;
 };
 
 #endif

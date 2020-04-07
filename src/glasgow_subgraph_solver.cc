@@ -109,7 +109,8 @@ auto main(int argc, char * argv[]) -> int
         po::options_description lackey_options{ "External constraint solver options" };
         lackey_options.add_options()
             ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
-            ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe");
+            ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
+            ("send-partials-to-lackey",                        "Send partial solutions to the lackey");
         display_options.add(lackey_options);
 
         po::options_description proof_logging_options{ "Proof logging options" };
@@ -306,6 +307,7 @@ auto main(int argc, char * argv[]) -> int
                     options_vars["receive-from-lackey"].as<string>(),
                     pattern, target);
         }
+        params.send_partials_to_lackey = options_vars.count("send-partials-to-lackey");
 
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {

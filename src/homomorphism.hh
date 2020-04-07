@@ -88,6 +88,9 @@ struct HomomorphismParams
     /// Optional lackey, for external side constraints
     std::unique_ptr<Lackey> lackey;
 
+    /// Send partial solutions to the lackey?
+    bool send_partials_to_lackey = false;
+
     /// Optional proof handler
     std::unique_ptr<Proof> proof;
 };
