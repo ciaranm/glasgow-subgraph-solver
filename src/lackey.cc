@@ -48,11 +48,12 @@ Lackey::~Lackey()
     }
 }
 
-auto Lackey::check_solution(const VertexToVertexMapping & m) -> bool
+auto Lackey::check_solution(const VertexToVertexMapping & m, bool partial) -> bool
 {
     unique_lock<mutex> lock{ _imp->external_solver_mutex };
 
-    _imp->send_to << "C " << m.size();
+    string command = partial ? "C" : "S";
+    _imp->send_to << command << " " << m.size();
     for (auto & [ p, t ] : m)
         _imp->send_to << " " << _imp->pattern_graph.vertex_name(p) << " " << _imp->target_graph.vertex_name(t);
     _imp->send_to << endl;
@@ -61,23 +62,29 @@ auto Lackey::check_solution(const VertexToVertexMapping & m) -> bool
         throw DisobedientLackeyError{ "error giving lackey its orders" };
 
     string operation;
-    if (! (_imp->read_from >> operation) || operation != "C")
-        throw DisobedientLackeyError{ "asked lackey to C, but it replied with '" + operation + "'" };
+    if (! (_imp->read_from >> operation) || operation != command)
+        throw DisobedientLackeyError{ "asked lackey to " + command + ", but it replied with '" + operation + "'" };
 
     bool result;
     string response;
     if (! (_imp->read_from >> response))
-        throw DisobedientLackeyError{ "asked lackey to C, but it gave no T/F" };
+        throw DisobedientLackeyError{ "asked lackey to C or S, but it gave no T/F" };
     else if (response == "T")
         result = true;
     else if (response == "F")
         result = false;
     else
-        throw DisobedientLackeyError{ "asked lackey to C, but it replied with '" + operation + "' then '" + response + "'" };
+        throw DisobedientLackeyError{ "asked lackey to C, or S but it replied with '" + operation + "' then '" + response + "'" };
 
     int n;
-    if (! (_imp->read_from >> n) || n != 0)
-        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to C query" };
+    if (! (_imp->read_from >> n))
+        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to C or S query" };
+
+    for (int i = 0 ; i < n ; ++i) {
+        string k, v;
+        if (! (_imp->read_from >> k >> v))
+            throw DisobedientLackeyError{ "lackey gave bad response pair " + to_string(i) + " to C or S query" };
+    }
 
     return result;
 }
