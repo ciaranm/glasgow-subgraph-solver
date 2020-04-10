@@ -2,6 +2,7 @@
 
 #include "sip_decomposer.hh"
 #include "homomorphism.hh"
+#include "loooong.hh"
 #include "proof.hh"
 
 #include <numeric>
@@ -9,15 +10,11 @@
 #include <string>
 #include <vector>
 
-#include <boost/multiprecision/cpp_int.hpp>
-
 using std::gcd;
 using std::pair;
 using std::set;
 using std::to_string;
 using std::vector;
-
-using boost::multiprecision::cpp_int;
 
 namespace
 {
@@ -123,9 +120,9 @@ auto solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & t
 
         // fix up the solution count
         if (params.count_solutions && result.solution_count > 0) {
-            cpp_int unmapped_target_vertices = target.size() - reduced_pattern.size();
-            cpp_int solution_multiplier = n_choose_k<cpp_int>(unmapped_target_vertices, isolated_pattern_vertices.size());
-            cpp_int isolated_symmetry_multiplier = factorial<cpp_int>(isolated_pattern_vertices.size());
+            loooong unmapped_target_vertices = target.size() - reduced_pattern.size();
+            loooong solution_multiplier = n_choose_k<loooong>(unmapped_target_vertices, isolated_pattern_vertices.size());
+            loooong isolated_symmetry_multiplier = factorial<loooong>(isolated_pattern_vertices.size());
             result.solution_count *= solution_multiplier * isolated_symmetry_multiplier;
         }
 

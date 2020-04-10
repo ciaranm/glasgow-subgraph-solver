@@ -23,7 +23,6 @@
 #include <utility>
 
 #include <boost/thread/barrier.hpp>
-#include <boost/multiprecision/cpp_int.hpp>
 
 using std::atomic;
 using std::function;
@@ -48,8 +47,6 @@ using std::chrono::steady_clock;
 using std::chrono::operator""ms;
 
 using boost::barrier;
-
-using boost::multiprecision::cpp_int;
 
 namespace
 {

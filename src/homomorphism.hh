@@ -5,6 +5,7 @@
 
 #include "formats/input_graph.hh"
 #include "lackey.hh"
+#include "loooong.hh"
 #include "restarts.hh"
 #include "timeout.hh"
 #include "value_ordering.hh"
@@ -15,8 +16,6 @@
 #include <list>
 #include <memory>
 #include <string>
-
-#include <boost/multiprecision/cpp_int.hpp>
 
 enum class Injectivity
 {
@@ -110,7 +109,7 @@ struct HomomorphismResult
     std::list<std::string> extra_stats;
 
     /// Number of solutions, only if enumerating
-    boost::multiprecision::cpp_int solution_count = 0;
+    loooong solution_count = 0;
 
     /// Did we perform a complete search?
     bool complete = false;
