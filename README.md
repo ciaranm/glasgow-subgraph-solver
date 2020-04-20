@@ -90,10 +90,9 @@ Proof Logging
 -------------
 
 As a highly experimental feature, the solver can output a proof log. First, install the following
-two programs:
+program:
 
 * VeriPB from https://github.com/StephanGocht/VeriPB/ .
-* roundingsat from https://github.com/elffersj/roundingsat/ .
 
 And then you can produce and verify a log like this:
 
