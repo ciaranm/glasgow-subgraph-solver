@@ -9,7 +9,10 @@
 #include <functional>
 #include <iosfwd>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 class ProofError : public std::exception
@@ -44,10 +47,12 @@ class Proof
         auto create_cp_variable(int pattern_vertex, int target_size,
                 const std::function<auto (int) -> std::string> & pattern_name,
                 const std::function<auto (int) -> std::string> & target_name) -> void;
+
         auto create_injectivity_constraints(int pattern_size, int target_size) -> void;
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
         auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u) -> void;
+
         auto finalise_model() -> void;
 
         // when we're done
@@ -104,8 +109,34 @@ class Proof
         auto back_up_to_top() -> void;
         auto post_restart_nogood(const std::vector<std::pair<int, int> > & decisions) -> void;
 
+        // cliques
+        auto create_binary_variable(int vertex,
+                const std::function<auto (int) -> std::string> & name) -> void;
+        auto create_objective(int n, std::optional<int> d) -> void;
+        auto create_non_edge_constraint(int p, int q) -> void;
+        auto backtrack_from_binary_variables(const std::vector<int> &) -> void;
+        auto colour_bound(const std::vector<std::vector<int> > &) -> void;
+
+        // common subgraphs
+        auto create_non_null_decision_bound(int p, int t, std::optional<int> d) -> void;
+        auto rewrite_mcs_objective(int pattern_size) -> void;
+        auto mcs_bound(
+                const std::vector<std::pair<std::set<int>, std::set<int> > > & partitions) -> void;
+        auto create_connected_constraints(int p, int t, const std::function<auto (int, int) -> bool> & adj) -> void;
+
+        // common subgraph to clique
+        auto has_clique_model() const -> bool;
+        auto create_clique_encoding(const std::vector<std::pair<int, int> > &) -> void;
+        auto create_clique_nonedge(int v, int w) -> void;
+        auto not_connected_in_underlying_graph(const std::vector<int> &, int) -> void;
+
         // enumeration
         auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex> > & decisions) -> void;
+        auto post_solution(const std::vector<int> & solution) -> void;
+
+        // optimisation
+        auto new_incumbent(const std::vector<std::pair<int, bool> > & solution) -> void;
+        auto new_incumbent(const std::vector<std::tuple<NamedVertex, NamedVertex, bool> > & solution) -> void;
 };
 
 #endif
