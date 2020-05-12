@@ -75,30 +75,28 @@ namespace
             SplitDomains result;
 
             for (auto & [ l, r ] : d.partitions) {
+                map<tuple<bool, string_view, string_view>, pair<set<int>, set<int> > > new_partitions;
                 set<int> new_l_1, new_r_1, new_l_2, new_r_2;
 
-                for (auto & v : l) {
-                    if (left != v) {
-                        if (first.adjacent(left, v))
-                            new_l_1.emplace(v);
-                        else
-                            new_l_2.emplace(v);
-                    }
-                }
+                string no_label;
+                auto partition_of = [&] (const InputGraph & g, int w, int v) -> tuple<bool, string_view, string_view> {
+                    return tuple{
+                        g.adjacent(w, v),
+                            g.adjacent(w, v) ? g.edge_label(w, v) : no_label,
+                            g.adjacent(v, w) ? g.edge_label(v, w) : no_label };
+                };
 
-                for (auto & v : r) {
-                    if (right != v) {
-                        if (second.adjacent(right, v))
-                            new_r_1.emplace(v);
-                        else
-                            new_r_2.emplace(v);
-                    }
-                }
+                for (auto & v : l)
+                    if (left != v)
+                        new_partitions[partition_of(first, left, v)].first.emplace(v);
 
-                if ((! new_l_1.empty()) && (! new_r_1.empty()))
-                    result.partitions.emplace_back(new_l_1, new_r_1);
-                if ((! new_l_2.empty()) && (! new_r_2.empty()))
-                    result.partitions.emplace_back(new_l_2, new_r_2);
+                for (auto & v : r)
+                    if (right != v)
+                        new_partitions[partition_of(second, right, v)].second.emplace(v);
+
+                for (auto & [ _, s ] : new_partitions)
+                    if ((! s.first.empty()) && (! s.second.empty()))
+                        result.partitions.emplace_back(s.first, s.second);
             }
 
             return result;
