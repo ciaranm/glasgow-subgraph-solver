@@ -13,4 +13,6 @@ auto read_unlabelled_undirected_vfmcs(std::ifstream && infile, const std::string
 
 auto read_vertex_labelled_undirected_vfmcs(std::ifstream && infile, const std::string & filename) -> InputGraph;
 
+auto read_vertex_labelled_directed_vfmcs(std::ifstream && infile, const std::string & filename) -> InputGraph;
+
 #endif

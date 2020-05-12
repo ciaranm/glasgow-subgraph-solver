@@ -21,7 +21,7 @@ namespace
         return unsigned(a) | (unsigned(b) << 8);
     }
 
-    auto read_vfmcs(ifstream && infile, const string & filename, bool vertex_labels) -> InputGraph
+    auto read_vfmcs(ifstream && infile, const string & filename, bool vertex_labels, bool directed) -> InputGraph
     {
         int size = read_word(infile);
         if (! infile)
@@ -58,7 +58,10 @@ namespace
                 if (e >= unsigned(result.size()))
                     throw GraphFileError{ filename, "edge index " + to_string(e) + " out of bounds", true };
 
-                result.add_edge(r, e);
+                if (directed)
+                    result.add_directed_edge(r, e, "directed");
+                else
+                    result.add_edge(r, e);
                 read_word(infile);
             }
         }
@@ -73,11 +76,16 @@ namespace
 
 auto read_unlabelled_undirected_vfmcs(ifstream && infile, const string & filename) -> InputGraph
 {
-    return read_vfmcs(move(infile), filename, false);
+    return read_vfmcs(move(infile), filename, false, false);
 }
 
 auto read_vertex_labelled_undirected_vfmcs(ifstream && infile, const string & filename) -> InputGraph
 {
-    return read_vfmcs(move(infile), filename, true);
+    return read_vfmcs(move(infile), filename, true, false);
+}
+
+auto read_vertex_labelled_directed_vfmcs(std::ifstream && infile, const std::string & filename) -> InputGraph
+{
+    return read_vfmcs(move(infile), filename, true, true);
 }
 
