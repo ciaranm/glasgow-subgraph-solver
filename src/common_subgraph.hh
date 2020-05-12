@@ -7,13 +7,12 @@
 #include "timeout.hh"
 #include "vertex_to_vertex_mapping.hh"
 #include "proof-fwd.hh"
+#include "loooong.hh"
 
 #include <functional>
 #include <list>
 #include <memory>
 #include <string>
-
-#include <boost/multiprecision/cpp_int.hpp>
 
 struct CommonSubgraphParams
 {
@@ -51,7 +50,7 @@ struct CommonSubgraphResult
     unsigned long long nodes = 0;
 
     /// Number of solutions, only if enumerating
-    boost::multiprecision::cpp_int solution_count = 0;
+    loooong solution_count = 0;
 
     /// Extra stats, to output
     std::list<std::string> extra_stats;
