@@ -122,6 +122,8 @@ auto read_file_format(const string & format, const string & filename) -> InputGr
         return read_vertex_labelled_undirected_vfmcs(move(infile), filename);
     else if (actual_format == "vfmcsvd")
         return read_vertex_labelled_directed_vfmcs(move(infile), filename);
+    else if (0 == actual_format.compare(0, 8, "csvname:"))
+        return read_csv_name(move(infile), filename, actual_format.substr(8));
     else
         throw GraphFileError{ filename, "Unknown file format '" + format + "'", true };
 }
