@@ -76,7 +76,6 @@ namespace
 
             for (auto & [ l, r ] : d.partitions) {
                 map<tuple<bool, string_view, string_view>, pair<set<int>, set<int> > > new_partitions;
-                set<int> new_l_1, new_r_1, new_l_2, new_r_2;
 
                 string no_label;
                 auto partition_of = [&] (const InputGraph & g, int w, int v) -> tuple<bool, string_view, string_view> {
