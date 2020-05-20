@@ -81,7 +81,7 @@ auto HomomorphismSearcher::restarting_search(
         if (params.lackey) {
             VertexToVertexMapping mapping;
             expand_to_full_result(assignments, mapping);
-            if (! params.lackey->check_solution(mapping, false))
+            if (! params.lackey->check_solution(mapping, false, params.count_solutions))
                 return SearchResult::Unsatisfiable;
         }
 
@@ -164,7 +164,7 @@ auto HomomorphismSearcher::restarting_search(
         if (params.lackey && params.send_partials_to_lackey) {
             VertexToVertexMapping mapping;
             expand_to_full_result(assignments, mapping);
-            if (! params.lackey->check_solution(mapping, true)) {
+            if (! params.lackey->check_solution(mapping, true, false)) {
                 assignments.values.resize(assignments_size);
                 actually_hit_a_failure = true;
                 continue;

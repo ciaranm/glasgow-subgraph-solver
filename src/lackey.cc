@@ -48,11 +48,11 @@ Lackey::~Lackey()
     }
 }
 
-auto Lackey::check_solution(const VertexToVertexMapping & m, bool partial) -> bool
+auto Lackey::check_solution(const VertexToVertexMapping & m, bool partial, bool all_solutions) -> bool
 {
     unique_lock<mutex> lock{ _imp->external_solver_mutex };
 
-    string command = partial ? "C" : "S";
+    string command = partial ? "C" : all_solutions ? "A" : "F";
     _imp->send_to << command << " " << m.size();
     for (auto & [ p, t ] : m)
         _imp->send_to << " " << _imp->pattern_graph.vertex_name(p) << " " << _imp->target_graph.vertex_name(t);
@@ -68,22 +68,22 @@ auto Lackey::check_solution(const VertexToVertexMapping & m, bool partial) -> bo
     bool result;
     string response;
     if (! (_imp->read_from >> response))
-        throw DisobedientLackeyError{ "asked lackey to C or S, but it gave no T/F" };
+        throw DisobedientLackeyError{ "asked lackey to " + command + ", but it gave no T/F" };
     else if (response == "T")
         result = true;
     else if (response == "F")
         result = false;
     else
-        throw DisobedientLackeyError{ "asked lackey to C, or S but it replied with '" + operation + "' then '" + response + "'" };
+        throw DisobedientLackeyError{ "asked lackey to " + command + " but it replied with '" + operation + "' then '" + response + "'" };
 
     int n;
     if (! (_imp->read_from >> n))
-        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to C or S query" };
+        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to " + command + " query" };
 
     for (int i = 0 ; i < n ; ++i) {
         string k, v;
         if (! (_imp->read_from >> k >> v))
-            throw DisobedientLackeyError{ "lackey gave bad response pair " + to_string(i) + " to C or S query" };
+            throw DisobedientLackeyError{ "lackey gave bad response pair " + to_string(i) + " to " + command + " query" };
     }
 
     return result;
