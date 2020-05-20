@@ -80,10 +80,12 @@ auto Lackey::check_solution(const VertexToVertexMapping & m, bool partial, bool 
     if (! (_imp->read_from >> n))
         throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to " + command + " query" };
 
-    for (int i = 0 ; i < n ; ++i) {
-        string k, v;
-        if (! (_imp->read_from >> k >> v))
-            throw DisobedientLackeyError{ "lackey gave bad response pair " + to_string(i) + " to " + command + " query" };
+    if (command == "S" || command == "C") {
+        for (int i = 0 ; i < n ; ++i) {
+            string k, v;
+            if (! (_imp->read_from >> k >> v))
+                throw DisobedientLackeyError{ "lackey gave bad response pair " + to_string(i) + " to " + command + " query" };
+        }
     }
 
     return result;
