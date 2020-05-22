@@ -72,18 +72,18 @@ struct Proof::Imp
     bool friendly_names;
     bool bz2 = false;
 
-    map<pair<int, int>, string> variable_mappings;
-    map<int, string> binary_variable_mappings;
-    map<tuple<int, int, int>, string> connected_variable_mappings;
-    map<tuple<int, int, int, int>, string> connected_variable_mappings_aux;
-    map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
-    map<tuple<int, int, int, int>, int> adjacency_lines;
-    map<pair<int, int>, int> eliminations;
-    map<pair<int, int>, int> non_edge_constraints;
-    int objective_line = 0;
+    map<pair<long, long>, string> variable_mappings;
+    map<long, string> binary_variable_mappings;
+    map<tuple<long, long, long>, string> connected_variable_mappings;
+    map<tuple<long, long, long, long>, string> connected_variable_mappings_aux;
+    map<long, long> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
+    map<tuple<long, long, long, long>, long> adjacency_lines;
+    map<pair<long, long>, long> eliminations;
+    map<pair<long, long>, long> non_edge_constraints;
+    long objective_line = 0;
 
-    int nb_constraints = 0;
-    int proof_line = 0;
+    long nb_constraints = 0;
+    long proof_line = 0;
     int largest_level_set = 0;
 
     bool clique_encoding = false;
@@ -511,7 +511,7 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
-    vector<int> things_to_add_up;
+    vector<long> things_to_add_up;
     things_to_add_up.push_back(_imp->proof_line);
 
     // cancel out anything that is two away from t, but by insufficiently many paths
@@ -645,7 +645,7 @@ auto Proof::colour_bound(const vector<vector<int> > & ccs) -> void
     }
     *_imp->proof_stream << endl;
 
-    vector<int> to_sum;
+    vector<long> to_sum;
     for (auto & cc : ccs) {
         if (cc.size() > 2) {
             *_imp->proof_stream << "p " << _imp->non_edge_constraints[pair{ cc[0], cc[1] }];
