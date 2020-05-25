@@ -81,7 +81,7 @@ auto HomomorphismSearcher::restarting_search(
         if (params.lackey) {
             VertexToVertexMapping mapping;
             expand_to_full_result(assignments, mapping);
-            if (! params.lackey->check_solution(mapping, false, params.count_solutions))
+            if (! params.lackey->check_solution(mapping, false, params.count_solutions, { }))
                 return SearchResult::Unsatisfiable;
         }
 
@@ -150,7 +150,7 @@ auto HomomorphismSearcher::restarting_search(
 
         // propagate
         ++propagations;
-        if (! propagate(new_domains, assignments)) {
+        if (! propagate(new_domains, assignments, params.propagate_using_lackey == PropagateUsingLackey::Always)) {
             // failure? restore assignments and go on to the next thing
             if (params.proof)
                 params.proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
@@ -159,16 +159,6 @@ auto HomomorphismSearcher::restarting_search(
             actually_hit_a_failure = true;
 
             continue;
-        }
-
-        if (params.lackey && params.send_partials_to_lackey) {
-            VertexToVertexMapping mapping;
-            expand_to_full_result(assignments, mapping);
-            if (! params.lackey->check_solution(mapping, true, false)) {
-                assignments.values.resize(assignments_size);
-                actually_hit_a_failure = true;
-                continue;
-            }
         }
 
         if (params.proof)
@@ -509,7 +499,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
     return true;
 }
 
-auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignments & assignments) -> bool
+auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
 {
     auto find_unit_domain = [&] () {
         return find_if(new_domains.begin(), new_domains.end(), [] (HomomorphismDomain & d) {
@@ -561,6 +551,30 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
         if (params.injectivity == Injectivity::Injective)
             if (! cheap_all_different(model.target_size, new_domains, params.proof))
                 return false;
+    }
+
+    int dcount = 0;
+    if (params.lackey && params.send_partials_to_lackey) {
+        VertexToVertexMapping mapping;
+        expand_to_full_result(assignments, mapping);
+        bool wipeout = false;
+        auto deletion = [&] (int p, int t) -> void {
+            if (! wipeout) {
+                for (auto & d : new_domains)
+                    if (d.v == unsigned(p)) {
+                        if (d.values.test(t)) {
+                            ++dcount;
+                            d.values.reset(t);
+                            if (0 == --d.count)
+                                wipeout = true;
+                        }
+                        break;
+                    }
+            }
+        };
+
+        if (! params.lackey->check_solution(mapping, true, false, propagate_using_lackey ? deletion : Lackey::DeletionFunction{}) || wipeout)
+            return false;
     }
 
     return true;

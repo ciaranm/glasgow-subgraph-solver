@@ -118,7 +118,7 @@ class HomomorphismSearcher
     public:
         HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p);
 
-        auto propagate(Domains & new_domains, HomomorphismAssignments & assignments) -> bool;
+        auto propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
 
         auto restarting_search(
                 HomomorphismAssignments & assignments,

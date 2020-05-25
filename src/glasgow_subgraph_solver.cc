@@ -110,7 +110,8 @@ auto main(int argc, char * argv[]) -> int
         lackey_options.add_options()
             ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
             ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
-            ("send-partials-to-lackey",                        "Send partial solutions to the lackey");
+            ("send-partials-to-lackey",                        "Send partial solutions to the lackey")
+            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / always)");
         display_options.add(lackey_options);
 
         po::options_description proof_logging_options{ "Proof logging options" };
@@ -308,6 +309,21 @@ auto main(int argc, char * argv[]) -> int
                     pattern, target);
         }
         params.send_partials_to_lackey = options_vars.count("send-partials-to-lackey");
+        if (options_vars.count("propagate-using-lackey")) {
+            string propagate_using_lackey = options_vars["propagate-using-lackey"].as<string>();
+            if (propagate_using_lackey == "always")
+                params.propagate_using_lackey = PropagateUsingLackey::Always;
+            else if (propagate_using_lackey == "root")
+                params.propagate_using_lackey = PropagateUsingLackey::Root;
+            else if (propagate_using_lackey == "never")
+                params.propagate_using_lackey = PropagateUsingLackey::Never;
+            else {
+                cerr << "Unknown propagate-using-lackey option '" << propagate_using_lackey << "'" << endl;
+                return EXIT_FAILURE;
+            }
+        }
+        else
+            params.propagate_using_lackey = PropagateUsingLackey::Never;
 
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {

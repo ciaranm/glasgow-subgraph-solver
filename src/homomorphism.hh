@@ -24,6 +24,13 @@ enum class Injectivity
     NonInjective
 };
 
+enum class PropagateUsingLackey
+{
+    Never,
+    Root,
+    Always
+};
+
 struct HomomorphismParams
 {
     /// Timeout handler
@@ -89,6 +96,9 @@ struct HomomorphismParams
 
     /// Send partial solutions to the lackey?
     bool send_partials_to_lackey = false;
+
+    /// Propagate using the lackey?
+    PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
 
     /// Optional proof handler
     std::unique_ptr<Proof> proof;

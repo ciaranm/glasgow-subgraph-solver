@@ -6,6 +6,7 @@
 #include <mutex>
 
 using std::endl;
+using std::function;
 using std::ifstream;
 using std::mutex;
 using std::ofstream;
@@ -48,11 +49,26 @@ Lackey::~Lackey()
     }
 }
 
-auto Lackey::check_solution(const VertexToVertexMapping & m, bool partial, bool all_solutions) -> bool
+auto Lackey::check_solution(
+        const VertexToVertexMapping & m,
+        bool partial,
+        bool all_solutions,
+        const function<auto (int, int) -> void> & deletion) -> bool
 {
     unique_lock<mutex> lock{ _imp->external_solver_mutex };
 
-    string command = partial ? "C" : all_solutions ? "A" : "F";
+    string command;
+    if (partial) {
+        if (deletion)
+            command = "P";
+        else
+            command = "C";
+    }
+    else if (all_solutions)
+        command = "A";
+    else
+        command = "F";
+
     _imp->send_to << command << " " << m.size();
     for (auto & [ p, t ] : m)
         _imp->send_to << " " << _imp->pattern_graph.vertex_name(p) << " " << _imp->target_graph.vertex_name(t);
@@ -80,11 +96,31 @@ auto Lackey::check_solution(const VertexToVertexMapping & m, bool partial, bool 
     if (! (_imp->read_from >> n))
         throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to " + command + " query" };
 
-    if (command == "S" || command == "C") {
+    if (command == "S") {
         for (int i = 0 ; i < n ; ++i) {
             string k, v;
             if (! (_imp->read_from >> k >> v))
                 throw DisobedientLackeyError{ "lackey gave bad response pair " + to_string(i) + " to " + command + " query" };
+        }
+    }
+    else if (command == "C" || command == "P") {
+        for (int i = 0 ; i < n ; ++i) {
+            string k, v;
+            int m;
+            if (! (_imp->read_from >> k >> m))
+                throw DisobedientLackeyError{ "lackey gave bad response pair " + k + " " + to_string(m) + " to " + command + " query" };
+            auto p = _imp->pattern_graph.vertex_from_name(k);
+
+            for (int j = 0 ; j < m ; ++j) {
+                if (! (_imp->read_from >> v))
+                    throw DisobedientLackeyError{ "lackey gave bad response pair " + k + " " + to_string(m) + " to " + command + " query" };
+
+                if (deletion) {
+                    auto t = _imp->target_graph.vertex_from_name(v);
+                    if (p && t)
+                        deletion(*p, *t);
+                }
+            }
         }
     }
 

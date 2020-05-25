@@ -113,7 +113,7 @@ namespace
                 searcher.watches.clear_new_nogoods();
 
                 ++result.propagations;
-                if (searcher.propagate(domains, assignments)) {
+                if (searcher.propagate(domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
@@ -272,7 +272,7 @@ namespace
                     }
 
                     ++thread_result.propagations;
-                    if (searchers[t]->propagate(domains, thread_assignments)) {
+                    if (searchers[t]->propagate(domains, thread_assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                         auto assignments_copy = thread_assignments;
 
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
