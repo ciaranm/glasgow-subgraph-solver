@@ -28,7 +28,8 @@ enum class PropagateUsingLackey
 {
     Never,
     Root,
-    Always
+    Always,
+    RootAndBackjump
 };
 
 struct HomomorphismParams

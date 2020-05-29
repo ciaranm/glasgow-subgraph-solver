@@ -40,13 +40,17 @@ class Lackey
         Lackey(const Lackey &) = delete;
         Lackey & operator= (const Lackey &) = delete;
 
-        using DeletionFunction = std::function<auto (int, int) -> void>;
+        using DeletionFunction = std::function<auto (int, int) -> bool>;
 
         auto check_solution(
                 const VertexToVertexMapping &,
                 bool partial,
                 bool all_solutions,
                 const DeletionFunction & deletions) -> bool;
+
+        auto number_of_checks() const -> long;
+        auto number_of_propagations() const -> long;
+        auto number_of_deletions() const -> long;
 };
 
 #endif

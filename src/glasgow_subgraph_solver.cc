@@ -111,7 +111,7 @@ auto main(int argc, char * argv[]) -> int
             ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
             ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
             ("send-partials-to-lackey",                        "Send partial solutions to the lackey")
-            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / always)");
+            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / always)");
         display_options.add(lackey_options);
 
         po::options_description proof_logging_options{ "Proof logging options" };
@@ -315,6 +315,8 @@ auto main(int argc, char * argv[]) -> int
                 params.propagate_using_lackey = PropagateUsingLackey::Always;
             else if (propagate_using_lackey == "root")
                 params.propagate_using_lackey = PropagateUsingLackey::Root;
+            else if (propagate_using_lackey == "root-and-backjump")
+                params.propagate_using_lackey = PropagateUsingLackey::RootAndBackjump;
             else if (propagate_using_lackey == "never")
                 params.propagate_using_lackey = PropagateUsingLackey::Never;
             else {
@@ -398,6 +400,12 @@ auto main(int argc, char * argv[]) -> int
 
         for (const auto & s : result.extra_stats)
             cout << s << endl;
+
+        if (params.lackey) {
+            cout << "lackey_checks = " << params.lackey->number_of_checks() << endl;
+            cout << "lackey_deletions = " << params.lackey->number_of_propagations() << endl;
+            cout << "lackey_propagations = " << params.lackey->number_of_deletions() << endl;
+        }
 
         verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
                 params.induced, result.mapping);

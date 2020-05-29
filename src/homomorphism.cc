@@ -129,6 +129,7 @@ namespace
                             done = true;
                             break;
 
+                        case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
                         case SearchResult::Unsatisfiable:
                             result.complete = true;
                             done = true;
@@ -291,6 +292,7 @@ namespace
                                 break;
 
                             case SearchResult::Unsatisfiable:
+                            case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
                                 thread_result.complete = true;
                                 params.timeout->trigger_early_abort();
                                 searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{ });

@@ -81,8 +81,12 @@ auto HomomorphismSearcher::restarting_search(
         if (params.lackey) {
             VertexToVertexMapping mapping;
             expand_to_full_result(assignments, mapping);
-            if (! params.lackey->check_solution(mapping, false, params.count_solutions, { }))
-                return SearchResult::Unsatisfiable;
+            if (! params.lackey->check_solution(mapping, false, params.count_solutions, { })) {
+                if (params.propagate_using_lackey == PropagateUsingLackey::RootAndBackjump)
+                    return SearchResult::UnsatisfiableAndBackjumpUsingLackey;
+                else
+                    return SearchResult::Unsatisfiable;
+            }
         }
 
         if (params.proof)
@@ -133,6 +137,7 @@ auto HomomorphismSearcher::restarting_search(
 
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
+    bool use_lackey_for_propagation = false;
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end ; f_v != f_end ; ++f_v) {
@@ -150,7 +155,7 @@ auto HomomorphismSearcher::restarting_search(
 
         // propagate
         ++propagations;
-        if (! propagate(new_domains, assignments, params.propagate_using_lackey == PropagateUsingLackey::Always)) {
+        if (! propagate(new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
             // failure? restore assignments and go on to the next thing
             if (params.proof)
                 params.proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
@@ -199,6 +204,10 @@ auto HomomorphismSearcher::restarting_search(
                 assignments.values.resize(assignments_size);
                 break;
 
+            case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
+                use_lackey_for_propagation = true;
+                [[ std::fallthrough ]];
+
             case SearchResult::Unsatisfiable:
                 if (params.proof) {
                     params.proof->back_up_to_level(depth + 1);
@@ -230,7 +239,7 @@ auto HomomorphismSearcher::restarting_search(
         return SearchResult::Restart;
     }
     else
-        return SearchResult::Unsatisfiable;
+        return use_lackey_for_propagation ? SearchResult::UnsatisfiableAndBackjumpUsingLackey : SearchResult::Unsatisfiable;
 }
 
 auto HomomorphismSearcher::degree_sort(
@@ -554,11 +563,11 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
     }
 
     int dcount = 0;
-    if (params.lackey && params.send_partials_to_lackey) {
+    if (params.lackey && (propagate_using_lackey || params.send_partials_to_lackey)) {
         VertexToVertexMapping mapping;
         expand_to_full_result(assignments, mapping);
         bool wipeout = false;
-        auto deletion = [&] (int p, int t) -> void {
+        auto deletion = [&] (int p, int t) -> bool {
             if (! wipeout) {
                 for (auto & d : new_domains)
                     if (d.v == unsigned(p)) {
@@ -567,10 +576,12 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                             d.values.reset(t);
                             if (0 == --d.count)
                                 wipeout = true;
+                            return true;
                         }
                         break;
                     }
             }
+            return false;
         };
 
         if (! params.lackey->check_solution(mapping, true, false, propagate_using_lackey ? deletion : Lackey::DeletionFunction{}) || wipeout)

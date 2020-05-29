@@ -15,6 +15,7 @@ enum class SearchResult
 {
     Aborted,
     Unsatisfiable,
+    UnsatisfiableAndBackjumpUsingLackey,
     Satisfiable,
     SatisfiableButKeepGoing,
     Restart

@@ -32,6 +32,8 @@ struct Lackey::Imp
     ifstream read_from;
     const InputGraph & pattern_graph;
     const InputGraph & target_graph;
+
+    long number_of_checks = 0, number_of_propagations = 0, number_of_deletions = 0;
 };
 
 Lackey::Lackey(const string & send_to_name, const string & read_from_name,
@@ -53,21 +55,28 @@ auto Lackey::check_solution(
         const VertexToVertexMapping & m,
         bool partial,
         bool all_solutions,
-        const function<auto (int, int) -> void> & deletion) -> bool
+        const function<auto (int, int) -> bool> & deletion) -> bool
 {
     unique_lock<mutex> lock{ _imp->external_solver_mutex };
 
     string command;
     if (partial) {
-        if (deletion)
+        if (deletion) {
+            ++_imp->number_of_propagations;
             command = "P";
-        else
+        }
+        else {
+            ++_imp->number_of_checks;
             command = "C";
+        }
     }
-    else if (all_solutions)
-        command = "A";
-    else
-        command = "F";
+    else {
+        ++_imp->number_of_checks;
+        if (all_solutions)
+            command = "A";
+        else
+            command = "F";
+    }
 
     _imp->send_to << command << " " << m.size();
     for (auto & [ p, t ] : m)
@@ -118,12 +127,29 @@ auto Lackey::check_solution(
                 if (deletion) {
                     auto t = _imp->target_graph.vertex_from_name(v);
                     if (p && t)
-                        deletion(*p, *t);
+                        if (deletion(*p, *t))
+                            ++_imp->number_of_deletions;
                 }
             }
         }
     }
 
     return result;
+}
+
+auto Lackey::number_of_checks() const -> long
+{
+    return _imp->number_of_checks;
+}
+
+auto Lackey::number_of_propagations() const -> long
+{
+    return _imp->number_of_propagations;
+
+}
+
+auto Lackey::number_of_deletions() const -> long
+{
+    return _imp->number_of_deletions;
 }
 
