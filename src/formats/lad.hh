@@ -17,6 +17,13 @@
 auto read_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
 
 /**
+ * Read a LAD format file into an InputGraph, treating edges as directed.
+ *
+ * \throw GraphFileError
+ */
+auto read_directed_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
+
+/**
  * Read a Labelled LAD format file into an InputGraph.
  *
  * \throw GraphFileError

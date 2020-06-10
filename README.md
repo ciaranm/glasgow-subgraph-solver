@@ -72,8 +72,25 @@ $ ./glasgow_subgraph_solver --format lad pattern-file target-file
 
 In particular, note that auto-detection can easily fail if, for example, the first vertex in the
 graph has no neighbours.  We can read LAD, Labelled LAD (labels on vertices, and optionally also on
-edges), CSV, and DIMACS 2 formatted graphs; consider using [the LAD
-format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) if you have a choice.
+edges), CSV, and DIMACS 2 formatted graphs. [The LAD
+format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) is a nice simple choice. If you need
+to support named vertices, labels on vertices and / or edges, or directed edges, consider using the
+CSV format. To specify a directed edge, use a greater-than sign rather than a comma as the delimiter
+between the first two columns.  To specify an edge label, include a third column in the file. To
+specify a vertex label, leave the second column empty and use the third column for the label. For
+example, the following describes a graph with four vertices, with colours for edge labels and shapes
+for vertex labels.
+
+```
+first>second,red
+second>first,blue
+first,third,purple
+first>first,green
+first,,circle
+second,,circle
+third,,square
+fourth,,square
+```
 
 Symmetries
 ----------

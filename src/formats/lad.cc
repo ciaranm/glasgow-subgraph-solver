@@ -80,6 +80,11 @@ auto read_lad(ifstream && infile, const string & filename) -> InputGraph
     return read_any_lad(move(infile), filename, false, false, false);
 }
 
+auto read_directed_lad(ifstream && infile, const string & filename) -> InputGraph
+{
+    return read_any_lad(move(infile), filename, true, false, false);
+}
+
 auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGraph
 {
     return read_any_lad(move(infile), filename, true, true, true);

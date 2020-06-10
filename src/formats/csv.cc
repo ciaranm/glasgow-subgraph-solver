@@ -5,14 +5,15 @@
 
 #include <fstream>
 #include <optional>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
 using std::ifstream;
 using std::nullopt;
 using std::optional;
-using std::pair;
 using std::string;
+using std::tuple;
 using std::unordered_map;
 using std::vector;
 
@@ -20,34 +21,67 @@ namespace
 {
     auto read_csv(ifstream && infile, const string & filename, const optional<unordered_map<string, string> > & rename_map) -> InputGraph
     {
-        InputGraph result{ 0, false, false };
-
         if (! infile)
             throw GraphFileError{ filename, "error opening file", false };
 
         unordered_map<string, int> vertices;
+        unordered_map<string, string> vertex_labels;
+        vector<tuple<int, int, string> > edges;
+        bool seen_vertex_label = false, seen_edge_label = false, seen_directed_edge = false;
+
         string line;
 
-        vector<pair<int, int> > edges;
-
         while (getline(infile, line)) {
-            auto pos = line.find(',');
+            auto pos = line.find_first_of(",>");
             if (string::npos == pos)
                 throw GraphFileError{ filename, "expected a comma but didn't get one", true };
-            string left = line.substr(0, pos), right = line.substr(pos + 1);
-            if (right.empty() && ! left.empty() && ! vertices.count(left))
+
+            string left = line.substr(0, pos), right = line.substr(pos + 1), label;
+            char delim = line.at(pos);
+
+            auto pos2 = right.find(',');
+            if (string::npos != pos2) {
+                label = right.substr(pos2 + 1);
+                right = right.substr(0, pos2);
+            }
+
+            if (right.empty() && ! left.empty()) {
+                if (! label.empty()) {
+                    seen_vertex_label = true;
+                    vertex_labels.emplace(left, label);
+                }
+
                 vertices.emplace(left, vertices.size());
+            }
             else {
                 int left_idx = vertices.emplace(left, vertices.size()).first->second;
                 int right_idx = vertices.emplace(right, vertices.size()).first->second;
-                edges.emplace_back(left_idx, right_idx);
+
+                if (! label.empty())
+                    seen_edge_label = true;
+
+                if (delim == '>') {
+                    seen_directed_edge = true;
+                    edges.emplace_back(left_idx, right_idx, label);
+                }
+                else {
+                    edges.emplace_back(left_idx, right_idx, label);
+                    edges.emplace_back(right_idx, left_idx, label);
+                }
             }
         }
 
-        result.resize(vertices.size());
+        InputGraph result{ int(vertices.size()), seen_vertex_label, seen_edge_label };
 
-        for (auto & e : edges)
-            result.add_edge(e.first, e.second);
+        for (auto & [ f, t, l ] : edges)
+            if (seen_directed_edge)
+                result.add_directed_edge(f, t, l);
+            else if (seen_edge_label) {
+                result.add_directed_edge(f, t, l);
+                result.add_directed_edge(t, f, l);
+            }
+            else
+                result.add_edge(f, t);
 
         auto rename = [&] (const string & s) -> string {
             if (rename_map) {
@@ -62,6 +96,10 @@ namespace
 
         for (auto & [v, l] : vertices)
             result.set_vertex_name(l, rename(v));
+
+        if (seen_vertex_label)
+            for (auto & [v, l] : vertices)
+                result.set_vertex_label(l, vertex_labels[v]);
 
         return result;
     }

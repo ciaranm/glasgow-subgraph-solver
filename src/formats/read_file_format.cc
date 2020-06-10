@@ -110,6 +110,8 @@ auto read_file_format(const string & format, const string & filename) -> InputGr
         return read_dimacs(move(infile), filename);
     else if (actual_format == "lad")
         return read_lad(move(infile), filename);
+    else if (actual_format == "directedlad")
+        return read_directed_lad(move(infile), filename);
     else if (actual_format == "labelledlad")
         return read_labelled_lad(move(infile), filename);
     else if (actual_format == "vertexlabelledlad")
