@@ -24,7 +24,8 @@ namespace
             set<int> & isolated_pattern_vertices) -> void
     {
         if (params.induced || (! params.pattern_less_constraints.empty())
-                || params.lackey || pattern.has_vertex_labels() || (params.count_solutions && params.enumerate_callback))
+                || params.lackey || pattern.has_vertex_labels() || (params.count_solutions && params.enumerate_callback)
+                || pattern.directed())
             return;
 
         for (int i = 0 ; i < pattern.size() ; ++i)
@@ -89,7 +90,7 @@ auto solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & t
                     continue;
 
                 if (pattern.adjacent(i, j))
-                    reduced_pattern.add_edge(r_i, r_j);
+                    reduced_pattern.add_directed_edge(r_i, r_j, "");
             }
         }
         auto result = solve_homomorphism_problem(reduced_pattern, target, params);
