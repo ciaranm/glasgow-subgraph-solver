@@ -41,11 +41,11 @@ struct HomomorphismModel::Imp
 
     vector<PatternAdjacencyBitsType> pattern_adjacencies_bits;
     vector<SVOBitset> pattern_graph_rows;
-    vector<SVOBitset> target_graph_rows;
+    vector<SVOBitset> target_graph_rows, forward_target_graph_rows, reverse_target_graph_rows;
 
     vector<vector<int> > patterns_degrees, targets_degrees;
     int largest_target_degree = 0;
-    bool has_less_thans = false;
+    bool has_less_thans = false, directed = false;
 
     vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
     vector<int> pattern_loops, target_loops;
@@ -79,6 +79,9 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         for (int v = 0 ; v < target.size() ; ++v)
             _imp->target_vertex_proof_names.push_back(target.vertex_name(v));
     }
+
+    if (pattern.directed())
+        _imp->directed = true;
 
     // recode pattern to a bit graph, and strip out loops
     _imp->pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
@@ -131,6 +134,18 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             _imp->target_loops[e->first.first] = 1;
         else
             _imp->target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
+    }
+
+    // if directed, do both directions
+    if (pattern.directed()) {
+        _imp->forward_target_graph_rows.resize(target_size, SVOBitset{ target_size, 0 });
+        _imp->reverse_target_graph_rows.resize(target_size, SVOBitset{ target_size, 0 });
+        for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
+            if (e->first.first != e->first.second && e->second != "unlabelled") {
+                _imp->forward_target_graph_rows[e->first.first].set(e->first.second);
+                _imp->reverse_target_graph_rows[e->first.second].set(e->first.first);
+            }
+        }
     }
 
     // target vertex labels
@@ -496,8 +511,8 @@ auto HomomorphismModel::prepare() -> bool
     unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
     // build exact path graphs
     if (supports_exact_path_graphs(_imp->params)) {
-        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs);
-        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs);
+        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed);
+        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed);
 
         if (_imp->params.proof) {
             for (int g = 1 ; g <= _imp->params.number_of_exact_path_graphs ; ++g) {
@@ -601,17 +616,17 @@ auto HomomorphismModel::prepare() -> bool
 }
 
 auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-        unsigned number_of_exact_path_graphs) -> void
+        unsigned number_of_exact_path_graphs, bool directed) -> void
 {
     vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
-    // count number of paths from w to v (only w >= v, so not v to w)
+    // count number of paths from w to v (unless directed, only w >= v, so not v to w)
     for (unsigned v = 0 ; v < size ; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];
         for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
             nv.reset(c);
             auto nc = graph_rows[c * max_graphs + 0];
-            for (auto w = nc.find_first() ; w != decltype(nc)::npos && w <= v ; w = nc.find_first()) {
+            for (auto w = nc.find_first() ; w != decltype(nc)::npos && (directed ? true : w <= v) ; w = nc.find_first()) {
                 nc.reset(w);
                 ++path_counts[v][w];
             }
@@ -619,13 +634,14 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
     }
 
     for (unsigned v = 0 ; v < size ; ++v) {
-        for (unsigned w = v ; w < size ; ++w) {
-            // w to v, not v to w, see above
+        for (unsigned w = (directed ? 0 : v) ; w < size ; ++w) {
+            // nuless directed, w to v, not v to w, see above
             unsigned path_count = path_counts[w][v];
             for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
                 if (path_count >= p) {
                     graph_rows[v * max_graphs + idx + p - 1].set(w);
-                    graph_rows[w * max_graphs + idx + p - 1].set(v);
+                    if (! directed)
+                        graph_rows[w * max_graphs + idx + p - 1].set(v);
                 }
             }
         }
@@ -702,6 +718,16 @@ auto HomomorphismModel::target_graph_row(int g, int t) const -> const SVOBitset 
     return _imp->target_graph_rows[t * max_graphs + g];
 }
 
+auto HomomorphismModel::forward_target_graph_row(int t) const -> const SVOBitset &
+{
+    return _imp->forward_target_graph_rows[t];
+}
+
+auto HomomorphismModel::reverse_target_graph_row(int t) const -> const SVOBitset &
+{
+    return _imp->reverse_target_graph_rows[t];
+}
+
 auto HomomorphismModel::pattern_degree(int g, int p) const -> unsigned
 {
     return _imp->patterns_degrees[g][p];
@@ -760,5 +786,10 @@ auto HomomorphismModel::target_has_loop(int t) const -> bool
 auto HomomorphismModel::has_less_thans() const -> bool
 {
     return _imp->has_less_thans;
+}
+
+auto HomomorphismModel::directed() const -> bool
+{
+    return _imp->directed;
 }
 

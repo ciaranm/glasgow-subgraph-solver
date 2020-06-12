@@ -343,20 +343,48 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const 
     return result;
 }
 
-template <bool has_edge_labels_, bool induced_>
+template <bool directed_, bool has_edge_labels_, bool induced_>
 auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void
 {
-    auto graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
+    const auto & graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
 
-    // for the original graph pair, if we're adjacent...
-    if (graph_pairs_to_consider & (1u << 0)) {
-        // ...then we can only be mapped to adjacent vertices
-        d.values &= model.target_graph_row(0, current_assignment.target_vertex);
+    if constexpr (! directed_) {
+        // for the original graph pair, if we're adjacent...
+        if (graph_pairs_to_consider & (1u << 0)) {
+            // ...then we can only be mapped to adjacent vertices
+            d.values &= model.target_graph_row(0, current_assignment.target_vertex);
+        }
+        else {
+            if constexpr (induced_) {
+                // ...otherwise we can only be mapped to adjacent vertices
+                d.values.intersect_with_complement(model.target_graph_row(0, current_assignment.target_vertex));
+            }
+        }
     }
     else {
-        if constexpr (induced_) {
-            // ...otherwise we can only be mapped to adjacent vertices
-            d.values.intersect_with_complement(model.target_graph_row(0, current_assignment.target_vertex));
+        // both forward and reverse edges to consider
+        if (graph_pairs_to_consider & (1u << 0)) {
+            // ...then we can only be mapped to adjacent vertices
+            d.values &= model.forward_target_graph_row(current_assignment.target_vertex);
+        }
+        else {
+            if constexpr (induced_) {
+                // ...otherwise we can only be mapped to adjacent vertices
+                d.values.intersect_with_complement(model.forward_target_graph_row(current_assignment.target_vertex));
+            }
+        }
+
+        const auto & reverse_edge_graph_pairs_to_consider = model.pattern_adjacency_bits(d.v, current_assignment.pattern_vertex);
+
+        if (reverse_edge_graph_pairs_to_consider & (1u << 0)) {
+            // ...then we can only be mapped to adjacent vertices
+            d.values &= model.reverse_target_graph_row(current_assignment.target_vertex);
+        }
+        else {
+            if constexpr (induced_) {
+                // ...otherwise we can only be mapped to adjacent vertices
+                d.values.intersect_with_complement(model.reverse_target_graph_row(current_assignment.target_vertex));
+            }
         }
     }
 
@@ -418,16 +446,25 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
 
         // adjacency
         if (! model.has_edge_labels()) {
-            if (params.induced)
-                propagate_adjacency_constraints<false, true>(d, current_assignment);
-            else
-                propagate_adjacency_constraints<false, false>(d, current_assignment);
+            if (params.induced) {
+                if (model.directed())
+                    propagate_adjacency_constraints<true, false, true>(d, current_assignment);
+                else
+                    propagate_adjacency_constraints<false, false, true>(d, current_assignment);
+            }
+            else {
+                if (model.directed())
+                    propagate_adjacency_constraints<true, false, false>(d, current_assignment);
+                else
+                    propagate_adjacency_constraints<false, false, false>(d, current_assignment);
+            }
         }
         else {
+            // edge labels are always directed
             if (params.induced)
-                propagate_adjacency_constraints<true, true>(d, current_assignment);
+                propagate_adjacency_constraints<true, true, true>(d, current_assignment);
             else
-                propagate_adjacency_constraints<true, false>(d, current_assignment);
+                propagate_adjacency_constraints<true, true, false>(d, current_assignment);
             break;
         }
 

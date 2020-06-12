@@ -86,7 +86,7 @@ class HomomorphismSearcher
 
         auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 
-        template <bool has_edge_labels_, bool induced_>
+        template <bool directed_, bool has_edge_labels_, bool induced_>
         auto propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void;
 
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool;

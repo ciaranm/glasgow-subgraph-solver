@@ -75,12 +75,13 @@ namespace
             SplitDomains result;
 
             for (auto & [ l, r ] : d.partitions) {
-                map<tuple<bool, string_view, string_view>, pair<set<int>, set<int> > > new_partitions;
+                map<tuple<bool, bool, string_view, string_view>, pair<set<int>, set<int> > > new_partitions;
 
                 string no_label;
-                auto partition_of = [&] (const InputGraph & g, int w, int v) -> tuple<bool, string_view, string_view> {
+                auto partition_of = [&] (const InputGraph & g, int w, int v) -> tuple<bool, bool, string_view, string_view> {
                     return tuple{
                         g.adjacent(w, v),
+                        g.adjacent(v, w),
                             g.adjacent(w, v) ? g.edge_label(w, v) : no_label,
                             g.adjacent(v, w) ? g.edge_label(v, w) : no_label };
                 };

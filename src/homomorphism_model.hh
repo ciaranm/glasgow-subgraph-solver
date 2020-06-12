@@ -18,7 +18,7 @@ class HomomorphismModel
         std::unique_ptr<Imp> _imp;
 
         auto _build_exact_path_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-                unsigned number_of_exact_path_graphs) -> void;
+                unsigned number_of_exact_path_graphs, bool directed) -> void;
 
         auto _build_distance3_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void;
 
@@ -58,12 +58,16 @@ class HomomorphismModel
         auto pattern_graph_row(int g, int p) const -> const SVOBitset &;
         auto target_graph_row(int g, int t) const -> const SVOBitset &;
 
+        auto forward_target_graph_row(int t) const -> const SVOBitset &;
+        auto reverse_target_graph_row(int t) const -> const SVOBitset &;
+
         auto pattern_degree(int g, int p) const -> unsigned;
         auto target_degree(int g, int t) const -> unsigned;
         auto largest_target_degree() const -> unsigned;
 
         auto has_vertex_labels() const -> bool;
         auto has_edge_labels() const -> bool;
+        auto directed() const -> bool;
         auto pattern_vertex_label(int p) const -> int;
         auto target_vertex_label(int p) const -> int;
         auto pattern_edge_label(int p, int q) const -> int;

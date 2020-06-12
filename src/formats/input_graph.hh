@@ -26,7 +26,7 @@ class InputGraph
         std::map<std::pair<int, int>, std::string> _edges;
         std::vector<std::string> _vertex_labels;
         std::vector<std::string> _vertex_names;
-        bool _loopy = false;
+        bool _loopy = false, _directed = false;
 
     public:
         /**
@@ -117,6 +117,8 @@ class InputGraph
         auto begin_edges() const -> EdgesIterator;
 
         auto end_edges() const -> EdgesIterator;
+
+        auto directed() const -> bool;
 };
 
 #endif
