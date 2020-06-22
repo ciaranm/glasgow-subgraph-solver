@@ -54,13 +54,6 @@ $ ./glasgow_subgraph_solver --parallel ...
 
 Note that parallel search, in its default configuration, is non-deterministic.
 
-Depending upon how your system is configured, you may need to increase the stack space, for larger
-graphs.  In bash this is done as follows:
-
-```shell session
-$ ulimit -s 1048576
-```
-
 File Formats
 ------------
 
