@@ -6,11 +6,10 @@ papers by subsets of Blair Archibald, Ciaran McCreesh, Patrick Prosser and James
 University of Glasgow, and Fraser Dunlop and Ruth Hoffmann at the University of St Andrews. A clique
 decision / maximum clique solver is also included.
 
-If you use this software for research, please cite [cpaior/ArchibaldDHMPT19] if you can; if you use
-the clique solver instead of the subgraph isomorphism solver, please cite [cp/McCreeshP14]. If you
-use this solver in a non-research setting, please get in touch if you can. This software is an
-output of taxpayer funded research, and it is very helpful for us if we can demonstrate real-world
-impact when we write grant applications.
+If you use this software for research, please cite [icgt/McCreeshPT20]. If you use this solver in a
+non-research setting, please get in touch if you can. This software is an output of taxpayer funded
+research, and it is very helpful for us if we can demonstrate real-world impact when we write grant
+applications.
 
 Please contact [Ciaran McCreesh](mailto:ciaran.mccreesh@glasgow.ac.uk) with any queries.
 
@@ -131,14 +130,13 @@ The subgraph solver is a constraint programming style backtracker, which recursi
 mapping from pattern vertices to target vertices. It includes inference based upon paths (not just
 adjacency) and neighbourhood degree sequences, has a fast all-different propagator, and uses
 sophisticated variable- and value-ordering heuristics to direct a slightly-random restarting search.
-Our most recent publication on the evolution of this solver is [cpaior/ArchibaldDHMPT19], which
-describes its new restarting search algorithm.
 
 Chronologically, our first subgraph isomorphism solver is [cp/McCreeshP15]. We introduced new
 variants of this solver in [lion/KotthoffMS16], and described a refactored version (which can solve
 an optimisation variant of the problem) in [aaai/HoffmannMR17]. We also investigated search ordering
-heuristics in more detail in [jair/McCreeshPST18]. Currently there is no "master paper" that
-describes every aspect of the solver in one place.
+heuristics in more detail in [jair/McCreeshPST18], and [cpaior/ArchibaldDHMPT19] describes its new
+restarting search algorithm. There is currently no paper describing the entire algorithm, but
+[icgt/McCreeshPT20] summarises the main aspects of it.
 
 The clique solver (with its default configuration) is a branch and bound solver that uses a greedy
 colouring both as the bound function, and as a branching heuristic. It is based upon the "domains of
@@ -206,10 +204,17 @@ References
   Really Hard, and Why This Matters for Graph Databases. J. Artif. Intell. Res. 61: 723-759 (2018).
   DBLP: [jair/McCreeshPST18].
 
-* [cpaior/ArchibaldDHMPT19]: http://dcs.gla.ac.uk/~ciaran/papers/cpaior2019-sbs-for-subgraphs.pdf
+* [cpaior/ArchibaldDHMPT19]: http://dblp.org/rec/html/conf/cpaior/ArchibaldDHMP019
   **cpaior/ArchibaldDHMPT19**:
   Blair Archibald, Fraser Dunlop, Ruth Hoffmann, Ciaran McCreesh, Patrick Prosser and James Trimble:
   Sequential and Parallel Solution-Biased Search for Subgraph Algorithms. CPAIOR 2019: 20-38.
-  PDF: [cpaior/ArchibaldDHMPT19].
+  DBLP: [cpaior/ArchibaldDHMPT19].
+
+* [icgt/McCreeshPT20]: http://dblp.org/rec/html/conf/gg/McCreeshP020
+  **icgt/McCreeshP020**:
+  Ciaran McCreesh, Patrick Prosser, James Trimble:
+  The Glasgow Subgraph Solver: Using Constraint Programming to Tackle Hard Subgraph Isomorphism
+  Problem Variants. ICGT 2020: 316-324.
+  DBLP: [icgt/McCreeshPT20].
 
 <!-- vim: set tw=100 spell spelllang=en : -->
