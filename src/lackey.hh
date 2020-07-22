@@ -51,6 +51,7 @@ class Lackey
         auto number_of_checks() const -> long;
         auto number_of_propagations() const -> long;
         auto number_of_deletions() const -> long;
+        auto number_of_calls() const -> long;
 };
 
 #endif

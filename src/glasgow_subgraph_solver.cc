@@ -402,9 +402,10 @@ auto main(int argc, char * argv[]) -> int
             cout << s << endl;
 
         if (params.lackey) {
+            cout << "lackey_calls = " << params.lackey->number_of_calls() << endl;
             cout << "lackey_checks = " << params.lackey->number_of_checks() << endl;
-            cout << "lackey_deletions = " << params.lackey->number_of_propagations() << endl;
-            cout << "lackey_propagations = " << params.lackey->number_of_deletions() << endl;
+            cout << "lackey_deletions = " << params.lackey->number_of_deletions() << endl;
+            cout << "lackey_propagations = " << params.lackey->number_of_propagations() << endl;
         }
 
         verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,

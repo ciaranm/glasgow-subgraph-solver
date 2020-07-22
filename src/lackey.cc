@@ -3,11 +3,13 @@
 #include "lackey.hh"
 
 #include <fstream>
+#include <map>
 #include <mutex>
 
 using std::endl;
 using std::function;
 using std::ifstream;
+using std::map;
 using std::mutex;
 using std::ofstream;
 using std::string;
@@ -33,7 +35,7 @@ struct Lackey::Imp
     const InputGraph & pattern_graph;
     const InputGraph & target_graph;
 
-    long number_of_checks = 0, number_of_propagations = 0, number_of_deletions = 0;
+    long number_of_checks = 0, number_of_propagations = 0, number_of_deletions = 0, number_of_calls = 0;
 };
 
 Lackey::Lackey(const string & send_to_name, const string & read_from_name,
@@ -58,6 +60,7 @@ auto Lackey::check_solution(
         const function<auto (int, int) -> bool> & deletion) -> bool
 {
     unique_lock<mutex> lock{ _imp->external_solver_mutex };
+    ++_imp->number_of_calls;
 
     string command;
     if (partial) {
@@ -145,11 +148,15 @@ auto Lackey::number_of_checks() const -> long
 auto Lackey::number_of_propagations() const -> long
 {
     return _imp->number_of_propagations;
-
 }
 
 auto Lackey::number_of_deletions() const -> long
 {
     return _imp->number_of_deletions;
+}
+
+auto Lackey::number_of_calls() const -> long
+{
+    return _imp->number_of_calls;
 }
 
