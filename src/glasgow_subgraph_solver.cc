@@ -303,10 +303,13 @@ auto main(int argc, char * argv[]) -> int
         cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
 
         if (options_vars.count("send-to-lackey") && options_vars.count("receive-from-lackey")) {
+            auto lackey_started_at = steady_clock::now();
             params.lackey = make_unique<Lackey>(
                     options_vars["send-to-lackey"].as<string>(),
                     options_vars["receive-from-lackey"].as<string>(),
                     pattern, target);
+            auto lackey_time = duration_cast<milliseconds>(steady_clock::now() - lackey_started_at);
+            cout << "lackey_init_time = " << lackey_time.count() << endl;
         }
         params.send_partials_to_lackey = options_vars.count("send-partials-to-lackey");
         if (options_vars.count("propagate-using-lackey")) {
