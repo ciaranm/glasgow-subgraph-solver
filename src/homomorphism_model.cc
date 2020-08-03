@@ -70,9 +70,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{ "Supplemental graphs won't fit in the chosen bitset size" };
 
-    if (pattern.has_edge_labels() && ! _imp->params.induced)
-        throw UnsupportedConfiguration{ "Currently edge labels only work with --induced" };
-
     if (_imp->params.proof) {
         for (int v = 0 ; v < pattern.size() ; ++v)
             _imp->pattern_vertex_proof_names.push_back(pattern.vertex_name(v));

@@ -410,8 +410,20 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
                 auto got_forward_label = model.target_edge_label(c, current_assignment.target_vertex);
                 auto got_reverse_label = model.target_edge_label(current_assignment.target_vertex, c);
 
-                if (got_forward_label != want_forward_label || got_reverse_label != want_reverse_label)
-                    d.values.reset(c);
+                if constexpr (induced_) {
+                    if (got_forward_label != want_forward_label || got_reverse_label != want_reverse_label)
+                        d.values.reset(c);
+                }
+                else {
+                    if (graph_pairs_to_consider & (1u << 0))
+                        if (got_forward_label != want_forward_label)
+                            d.values.reset(c);
+
+                    const auto & reverse_edge_graph_pairs_to_consider = model.pattern_adjacency_bits(d.v, current_assignment.pattern_vertex);
+                    if (reverse_edge_graph_pairs_to_consider & (1u << 0))
+                        if (got_reverse_label != want_reverse_label)
+                            d.values.reset(c);
+                }
             }
         }
     }
