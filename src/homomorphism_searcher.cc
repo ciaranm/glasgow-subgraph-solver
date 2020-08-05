@@ -477,7 +477,6 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
                 propagate_adjacency_constraints<true, true, true>(d, current_assignment);
             else
                 propagate_adjacency_constraints<true, true, false>(d, current_assignment);
-            break;
         }
 
         // we might have removed values
