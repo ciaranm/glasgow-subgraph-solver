@@ -5,6 +5,7 @@
 
 #include "formats/input_graph.hh"
 #include "lackey.hh"
+#include "loooong.hh"
 #include "restarts.hh"
 #include "timeout.hh"
 #include "value_ordering.hh"
@@ -21,6 +22,14 @@ enum class Injectivity
     Injective,
     LocallyInjective,
     NonInjective
+};
+
+enum class PropagateUsingLackey
+{
+    Never,
+    Root,
+    Always,
+    RootAndBackjump
 };
 
 struct HomomorphismParams
@@ -42,9 +51,6 @@ struct HomomorphismParams
 
     /// Enumerate?
     bool count_solutions = false;
-
-    /// Find a minimal unsat pattern?
-    bool minimal_unsat_pattern = false;
 
     /// Print solutions, for enumerating
     std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;
@@ -71,32 +77,17 @@ struct HomomorphismParams
     /// Are we allowed to do clique detection?
     bool clique_detection = true;
 
-    /// Are we allowed to remove isolated vertices?
-    bool remove_isolated_vertices = true;
-
-    /// Use common neighbour shape filtering?
-    bool common_neighbour_shapes = false;
-
     /// Use distance 3 filtering?
     bool distance3 = false;
 
     /// Use k4 filtering?
     bool k4 = false;
 
-    /// Use diamond filtering?
-    bool diamond = false;
-
     /// Disable all supplemental graphs?
     bool no_supplementals = false;
 
     /// How many exact path graphs do we have, if we have any?
     int number_of_exact_path_graphs = 4;
-
-    /// How many common neighbourhood graphs do we have, if we have any?
-    int number_of_common_neighbour_graphs = 1;
-
-    /// How many common neighbourhood graphs do we skip?
-    int skip_common_neighbour_graphs = 0;
 
     /// Disable neighbourhood degree sequence processing?
     bool no_nds = false;
@@ -107,6 +98,12 @@ struct HomomorphismParams
     /// Optional lackey, for external side constraints
     std::unique_ptr<Lackey> lackey;
 
+    /// Send partial solutions to the lackey?
+    bool send_partials_to_lackey = false;
+
+    /// Propagate using the lackey?
+    PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
+
     /// Optional proof handler
     std::unique_ptr<Proof> proof;
 };
@@ -115,9 +112,6 @@ struct HomomorphismResult
 {
     /// The mapping, empty if none found.
     VertexToVertexMapping mapping;
-
-    /// Vertices in a minimal unsat pattern, if requested.
-    std::list<int> minimal_unsat_pattern;
 
     /// Total number of nodes processed (recursive calls).
     unsigned long long nodes = 0;
@@ -129,12 +123,15 @@ struct HomomorphismResult
     std::list<std::string> extra_stats;
 
     /// Number of solutions, only if enumerating
-    unsigned long long solution_count = 0;
+    loooong solution_count = 0;
 
     /// Did we perform a complete search?
     bool complete = false;
 };
 
-auto solve_homomorphism_problem(const std::pair<InputGraph, InputGraph> & graphs, const HomomorphismParams & params) -> HomomorphismResult;
+auto solve_homomorphism_problem(
+        const InputGraph & pattern,
+        const InputGraph & target,
+        const HomomorphismParams & params) -> HomomorphismResult;
 
 #endif

@@ -104,7 +104,7 @@ auto find_symmetries(
     if (0 == child_pid) {
         dup2(stdin_pipefd[0], STDIN_FILENO);
         dup2(stdout_pipefd[1], STDOUT_FILENO);
-        execlp("gap", "-q", "-A", "-b", gap_helper_file_path_str.c_str(), static_cast<char *>(nullptr));
+        execlp("gap", "gap", "-q", "-A", "-b", gap_helper_file_path_str.c_str(), static_cast<char *>(nullptr));
         throw GapFailedUs{ "exec gap failed" };
     }
 

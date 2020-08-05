@@ -4,6 +4,7 @@
 #include "formats/dimacs.hh"
 #include "formats/lad.hh"
 #include "formats/csv.hh"
+#include "formats/vfmcs.hh"
 
 #include <fstream>
 #include <regex>
@@ -109,12 +110,22 @@ auto read_file_format(const string & format, const string & filename) -> InputGr
         return read_dimacs(move(infile), filename);
     else if (actual_format == "lad")
         return read_lad(move(infile), filename);
+    else if (actual_format == "directedlad")
+        return read_directed_lad(move(infile), filename);
     else if (actual_format == "labelledlad")
         return read_labelled_lad(move(infile), filename);
     else if (actual_format == "vertexlabelledlad")
         return read_vertex_labelled_lad(move(infile), filename);
     else if (actual_format == "csv")
         return read_csv(move(infile), filename);
+    else if (actual_format == "vfmcs")
+        return read_unlabelled_undirected_vfmcs(move(infile), filename);
+    else if (actual_format == "vfmcsv")
+        return read_vertex_labelled_undirected_vfmcs(move(infile), filename);
+    else if (actual_format == "vfmcsvd")
+        return read_vertex_labelled_directed_vfmcs(move(infile), filename);
+    else if (0 == actual_format.compare(0, 8, "csvname:"))
+        return read_csv_name(move(infile), filename, actual_format.substr(8));
     else
         throw GraphFileError{ filename, "Unknown file format '" + format + "'", true };
 }

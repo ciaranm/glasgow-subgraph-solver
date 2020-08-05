@@ -38,7 +38,7 @@ namespace
 
 auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGraph
 {
-    InputGraph result{ 0, true, true };
+    InputGraph result{ 0, true, true, true };
     
     int r = read_num(infile); 
     int n = read_num(infile);
@@ -87,7 +87,7 @@ auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGr
 
 auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputGraph
 {
-    InputGraph result{ 0, true, true };
+    InputGraph result{ 0, true, true, true };
     
     int r = read_num(infile); 
     int n = read_num(infile);

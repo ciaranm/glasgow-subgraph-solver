@@ -6,11 +6,10 @@ papers by subsets of Blair Archibald, Ciaran McCreesh, Patrick Prosser and James
 University of Glasgow, and Fraser Dunlop and Ruth Hoffmann at the University of St Andrews. A clique
 decision / maximum clique solver is also included.
 
-If you use this software for research, please cite [cpaior/ArchibaldDHMPT19] if you can; if you use
-the clique solver instead of the subgraph isomorphism solver, please cite [cp/McCreeshP14]. If you
-use this solver in a non-research setting, please get in touch if you can. This software is an
-output of taxpayer funded research, and it is very helpful for us if we can demonstrate real-world
-impact when we write grant applications.
+If you use this software for research, please cite [icgt/McCreeshPT20]. If you use this solver in a
+non-research setting, please get in touch if you can. This software is an output of taxpayer funded
+research, and it is very helpful for us if we can demonstrate real-world impact when we write grant
+applications.
 
 Please contact [Ciaran McCreesh](mailto:ciaran.mccreesh@glasgow.ac.uk) with any queries.
 
@@ -54,13 +53,6 @@ $ ./glasgow_subgraph_solver --parallel ...
 
 Note that parallel search, in its default configuration, is non-deterministic.
 
-Depending upon how your system is configured, you may need to increase the stack space, for larger
-graphs.  In bash this is done as follows:
-
-```shell session
-$ ulimit -s 1048576
-```
-
 File Formats
 ------------
 
@@ -72,8 +64,25 @@ $ ./glasgow_subgraph_solver --format lad pattern-file target-file
 
 In particular, note that auto-detection can easily fail if, for example, the first vertex in the
 graph has no neighbours.  We can read LAD, Labelled LAD (labels on vertices, and optionally also on
-edges), CSV, and DIMACS 2 formatted graphs; consider using [the LAD
-format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) if you have a choice.
+edges), CSV, and DIMACS 2 formatted graphs. [The LAD
+format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) is a nice simple choice. If you need
+to support named vertices, labels on vertices and / or edges, or directed edges, consider using the
+CSV format. To specify a directed edge, use a greater-than sign rather than a comma as the delimiter
+between the first two columns.  To specify an edge label, include a third column in the file. To
+specify a vertex label, leave the second column empty and use the third column for the label. For
+example, the following describes a graph with four vertices, with colours for edge labels and shapes
+for vertex labels.
+
+```
+first>second,red
+second>first,blue
+first,third,purple
+first>first,green
+first,,circle
+second,,circle
+third,,square
+fourth,,square
+```
 
 Symmetries
 ----------
@@ -89,35 +98,18 @@ $ ./glasgow_clique_solver --pattern-symmetries --count-solutions pattern-file ta
 Proof Logging
 -------------
 
-As a highly experimental feature, the solver can output a proof log. You have two options for
-verifying the proof log. The first is to install the following two programs:
+As a highly experimental feature, the solver can output a proof log. First, install the following
+program:
 
-* refpy from https://github.com/StephanGocht/refpy/ .
-* roundingsat from https://github.com/elffersj/roundingsat/ .
+* VeriPB from https://github.com/StephanGocht/VeriPB/ .
 
 And then you can produce and verify a log like this:
 
 ```shell session
 $ ./glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
     --prove myproof --proof-solutions pattern-file target-file
-$ refpy myproof.opb myproof.log
+$ veripb myproof.opb myproof.log
 ```
-
-Or you can install:
-
-* verifier from https://github.com/elffersj/prooflogging
-
-And then you can produce and verify a log like this:
-
-```shell session
-$ ./glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
-    --prove myproof --proof-levels pattern-file target-file
-$ verifier myproof.opb myproof.log
-```
-
-At the time of writing, ``refpy`` supports ``--proof-solutions`` for logging satisfiable instances,
-whilst ``verifier`` does not, and ``verifier`` supports ``--proof-levels`` for faster verification
-and reduced memory usage, whilst ``refpy`` does not.
 
 Note that most features are not yet supported with proof logging. This is a "not yet implemented"
 problem, not a fundamental restriction.
@@ -138,14 +130,13 @@ The subgraph solver is a constraint programming style backtracker, which recursi
 mapping from pattern vertices to target vertices. It includes inference based upon paths (not just
 adjacency) and neighbourhood degree sequences, has a fast all-different propagator, and uses
 sophisticated variable- and value-ordering heuristics to direct a slightly-random restarting search.
-Our most recent publication on the evolution of this solver is [cpaior/ArchibaldDHMPT19], which
-describes its new restarting search algorithm.
 
 Chronologically, our first subgraph isomorphism solver is [cp/McCreeshP15]. We introduced new
 variants of this solver in [lion/KotthoffMS16], and described a refactored version (which can solve
 an optimisation variant of the problem) in [aaai/HoffmannMR17]. We also investigated search ordering
-heuristics in more detail in [jair/McCreeshPST18]. Currently there is no "master paper" that
-describes every aspect of the solver in one place.
+heuristics in more detail in [jair/McCreeshPST18], and [cpaior/ArchibaldDHMPT19] describes its new
+restarting search algorithm. There is currently no paper describing the entire algorithm, but
+[icgt/McCreeshPT20] summarises the main aspects of it.
 
 The clique solver (with its default configuration) is a branch and bound solver that uses a greedy
 colouring both as the bound function, and as a branching heuristic. It is based upon the "domains of
@@ -213,10 +204,17 @@ References
   Really Hard, and Why This Matters for Graph Databases. J. Artif. Intell. Res. 61: 723-759 (2018).
   DBLP: [jair/McCreeshPST18].
 
-* [cpaior/ArchibaldDHMPT19]: http://dcs.gla.ac.uk/~ciaran/papers/cpaior2019-sbs-for-subgraphs.pdf
+* [cpaior/ArchibaldDHMPT19]: http://dblp.org/rec/html/conf/cpaior/ArchibaldDHMP019
   **cpaior/ArchibaldDHMPT19**:
   Blair Archibald, Fraser Dunlop, Ruth Hoffmann, Ciaran McCreesh, Patrick Prosser and James Trimble:
   Sequential and Parallel Solution-Biased Search for Subgraph Algorithms. CPAIOR 2019: 20-38.
-  PDF: [cpaior/ArchibaldDHMPT19].
+  DBLP: [cpaior/ArchibaldDHMPT19].
+
+* [icgt/McCreeshPT20]: http://dblp.org/rec/html/conf/gg/McCreeshP020
+  **icgt/McCreeshP020**:
+  Ciaran McCreesh, Patrick Prosser, James Trimble:
+  The Glasgow Subgraph Solver: Using Constraint Programming to Tackle Hard Subgraph Isomorphism
+  Problem Variants. ICGT 2020: 316-324.
+  DBLP: [icgt/McCreeshPT20].
 
 <!-- vim: set tw=100 spell spelllang=en : -->

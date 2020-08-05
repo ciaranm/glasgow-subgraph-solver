@@ -6,23 +6,53 @@
 #include <iterator>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <tuple>
+#include <utility>
+
+#include <boost/iostreams/device/file.hpp>
+#include <boost/iostreams/filter/bzip2.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/stream.hpp>
 
 using std::copy;
 using std::endl;
+using std::find;
 using std::function;
 using std::istreambuf_iterator;
+using std::make_unique;
 using std::map;
+using std::max;
+using std::min;
 using std::move;
 using std::ofstream;
+using std::optional;
+using std::ostream;
 using std::ostreambuf_iterator;
 using std::pair;
+using std::set;
 using std::string;
 using std::stringstream;
 using std::to_string;
 using std::tuple;
+using std::unique_ptr;
 using std::vector;
+
+using boost::iostreams::bzip2_compressor;
+using boost::iostreams::file_sink;
+using boost::iostreams::filtering_ostream;
+
+namespace
+{
+    auto make_compressed_ostream(const string & fn) -> unique_ptr<ostream>
+    {
+        auto out = make_unique<filtering_ostream>();
+        out->push(bzip2_compressor());
+        out->push(file_sink(fn));
+        return out;
+    }
+}
 
 ProofError::ProofError(const string & m) noexcept :
     _message("Proof error: " + m)
@@ -37,28 +67,35 @@ auto ProofError::what() const noexcept -> const char *
 struct Proof::Imp
 {
     string opb_filename, log_filename;
-    stringstream model_stream;
-    ofstream proof_stream;
-    bool levels;
-    bool solutions;
+    stringstream model_stream, model_prelude_stream;
+    unique_ptr<ostream> proof_stream;
     bool friendly_names;
+    bool bz2 = false;
 
-    map<pair<int, int>, string> variable_mappings;
-    map<int, int> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
-    map<tuple<int, int, int, int>, int> adjacency_lines;
+    map<pair<long, long>, string> variable_mappings;
+    map<long, string> binary_variable_mappings;
+    map<tuple<long, long, long>, string> connected_variable_mappings;
+    map<tuple<long, long, long, long>, string> connected_variable_mappings_aux;
+    map<long, long> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
+    map<tuple<long, long, long, long>, long> adjacency_lines;
+    map<pair<long, long>, long> eliminations;
+    map<pair<long, long>, long> non_edge_constraints;
+    long objective_line = 0;
 
-    int nb_constraints = 0;
-    int proof_line = 0;
+    long nb_constraints = 0;
+    long proof_line = 0;
+    int largest_level_set = 0;
+
+    bool clique_encoding = false;
 };
 
-Proof::Proof(const string & opb_file, const string & log_file, bool l, bool s, bool f) :
+Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
     _imp->log_filename = log_file;
-    _imp->levels = l;
-    _imp->solutions = s;
     _imp->friendly_names = f;
+    _imp->bz2 = b;
 }
 
 Proof::Proof(Proof &&) = default;
@@ -109,6 +146,7 @@ auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
     _imp->model_stream << "* forbidden assignment" << endl;
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{ p, t }] << " >= 1 ;" << endl;
     ++_imp->nb_constraints;
+    _imp->eliminations.emplace(pair{ p, t }, _imp->nb_constraints);
 }
 
 auto Proof::start_adjacency_constraints_for(int p, int t) -> void
@@ -127,180 +165,672 @@ auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> &
 
 auto Proof::finalise_model() -> void
 {
-    ofstream f{ _imp->opb_filename };
+    unique_ptr<ostream> f = (_imp->bz2 ? make_compressed_ostream(_imp->opb_filename + ".bz2") : make_unique<ofstream>(_imp->opb_filename));
 
-    f << "* #variable= " << _imp->variable_mappings.size() << " #constraint= " << _imp->nb_constraints << endl;
-    copy(istreambuf_iterator<char>{ _imp->model_stream }, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{ f });
+    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size()
+            + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
+        << " #constraint= " << _imp->nb_constraints << endl;
+    copy(istreambuf_iterator<char>{ _imp->model_prelude_stream }, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{ *f });
+    _imp->model_prelude_stream.clear();
+    copy(istreambuf_iterator<char>{ _imp->model_stream }, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{ *f });
     _imp->model_stream.clear();
 
-    if (! f)
+    if (! *f)
         throw ProofError{ "Error writing opb file to '" + _imp->opb_filename + "'" };
 
-    _imp->proof_stream = ofstream{ _imp->log_filename };
-    string commands = "f l p u c";
-    if (_imp->levels)
-        commands += " lvlset lvlclear";
-    if (_imp->solutions)
-        commands += " v";
+    _imp->proof_stream = (_imp->bz2 ? make_compressed_ostream(_imp->log_filename + ".bz2") : make_unique<ofstream>(_imp->log_filename));
 
-    _imp->proof_stream << "refutation using " << commands << " 0" << endl;
+    *_imp->proof_stream << "pseudo-Boolean proof version 1.0" << endl;
 
-    _imp->proof_stream << "f " << _imp->nb_constraints << " 0" << endl;
+    *_imp->proof_stream << "f " << _imp->nb_constraints << " 0" << endl;
     _imp->proof_line += _imp->nb_constraints;
-    _imp->proof_stream << "l " << _imp->variable_mappings.size() << " 0" << endl;
-    _imp->proof_line += _imp->variable_mappings.size() * 2;
 
-    if (! _imp->proof_stream)
+    if (! *_imp->proof_stream)
         throw ProofError{ "Error writing proof file to '" + _imp->log_filename + "'" };
 }
 
 auto Proof::finish_unsat_proof() -> void
 {
-    _imp->proof_stream << "* asserting that we've proved unsat" << endl;
-    _imp->proof_stream << "u opb >= 1 ;" << endl;
+    *_imp->proof_stream << "* asserting that we've proved unsat" << endl;
+    *_imp->proof_stream << "u >= 1 ;" << endl;
     ++_imp->proof_line;
-    _imp->proof_stream << "c " << _imp->proof_line << " 0" << endl;
+    *_imp->proof_stream << "c " << _imp->proof_line << " 0" << endl;
 }
 
 auto Proof::failure_due_to_pattern_bigger_than_target() -> void
 {
-    _imp->proof_stream << "* failure due to the pattern being bigger than the target" << endl;
+    *_imp->proof_stream << "* failure due to the pattern being bigger than the target" << endl;
 
     // we get a hall violator by adding up all of the things
-    _imp->proof_stream << "p 0";
-    for (auto & [ _, line ] : _imp->at_least_one_value_constraints)
-        _imp->proof_stream << " " << line << " +";
+    *_imp->proof_stream << "p";
+    bool first = true;
+
+    for (auto & [ _, line ] : _imp->at_least_one_value_constraints) {
+        if (first) {
+            *_imp->proof_stream << " " << line;
+            first = false;
+        }
+        else
+            *_imp->proof_stream << " " << line << " +";
+    }
+
     for (auto & [ _, line ] : _imp->injectivity_constraints)
-        _imp->proof_stream << " " << line << " +";
-    _imp->proof_stream << " 0" << endl;
+        *_imp->proof_stream << " " << line << " +";
+    *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 }
 
-auto Proof::incompatible_by_degrees(int g, const NamedVertex & p, const vector<int> & n_p, const NamedVertex & t, const vector<int> & n_t) -> void
+auto Proof::incompatible_by_degrees(
+        int g,
+        const NamedVertex & p,
+        const vector<int> & n_p,
+        const NamedVertex & t,
+        const vector<int> & n_t) -> void
 {
-    _imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << endl;
+    *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << endl;
 
-    _imp->proof_stream << "p 0";
-    for (auto & n : n_p)
-        _imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+    *_imp->proof_stream << "p";
+    bool first = true;
+    for (auto & n : n_p) {
+        // due to loops or labels, it might not be possible to map n to t.first
+        if (_imp->adjacency_lines.count(tuple{ g, p.first, n, t.first })) {
+            if (first) {
+                first = false;
+                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+            }
+            else
+                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+        }
+    }
 
     // if I map p to t, I have to map the neighbours of p to neighbours of t
     for (auto & n : n_t)
-        _imp->proof_stream << " " << _imp->injectivity_constraints[n] << " +";
+        *_imp->proof_stream << " " << _imp->injectivity_constraints[n] << " +";
 
-    _imp->proof_stream << " 0" << endl;
+    *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
+
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+    _imp->eliminations.emplace(pair{ p.first, t.first }, _imp->proof_line);
+
+    *_imp->proof_stream << "d " << _imp->proof_line - 1 << " 0" << endl;
 }
 
-auto Proof::incompatible_by_nds(int g, int p, int t) -> void
+auto Proof::incompatible_by_nds(
+        int g,
+        const NamedVertex & p,
+        const NamedVertex & t,
+        const vector<int> & p_subsequence,
+        const vector<int> & t_subsequence,
+        const vector<int> & t_remaining) -> void
 {
-    _imp->proof_stream << "* cannot map " << p << " to " << t << " due to nds in graph pairs " << g << endl;
+    *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << endl;
+
+    // summing up horizontally
+    *_imp->proof_stream << "p";
+    bool first = true;
+    for (auto & n : p_subsequence) {
+        // due to loops or labels, it might not be possible to map n to t.first
+        if (_imp->adjacency_lines.count(tuple{ g, p.first, n, t.first })) {
+            if (first) {
+                first = false;
+                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+            }
+            else
+                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+        }
+    }
+
+    // injectivity in the square
+    for (auto & t : t_subsequence) {
+        if (t != t_subsequence.back())
+            *_imp->proof_stream << " " << _imp->injectivity_constraints.find(t)->second << " +";
+    }
+
+    // block to the right of the failing square
+    for (auto & n : p_subsequence) {
+        for (auto & u : t_remaining) {
+            /* n -> t is already eliminated by degree or loop */
+            *_imp->proof_stream << " " << _imp->eliminations[pair{ n, u }] << " +";
+        }
+    }
+
+    // final column
+    for (auto & n : p_subsequence) {
+        /* n -> t is already eliminated by degree or loop */
+        *_imp->proof_stream << " " << _imp->eliminations[pair{ n, t_subsequence.back() }] << " +";
+    }
+
+    *_imp->proof_stream << " 0" << endl;
+    ++_imp->proof_line;
+
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    *_imp->proof_stream << "d " << _imp->proof_line - 1 << " 0" << endl;
 }
 
 auto Proof::initial_domain_is_empty(int p) -> void
 {
-    _imp->proof_stream << "* failure due to domain " << p << " being empty" << endl;
+    *_imp->proof_stream << "* failure due to domain " << p << " being empty" << endl;
 }
 
 auto Proof::emit_hall_set_or_violator(const vector<int> & lhs, const vector<int> & rhs) -> void
 {
-    _imp->proof_stream << "* hall set or violator size " << lhs.size() << "/" << rhs.size() << endl;
-    _imp->proof_stream << "p 0";
-    for (auto & l : lhs)
-        _imp->proof_stream << " " << _imp->at_least_one_value_constraints[l] << " +";
+    *_imp->proof_stream << "* hall set or violator size " << lhs.size() << "/" << rhs.size() << endl;
+    *_imp->proof_stream << "p";
+    bool first = true;
+    for (auto & l : lhs) {
+        if (first) {
+            first = false;
+            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l];
+        }
+        else
+            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l] << " +";
+    }
     for (auto & r : rhs)
-        _imp->proof_stream << " " << _imp->injectivity_constraints[r] << " +";
-    _imp->proof_stream << " 0" << endl;
+        *_imp->proof_stream << " " << _imp->injectivity_constraints[r] << " +";
+    *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 }
 
 auto Proof::root_propagation_failed() -> void
 {
-    _imp->proof_stream << "* root node propagation failed" << endl;
+    *_imp->proof_stream << "* root node propagation failed" << endl;
 }
 
 auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
-    _imp->proof_stream << "* [" << depth << "] guessing " << branch_v.second << "=" << val.second << endl;
+    *_imp->proof_stream << "* [" << depth << "] guessing " << branch_v.second << "=" << val.second << endl;
 }
 
 auto Proof::propagation_failure(const vector<pair<int, int> > & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
-    _imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << endl;
-    _imp->proof_stream << "u opb";
+    *_imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << endl;
+    *_imp->proof_stream << "u ";
     for (auto & [ var, val ] : decisions)
-        _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
+        *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{ var, val }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 }
 
 auto Proof::incorrect_guess(const vector<pair<int, int> > & decisions, bool failure) -> void
 {
     if (failure)
-        _imp->proof_stream << "* [" << decisions.size() << "] incorrect guess" << endl;
+        *_imp->proof_stream << "* [" << decisions.size() << "] incorrect guess" << endl;
     else
-        _imp->proof_stream << "* [" << decisions.size() << "] backtracking" << endl;
+        *_imp->proof_stream << "* [" << decisions.size() << "] backtracking" << endl;
 
-    _imp->proof_stream << "u opb";
+    *_imp->proof_stream << "u";
     for (auto & [ var, val ] : decisions)
-        _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
+        *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{ var, val }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 }
 
-auto Proof::out_of_guesses(const vector<pair<int, int> > & decisions) -> void
+auto Proof::out_of_guesses(const vector<pair<int, int> > &) -> void
 {
-    _imp->proof_stream << "* [" << decisions.size() << "] out of guesses" << endl;
 }
 
 auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void
 {
-    _imp->proof_stream << "* unit propagating " << var.second << "=" << val.second << endl;
+    *_imp->proof_stream << "* unit propagating " << var.second << "=" << val.second << endl;
 }
 
-auto Proof::start_level(int level) -> void
+auto Proof::start_level(int l) -> void
 {
-    if (_imp->levels) {
-        _imp->proof_stream << "lvlset " << level << endl;
-        _imp->proof_stream << "lvlclear " << level << endl;
-    }
+    *_imp->proof_stream << "# " << l << endl;
+    _imp->largest_level_set = max(_imp->largest_level_set, l);
 }
 
-auto Proof::back_up_to_level(int level) -> void
+auto Proof::back_up_to_level(int l) -> void
 {
-    if (_imp->levels)
-        _imp->proof_stream << "lvlset " << level << endl;
+    *_imp->proof_stream << "# " << l << endl;
+    _imp->largest_level_set = max(_imp->largest_level_set, l);
+}
+
+auto Proof::forget_level(int l) -> void
+{
+    if (_imp->largest_level_set >= l)
+        *_imp->proof_stream << "w " << l << endl;
 }
 
 auto Proof::back_up_to_top() -> void
 {
-    if (_imp->levels)
-        _imp->proof_stream << "lvlset " << 0 << endl;
+    *_imp->proof_stream << "# " << 0 << endl;
 }
 
 auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> void
 {
-    _imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
-    _imp->proof_stream << "u opb";
+    *_imp->proof_stream << "* [" << decisions.size() << "] restart nogood" << endl;
+    *_imp->proof_stream << "u";
     for (auto & [ var, val ] : decisions)
-        _imp->proof_stream << " -1 x" << _imp->variable_mappings[pair{ var, val }];
-    _imp->proof_stream << " >= " << -(long(decisions.size()) - 1) << " ;" << endl;
+        *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{ var, val }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 }
 
 auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisions) -> void
 {
-    _imp->proof_stream << "* found solution";
+    *_imp->proof_stream << "* found solution";
     for (auto & [ var, val ] : decisions)
-        _imp->proof_stream << " " << var.second << "=" << val.second;
-    _imp->proof_stream << endl;
+        *_imp->proof_stream << " " << var.second << "=" << val.second;
+    *_imp->proof_stream << endl;
 
-    if (_imp->solutions) {
-        _imp->proof_stream << "v";
-        for (auto & [ var, val ] : decisions)
-            _imp->proof_stream << " x" << _imp->variable_mappings[pair{ var.first, val.first }];
-        _imp->proof_stream << endl;
+    *_imp->proof_stream << "v";
+    for (auto & [ var, val ] : decisions)
+        *_imp->proof_stream << " x" << _imp->variable_mappings[pair{ var.first, val.first }];
+    *_imp->proof_stream << endl;
+    ++_imp->proof_line;
+}
+
+auto Proof::post_solution(const vector<int> & solution) -> void
+{
+    *_imp->proof_stream << "v";
+    for (auto & v : solution)
+        *_imp->proof_stream << " x" << _imp->binary_variable_mappings[v];
+    *_imp->proof_stream << endl;
+    ++_imp->proof_line;
+}
+
+auto Proof::new_incumbent(const vector<pair<int, bool> > & solution) -> void
+{
+    *_imp->proof_stream << "o";
+    for (auto & [ v, t ] : solution)
+        *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->binary_variable_mappings[v];
+    *_imp->proof_stream << endl;
+    _imp->objective_line = ++_imp->proof_line;
+}
+
+auto Proof::new_incumbent(const vector<tuple<NamedVertex, NamedVertex, bool> > & decisions) -> void
+{
+    *_imp->proof_stream << "o";
+    for (auto & [ var, val, t ] : decisions)
+        *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->variable_mappings[pair{ var.first, val.first }];
+    *_imp->proof_stream << endl;
+    _imp->objective_line = ++_imp->proof_line;
+}
+
+auto Proof::create_exact_path_graphs(
+        int g,
+        const NamedVertex & p,
+        const NamedVertex & q,
+        const vector<NamedVertex> & between_p_and_q,
+        const NamedVertex & t,
+        const vector<NamedVertex> & n_t,
+        const vector<pair<NamedVertex, vector<NamedVertex> > > & two_away_from_t,
+        const vector<NamedVertex> & d_n_t
+        ) -> void
+{
+    *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
+        " in G^[" << g << "x2] so " << q.second << " maps to one of..." << endl;
+
+    *_imp->proof_stream << "# 1" << endl;
+
+    *_imp->proof_stream << "p";
+
+    // if p maps to t then things in between_p_and_q have to go to one of these...
+    bool first = true;
+    for (auto & b : between_p_and_q) {
+        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }];
+        if (! first)
+            *_imp->proof_stream << " +";
+        first = false;
+    }
+
+    // now go two hops out: cancel between_p_and_q things with where can q go
+    for (auto & b : between_p_and_q) {
+        for (auto & w : n_t) {
+            // due to loops or labels, it might not be possible to map to w
+            auto i = _imp->adjacency_lines.find(tuple{ 0, b.first, q.first, w.first });
+            if (i != _imp->adjacency_lines.end())
+                *_imp->proof_stream << " " << i->second << " +";
+        }
+    }
+
+    *_imp->proof_stream << " 0" << endl;
+    ++_imp->proof_line;
+
+    // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : two_away_from_t)
+        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    // if p maps to t then q does not map to t
+    *_imp->proof_stream << "p " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + 0" << endl;
+    ++_imp->proof_line;
+
+    // and cancel out stray extras from injectivity
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : two_away_from_t)
+        if (u.first != t)
+            *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    vector<long> things_to_add_up;
+    things_to_add_up.push_back(_imp->proof_line);
+
+    // cancel out anything that is two away from t, but by insufficiently many paths
+    for (auto & u : two_away_from_t) {
+        if ((u.first == t) || (d_n_t.end() != find(d_n_t.begin(), d_n_t.end(), u.first)))
+            continue;
+
+        *_imp->proof_stream << "p";
+        bool first = true;
+        for (auto & b : between_p_and_q) {
+            *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }];
+            if (! first)
+                *_imp->proof_stream << " +";
+            first = false;
+            *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, q.first, b.first, u.first.first }] << " +";
+            *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[b.first] << " +";
+        }
+
+        for (auto & z : u.second)
+            *_imp->proof_stream << " " << _imp->injectivity_constraints[z.first] << " +";
+
+        *_imp->proof_stream << " 0" << endl;
+        ++_imp->proof_line;
+
+        // want: ~x_p_t + ~x_q_u >= 1
+        *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }]
+            << " 1 ~x" << _imp->variable_mappings[pair{ q.first, u.first.first }] << " >= 1 ;" << endl;
+        things_to_add_up.push_back(++_imp->proof_line);
+    }
+
+    // do the getting rid of
+    if (things_to_add_up.size() > 1) {
+        bool first = true;
+        *_imp->proof_stream << "p";
+        for (auto & t : things_to_add_up) {
+            *_imp->proof_stream << " " << t;
+            if (! first)
+                *_imp->proof_stream << " +";
+            first = false;
+        }
+        *_imp->proof_stream << " 0" << endl;
         ++_imp->proof_line;
     }
+
+    *_imp->proof_stream << "# 0" << endl;
+
+    // and finally, tidy up to get what we wanted
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d_n_t)
+        if (u != t)
+            *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+
+    *_imp->proof_stream << "w 1" << endl;
+}
+
+auto Proof::create_binary_variable(int vertex,
+                const function<auto (int) -> string> & name) -> void
+{
+    if (_imp->friendly_names)
+        _imp->binary_variable_mappings.emplace(vertex, name(vertex));
+    else
+        _imp->binary_variable_mappings.emplace(vertex, to_string(_imp->binary_variable_mappings.size() + 1));
+}
+
+auto Proof::create_objective(int n, optional<int> d) -> void
+{
+    if (d) {
+        _imp->model_stream << "* objective" << endl;
+        for (int v = 0 ; v < n ; ++ v)
+            _imp->model_stream << "1 x" << _imp->binary_variable_mappings[v] << " ";
+        _imp->model_stream << ">= " << *d << ";" << endl;
+        _imp->objective_line = ++_imp->nb_constraints;
+    }
+    else {
+        _imp->model_prelude_stream << "min:";
+        for (int v = 0 ; v < n ; ++ v)
+            _imp->model_prelude_stream << " -1 x" << _imp->binary_variable_mappings[v];
+        _imp->model_prelude_stream << " ;" << endl;
+    }
+}
+
+auto Proof::create_non_edge_constraint(int p, int q) -> void
+{
+    _imp->model_stream << "-1 x" << _imp->binary_variable_mappings[p] << " -1 x" << _imp->binary_variable_mappings[q] << " >= -1 ;" << endl;
+
+    ++_imp->nb_constraints;
+    _imp->non_edge_constraints.emplace(pair{ p, q }, _imp->nb_constraints);
+    _imp->non_edge_constraints.emplace(pair{ q, p }, _imp->nb_constraints);
+}
+
+auto Proof::create_non_null_decision_bound(int p, int t, optional<int> d) -> void
+{
+    if (d) {
+        _imp->model_stream << "* objective" << endl;
+        for (int v = 0 ; v < p ; ++v)
+            for (int w = 0 ; w < t ; ++w)
+                _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, w }] << " ";
+        _imp->model_stream << ">= " << *d << " ;" << endl;
+        _imp->objective_line = ++_imp->nb_constraints;
+    }
+    else {
+        _imp->model_prelude_stream << "min:";
+        for (int v = 0 ; v < p ; ++v)
+            for (int w = 0 ; w < t ; ++w)
+                _imp->model_prelude_stream << " -1 x" << _imp->variable_mappings[pair{ v, w }] << " ";
+        _imp->model_prelude_stream << " ;" << endl;
+    }
+}
+
+auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
+{
+    *_imp->proof_stream << "u";
+    for (auto & w : v)
+        *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+}
+
+auto Proof::colour_bound(const vector<vector<int> > & ccs) -> void
+{
+    *_imp->proof_stream << "* bound using";
+    for (auto & cc : ccs) {
+        *_imp->proof_stream << " [";
+        for (auto & c : cc)
+            *_imp->proof_stream << " x" << _imp->binary_variable_mappings[c];
+        *_imp->proof_stream << " ]";
+    }
+    *_imp->proof_stream << endl;
+
+    vector<long> to_sum;
+    for (auto & cc : ccs) {
+        if (cc.size() > 2) {
+            *_imp->proof_stream << "p " << _imp->non_edge_constraints[pair{ cc[0], cc[1] }];
+
+            for (unsigned i = 2 ; i < cc.size() ; ++i) {
+                *_imp->proof_stream << " " << i << " *";
+                for (unsigned j = 0 ; j < i ; ++j)
+                    *_imp->proof_stream << " " << _imp->non_edge_constraints[pair{ cc[i], cc[j] }] << " +";
+                *_imp->proof_stream << " " << (i + 1) << " d";
+            }
+
+            *_imp->proof_stream << endl;
+            to_sum.push_back(++_imp->proof_line);
+        }
+        else if (cc.size() == 2) {
+            to_sum.push_back(_imp->non_edge_constraints[pair{ cc[0], cc[1] }]);
+        }
+
+        *_imp->proof_stream << "p " << _imp->objective_line;
+        for (auto & t : to_sum)
+            *_imp->proof_stream << " " << t << " +";
+        *_imp->proof_stream << endl;
+        ++_imp->proof_line;
+    }
+}
+
+auto Proof::mcs_bound(
+        const vector<pair<set<int>, set<int> > > & partitions) -> void
+{
+    *_imp->proof_stream << "* failed bound" << endl;
+
+    vector<string> to_sum;
+    for (auto & [ l, r ] : partitions) {
+        if (r.size() >= l.size())
+            continue;
+
+        *_imp->proof_stream << "p";
+        bool first = true;
+        for (auto & v : l) {
+            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[v];
+           if (first)
+              first = false;
+           else
+              *_imp->proof_stream << " +";
+        }
+        for (auto & v : r)
+            *_imp->proof_stream << " " << _imp->injectivity_constraints[v] << " +";
+
+        *_imp->proof_stream << endl;
+        to_sum.push_back(to_string(++_imp->proof_line));
+    }
+
+    if (! to_sum.empty()) {
+        *_imp->proof_stream << "p " << _imp->objective_line;
+        for (auto & t : to_sum)
+            *_imp->proof_stream << " " << t << " +";
+        *_imp->proof_stream << endl;
+        ++_imp->proof_line;
+    }
+}
+
+auto Proof::rewrite_mcs_objective(int pattern_size) -> void
+{
+    *_imp->proof_stream << "* get the objective function to talk about nulls, not non-nulls" << endl;
+    *_imp->proof_stream << "p " << _imp->objective_line;
+    for (int v = 0 ; v < pattern_size ; ++v)
+        *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[v] << " +";
+    *_imp->proof_stream << endl;
+    _imp->objective_line = ++_imp->proof_line;
+}
+
+auto Proof::create_connected_constraints(int p, int t, const function<auto (int, int) -> bool> & adj) -> void
+{
+    _imp->model_stream << "* selected vertices must be connected, walk 1" << endl;
+    int mapped_to_null = t;
+    int cnum = _imp->variable_mappings.size();
+
+    for (int v = 0 ; v < p ; ++v)
+        for (int w = 0 ; w < v ; ++w) {
+            string n = _imp->friendly_names ? ("conn1_" + to_string(v) + "_" + to_string(w)) : to_string(++cnum);
+            _imp->connected_variable_mappings.emplace(tuple{ 1, v, w }, n);
+            if (! adj(v, w)) {
+                // v not adjacent to w, so the walk does not exist
+                _imp->model_stream << "1 ~x" << n << " >= 1 ;" << endl;
+                ++_imp->nb_constraints;
+            }
+            else {
+                // v = null -> the walk does not exist
+                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ v, mapped_to_null }] << " >= 1 ;" << endl;
+                // w = null -> the walk does not exist
+                _imp->model_stream << "1 ~x" << n << " 1 ~x" << _imp->variable_mappings[pair{ w, mapped_to_null }] << " >= 1 ;" << endl;
+                // either v = null, or w = null, or the walk exists
+                _imp->model_stream << "1 x" << n << " 1 x" << _imp->variable_mappings[pair{ v, mapped_to_null }]
+                    << " 1 x" << _imp->variable_mappings[pair{ w, mapped_to_null }] << " >= 1 ;" << endl;
+                _imp->nb_constraints += 3;
+            }
+        }
+
+    int last_k = 0;
+    for (int k = 2 ; k < 2 * t ; k *= 2) {
+        last_k = k;
+        _imp->model_stream << "* selected vertices must be connected, walk " << k << endl;
+        for (int v = 0 ; v < p ; ++v)
+            for (int w = 0 ; w < v ; ++w) {
+                string n = _imp->friendly_names ? ("conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w)) : to_string(++cnum);
+                _imp->connected_variable_mappings.emplace(tuple{ k, v, w }, n);
+
+                vector<string> ors;
+                for (int u = 0 ; u < p ; ++u) {
+                    if (v != w && v != u && u != w) {
+                        string m = _imp->friendly_names ?
+                            ("conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u)) :
+                            to_string(++cnum);
+                        ors.push_back(m);
+                        _imp->connected_variable_mappings_aux.emplace(tuple{ k, v, w, u }, m);
+                        // either the first half walk exists, or the via term is false
+                        _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, max(u, v), min(u, v) }]
+                            << " 1 ~x" << m << " >= 1 ;" << endl;
+                        // either the second half walk exists, or the via term is false
+                        _imp->model_stream << "1 x" << _imp->connected_variable_mappings[tuple{ k / 2, max(u, w), min(u, w) }]
+                            << " 1 ~x" << m << " >= 1 ;" << endl;
+                        // one of the half walks is false, or the via term must be true
+                        _imp->model_stream << "1 x" << m
+                            << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, max(v, u), min(v, u) }]
+                            << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, max(u, w), min(u, w) }] << " >= 1 ;" << endl;
+                        _imp->nb_constraints += 3;
+                    }
+                }
+
+                // one of the vias must be true, or a shorter walk exists, or the entry is false
+                _imp->model_stream << "1 ~x" << n;
+                for (auto & o : ors)
+                    _imp->model_stream << " 1 x" << o;
+                _imp->model_stream << " 1 x" << _imp->connected_variable_mappings[tuple{ k / 2, v, w }];
+                _imp->model_stream << " >= 1 ;" << endl;
+                ++_imp->nb_constraints;
+
+                // if the entry is false, then all of the vias must be false and the shorter walk must be false
+                for (auto & o : ors) {
+                    _imp->model_stream << "1 x" << n << " 1 ~x" << o << " >= 1 ;" << endl;
+                    ++_imp->nb_constraints;
+                }
+                _imp->model_stream << "1 x" << n << " 1 ~x" << _imp->connected_variable_mappings[tuple{ k / 2, v, w }] << " >= 1 ;" << endl;
+                ++_imp->nb_constraints;
+            }
+    }
+
+    _imp->model_stream << "* if two vertices are used, they must be connected" << endl;
+    for (int v = 0 ; v < p ; ++v)
+        for (int w = 0 ; w < v ; ++w) {
+            _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, mapped_to_null }]
+                << " 1 x" << _imp->variable_mappings[pair{ w, mapped_to_null }]
+                << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
+            ++_imp->nb_constraints;
+        }
+}
+
+auto Proof::not_connected_in_underlying_graph(const std::vector<int> & x, int y) -> void
+{
+    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[y];
+    for (auto & v : x)
+        *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[v];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+}
+
+auto Proof::has_clique_model() const -> bool
+{
+    return _imp->clique_encoding;
+}
+
+auto Proof::create_clique_encoding(
+        const vector<pair<int, int> > & enc) -> void
+{
+    _imp->clique_encoding = true;
+    for (unsigned i = 0 ; i < enc.size() ; ++i)
+        _imp->binary_variable_mappings.emplace(i, _imp->variable_mappings[enc[i]]);
+}
+
+auto Proof::create_clique_nonedge(int v, int w) -> void
+{
+    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[v] <<
+        " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+    _imp->non_edge_constraints.emplace(pair{ v, w }, _imp->proof_line);
+    _imp->non_edge_constraints.emplace(pair{ w, v }, _imp->proof_line);
 }
 

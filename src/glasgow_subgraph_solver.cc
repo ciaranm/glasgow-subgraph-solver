@@ -2,6 +2,7 @@
 
 #include "formats/read_file_format.hh"
 #include "homomorphism.hh"
+#include "sip_decomposer.hh"
 #include "lackey.hh"
 #include "symmetries.hh"
 #include "restarts.hh"
@@ -29,6 +30,7 @@ using std::cout;
 using std::endl;
 using std::exception;
 using std::function;
+using std::list;
 using std::localtime;
 using std::make_pair;
 using std::make_shared;
@@ -84,7 +86,6 @@ auto main(int argc, char * argv[]) -> int
         po::options_description mangling_options{ "Advanced input processing options" };
         mangling_options.add_options()
             ("no-clique-detection",                            "Disable clique / independent set detection")
-            ("no-isolated-vertex-removal",                     "Disable isolated vertex removal")
             ("no-supplementals",                               "Do not use supplemental graphs")
             ("no-nds",                                         "Do not use neighbourhood degree sequences");
         display_options.add(mangling_options);
@@ -108,28 +109,25 @@ auto main(int argc, char * argv[]) -> int
         po::options_description lackey_options{ "External constraint solver options" };
         lackey_options.add_options()
             ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
-            ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe");
+            ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
+            ("send-partials-to-lackey",                        "Send partial solutions to the lackey")
+            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / always)");
         display_options.add(lackey_options);
 
         po::options_description proof_logging_options{ "Proof logging options" };
         proof_logging_options.add_options()
             ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .log)")
-            ("proof-levels",                                   "Generate lvlset and lvlclear commands in the proof")
-            ("proof-solutions",                                "Generate v commands for sat instances in the proof")
-            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...");
+            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
+            ("compress-proof",                                 "Compress the proof using bz2");
         display_options.add(proof_logging_options);
 
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
-            ("common-neighbour-shapes",                        "Use common neighbour shapes filtering (experimental)")
-            ("minimal-unsat-pattern",                          "Find a minimal unsat pattern graph, if unsat (experimental)")
             ("distance3",                                      "Use distance 3 filtering (experimental)")
             ("k4",                                             "Use 4-clique filtering (experimental)")
-            ("diamond",                                        "Use diamond filtering (experimental)")
             ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
-            ("n-common-neighbour-graphs", po::value<int>(),    "Specify number of common neighbour graphs")
-            ("skip-common-neighbour-graphs", po::value<int>(), "Specify number of common neighbour graphs to skip");
+            ("decomposition",                                  "Use decomposition");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -183,7 +181,6 @@ auto main(int argc, char * argv[]) -> int
 
         params.induced = options_vars.count("induced");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions");
-        params.minimal_unsat_pattern = options_vars.count("minimal-unsat-pattern");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
@@ -255,17 +252,10 @@ auto main(int argc, char * argv[]) -> int
         }
 
         params.clique_detection = ! options_vars.count("no-clique-detection");
-        params.remove_isolated_vertices = ! options_vars.count("no-isolated-vertex-removal");
-        params.common_neighbour_shapes = options_vars.count("common-neighbour-shapes");
         params.distance3 = options_vars.count("distance3");
         params.k4 = options_vars.count("k4");
-        params.diamond = options_vars.count("diamond");
         if (options_vars.count("n-exact-path-graphs"))
             params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
-        if (options_vars.count("n-common-neighbour-graphs"))
-            params.number_of_common_neighbour_graphs = options_vars["n-common-neighbour-graphs"].as<int>();
-        if (options_vars.count("skip-common-neighbour-graphs"))
-            params.skip_common_neighbour_graphs = options_vars["skip-common-neighbour-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
 
@@ -306,39 +296,63 @@ auto main(int argc, char * argv[]) -> int
         string default_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
         string pattern_format_name = options_vars.count("pattern-format") ? options_vars["pattern-format"].as<string>() : default_format_name;
         string target_format_name = options_vars.count("target-format") ? options_vars["target-format"].as<string>() : default_format_name;
-        auto graphs = make_pair(
-            read_file_format(pattern_format_name, options_vars["pattern-file"].as<string>()),
-            read_file_format(target_format_name, options_vars["target-file"].as<string>()));
+        auto pattern = read_file_format(pattern_format_name, options_vars["pattern-file"].as<string>());
+        auto target = read_file_format(target_format_name, options_vars["target-file"].as<string>());
 
         cout << "pattern_file = " << options_vars["pattern-file"].as<string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
 
         if (options_vars.count("send-to-lackey") && options_vars.count("receive-from-lackey")) {
+            auto lackey_started_at = steady_clock::now();
             params.lackey = make_unique<Lackey>(
                     options_vars["send-to-lackey"].as<string>(),
                     options_vars["receive-from-lackey"].as<string>(),
-                    graphs.first,
-                    graphs.second);
+                    pattern, target);
+            auto lackey_time = duration_cast<milliseconds>(steady_clock::now() - lackey_started_at);
+            cout << "lackey_init_time = " << lackey_time.count() << endl;
         }
+        params.send_partials_to_lackey = options_vars.count("send-partials-to-lackey");
+        if (options_vars.count("propagate-using-lackey")) {
+            string propagate_using_lackey = options_vars["propagate-using-lackey"].as<string>();
+            if (propagate_using_lackey == "always")
+                params.propagate_using_lackey = PropagateUsingLackey::Always;
+            else if (propagate_using_lackey == "root")
+                params.propagate_using_lackey = PropagateUsingLackey::Root;
+            else if (propagate_using_lackey == "root-and-backjump")
+                params.propagate_using_lackey = PropagateUsingLackey::RootAndBackjump;
+            else if (propagate_using_lackey == "never")
+                params.propagate_using_lackey = PropagateUsingLackey::Never;
+            else {
+                cerr << "Unknown propagate-using-lackey option '" << propagate_using_lackey << "'" << endl;
+                return EXIT_FAILURE;
+            }
+        }
+        else
+            params.propagate_using_lackey = PropagateUsingLackey::Never;
 
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
                 cout << "mapping = ";
                 for (auto v : mapping)
-                    cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+                    cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
                 cout << endl;
             };
         }
 
         if (options_vars.count("prove")) {
-            bool levels = options_vars.count("proof-levels");
-            bool solutions = options_vars.count("proof-solutions");
             bool friendly_names = options_vars.count("proof-names");
+            bool compress_proof = options_vars.count("compress-proof");
             string fn = options_vars["prove"].as<string>();
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", levels, solutions, friendly_names);
-            cout << "proof_model = " << fn << ".opb" << endl;
-            cout << "proof_log = " << fn << ".log" << endl;
+            string suffix = compress_proof ? ".bz2" : "";
+            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names, compress_proof);
+            cout << "proof_model = " << fn << ".opb" << suffix << endl;
+            cout << "proof_log = " << fn << ".log" << suffix << endl;
         }
+
+        cout << "pattern_vertices = " << pattern.size() << endl;
+        cout << "pattern_directed_edges = " << pattern.number_of_directed_edges() << endl;
+        cout << "target_vertices = " << target.size() << endl;
+        cout << "target_directed_edges = " << target.number_of_directed_edges() << endl;
 
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
@@ -348,7 +362,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("pattern-symmetries")) {
             auto gap_start_time = steady_clock::now();
-            find_symmetries(argv[0], graphs.first, params.pattern_less_constraints, pattern_automorphism_group_size);
+            find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
             was_given_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
         }
@@ -356,7 +370,9 @@ auto main(int argc, char * argv[]) -> int
         if (was_given_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
 
-        auto result = solve_homomorphism_problem(graphs, params);
+        auto result = options_vars.count("decomposition") ?
+            solve_sip_by_decomposition(pattern, target, params) :
+            solve_homomorphism_problem(pattern, target, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
@@ -379,14 +395,7 @@ auto main(int argc, char * argv[]) -> int
         if (! result.mapping.empty() && ! options_vars.count("print-all-solutions")) {
             cout << "mapping = ";
             for (auto v : result.mapping)
-                cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
-            cout << endl;
-        }
-
-        if (! result.minimal_unsat_pattern.empty()) {
-            cout << "minimal_unsat_pattern =";
-            for (auto v : result.minimal_unsat_pattern)
-                cout << " " << graphs.first.vertex_name(v);
+                cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
             cout << endl;
         }
 
@@ -395,7 +404,14 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
-        verify_homomorphism(graphs, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
+        if (params.lackey) {
+            cout << "lackey_calls = " << params.lackey->number_of_calls() << endl;
+            cout << "lackey_checks = " << params.lackey->number_of_checks() << endl;
+            cout << "lackey_deletions = " << params.lackey->number_of_deletions() << endl;
+            cout << "lackey_propagations = " << params.lackey->number_of_propagations() << endl;
+        }
+
+        verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
                 params.induced, result.mapping);
 
         return EXIT_SUCCESS;

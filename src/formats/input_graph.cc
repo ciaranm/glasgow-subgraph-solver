@@ -21,10 +21,11 @@ using std::string_view;
 using std::to_string;
 using std::vector;
 
-InputGraph::InputGraph(int size, bool v, bool e) :
+InputGraph::InputGraph(int size, bool v, bool e, bool f) :
     _has_vertex_labels(v),
     _has_edge_labels(e),
-    _loopy(false)
+    _loopy(false),
+    _directed(f)
 {
     if (0 != size)
         resize(size);
@@ -47,14 +48,15 @@ auto InputGraph::add_edge(int a, int b) -> void
         _loopy = true;
 }
 
-auto InputGraph::add_directed_edge(int a, int b, string_view label) -> void
+auto InputGraph::add_directed_edge(int a, int b, const std::string & label) -> void
 {
-    _edges.emplace(make_pair(a, b), label).first->second = label;
-    _edges.emplace(make_pair(b, a), "unlabelled");
-    _vertex_directed_degrees[b].first++;
-    _vertex_directed_degrees[a].second++;
+    _directed = true;
     if (a == b)
         _loopy = true;
+
+    _edges.emplace(make_pair(a, b), label).first->second = label;
+    _vertex_directed_degrees[b].first++;
+    _vertex_directed_degrees[a].second++;
 }
 
 auto InputGraph::add_hyperedge(std::pair<bool, std::vector<int> > he) -> void
@@ -211,5 +213,10 @@ auto InputGraph::has_vertex_labels() const -> bool
 auto InputGraph::has_edge_labels() const -> bool
 {
     return _has_edge_labels;
+}
+
+auto InputGraph::directed() const -> bool
+{
+    return _directed;
 }
 

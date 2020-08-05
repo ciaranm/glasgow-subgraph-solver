@@ -144,7 +144,6 @@ auto main(int argc, char * argv[]) -> int
         params.induced = true;
         params.bigraph = true;
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
-        params.minimal_unsat_pattern = false;
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
@@ -301,7 +300,7 @@ auto main(int argc, char * argv[]) -> int
         if (was_given_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
 
-        auto result = solve_homomorphism_problem(graphs, params);
+        auto result = solve_homomorphism_problem(graphs.first, graphs.second, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);

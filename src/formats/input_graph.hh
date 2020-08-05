@@ -34,13 +34,13 @@ class InputGraph
         std::vector<std::pair<int, int> > _pattern_site_edges;
         std::vector<std::pair<int, int> > _pattern_root_edges;
 
-        bool _loopy = false;
+        bool _loopy = false, _directed = false;
 
     public:
         /**
          * \param initial_size can be 0, if resize() is called afterwards.
          */
-        InputGraph(int initial_size, bool has_vertex_labels, bool has_edge_labels);
+        InputGraph(int initial_size, bool has_vertex_labels, bool has_edge_labels, bool force_directed = false);
 
         InputGraph(const InputGraph &) = default;
 
@@ -74,7 +74,7 @@ class InputGraph
         /**
          * Add a directed edge from a to b, with a label.
          */
-        auto add_directed_edge(int a, int b, std::string_view label) -> void;
+        auto add_directed_edge(int a, int b, const std::string & label) -> void;
 
         /**
          * Add a bigraph hyperedge to a subset of vertices (open or closed)
@@ -185,6 +185,8 @@ class InputGraph
         auto begin_edges() const -> EdgesIterator;
 
         auto end_edges() const -> EdgesIterator;
+
+        auto directed() const -> bool;
 };
 
 #endif

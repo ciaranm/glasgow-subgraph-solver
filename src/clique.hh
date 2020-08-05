@@ -6,8 +6,11 @@
 #include "formats/input_graph.hh"
 #include "restarts.hh"
 #include "timeout.hh"
+#include "proof-fwd.hh"
+#include "svo_bitset.hh"
 
 #include <chrono>
+#include <functional>
 #include <list>
 #include <memory>
 #include <optional>
@@ -39,6 +42,15 @@ struct CliqueParams
 
     /// Which colour order to use?
     ColourClassOrder colour_class_order = ColourClassOrder::SingletonsFirst;
+
+    /// Colour in input order, rather than degree order
+    bool input_order = false;
+
+    /// For use by the maximum common connected subgraph reduction
+    std::function<auto (int, const std::function<auto (int) -> int> &) -> SVOBitset> connected;
+
+    /// Optional proof handler
+    std::shared_ptr<Proof> proof;
 };
 
 struct CliqueResult

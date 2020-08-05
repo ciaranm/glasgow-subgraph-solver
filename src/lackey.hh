@@ -7,6 +7,7 @@
 #include "vertex_to_vertex_mapping.hh"
 
 #include <exception>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -39,7 +40,18 @@ class Lackey
         Lackey(const Lackey &) = delete;
         Lackey & operator= (const Lackey &) = delete;
 
-        auto check_solution(const VertexToVertexMapping &) -> bool;
+        using DeletionFunction = std::function<auto (int, int) -> bool>;
+
+        auto check_solution(
+                const VertexToVertexMapping &,
+                bool partial,
+                bool all_solutions,
+                const DeletionFunction & deletions) -> bool;
+
+        auto number_of_checks() const -> long;
+        auto number_of_propagations() const -> long;
+        auto number_of_deletions() const -> long;
+        auto number_of_calls() const -> long;
 };
 
 #endif

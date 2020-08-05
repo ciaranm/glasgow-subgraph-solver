@@ -3,10 +3,13 @@
 #include "lackey.hh"
 
 #include <fstream>
+#include <map>
 #include <mutex>
 
 using std::endl;
+using std::function;
 using std::ifstream;
+using std::map;
 using std::mutex;
 using std::ofstream;
 using std::string;
@@ -31,6 +34,8 @@ struct Lackey::Imp
     ifstream read_from;
     const InputGraph & pattern_graph;
     const InputGraph & target_graph;
+
+    long number_of_checks = 0, number_of_propagations = 0, number_of_deletions = 0, number_of_calls = 0;
 };
 
 Lackey::Lackey(const string & send_to_name, const string & read_from_name,
@@ -48,11 +53,35 @@ Lackey::~Lackey()
     }
 }
 
-auto Lackey::check_solution(const VertexToVertexMapping & m) -> bool
+auto Lackey::check_solution(
+        const VertexToVertexMapping & m,
+        bool partial,
+        bool all_solutions,
+        const function<auto (int, int) -> bool> & deletion) -> bool
 {
     unique_lock<mutex> lock{ _imp->external_solver_mutex };
+    ++_imp->number_of_calls;
 
-    _imp->send_to << "C " << m.size();
+    string command;
+    if (partial) {
+        if (deletion) {
+            ++_imp->number_of_propagations;
+            command = "P";
+        }
+        else {
+            ++_imp->number_of_checks;
+            command = "C";
+        }
+    }
+    else {
+        ++_imp->number_of_checks;
+        if (all_solutions)
+            command = "A";
+        else
+            command = "F";
+    }
+
+    _imp->send_to << command << " " << m.size();
     for (auto & [ p, t ] : m)
         _imp->send_to << " " << _imp->pattern_graph.vertex_name(p) << " " << _imp->target_graph.vertex_name(t);
     _imp->send_to << endl;
@@ -61,24 +90,73 @@ auto Lackey::check_solution(const VertexToVertexMapping & m) -> bool
         throw DisobedientLackeyError{ "error giving lackey its orders" };
 
     string operation;
-    if (! (_imp->read_from >> operation) || operation != "C")
-        throw DisobedientLackeyError{ "asked lackey to C, but it replied with '" + operation + "'" };
+    if (! (_imp->read_from >> operation) || operation != command)
+        throw DisobedientLackeyError{ "asked lackey to " + command + ", but it replied with '" + operation + "'" };
 
     bool result;
     string response;
     if (! (_imp->read_from >> response))
-        throw DisobedientLackeyError{ "asked lackey to C, but it gave no T/F" };
+        throw DisobedientLackeyError{ "asked lackey to " + command + ", but it gave no T/F" };
     else if (response == "T")
         result = true;
     else if (response == "F")
         result = false;
     else
-        throw DisobedientLackeyError{ "asked lackey to C, but it replied with '" + operation + "' then '" + response + "'" };
+        throw DisobedientLackeyError{ "asked lackey to " + command + " but it replied with '" + operation + "' then '" + response + "'" };
 
     int n;
-    if (! (_imp->read_from >> n) || n != 0)
-        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to C query" };
+    if (! (_imp->read_from >> n))
+        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to " + command + " query" };
+
+    if (command == "S") {
+        for (int i = 0 ; i < n ; ++i) {
+            string k, v;
+            if (! (_imp->read_from >> k >> v))
+                throw DisobedientLackeyError{ "lackey gave bad response pair " + to_string(i) + " to " + command + " query" };
+        }
+    }
+    else if (command == "C" || command == "P") {
+        for (int i = 0 ; i < n ; ++i) {
+            string k, v;
+            int m;
+            if (! (_imp->read_from >> k >> m))
+                throw DisobedientLackeyError{ "lackey gave bad response pair " + k + " " + to_string(m) + " to " + command + " query" };
+            auto p = _imp->pattern_graph.vertex_from_name(k);
+
+            for (int j = 0 ; j < m ; ++j) {
+                if (! (_imp->read_from >> v))
+                    throw DisobedientLackeyError{ "lackey gave bad response pair " + k + " " + to_string(m) + " to " + command + " query" };
+
+                if (deletion) {
+                    auto t = _imp->target_graph.vertex_from_name(v);
+                    if (p && t)
+                        if (deletion(*p, *t))
+                            ++_imp->number_of_deletions;
+                }
+            }
+        }
+    }
 
     return result;
+}
+
+auto Lackey::number_of_checks() const -> long
+{
+    return _imp->number_of_checks;
+}
+
+auto Lackey::number_of_propagations() const -> long
+{
+    return _imp->number_of_propagations;
+}
+
+auto Lackey::number_of_deletions() const -> long
+{
+    return _imp->number_of_deletions;
+}
+
+auto Lackey::number_of_calls() const -> long
+{
+    return _imp->number_of_calls;
 }
 
