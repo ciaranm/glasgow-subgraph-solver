@@ -409,28 +409,27 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
         if (graph_pairs_to_consider & (1u << 0)) {
             auto check_d_values = d.values;
 
-            auto want_forward_label = model.pattern_edge_label(d.v, current_assignment.pattern_vertex);
-            auto want_reverse_label = model.pattern_edge_label(current_assignment.pattern_vertex, d.v);
+            auto want_forward_label = model.pattern_edge_label(current_assignment.pattern_vertex, d.v);
             for (auto c = check_d_values.find_first() ; c != decltype(check_d_values)::npos ; c = check_d_values.find_first()) {
                 check_d_values.reset(c);
 
-                auto got_forward_label = model.target_edge_label(c, current_assignment.target_vertex);
-                auto got_reverse_label = model.target_edge_label(current_assignment.target_vertex, c);
+                auto got_forward_label = model.target_edge_label(current_assignment.target_vertex, c);
+                if (got_forward_label != want_forward_label)
+                    d.values.reset(c);
+            }
+        }
 
-                if constexpr (induced_) {
-                    if (got_forward_label != want_forward_label || got_reverse_label != want_reverse_label)
-                        d.values.reset(c);
-                }
-                else {
-                    if (graph_pairs_to_consider & (1u << 0))
-                        if (got_forward_label != want_forward_label)
-                            d.values.reset(c);
+        const auto & reverse_edge_graph_pairs_to_consider = model.pattern_adjacency_bits(d.v, current_assignment.pattern_vertex);
+        if (reverse_edge_graph_pairs_to_consider & (1u << 0)) {
+            auto check_d_values = d.values;
 
-                    const auto & reverse_edge_graph_pairs_to_consider = model.pattern_adjacency_bits(d.v, current_assignment.pattern_vertex);
-                    if (reverse_edge_graph_pairs_to_consider & (1u << 0))
-                        if (got_reverse_label != want_reverse_label)
-                            d.values.reset(c);
-                }
+            auto want_reverse_label = model.pattern_edge_label(d.v, current_assignment.pattern_vertex);
+            for (auto c = check_d_values.find_first() ; c != decltype(check_d_values)::npos ; c = check_d_values.find_first()) {
+                check_d_values.reset(c);
+
+                auto got_reverse_label = model.target_edge_label(c, current_assignment.target_vertex);
+                if (got_reverse_label != want_reverse_label)
+                    d.values.reset(c);
             }
         }
     }
