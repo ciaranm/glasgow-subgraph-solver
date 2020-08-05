@@ -96,7 +96,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     // re-encode and store pattern labels
     map<string, int> vertex_labels_map;
-    int next_vertex_label = 0;
+    int next_vertex_label = 1;
     if (pattern.has_vertex_labels()) {
         for (unsigned i = 0 ; i < pattern_size ; ++i) {
             if (vertex_labels_map.emplace(pattern.vertex_label(i), next_vertex_label).second)
@@ -110,7 +110,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     // re-encode and store edge labels
     map<string, int> edge_labels_map;
-    int next_edge_label = 0;
+    int next_edge_label = 1;
     if (pattern.has_edge_labels()) {
         _imp->pattern_edge_labels.resize(pattern_size * pattern_size);
         for (unsigned i = 0 ; i < pattern_size ; ++i)
