@@ -971,9 +971,9 @@ auto HomomorphismModel::_backtracking_open_link_matching(
         vector<pair<bool, vector<int> > > & target_links,
         const VertexToVertexMapping & mapping) const -> bool
 {
-    for (unsigned i = 0; i != pattern_links.size() ; ++i) {
+    for (unsigned i = 0 ; i != pattern_links.size() ; ++i) {
         vector<int> valid_mappings;
-        for (unsigned j = 0; j != target_links.size() ; ++j)
+        for (unsigned j = 0 ; j != target_links.size() ; ++j)
             if (_bigraph_link_match(pattern_links[i], target_links[j], mapping))
                 valid_mappings.push_back(j);
 
@@ -1014,7 +1014,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
     for (unsigned i = 0 ; i != _imp->pattern_hyperedges.size() ; ++i) {
         if (! _imp->pattern_hyperedges[i].first) {
             bool lazy_flag = false;
-            for (unsigned j = 0; j != _imp->target_hyperedges.size() ; ++j) {
+            for (unsigned j = 0 ; j != _imp->target_hyperedges.size() ; ++j) {
                 if (mapped_targets.find(j) == mapped_targets.end() &&
                         _bigraph_link_match(_imp->pattern_hyperedges[i], _imp->target_hyperedges[j], mapping)) {
                     mapped_patterns.insert(i);
