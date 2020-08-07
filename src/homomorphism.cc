@@ -392,6 +392,8 @@ auto solve_homomorphism_problem(
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used for induced problems" };
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
+        if (params.bigraph)
+            throw UnsupportedConfiguration{ "Proof logging cannot yet be used for bigraphs" };
 
         // set up our model file, with a set of OPB variables for each CP variable
         for (int n = 0 ; n < pattern.size() ; ++n) {
