@@ -4,13 +4,15 @@
 #include "formats/input_graph.hh"
 
 #include <fstream>
-#include <iostream>
 #include <map>
+#include <utility>
 
 using std::ifstream;
+using std::pair;
 using std::string;
+using std::stoi;
 using std::to_string;
-using std::cout;
+using std::vector;
 
 namespace
 {
@@ -36,7 +38,7 @@ namespace
     }
 }
 
-auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGraph
+auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
 {
     InputGraph result{ 0, true, true, true };
 
@@ -68,26 +70,25 @@ auto read_target_bigraph(ifstream && infile, const string & filename) -> InputGr
                 result.add_directed_edge(i, j, "dir");
         }
 
-    for (int i=0; i<h; i++) {
-        std::pair<bool, std::vector<int> > he;
-        he.second.resize(r+n+s);
+    for (int i = 0 ; i != h ; ++i) {
+        pair<bool, vector<int> > he;
+        he.second.resize(r + n + s);
         string x = read_str(infile);
 
-        while(x != "f" && x != "t") {
-            int index = std::stoi(x);
-            he.second[index-1+r]++;
+        while (x != "f" && x != "t") {
+            int index = stoi(x);
+            ++he.second[index - 1 + r];
             x = read_str(infile);
         }
-        if(x == "t") he.first = true;
-        else he.first = false;
 
-        result.add_hyperedge(he);
+        he.first = (x == "t");
+        result.add_hyperedge(move(he));
     }
 
     return result;
 }
 
-auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputGraph
+auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
 {
     InputGraph result{ 0, true, true, true };
 
@@ -97,43 +98,37 @@ auto read_pattern_bigraph(ifstream && infile, const string & filename) -> InputG
     int h = read_num(infile);
     result.resize(n);
 
-    for (int i=0; i<n; i++) result.set_vertex_label(i, read_str(infile));
+    for (int i = 0 ; i != n ; ++i)
+        result.set_vertex_label(i, read_str(infile));
 
-    for (int i=0; i<(r+n); i++) for(int j=0; j<(n+s); j++) {
-        char x = read_char(infile);
-        if (i >= r && j < n && x == '1') result.add_directed_edge(i-r, j, "dir");
-        if (i < r && j < n && x == '1') {
-            result.set_child_of_root(j);
-            result.add_pattern_root_edge(i, j);
+    for (int i = 0 ; i != (r + n) ; ++i)
+        for (int j = 0 ; j != (n + s) ; ++j) {
+            char x = read_char(infile);
+            if (i >= r && j < n && x == '1') result.add_directed_edge(i - r, j, "dir");
+            else if (i < r && j < n && x == '1') {
+                result.set_child_of_root(j);
+                result.add_pattern_root_edge(i, j);
+            }
+            else if (j >= n && i >= r && x == '1') {
+                result.set_parent_of_site(i - r);
+                result.add_pattern_site_edge(j - n, i - r);
+            }
         }
-        if (j >= n && i >= r && x == '1') {
-            result.set_parent_of_site(i-r);
-            result.add_pattern_site_edge(j-n, i-r);
-        }
-    }
 
-    for (int i=0; i<h; i++) {
-        std::pair<bool, std::vector<int> > he;
+    for (int i = 0 ; i != h ; ++i) {
+        pair<bool, vector<int> > he;
         he.second.resize(n);
         string x = read_str(infile);
 
-        while(x != "f" && x != "t") {
-            int index = std::stoi(x);
-            he.second[index-1]++;
+        while (x != "f" && x != "t") {
+            int index = stoi(x);
+            ++he.second[index - 1];
             x = read_str(infile);
         }
-        if(x == "t") he.first = true;
-        else he.first = false;
-
-        result.add_hyperedge(he);
+        he.first = (x == "t");
+        result.add_hyperedge(move(he));
     }
 
     return result;
 }
-
-// GLasgowBigraphSolver.cc -> Rewrite stuff
-// Unary constraints to check in-degree and out-degree in the place graph to deal with that one problem Michele had
-// Consider sites, roots can be ignored for now?
-// Pass in a function
-
 

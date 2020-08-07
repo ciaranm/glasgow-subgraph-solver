@@ -37,7 +37,7 @@ auto InputGraph::resize(int size) -> void
     _vertex_labels.resize(size);
     _vertex_names.resize(size);
     _vertex_pattern_constraints.resize(size);
-    _vertex_directed_degrees.resize(size);   
+    _vertex_directed_degrees.resize(size);
 }
 
 auto InputGraph::add_edge(int a, int b) -> void
@@ -48,7 +48,7 @@ auto InputGraph::add_edge(int a, int b) -> void
         _loopy = true;
 }
 
-auto InputGraph::add_directed_edge(int a, int b, const std::string & label) -> void
+auto InputGraph::add_directed_edge(int a, int b, const string & label) -> void
 {
     _directed = true;
     if (a == b)
@@ -59,9 +59,9 @@ auto InputGraph::add_directed_edge(int a, int b, const std::string & label) -> v
     _vertex_directed_degrees[a].second++;
 }
 
-auto InputGraph::add_hyperedge(std::pair<bool, std::vector<int> > he) -> void
+auto InputGraph::add_hyperedge(pair<bool, vector<int> > && he) -> void
 {
-    _hyperedges.push_back(he);
+    _hyperedges.push_back(move(he));
 }
 
 auto InputGraph::adjacent(int a, int b) const -> bool
@@ -84,7 +84,7 @@ auto InputGraph::number_of_hyperedges() const -> int
     return _hyperedges.size();
 }
 
-auto InputGraph::get_hyperedge(int v) const -> std::pair<bool, std::vector<int> >
+auto InputGraph::get_hyperedge(int v) const -> const pair<bool, vector<int> > &
 {
     return _hyperedges[v];
 }
@@ -94,7 +94,7 @@ auto InputGraph::add_pattern_site_edge(int a, int b) -> void
     _pattern_site_edges.push_back(make_pair(a, b));
 }
 
-auto InputGraph::get_pattern_site_edge(int s) const -> std::pair<int, int>
+auto InputGraph::get_pattern_site_edge(int s) const -> pair<int, int>
 {
     return _pattern_site_edges[s];
 }
@@ -110,7 +110,7 @@ auto InputGraph::add_pattern_root_edge(int a, int b) -> void
     _pattern_root_edges.push_back(make_pair(a, b));
 }
 
-auto InputGraph::get_pattern_root_edge(int r) const -> std::pair<int, int>
+auto InputGraph::get_pattern_root_edge(int r) const -> pair<int, int>
 {
     return _pattern_root_edges[r];
 }
@@ -140,7 +140,7 @@ auto InputGraph::in_degree(int a) const -> int
 
 auto InputGraph::out_degree(int a) const -> int
 {
-    return _vertex_directed_degrees[a].second;    
+    return _vertex_directed_degrees[a].second;
 }
 
 auto InputGraph::set_vertex_label(int v, string_view l) -> void

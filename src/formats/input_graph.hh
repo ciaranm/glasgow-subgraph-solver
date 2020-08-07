@@ -79,7 +79,7 @@ class InputGraph
         /**
          * Add a bigraph hyperedge to a subset of vertices (open or closed)
          */
-        auto add_hyperedge(std::pair<bool, std::vector<int> > he) -> void;
+        auto add_hyperedge(std::pair<bool, std::vector<int> > && he) -> void;
 
         /**
          * Number of bigraph hyperedges.
@@ -89,7 +89,7 @@ class InputGraph
         /**
          * Return the bigraph hyperedge of index v.
          */
-        auto get_hyperedge(int v) const -> std::pair<bool, std::vector<int> >;
+        auto get_hyperedge(int v) const -> const std::pair<bool, std::vector<int> > &;
 
         /**
          * Keep track of pattern site edges for dealing with that one annoying edge case
@@ -134,12 +134,10 @@ class InputGraph
          */
         auto set_vertex_label(int v, std::string_view label) -> void;
 
-
         /**
          * Set a flag to tell the solver this graph is the child of a root bigraph node.
          */
         auto set_child_of_root(int v) -> void;
-
 
         /**
          * Set a flag to tell the solver this graph is the parent of a site bigraph node.
