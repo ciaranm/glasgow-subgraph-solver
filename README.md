@@ -17,8 +17,7 @@ Compiling
 ---------
 
 To build, type 'make'. You will need a C++17 compiler (we test with GCC 7.3, GCC 8.3, and Clang
-7.0.1 on Linux, and Xcode 10.2 on Mac OS X) and Boost (we use 1.65.1 or later, built with threads
-enabled).
+7.0.1 on Linux, and Xcode 10.2 on Mac OS X) and Boost (we use 1.65.1 or later, built with the libraries: thread, system, program_options, and iostreams).
 
 Running
 -------
