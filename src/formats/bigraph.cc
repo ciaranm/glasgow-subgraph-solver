@@ -3,10 +3,9 @@
 #include "formats/bigraph.hh"
 #include "formats/input_graph.hh"
 
-#include <string>
-#include <iostream>
 #include <fstream>
 #include <map>
+#include <string>
 #include <utility>
 
 using std::ifstream;
@@ -42,12 +41,12 @@ namespace
 
 auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
 {
-   
+
     InputGraph result{ 0, true, true, true };
 
     std::vector<std::string> labels;
     string t = read_str(infile);
-    while(t.find('}') == -1){
+    while (t.find('}') == string::npos) {
         t = read_str(infile);
         labels.push_back(t.substr(0, t.find(':')));
     }
@@ -56,7 +55,6 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
     int n = read_num(infile);
     int s = read_num(infile);
     result.resize(r + n + s);
-
 
     for (int i = 0 ; i != r ; ++i) {
         result.set_vertex_label(i, "ROOT");
@@ -88,14 +86,15 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
 
         read_char(infile);
 
-        while(true){
+        while (true) {
             string e = read_str(infile);
             string c = read_str(infile);
-            he.second[stoi(e.substr(1, e.find(',')-1)) + r] = stoi(c.substr(0, c.find(')')));
+            he.second[stoi(e.substr(1, e.find(',') - 1)) + r] = stoi(c.substr(0, c.find(')')));
 
-            if (c.find('}') != -1) break;
+            if (c.find('}') != string::npos)
+                break;
         }
-        
+
         result.add_hyperedge(move(he));
         h = read_str(infile);
     }
@@ -107,9 +106,9 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
 {
     InputGraph result{ 0, true, true, true };
 
-    std::vector<std::string> labels;
+    vector<string> labels;
     string t = read_str(infile);
-    while(t.find('}') == -1){
+    while (t.find('}') == string::npos) {
         t = read_str(infile);
         labels.push_back(t.substr(0, t.find(':')));
     }
@@ -125,7 +124,8 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
     for (int i = 0 ; i != (r + n) ; ++i)
         for (int j = 0 ; j != (n + s) ; ++j) {
             char x = read_char(infile);
-            if (i >= r && j < n && x == '1') result.add_directed_edge(i - r, j, "dir");
+            if (i >= r && j < n && x == '1')
+                result.add_directed_edge(i - r, j, "dir");
             else if (i < r && j < n && x == '1') {
                 result.set_child_of_root(j);
                 result.add_pattern_root_edge(i, j);
@@ -144,16 +144,17 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
 
         read_char(infile);
 
-        while(true){
+        while (true) {
             string e = read_str(infile);
             string c = read_str(infile);
-            he.second[stoi(e.substr(1, e.find(',')-1))] = stoi(c.substr(0, c.find(')')));
+            he.second[stoi(e.substr(1, e.find(',') - 1))] = stoi(c.substr(0, c.find(')')));
 
-            if (c.find('}') != -1) break;
+            if (c.find('}') != string::npos)
+                break;
         }
-    
+
         result.add_hyperedge(move(he));
-        h = read_str(infile);        
+        h = read_str(infile);
     }
 
     return result;
