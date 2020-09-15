@@ -148,7 +148,7 @@ namespace
                 Assignments & incumbent,
                 const SplitDomains & domains,
                 unsigned long long & nodes,
-                boost::multiprecision::cpp_int & solution_count,
+                loooong & solution_count,
                 const optional<set<int> > & permitted_branch_variables) -> SearchResult
         {
             if (params.timeout->should_abort())
