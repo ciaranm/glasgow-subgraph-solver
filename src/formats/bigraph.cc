@@ -3,6 +3,8 @@
 #include "formats/bigraph.hh"
 #include "formats/input_graph.hh"
 
+#include <string>
+#include <iostream>
 #include <fstream>
 #include <map>
 #include <utility>
@@ -40,13 +42,21 @@ namespace
 
 auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
 {
+   
     InputGraph result{ 0, true, true, true };
+
+    std::vector<std::string> labels;
+    string t = read_str(infile);
+    while(t.find('}') == -1){
+        t = read_str(infile);
+        labels.push_back(t.substr(0, t.find(':')));
+    }
 
     int r = read_num(infile);
     int n = read_num(infile);
     int s = read_num(infile);
-    int h = read_num(infile);
     result.resize(r + n + s);
+
 
     for (int i = 0 ; i != r ; ++i) {
         result.set_vertex_label(i, "ROOT");
@@ -59,7 +69,7 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
     }
 
     for (int i = r ; i < (r + n) ; ++i) {
-        result.set_vertex_label(i, read_str(infile));
+        result.set_vertex_label(i, labels.at(i - r));
         result.set_vertex_name(i, to_string(i - r));
     }
 
@@ -70,19 +80,24 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
                 result.add_directed_edge(i, j, "dir");
         }
 
-    for (int i = 0 ; i != h ; ++i) {
+    string h = read_str(infile);
+    while (h == "({},") {
         pair<bool, vector<int> > he;
         he.second.resize(r + n + s);
-        string x = read_str(infile);
+        he.first = (read_str(infile) != "{},");
 
-        while (x != "f" && x != "t") {
-            int index = stoi(x);
-            ++he.second[index - 1 + r];
-            x = read_str(infile);
+        read_char(infile);
+
+        while(true){
+            string e = read_str(infile);
+            string c = read_str(infile);
+            he.second[stoi(e.substr(1, e.find(',')-1)) + r] = stoi(c.substr(0, c.find(')')));
+
+            if (c.find('}') != -1) break;
         }
-
-        he.first = (x == "t");
+        
         result.add_hyperedge(move(he));
+        h = read_str(infile);
     }
 
     return result;
@@ -92,14 +107,20 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
 {
     InputGraph result{ 0, true, true, true };
 
+    std::vector<std::string> labels;
+    string t = read_str(infile);
+    while(t.find('}') == -1){
+        t = read_str(infile);
+        labels.push_back(t.substr(0, t.find(':')));
+    }
+
     int r = read_num(infile);
     int n = read_num(infile);
     int s = read_num(infile);
-    int h = read_num(infile);
     result.resize(n);
 
     for (int i = 0 ; i != n ; ++i)
-        result.set_vertex_label(i, read_str(infile));
+        result.set_vertex_label(i, labels.at(i));
 
     for (int i = 0 ; i != (r + n) ; ++i)
         for (int j = 0 ; j != (n + s) ; ++j) {
@@ -115,18 +136,24 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
             }
         }
 
-    for (int i = 0 ; i != h ; ++i) {
+    string h = read_str(infile);
+    while (h == "({},") {
         pair<bool, vector<int> > he;
         he.second.resize(n);
-        string x = read_str(infile);
+        he.first = (read_str(infile) != "{},");
 
-        while (x != "f" && x != "t") {
-            int index = stoi(x);
-            ++he.second[index - 1];
-            x = read_str(infile);
+        read_char(infile);
+
+        while(true){
+            string e = read_str(infile);
+            string c = read_str(infile);
+            he.second[stoi(e.substr(1, e.find(',')-1))] = stoi(c.substr(0, c.find(')')));
+
+            if (c.find('}') != -1) break;
         }
-        he.first = (x == "t");
+    
         result.add_hyperedge(move(he));
+        h = read_str(infile);        
     }
 
     return result;
