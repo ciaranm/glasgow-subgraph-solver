@@ -14,9 +14,11 @@ using std::to_string;
 using std::uniform_int_distribution;
 using std::vector;
 
-HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p) :
+HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
+        const DuplicateSolutionFilterer & d) :
     model(m),
-    params(p)
+    params(p),
+    _duplicate_solution_filterer(d)
 {
     if (might_have_watches(params)) {
         watches.table.target_size = model.target_size;
@@ -93,11 +95,14 @@ auto HomomorphismSearcher::restarting_search(
             params.proof->post_solution(solution_in_proof_form(assignments));
 
         if (params.count_solutions) {
-            ++solution_count;
-            if (params.enumerate_callback) {
-                VertexToVertexMapping mapping;
-                expand_to_full_result(assignments, mapping);
-                params.enumerate_callback(mapping);
+            // we could be finding duplicate solutions, in threaded search
+            if (_duplicate_solution_filterer(assignments)) {
+                ++solution_count;
+                if (params.enumerate_callback) {
+                    VertexToVertexMapping mapping;
+                    expand_to_full_result(assignments, mapping);
+                    params.enumerate_callback(mapping);
+                }
             }
 
             return SearchResult::SatisfiableButKeepGoing;

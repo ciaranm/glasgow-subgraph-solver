@@ -20,9 +20,11 @@
 #include <mutex>
 #include <optional>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 
 #include <boost/thread/barrier.hpp>
+#include <boost/functional/hash_fwd.hpp>
 
 using std::atomic;
 using std::function;
@@ -33,12 +35,14 @@ using std::move;
 using std::mutex;
 using std::optional;
 using std::pair;
+using std::size_t;
 using std::sort;
 using std::string;
 using std::thread;
 using std::to_string;
 using std::unique_lock;
 using std::unique_ptr;
+using std::unordered_set;
 using std::vector;
 
 using std::chrono::duration_cast;
@@ -47,6 +51,7 @@ using std::chrono::steady_clock;
 using std::chrono::operator""ms;
 
 using boost::barrier;
+using boost::hash_combine;
 
 namespace
 {
@@ -91,7 +96,7 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
-            HomomorphismSearcher searcher(model, params);
+            HomomorphismSearcher searcher(model, params, [] (const HomomorphismAssignments &) -> bool { return true; });
 
             while (! done) {
                 ++number_of_restarts;
@@ -180,6 +185,19 @@ namespace
         }
     };
 
+    struct VertexToVertexMappingHash
+    {
+        auto operator() (const VertexToVertexMapping & v) const -> size_t
+        {
+            size_t result{ 0 };
+            for (auto & [ p, t ] : v) {
+                hash_combine(result, p);
+                hash_combine(result, t);
+            }
+            return result;
+        }
+    };
+
     struct ThreadedSolver : HomomorphismSolver
     {
         unsigned n_threads;
@@ -214,17 +232,26 @@ namespace
             barrier wait_for_new_nogoods_barrier{ n_threads }, synced_nogoods_barrier{ n_threads };
             atomic<bool> restart_synchroniser{ false };
 
+            mutex duplicate_filter_set_mutex;
+            unordered_set<VertexToVertexMapping, VertexToVertexMappingHash> duplicate_filter_set;
+
             function<auto (unsigned) -> void> work_function = [&searchers, &common_domains, &threads, &work_function,
                         &model = this->model, &params = this->params, n_threads = this->n_threads,
                         &common_result, &common_result_mutex, &by_thread_nodes, &by_thread_propagations,
-                        &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser] (unsigned t) -> void
+                        &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser,
+                        &duplicate_filter_set, &duplicate_filter_set_mutex] (unsigned t) -> void
             {
                 // do the search
                 HomomorphismResult thread_result;
 
                 bool just_the_first_thread = (0 == t) && params.delay_thread_creation;
 
-                searchers[t] = make_unique<HomomorphismSearcher>(model, params);
+                searchers[t] = make_unique<HomomorphismSearcher>(model, params, [&] (const HomomorphismAssignments & a) -> bool {
+                        VertexToVertexMapping v;
+                        searchers[t]->expand_to_full_result(a, v);
+                        unique_lock<mutex> lock{ duplicate_filter_set_mutex };
+                        return duplicate_filter_set.insert(v).second;
+                        });
                 if (0 != t)
                     searchers[t]->set_seed(t);
 
@@ -264,8 +291,10 @@ namespace
                                 }))
                             break;
 
-                        if (0 == t)
+                        if (0 == t) {
                             restart_synchroniser.store(false);
+                            duplicate_filter_set.clear();
+                        }
 
                         synced_nogoods_barrier.wait();
 

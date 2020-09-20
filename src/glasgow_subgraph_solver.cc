@@ -227,7 +227,7 @@ auto main(int argc, char * argv[]) -> int
             }
         }
         else {
-            if (params.count_solutions)
+            if (params.count_solutions && ! options_vars.count("parallel"))
                 params.restarts_schedule = make_unique<NoRestartsSchedule>();
             else if (options_vars.count("parallel"))
                 params.restarts_schedule = make_unique<TimedRestartsSchedule>(TimedRestartsSchedule::default_duration, TimedRestartsSchedule::default_minimum_backtracks);

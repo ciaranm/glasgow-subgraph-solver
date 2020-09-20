@@ -9,6 +9,7 @@
 #include "homomorphism_traits.hh"
 #include "watches.hh"
 
+#include <functional>
 #include <random>
 
 enum class SearchResult
@@ -70,6 +71,8 @@ struct HomomorphismAssignments
     }
 };
 
+using DuplicateSolutionFilterer = const std::function<auto (const HomomorphismAssignments &) -> bool>;
+
 class HomomorphismSearcher
 {
     private:
@@ -77,14 +80,13 @@ class HomomorphismSearcher
 
         const HomomorphismModel & model;
         const HomomorphismParams & params;
+        const DuplicateSolutionFilterer _duplicate_solution_filterer;
 
         std::mt19937 global_rand;
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int> >;
 
         auto solution_in_proof_form(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<NamedVertex, NamedVertex> >;
-
-        auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 
         template <bool directed_, bool has_edge_labels_, bool induced_>
         auto propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void;
@@ -117,7 +119,10 @@ class HomomorphismSearcher
                 ) -> void;
 
     public:
-        HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p);
+        HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
+                const DuplicateSolutionFilterer &);
+
+        auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 
         auto propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
 
