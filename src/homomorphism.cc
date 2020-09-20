@@ -24,7 +24,7 @@
 #include <utility>
 
 #include <boost/thread/barrier.hpp>
-#include <boost/functional/hash_fwd.hpp>
+#include <boost/functional/hash.hpp>
 
 using std::atomic;
 using std::function;
