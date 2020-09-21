@@ -144,11 +144,26 @@ auto main(int argc, char * argv[]) -> int
         cout << "pattern_file = " << pattern_filename << endl;
         cout << "target_file = " << target_filename << endl;
 
-        if (options_vars.count("print-all-solutions")) {
+        if (options_vars.count("print-all-solutions") && ! params.bigraph) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
                 cout << "mapping = ";
                 for (auto v : mapping)
                     cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+                cout << endl;
+            };
+        }
+        else if(options_vars.count("print-all-solutions") && params.bigraph) {
+            params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
+                cout << "mapping = {";
+                bool lazy_flag = false;
+
+                for (auto v : mapping) {
+                    if(lazy_flag) cout << ", ";
+                    cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
+                    lazy_flag = true;
+                }
+
+                cout << "} -- {}";
                 cout << endl;
             };
         }
@@ -179,10 +194,22 @@ auto main(int argc, char * argv[]) -> int
         cout << "nodes = " << result.nodes << endl;
         cout << "propagations = " << result.propagations << endl;
 
-        if (! result.mapping.empty() && ! options_vars.count("print-all-solutions")) {
+        if (! result.mapping.empty() && ! options_vars.count("print-all-solutions") && ! params.bigraph) {
             cout << "mapping = ";
             for (auto v : result.mapping)
                 cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
+            cout << endl;
+        }
+        else if(! result.mapping.empty() && ! options_vars.count("print-all-solutions") && params.bigraph) {
+            cout << "mapping = {";
+            bool lazy_flag = false;
+
+            for (auto v : result.mapping) {
+                if(lazy_flag) cout << ", ";
+                cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
+                lazy_flag = true;
+            }
+            cout << "} -- {}";
             cout << endl;
         }
 
