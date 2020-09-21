@@ -942,6 +942,7 @@ auto HomomorphismModel::_bigraph_link_match(
         const pair<bool, vector<int> > & target_hyperedge,
         const VertexToVertexMapping & mapping) const -> bool
 {
+
     // If pattern is closed and target is open, cannot ever match
     if (target_hyperedge.first && ! pattern_hyperedge.first)
         return false;
@@ -980,7 +981,8 @@ auto HomomorphismModel::_backtracking_open_link_matching(
         if (valid_mappings.size() == 0)
             return false;
         else if (valid_mappings.size() == 1) {
-            target_links.erase(target_links.begin() + valid_mappings[0]);
+            for (unsigned j = 0 ; j != pattern_links[i].second.size() ; ++j)
+                target_links[valid_mappings[0]].second[mapping.find(j)->second] -= pattern_links[i].second[j];
             continue;
         }
         else {
