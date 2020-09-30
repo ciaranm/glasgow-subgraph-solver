@@ -158,12 +158,25 @@ auto main(int argc, char * argv[]) -> int
                 bool lazy_flag = false;
 
                 for (auto v : mapping) {
-                    if(lazy_flag) cout << ", ";
-                    cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
-                    lazy_flag = true;
+                    if(v.first >= 0){
+                        if(lazy_flag) cout << ", ";
+                        cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
+                        lazy_flag = true;
+                    }
+                }
+                
+                cout << "} -- {";
+
+                lazy_flag = false;
+                for (auto v : mapping) {
+                    if(v.first < 0){
+                        if(lazy_flag) cout << ", ";
+                        cout << "(" << v.first+999999999 << ", " << v.second+999999999 << ")";
+                        lazy_flag = true;
+                    }
                 }
 
-                cout << "} -- {}";
+                cout << "}";
                 cout << endl;
             };
         }

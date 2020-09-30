@@ -92,7 +92,7 @@ class HomomorphismModel
 
         auto initialise_domains(std::vector<HomomorphismDomain> & domains) const -> bool;
 
-        auto check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> bool;
+        auto check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> std::optional<VertexToVertexMapping>;
 };
 
 #endif

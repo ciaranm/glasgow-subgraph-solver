@@ -75,13 +75,16 @@ auto HomomorphismSearcher::restarting_search(
 
     ++nodes;
 
+    std::optional<VertexToVertexMapping> bigraph_mapping;
+
     // find ourselves a domain, or succeed if we're all assigned
     const HomomorphismDomain * branch_domain = find_branch_domain(domains);
     if (! branch_domain) {
         if (params.bigraph) {
             VertexToVertexMapping mapping;
             expand_to_full_result(assignments, mapping);
-            if (! model.check_extra_bigraph_constraints(mapping))
+            bigraph_mapping = model.check_extra_bigraph_constraints(mapping);
+            if (! bigraph_mapping.has_value())
                 return SearchResult::Unsatisfiable;
         }
 
@@ -104,6 +107,12 @@ auto HomomorphismSearcher::restarting_search(
             if (params.enumerate_callback) {
                 VertexToVertexMapping mapping;
                 expand_to_full_result(assignments, mapping);
+
+                if(params.bigraph)
+                    for(auto const& [key, val] : bigraph_mapping.value())
+                        // Weird lazy solution to partioning the node and link isos - make all the 
+                        // hyperlinks negative and swap them back during output
+                        mapping.insert(std::pair<int,int>(key-999999999,val-999999999));       
                 params.enumerate_callback(mapping);
             }
 

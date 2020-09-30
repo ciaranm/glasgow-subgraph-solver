@@ -1008,8 +1008,9 @@ auto HomomorphismModel::_backtracking_open_link_matching(
     return true;
 }
 
-auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> bool
+auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> std::optional<VertexToVertexMapping>
 {
+    VertexToVertexMapping hyperedges;
     set<int> mapped_patterns, mapped_targets;
 
     // Eliminate closed-pattern/closed-target hyperedges first
@@ -1020,13 +1021,14 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                 if (mapped_targets.find(j) == mapped_targets.end() &&
                         _bigraph_link_match(_imp->pattern_hyperedges[i], _imp->target_hyperedges[j], mapping)) {
                     mapped_patterns.insert(i);
-                    mapped_targets.insert(j);
+                    mapped_targets.insert(j);  
+                    hyperedges.insert(std::pair<int,int>(i,j));
                     lazy_flag = true;
                     break;
                 }
             }
             if (! lazy_flag)
-                return false;
+                return std::optional<VertexToVertexMapping>();
         }
     }
 
@@ -1042,7 +1044,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
             target_domains.push_back(_imp->target_hyperedges[i]);
 
     if (! _backtracking_open_link_matching(open_pattern_links, target_domains, mapping))
-        return false;
+        return std::optional<VertexToVertexMapping>();
 
     // Find transitive closure violations
     for (unsigned i = 0 ; i != pattern_size ; ++i) {
@@ -1076,7 +1078,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                         child_mappings.find(j) == child_mappings.end()) {
                     for (unsigned k = 0 ; k != pattern_size ; ++k)
                         if (_imp->pattern_big_constraints[k].first && _imp->target_graph_reachability[j].test(mapping.find(k)->second))
-                            return false;
+                            return std::optional<VertexToVertexMapping>();
 
                     // If only points to shared sites, check that all unmapped children have an adjacency superset of a site
                     if (! sites_okay) {
@@ -1096,7 +1098,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                         }
 
                         if (! site_sat)
-                            return false;
+                            return std::optional<VertexToVertexMapping>();
                     }
                 }
             }
@@ -1144,13 +1146,13 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                                 break;
                         }
                         if (! root_sat)
-                            return false;
+                            return std::optional<VertexToVertexMapping>();
                     }
                 }
             }
         }
     }
 
-    return true;
+    return hyperedges;
 }
 
