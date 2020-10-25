@@ -47,6 +47,9 @@ class HomomorphismModel
                 std::vector<std::pair<bool, std::vector<int> > > & target_links,
                 const VertexToVertexMapping & mapping) const -> bool;
 
+        auto _closed_link_matching(
+                const VertexToVertexMapping & mapping) const -> std::vector<VertexToVertexMapping>;
+
         auto _check_closed_link_compatibility(int p, int t) const -> bool;
 
         auto _check_bigraph_degree_compatibility(int p, int t) const -> bool;
