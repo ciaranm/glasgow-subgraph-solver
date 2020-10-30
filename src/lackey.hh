@@ -41,12 +41,16 @@ class Lackey
         Lackey & operator= (const Lackey &) = delete;
 
         using DeletionFunction = std::function<auto (int, int) -> bool>;
+        using RestrictRangeFunction = std::function<auto (int, int, int) -> void>;
 
         auto check_solution(
                 const VertexToVertexMapping &,
                 bool partial,
                 bool all_solutions,
                 const DeletionFunction & deletions) -> bool;
+
+        auto reduce_initial_bounds(
+                const RestrictRangeFunction & restrict_range) -> bool;
 
         auto number_of_checks() const -> long;
         auto number_of_propagations() const -> long;

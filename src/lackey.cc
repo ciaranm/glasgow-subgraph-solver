@@ -140,6 +140,51 @@ auto Lackey::check_solution(
     return result;
 }
 
+auto Lackey::reduce_initial_bounds(
+        const RestrictRangeFunction & restrict_range) -> bool
+{
+    unique_lock<mutex> lock{ _imp->external_solver_mutex };
+    ++_imp->number_of_calls;
+
+    string command = "I";
+    _imp->send_to << command << " " << 0 << endl;
+
+    if (! _imp->send_to)
+        throw DisobedientLackeyError{ "error giving lackey its orders" };
+
+    string operation;
+    if (! (_imp->read_from >> operation) || operation != command)
+        throw DisobedientLackeyError{ "asked lackey to " + command + ", but it replied with '" + operation + "'" };
+
+    string response;
+    if (! (_imp->read_from >> response))
+        throw DisobedientLackeyError{ "asked lackey to " + command + ", but it gave no T/F" };
+    else if (response == "T") {
+        /* nothing */
+    }
+    else if (response == "F")
+        return false;
+    else
+        throw DisobedientLackeyError{ "asked lackey to " + command + " but it replied with '" + operation + "' then '" + response + "'" };
+
+    int n;
+    if (! (_imp->read_from >> n))
+        throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to " + command + " query" };
+
+    for (int i = 0 ; i < n ; ++i) {
+        string k, lower, upper;
+        if (! (_imp->read_from >> k >> lower >> upper))
+            throw DisobedientLackeyError{ "lackey gave bad response triple " + to_string(i) + " to " + command + " query" };
+        auto p = _imp->pattern_graph.vertex_from_name(k);
+        auto l = _imp->target_graph.vertex_from_name(lower);
+        auto u = _imp->target_graph.vertex_from_name(upper);
+        if (p && l && u)
+            restrict_range(*p, *l, *u);
+    }
+
+    return true;
+}
+
 auto Lackey::number_of_checks() const -> long
 {
     return _imp->number_of_checks;
