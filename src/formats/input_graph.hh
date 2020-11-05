@@ -3,13 +3,10 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_SOLVER_FORMATS_INPUT_GRAPH_HH
 #define GLASGOW_SUBGRAPH_SOLVER_SOLVER_FORMATS_INPUT_GRAPH_HH 1
 
-#include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
-#include <string>
 #include <string_view>
-#include <type_traits>
-#include <vector>
 
 /**
  * A graph, in a convenient format for reading in from files. We don't do any
@@ -21,12 +18,8 @@
 class InputGraph
 {
     private:
-        int _size = 0;
-        bool _has_vertex_labels, _has_edge_labels;
-        std::map<std::pair<int, int>, std::string> _edges;
-        std::vector<std::string> _vertex_labels;
-        std::vector<std::string> _vertex_names;
-        bool _loopy = false, _directed = false;
+        struct Imp;
+        std::unique_ptr<Imp> _imp;
 
     public:
         /**
@@ -34,9 +27,11 @@ class InputGraph
          */
         InputGraph(int initial_size, bool has_vertex_labels, bool has_edge_labels);
 
-        InputGraph(const InputGraph &) = default;
+        InputGraph(const InputGraph &) = delete;
 
-        InputGraph(InputGraph &&) = default;
+        InputGraph(InputGraph &&);
+
+        ~InputGraph();
 
         /**
          * Number of vertices.
