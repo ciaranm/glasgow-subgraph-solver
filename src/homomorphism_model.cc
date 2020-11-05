@@ -430,22 +430,13 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
         // be completely eliminated from the upper and lower bounds of certain domains,
         // in which case they won't show up as being deleted during propagation.
         bool wipeout = false;
-        if (! _imp->params.lackey->reduce_initial_bounds([&] (int p, int tl, int tu) -> void {
+        if (! _imp->params.lackey->reduce_initial_bounds([&] (int p, int t) -> void {
                 for (auto & d : domains)
                     if (d.v == unsigned(p)) {
-                        for (unsigned v = 0 ; v < unsigned(tl) ; ++v) {
-                            if (d.values.test(v)) {
-                                d.values.reset(v);
-                                    if (0 == --d.count)
-                                        wipeout = true;
-                            }
-                        }
-                        for (unsigned v = tu + 1 ; v < target_size ; ++v) {
-                            if (d.values.test(v)) {
-                                d.values.reset(v);
-                                    if (0 == --d.count)
-                                        wipeout = true;
-                            }
+                        if (d.values.test(t)) {
+                            d.values.reset(t);
+                            if (0 == --d.count)
+                                wipeout = true;
                         }
                         break;
                     }

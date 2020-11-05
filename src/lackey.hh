@@ -41,7 +41,7 @@ class Lackey
         Lackey & operator= (const Lackey &) = delete;
 
         using DeletionFunction = std::function<auto (int, int) -> bool>;
-        using RestrictRangeFunction = std::function<auto (int, int, int) -> void>;
+        using RestrictRangeFunction = std::function<auto (int, int) -> void>;
 
         auto check_solution(
                 const VertexToVertexMapping &,

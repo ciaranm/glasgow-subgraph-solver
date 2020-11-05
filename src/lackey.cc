@@ -172,14 +172,24 @@ auto Lackey::reduce_initial_bounds(
         throw DisobedientLackeyError{ "lackey replied with length '" + to_string(n) + "' to " + command + " query" };
 
     for (int i = 0 ; i < n ; ++i) {
-        string k, lower, upper;
+        string k;
+        int lower, upper;
         if (! (_imp->read_from >> k >> lower >> upper))
             throw DisobedientLackeyError{ "lackey gave bad response triple " + to_string(i) + " to " + command + " query" };
         auto p = _imp->pattern_graph.vertex_from_name(k);
-        auto l = _imp->target_graph.vertex_from_name(lower);
-        auto u = _imp->target_graph.vertex_from_name(upper);
-        if (p && l && u)
-            restrict_range(*p, *l, *u);
+        if (p) {
+            auto delete_one = [&] (int v) {
+                auto v_name = _imp->target_graph.vertex_from_name(to_string(v));
+                if (! v_name)
+                    throw DisobedientLackeyError{ "something's wrong with name mapping in initial bounds reduction" };
+                restrict_range(*p, *v_name);
+            };
+
+            for (int i = 1 ; i < lower ; ++i)
+                delete_one(i);
+            for (int i = upper + 1 ; i < _imp->target_graph.size() ; ++i)
+                delete_one(i);
+        }
     }
 
     return true;
