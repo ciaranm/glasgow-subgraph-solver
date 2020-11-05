@@ -632,26 +632,35 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
     if (params.lackey && (propagate_using_lackey || params.send_partials_to_lackey)) {
         VertexToVertexMapping mapping;
         expand_to_full_result(assignments, mapping);
-        bool wipeout = false;
-        auto deletion = [&] (int p, int t) -> bool {
-            if (! wipeout) {
-                for (auto & d : new_domains)
-                    if (d.v == unsigned(p)) {
-                        if (d.values.test(t)) {
+
+        if (! propagate_using_lackey) {
+            if (! params.lackey->check_solution(mapping, true, false, Lackey::DeletionFunction{}))
+                return false;
+        }
+        else {
+            bool wipeout = false;
+            vector<int> find_domain(model.pattern_size, -1);
+            for (unsigned i = 0 ; i < new_domains.size() ; ++i)
+                find_domain[new_domains[i].v] = i;
+
+            auto deletion = [&] (int p, int t) -> bool {
+                if (! wipeout) {
+                    if (int d = find_domain[p] ; d != -1) {
+                        if (new_domains[d].values.test(t)) {
                             ++dcount;
-                            d.values.reset(t);
-                            if (0 == --d.count)
+                            new_domains[d].values.reset(t);
+                            if (0 == --new_domains[d].count)
                                 wipeout = true;
                             return true;
                         }
-                        break;
                     }
-            }
-            return false;
-        };
+                }
+                return false;
+            };
 
-        if (! params.lackey->check_solution(mapping, true, false, propagate_using_lackey ? deletion : Lackey::DeletionFunction{}) || wipeout)
-            return false;
+            if (! params.lackey->check_solution(mapping, true, false, deletion) || wipeout)
+                return false;
+        }
     }
 
     return true;
