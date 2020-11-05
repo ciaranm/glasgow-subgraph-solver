@@ -84,10 +84,15 @@ auto HomomorphismSearcher::restarting_search(
             VertexToVertexMapping mapping;
             expand_to_full_result(assignments, mapping);
             if (! params.lackey->check_solution(mapping, false, params.count_solutions, { })) {
-                if (params.propagate_using_lackey == PropagateUsingLackey::RootAndBackjump)
-                    return SearchResult::UnsatisfiableAndBackjumpUsingLackey;
-                else
-                    return SearchResult::Unsatisfiable;
+                switch (params.propagate_using_lackey) {
+                    case PropagateUsingLackey::RootAndBackjump:
+                    case PropagateUsingLackey::RandomAndBackjump:
+                        return SearchResult::UnsatisfiableAndBackjumpUsingLackey;
+                    case PropagateUsingLackey::Never:
+                    case PropagateUsingLackey::Root:
+                    case PropagateUsingLackey::Always:
+                        return SearchResult::Unsatisfiable;
+                }
             }
         }
 
@@ -142,7 +147,16 @@ auto HomomorphismSearcher::restarting_search(
 
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
+
+    // override whether we use the lackey for propagation, in case we are inside a backjump,
+    // or if we're randomly deciding to use the lackey anyway.
     bool use_lackey_for_propagation = false;
+    if (params.propagate_using_lackey == PropagateUsingLackey::RandomAndBackjump) {
+        uniform_int_distribution<long long> dist(1, 100);
+        long long select_score = dist(global_rand);
+        if (1 == select_score)
+            use_lackey_for_propagation = true;
+    }
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end ; f_v != f_end ; ++f_v) {
