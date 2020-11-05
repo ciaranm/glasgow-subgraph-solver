@@ -9,6 +9,9 @@
 #include <type_traits>
 #include <vector>
 
+#include <boost/bimap.hpp>
+#include <boost/bimap/unordered_set_of.hpp>
+
 using std::distance;
 using std::find;
 using std::numeric_limits;
@@ -24,13 +27,15 @@ using std::string_view;
 using std::to_string;
 using std::vector;
 
+using Names = boost::bimaps::bimap<boost::bimaps::unordered_set_of<int>, boost::bimaps::unordered_set_of<string> >;
+
 struct InputGraph::Imp
 {
     int size = 0;
     bool has_vertex_labels, has_edge_labels;
     map<pair<int, int>, string> edges;
     vector<string> vertex_labels;
-    vector<string> vertex_names;
+    Names vertex_names;
     bool loopy = false, directed = false;
 };
 
@@ -54,7 +59,6 @@ auto InputGraph::resize(int size) -> void
 {
     _imp->size = size;
     _imp->vertex_labels.resize(size);
-    _imp->vertex_names.resize(size);
 }
 
 auto InputGraph::add_edge(int a, int b) -> void
@@ -113,24 +117,25 @@ auto InputGraph::vertex_label(int v) const -> string_view
 
 auto InputGraph::set_vertex_name(int v, string_view l) -> void
 {
-    _imp->vertex_names[v] = l;
+    _imp->vertex_names.insert(Names::value_type{ v, string{ l } });
 }
 
 auto InputGraph::vertex_name(int v) const -> string
 {
-    if (_imp->vertex_names[v].empty())
+    auto it = _imp->vertex_names.left.find(v);
+    if (it == _imp->vertex_names.left.end())
         return to_string(v);
     else
-        return _imp->vertex_names[v];
+        return it->second;
 }
 
 auto InputGraph::vertex_from_name(string_view n) const -> optional<int>
 {
-    auto i = find(_imp->vertex_names.begin(), _imp->vertex_names.end(), n);
-    if (i == _imp->vertex_names.end())
+    auto it = _imp->vertex_names.right.find(string{ n });
+    if (it == _imp->vertex_names.right.end())
         return nullopt;
     else
-        return make_optional(i - _imp->vertex_names.begin());
+        return make_optional(it->second);
 }
 
 auto InputGraph::edge_label(int a, int b) const -> string_view
