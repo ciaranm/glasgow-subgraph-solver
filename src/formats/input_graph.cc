@@ -14,11 +14,13 @@
 
 using std::distance;
 using std::find;
+using std::function;
 using std::numeric_limits;
 using std::make_optional;
 using std::make_pair;
 using std::map;
 using std::max;
+using std::move;
 using std::nullopt;
 using std::optional;
 using std::pair;
@@ -53,7 +55,7 @@ InputGraph::InputGraph(int size, bool v, bool e) :
 
 InputGraph::~InputGraph() = default;
 
-InputGraph::InputGraph(InputGraph &&) = default;
+InputGraph::InputGraph(InputGraph && other) = default;
 
 auto InputGraph::resize(int size) -> void
 {
@@ -143,16 +145,6 @@ auto InputGraph::edge_label(int a, int b) const -> string_view
     return _imp->edges.find({a, b})->second;
 }
 
-auto InputGraph::begin_edges() const -> InputGraph::EdgesIterator
-{
-    return _imp->edges.begin();
-}
-
-auto InputGraph::end_edges() const -> InputGraph::EdgesIterator
-{
-    return _imp->edges.end();
-}
-
 auto InputGraph::has_vertex_labels() const -> bool
 {
     return _imp->has_vertex_labels;
@@ -166,5 +158,11 @@ auto InputGraph::has_edge_labels() const -> bool
 auto InputGraph::directed() const -> bool
 {
     return _imp->directed;
+}
+
+auto InputGraph::for_each_edge(const function<auto (int, int, std::string_view) -> void> & c) const -> void
+{
+    for (auto & [ e, l ] : _imp->edges)
+        c(e.first, e.second, l);
 }
 

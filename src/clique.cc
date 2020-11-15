@@ -26,6 +26,7 @@ using std::move;
 using std::pair;
 using std::reverse;
 using std::sort;
+using std::string_view;
 using std::swap;
 using std::to_string;
 using std::vector;
@@ -101,8 +102,7 @@ namespace
             // pre-calculate degrees
             vector<int> degrees;
             degrees.resize(size);
-            for (auto e = g.begin_edges(), e_end = g.end_edges() ; e != e_end ; ++e)
-                ++degrees[e->first.first];
+            g.for_each_edge([&] (int f, int, string_view) { ++degrees[f]; });
 
             // sort on degree
             if (! params.input_order)
@@ -112,8 +112,7 @@ namespace
             for (unsigned i = 0 ; i < order.size() ; ++i)
                 invorder[order[i]] = i;
 
-            for (auto e = g.begin_edges(), e_end = g.end_edges() ; e != e_end ; ++e)
-                adj[invorder[e->first.first]].set(invorder[e->first.second]);
+            g.for_each_edge([&] (int f, int t, string_view) { adj[invorder[f]].set(invorder[t]); });
 
             if (params.connected) {
                 connected_table.resize(size);

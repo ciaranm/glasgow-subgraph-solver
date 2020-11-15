@@ -3,9 +3,10 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_SOLVER_FORMATS_INPUT_GRAPH_HH
 #define GLASGOW_SUBGRAPH_SOLVER_SOLVER_FORMATS_INPUT_GRAPH_HH 1
 
-#include <map>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 
 /**
@@ -107,13 +108,9 @@ class InputGraph
 
         auto has_edge_labels() const -> bool;
 
-        using EdgesIterator = std::map<std::pair<int, int>, std::string>::const_iterator;
-
-        auto begin_edges() const -> EdgesIterator;
-
-        auto end_edges() const -> EdgesIterator;
-
         auto directed() const -> bool;
+
+        auto for_each_edge(const std::function<auto (int, int, std::string_view) -> void> &) const -> void;
 };
 
 #endif

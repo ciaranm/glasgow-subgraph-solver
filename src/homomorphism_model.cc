@@ -126,23 +126,23 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     // recode target to a bit graph, and take out loops
     _imp->target_graph_rows.resize(target_size * max_graphs, SVOBitset{ target_size, 0 });
     _imp->target_loops.resize(target_size);
-    for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
-        if (e->first.first == e->first.second)
-            _imp->target_loops[e->first.first] = 1;
+    target.for_each_edge([&] (int f, int t, string_view) {
+        if (f == t)
+            _imp->target_loops[f] = 1;
         else
-            _imp->target_graph_rows[e->first.first * max_graphs + 0].set(e->first.second);
-    }
+            _imp->target_graph_rows[f * max_graphs + 0].set(t);
+    });
 
     // if directed, do both directions
     if (pattern.directed()) {
         _imp->forward_target_graph_rows.resize(target_size, SVOBitset{ target_size, 0 });
         _imp->reverse_target_graph_rows.resize(target_size, SVOBitset{ target_size, 0 });
-        for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
-            if (e->first.first != e->first.second && e->second != "unlabelled") {
-                _imp->forward_target_graph_rows[e->first.first].set(e->first.second);
-                _imp->reverse_target_graph_rows[e->first.second].set(e->first.first);
+        target.for_each_edge([&] (int f, int t, string_view l) {
+            if (f != t && l != "unlabelled") {
+                _imp->forward_target_graph_rows[f].set(t);
+                _imp->reverse_target_graph_rows[t].set(f);
             }
-        }
+        });
     }
 
     // target vertex labels
@@ -160,13 +160,13 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     // target edge labels
     if (pattern.has_edge_labels()) {
         _imp->target_edge_labels.resize(target_size * target_size);
-        for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
-            auto r = edge_labels_map.emplace(e->second, next_edge_label);
+        target.for_each_edge([&] (int f, int t, string_view l) {
+            auto r = edge_labels_map.emplace(l, next_edge_label);
             if (r.second)
                 ++next_edge_label;
 
-            _imp->target_edge_labels[e->first.first * target_size + e->first.second] = r.first->second;
-        }
+            _imp->target_edge_labels[f * target_size + t] = r.first->second;
+        });
     }
 
     auto decode = [&] (string_view s) -> int {

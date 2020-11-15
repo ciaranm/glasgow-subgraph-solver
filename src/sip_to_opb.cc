@@ -30,6 +30,7 @@ using std::ostreambuf_iterator;
 using std::pair;
 using std::sort;
 using std::string;
+using std::string_view;
 using std::stringstream;
 using std::vector;
 
@@ -97,12 +98,12 @@ auto main(int argc, char * argv[]) -> int
         map<pair<int, int>, int> numberings;
 
         if (degree) {
-            for (auto e = pattern.begin_edges(), e_end = pattern.end_edges() ; e != e_end ; ++e) {
-                if (e->first.first == e->first.second)
-                    continue;
-                pattern_degrees[e->first.first]++;
-                pattern_ndss[e->first.first].push_back(e->first.second);
-            }
+            pattern.for_each_edge([&] (int f, int t, string_view) {
+                if (f != t) {
+                    pattern_degrees[f]++;
+                    pattern_ndss[f].push_back(t);
+                }
+            });
 
             for (int v = 0 ; v < pattern.size() ; ++v) {
                 for (auto & v : pattern_ndss[v])
@@ -110,12 +111,12 @@ auto main(int argc, char * argv[]) -> int
                 sort(pattern_ndss[v].begin(), pattern_ndss[v].end(), greater<int>());
             }
 
-            for (auto e = target.begin_edges(), e_end = target.end_edges() ; e != e_end ; ++e) {
-                if (e->first.first == e->first.second)
-                    continue;
-                target_degrees[e->first.first]++;
-                target_ndss[e->first.first].push_back(e->first.second);
-            }
+            target.for_each_edge([&] (int f, int t, string_view) {
+                if (f != t) {
+                    target_degrees[f]++;
+                    target_ndss[f].push_back(t);
+                }
+            });
 
             for (int v = 0 ; v < target.size() ; ++v) {
                 for (auto & v : target_ndss[v])
