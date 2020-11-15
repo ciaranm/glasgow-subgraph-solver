@@ -5,6 +5,7 @@
 
 #include "formats/input_graph.hh"
 
+#include <string>
 #include <exception>
 #include <map>
 #include <utility>
