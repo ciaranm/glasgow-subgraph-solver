@@ -4,7 +4,7 @@ language: cpp
 
 script:
   - $CXX_COMPILER --version
-  - env CXX=$CXX_COMPILER CXXFLAGS=$CXX_FLAGS make
+  - env CXX=$CXX_COMPILER CXXFLAGS=$CXX_FLAGS LDFLAGS=$CXX_LDFLAGS make
 
 matrix:
   include:
@@ -39,19 +39,25 @@ matrix:
           # old boost multiprecision doesn't work with new gcc
 
     - os: linux
-      dist: xenial
-      compiler: clang-7
+      dist: focal
+      compiler: gcc-9
       addons:
         apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-xenial-7
           packages:
-            - clang-7
-            - libstdc++-7-dev
             - libboost-all-dev
       env:
-        - CXX_COMPILER=clang++-7
+        - CXX_COMPILER=g++
+
+    - os: linux
+      dist: focal
+      compiler: clang-10
+      addons:
+        apt:
+          packages:
+            - libboost-all-dev
+            - clang-10
+      env:
+        - CXX_COMPILER=clang++-10
 
     - os: osx
       osx_image: xcode10.2
