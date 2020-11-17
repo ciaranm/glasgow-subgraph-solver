@@ -180,9 +180,8 @@ auto Lackey::reduce_initial_bounds(
         if (p) {
             auto delete_one = [&] (int v) {
                 auto v_name = _imp->target_graph.vertex_from_name(to_string(v));
-                if (! v_name)
-                    throw DisobedientLackeyError{ "something's wrong with name mapping in initial bounds reduction" };
-                restrict_range(*p, *v_name);
+                if (v_name)
+                    restrict_range(*p, *v_name);
             };
 
             for (int i = 1 ; i < lower ; ++i)
