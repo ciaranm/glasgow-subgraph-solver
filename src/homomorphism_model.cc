@@ -209,14 +209,22 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     }
 
     // hackery for side constraints
-    if (_imp->params.internal_side_constraints == InternalSideConstraints::Parity) {
-        _imp->pattern_parity.resize(pattern.size());
-        for (int p = 0 ; p < pattern.size() ; ++p)
-            _imp->pattern_parity[p] = stoi(pattern.raw_vertex_name(p)) % 2;
+    switch (_imp->params.internal_side_constraints) {
+        case InternalSideConstraints::None:
+            break;
 
-        _imp->target_parity.resize(target.size());
-        for (int t = 0 ; t < target.size() ; ++t)
-            _imp->target_parity[t] = stoi(target.vertex_name(t)) % 2;
+        case InternalSideConstraints::Parity:
+        case InternalSideConstraints::MoreOddThanEven:
+            {
+                _imp->pattern_parity.resize(pattern.size());
+                for (int p = 0 ; p < pattern.size() ; ++p)
+                    _imp->pattern_parity[p] = stoi(pattern.raw_vertex_name(p)) % 2;
+
+                _imp->target_parity.resize(target.size());
+                for (int t = 0 ; t < target.size() ; ++t)
+                    _imp->target_parity[t] = stoi(target.vertex_name(t)) % 2;
+            }
+            break;
     }
 }
 
@@ -460,6 +468,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
 
     switch (_imp->params.internal_side_constraints) {
         case InternalSideConstraints::None:
+        case InternalSideConstraints::MoreOddThanEven:
             break;
 
         case InternalSideConstraints::Parity:
@@ -840,5 +849,10 @@ auto HomomorphismModel::has_less_thans() const -> bool
 auto HomomorphismModel::directed() const -> bool
 {
     return _imp->directed;
+}
+
+auto HomomorphismModel::target_parity(int t) const -> int
+{
+    return _imp->target_parity[t];
 }
 

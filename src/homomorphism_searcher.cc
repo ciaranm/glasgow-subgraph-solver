@@ -96,6 +96,18 @@ auto HomomorphismSearcher::restarting_search(
             }
         }
 
+        if (params.internal_side_constraints == InternalSideConstraints::MoreOddThanEven) {
+            // such that (sum i : P . f(i) % 2) > (sum i : P . (f(i) + 1) % 2)
+            VertexToVertexMapping mapping;
+            expand_to_full_result(assignments, mapping);
+            int even = 0, odd = 0;
+            for (auto & [ _, v ] : mapping) {
+                model.target_parity(v) ? ++even : ++odd;
+            }
+            if (! (odd > even))
+                return SearchResult::Unsatisfiable;
+        }
+
         if (params.proof)
             params.proof->post_solution(solution_in_proof_form(assignments));
 

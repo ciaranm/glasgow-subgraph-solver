@@ -36,7 +36,8 @@ enum class PropagateUsingLackey
 enum class InternalSideConstraints
 {
     None,
-    Parity
+    Parity,
+    MoreOddThanEven
 };
 
 struct HomomorphismParams

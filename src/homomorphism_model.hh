@@ -77,6 +77,8 @@ class HomomorphismModel
         auto target_has_loop(int t) const -> bool;
 
         auto initialise_domains(std::vector<HomomorphismDomain> & domains) const -> bool;
+
+        auto target_parity(int t) const -> int;
 };
 
 #endif
