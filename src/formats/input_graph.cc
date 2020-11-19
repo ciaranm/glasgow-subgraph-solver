@@ -37,7 +37,7 @@ struct InputGraph::Imp
     bool has_vertex_labels, has_edge_labels;
     map<pair<int, int>, string> edges;
     vector<string> vertex_labels;
-    Names vertex_names;
+    Names vertex_names, raw_vertex_names;
     bool loopy = false, directed = false;
 };
 
@@ -122,10 +122,24 @@ auto InputGraph::set_vertex_name(int v, string_view l) -> void
     _imp->vertex_names.insert(Names::value_type{ v, string{ l } });
 }
 
+auto InputGraph::set_raw_vertex_name(int v, string_view l) -> void
+{
+    _imp->raw_vertex_names.insert(Names::value_type{ v, string{ l } });
+}
+
 auto InputGraph::vertex_name(int v) const -> string
 {
     auto it = _imp->vertex_names.left.find(v);
     if (it == _imp->vertex_names.left.end())
+        return to_string(v);
+    else
+        return it->second;
+}
+
+auto InputGraph::raw_vertex_name(int v) const -> string
+{
+    auto it = _imp->raw_vertex_names.left.find(v);
+    if (it == _imp->raw_vertex_names.left.end())
         return to_string(v);
     else
         return it->second;

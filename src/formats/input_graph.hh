@@ -91,10 +91,14 @@ class InputGraph
          */
         auto set_vertex_name(int v, std::string_view label) -> void;
 
+        auto set_raw_vertex_name(int v, std::string_view label) -> void;
+
         /**
          * What is the name associated with a given vertex (for output purposes)?
          */
         auto vertex_name(int v) const -> std::string;
+
+        auto raw_vertex_name(int v) const -> std::string;
 
         /**
          * Find a given vertex by name.

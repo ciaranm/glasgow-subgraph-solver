@@ -52,6 +52,8 @@ struct HomomorphismModel::Imp
 
     vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
+    vector<int> pattern_parity, target_parity;
+
     Imp(const HomomorphismParams & p) :
         params(p)
     {
@@ -204,6 +206,17 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             if (loop_detect)
                 throw UnsupportedConfiguration{ "Pattern less than constraints form a loop" };
         }
+    }
+
+    // hackery for side constraints
+    if (_imp->params.internal_side_constraints == InternalSideConstraints::Parity) {
+        _imp->pattern_parity.resize(pattern.size());
+        for (int p = 0 ; p < pattern.size() ; ++p)
+            _imp->pattern_parity[p] = stoi(pattern.raw_vertex_name(p)) % 2;
+
+        _imp->target_parity.resize(target.size());
+        for (int t = 0 ; t < target.size() ; ++t)
+            _imp->target_parity[t] = stoi(target.vertex_name(t)) % 2;
     }
 }
 
@@ -443,6 +456,25 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                 }) || wipeout) {
             return false;
         }
+    }
+
+    switch (_imp->params.internal_side_constraints) {
+        case InternalSideConstraints::None:
+            break;
+
+        case InternalSideConstraints::Parity:
+            for (auto & d : domains) {
+                auto dv = d.values;
+                for (auto v = dv.find_first() ; v != decltype(dv)::npos ; v = dv.find_first()) {
+                    dv.reset(v);
+                    if (_imp->pattern_parity[d.v] != _imp->target_parity[v]) {
+                        d.values.reset(v);
+                        if (0 == --d.count)
+                            return false;
+                    }
+                }
+            }
+            break;
     }
 
     return true;

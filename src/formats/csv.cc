@@ -94,8 +94,10 @@ namespace
                 return s;
         };
 
-        for (auto & [v, l] : vertices)
+        for (auto & [v, l] : vertices) {
+            result.set_raw_vertex_name(l, v);
             result.set_vertex_name(l, rename(v));
+        }
 
         if (seen_vertex_label)
             for (auto & [v, l] : vertices)

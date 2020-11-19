@@ -33,6 +33,12 @@ enum class PropagateUsingLackey
     RandomAndBackjump
 };
 
+enum class InternalSideConstraints
+{
+    None,
+    Parity
+};
+
 struct HomomorphismParams
 {
     /// Timeout handler
@@ -101,6 +107,9 @@ struct HomomorphismParams
 
     /// Propagate using the lackey?
     PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
+
+    /// Side constraints internally, for comparison with lackey purposes only.
+    InternalSideConstraints internal_side_constraints = InternalSideConstraints::None;
 
     /// Optional proof handler
     std::unique_ptr<Proof> proof;

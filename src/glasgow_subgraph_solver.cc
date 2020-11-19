@@ -111,7 +111,8 @@ auto main(int argc, char * argv[]) -> int
             ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
             ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
             ("send-partials-to-lackey",                        "Send partial solutions to the lackey")
-            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / random-and-backjump / always)");
+            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / random-and-backjump / always)")
+            ("internal-side-constraints", po::value<string>(), "Internal side constraints (for science purposes only, none / parity)");
         display_options.add(lackey_options);
 
         po::options_description proof_logging_options{ "Proof logging options" };
@@ -331,6 +332,18 @@ auto main(int argc, char * argv[]) -> int
         }
         else
             params.propagate_using_lackey = PropagateUsingLackey::Never;
+
+        if (options_vars.count("internal-side-constraints")) {
+            string isc = options_vars["internal-side-constraints"].as<string>();
+            if (isc == "none")
+                params.internal_side_constraints = InternalSideConstraints::None;
+            else if (isc == "parity")
+                params.internal_side_constraints = InternalSideConstraints::Parity;
+            else {
+                cerr << "Unknown internal-side-constraints option '" << isc << "'" << endl;
+                return EXIT_FAILURE;
+            }
+        }
 
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
