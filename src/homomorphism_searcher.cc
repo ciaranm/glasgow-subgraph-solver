@@ -102,7 +102,7 @@ auto HomomorphismSearcher::restarting_search(
             expand_to_full_result(assignments, mapping);
             int even = 0, odd = 0;
             for (auto & [ _, v ] : mapping) {
-                model.target_parity(v) ? ++even : ++odd;
+                model.target_parity(v) ? ++odd : ++even;
             }
             if (! (odd > even))
                 return SearchResult::Unsatisfiable;
