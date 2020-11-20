@@ -86,7 +86,6 @@ auto HomomorphismSearcher::restarting_search(
             if (! params.lackey->check_solution(mapping, false, params.count_solutions, { })) {
                 switch (params.propagate_using_lackey) {
                     case PropagateUsingLackey::RootAndBackjump:
-                    case PropagateUsingLackey::RandomAndBackjump:
                         return SearchResult::UnsatisfiableAndBackjumpUsingLackey;
                     case PropagateUsingLackey::Never:
                     case PropagateUsingLackey::Root:
@@ -148,8 +147,7 @@ auto HomomorphismSearcher::restarting_search(
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
 
-    // override whether we use the lackey for propagation, in case we are inside a backjump,
-    // or if we're randomly deciding to use the lackey anyway.
+    // override whether we use the lackey for propagation, in case we are inside a backjump
     bool use_lackey_for_propagation = false;
 
     // for each value remaining...
@@ -231,15 +229,6 @@ auto HomomorphismSearcher::restarting_search(
                 // restore assignments
                 assignments.values.resize(assignments_size);
                 actually_hit_a_failure = true;
-
-                // possibly turn on the lackey anyway just to see what happens
-                if ((! use_lackey_for_propagation) && (params.propagate_using_lackey == PropagateUsingLackey::RandomAndBackjump)) {
-                    uniform_int_distribution<long long> dist(1, 100);
-                    long long select_score = dist(global_rand);
-                    if (1 == select_score)
-                        use_lackey_for_propagation = true;
-                }
-
                 break;
         }
 
