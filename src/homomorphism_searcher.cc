@@ -677,6 +677,18 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
         }
     }
 
+    if (params.internal_side_constraints == InternalSideConstraints::LessThreeOdd) {
+        // such that (sum i : P . f(i) % 2) < 3
+        VertexToVertexMapping mapping;
+        expand_to_full_result(assignments, mapping);
+        int odds = 0;
+        for (auto & [ _, v ] : mapping)
+            if (model.target_parity(v))
+                ++odds;
+        if (! (odds < 3))
+            return false;
+    }
+
     return true;
 }
 

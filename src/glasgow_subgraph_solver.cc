@@ -112,7 +112,7 @@ auto main(int argc, char * argv[]) -> int
             ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
             ("send-partials-to-lackey",                        "Send partial solutions to the lackey")
             ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / random-and-backjump / always)")
-            ("internal-side-constraints", po::value<string>(), "Internal side constraints (for science purposes only, none / parity / moreodd)");
+            ("internal-side-constraints", po::value<string>(), "Internal side constraints (for science purposes only, none / parity / moreodd / lessthreeodd)");
         display_options.add(lackey_options);
 
         po::options_description proof_logging_options{ "Proof logging options" };
@@ -341,6 +341,8 @@ auto main(int argc, char * argv[]) -> int
                 params.internal_side_constraints = InternalSideConstraints::Parity;
             else if (isc == "moreodd")
                 params.internal_side_constraints = InternalSideConstraints::MoreOddThanEven;
+            else if (isc == "lessthreeodd")
+                params.internal_side_constraints = InternalSideConstraints::LessThreeOdd;
             else {
                 cerr << "Unknown internal-side-constraints option '" << isc << "'" << endl;
                 return EXIT_FAILURE;

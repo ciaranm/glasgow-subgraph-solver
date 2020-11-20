@@ -215,6 +215,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
         case InternalSideConstraints::Parity:
         case InternalSideConstraints::MoreOddThanEven:
+        case InternalSideConstraints::LessThreeOdd:
             {
                 _imp->pattern_parity.resize(pattern.size());
                 for (int p = 0 ; p < pattern.size() ; ++p)
@@ -469,6 +470,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
     switch (_imp->params.internal_side_constraints) {
         case InternalSideConstraints::None:
         case InternalSideConstraints::MoreOddThanEven:
+        case InternalSideConstraints::LessThreeOdd:
             break;
 
         case InternalSideConstraints::Parity:

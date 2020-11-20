@@ -37,7 +37,8 @@ enum class InternalSideConstraints
 {
     None,
     Parity,
-    MoreOddThanEven
+    MoreOddThanEven,
+    LessThreeOdd
 };
 
 struct HomomorphismParams
