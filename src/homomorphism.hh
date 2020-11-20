@@ -29,8 +29,7 @@ enum class PropagateUsingLackey
     Never,
     Root,
     Always,
-    RootAndBackjump,
-    RandomAndBackjump
+    RootAndBackjump
 };
 
 enum class InternalSideConstraints

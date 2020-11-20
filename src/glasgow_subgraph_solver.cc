@@ -111,7 +111,7 @@ auto main(int argc, char * argv[]) -> int
             ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
             ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
             ("send-partials-to-lackey",                        "Send partial solutions to the lackey")
-            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / random-and-backjump / always)")
+            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / always)")
             ("internal-side-constraints", po::value<string>(), "Internal side constraints (for science purposes only, none / parity / moreodd / lessthreeodd)");
         display_options.add(lackey_options);
 
@@ -321,8 +321,6 @@ auto main(int argc, char * argv[]) -> int
                 params.propagate_using_lackey = PropagateUsingLackey::Root;
             else if (propagate_using_lackey == "root-and-backjump")
                 params.propagate_using_lackey = PropagateUsingLackey::RootAndBackjump;
-            else if (propagate_using_lackey == "random-and-backjump")
-                params.propagate_using_lackey = PropagateUsingLackey::RandomAndBackjump;
             else if (propagate_using_lackey == "never")
                 params.propagate_using_lackey = PropagateUsingLackey::Never;
             else {
