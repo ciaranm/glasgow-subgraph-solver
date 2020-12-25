@@ -37,6 +37,8 @@ class HomomorphismModel
 
         auto _check_label_compatibility(int p, int t) const -> bool;
 
+        auto _check_clique_compatibility(int p, int t) const -> bool;
+
     public:
         using PatternAdjacencyBitsType = uint8_t;
 

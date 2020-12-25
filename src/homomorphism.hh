@@ -86,6 +86,9 @@ struct HomomorphismParams
     /// How many exact path graphs do we have, if we have any?
     int number_of_exact_path_graphs = 4;
 
+    /// Optional clique constraints
+    std::unique_ptr<std::pair<std::vector<int>, std::vector<int> > > clique_sizes;
+
     /// Disable neighbourhood degree sequence processing?
     bool no_nds = false;
 

@@ -227,6 +227,14 @@ auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
     return true;
 }
 
+auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
+{
+    if (! _imp->params.clique_sizes)
+        return true;
+
+    return _imp->params.clique_sizes->first[p] <= _imp->params.clique_sizes->second[t];
+}
+
 auto HomomorphismModel::_check_degree_compatibility(
         int p,
         int t,
@@ -369,6 +377,8 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
             else if (! _check_loop_compatibility(i, j))
                 ok = false;
             else if (! _check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, _imp->params.proof.get()))
+                ok = false;
+            else if (! _check_clique_compatibility(i, j))
                 ok = false;
 
             if (ok)
