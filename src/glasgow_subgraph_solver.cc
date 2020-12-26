@@ -52,20 +52,27 @@ using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
 
-auto find_clique(InputGraph & g, int v, optional<int> largest) -> int
+auto find_clique(InputGraph & g, int v, optional<int> largest, vector<int> & best_knowns) -> int
 {
+    if (largest && (best_knowns[v] >= *largest))
+        return best_knowns[v];
+
     CliqueParams params;
     params.timeout = make_shared<Timeout>(0s);
     params.start_time = steady_clock::now();
     params.decide = nullopt;
     params.restarts_schedule = make_unique<NoRestartsSchedule>();
-    params.stop_after_finding = largest;
+    if (largest)
+        params.stop_after_finding = *largest - 1;
 
-    vector<int> include(g.size(), -1);
+    vector<int> include(g.size(), -1), invinclude(g.size(), 0);
     int count = 0;
     for (int w = 0 ; w < g.size() ; ++w)
-        if (w == v || g.adjacent(w, v))
-            include[w] = count++;
+        if (w == v || g.adjacent(w, v)) {
+            include[w] = count;
+            invinclude[count] = w;
+            ++count;
+        }
 
     InputGraph gv(count, false, false);
     g.for_each_edge([&] (int f, int t, string_view) -> void {
@@ -74,6 +81,11 @@ auto find_clique(InputGraph & g, int v, optional<int> largest) -> int
                 });
 
     auto result = solve_clique_problem(gv, params);
+
+    best_knowns[v] = max<int>(best_knowns[v], result.clique.size() + 1);
+    for (auto & w : result.clique)
+        best_knowns[invinclude[w]] = max<int>(best_knowns[invinclude[w]], result.clique.size() + 1);
+
     return result.clique.size() + 1;
 }
 
@@ -407,16 +419,18 @@ auto main(int argc, char * argv[]) -> int
 
             auto pattern_started_at = steady_clock::now();
             int largest_clique = 0;
+            vector<int> pattern_best_knowns(pattern.size());
             for (int v = 0 ; v < pattern.size() ; ++v) {
-                auto c = find_clique(pattern, v, nullopt);
+                auto c = find_clique(pattern, v, nullopt, pattern_best_knowns);
                 params.clique_sizes->first.at(v) = c;
                 largest_clique = max(largest_clique, c);
             }
             cout << "pattern_cliques_time = " << duration_cast<milliseconds>(steady_clock::now() - pattern_started_at).count() << endl;
 
             auto target_started_at = steady_clock::now();
+            vector<int> target_best_knowns(target.size());
             for (int v = 0 ; v < target.size() ; ++v)
-                params.clique_sizes->second.at(v) = find_clique(target, v, largest_clique);
+                params.clique_sizes->second.at(v) = find_clique(target, v, largest_clique, target_best_knowns);
             cout << "target_cliques_time = " << duration_cast<milliseconds>(steady_clock::now() - target_started_at).count() << endl;
         }
 
