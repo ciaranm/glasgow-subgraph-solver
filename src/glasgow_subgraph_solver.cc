@@ -1,7 +1,6 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include "formats/read_file_format.hh"
-#include "clique.hh"
 #include "homomorphism.hh"
 #include "sip_decomposer.hh"
 #include "lackey.hh"
@@ -36,13 +35,9 @@ using std::localtime;
 using std::make_pair;
 using std::make_shared;
 using std::make_unique;
-using std::max;
-using std::nullopt;
-using std::optional;
 using std::pair;
 using std::put_time;
 using std::string;
-using std::string_view;
 using std::vector;
 
 using std::chrono::duration_cast;
@@ -51,43 +46,6 @@ using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
-
-auto find_clique(InputGraph & g, int v, optional<int> largest, vector<int> & best_knowns) -> int
-{
-    if (largest && (best_knowns[v] >= *largest))
-        return best_knowns[v];
-
-    CliqueParams params;
-    params.timeout = make_shared<Timeout>(0s);
-    params.start_time = steady_clock::now();
-    params.decide = nullopt;
-    params.restarts_schedule = make_unique<NoRestartsSchedule>();
-    if (largest)
-        params.stop_after_finding = *largest - 1;
-
-    vector<int> include(g.size(), -1), invinclude(g.size(), 0);
-    int count = 0;
-    for (int w = 0 ; w < g.size() ; ++w)
-        if (w == v || g.adjacent(w, v)) {
-            include[w] = count;
-            invinclude[count] = w;
-            ++count;
-        }
-
-    InputGraph gv(count, false, false);
-    g.for_each_edge([&] (int f, int t, string_view) -> void {
-            if (include[f] != -1 && include[t] != -1 && f != t)
-                gv.add_edge(include[f], include[t]);
-                });
-
-    auto result = solve_clique_problem(gv, params);
-
-    best_knowns[v] = max<int>(best_knowns[v], result.clique.size() + 1);
-    for (auto & w : result.clique)
-        best_knowns[invinclude[w]] = max<int>(best_knowns[invinclude[w]], result.clique.size() + 1);
-
-    return result.clique.size() + 1;
-}
 
 auto main(int argc, char * argv[]) -> int
 {
@@ -171,7 +129,7 @@ auto main(int argc, char * argv[]) -> int
             ("k4",                                             "Use 4-clique filtering (experimental)")
             ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
             ("decomposition",                                  "Use decomposition")
-            ("cliques",                                        "Use clique constraints");
+            ("cliques",                                        "Use clique size constraints");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -302,6 +260,7 @@ auto main(int argc, char * argv[]) -> int
             params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
+        params.clique_size_constraints = options_vars.count("cliques");
 
         string pattern_automorphism_group_size = "1";
         bool was_given_automorphism_group = false;
@@ -413,26 +372,6 @@ auto main(int argc, char * argv[]) -> int
 
         if (was_given_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
-
-        if (options_vars.count("cliques")) {
-            params.clique_sizes.reset(new pair<vector<int>, vector<int> >(vector<int>(pattern.size()), vector<int>(target.size())));
-
-            auto pattern_started_at = steady_clock::now();
-            int largest_clique = 0;
-            vector<int> pattern_best_knowns(pattern.size());
-            for (int v = 0 ; v < pattern.size() ; ++v) {
-                auto c = find_clique(pattern, v, nullopt, pattern_best_knowns);
-                params.clique_sizes->first.at(v) = c;
-                largest_clique = max(largest_clique, c);
-            }
-            cout << "pattern_cliques_time = " << duration_cast<milliseconds>(steady_clock::now() - pattern_started_at).count() << endl;
-
-            auto target_started_at = steady_clock::now();
-            vector<int> target_best_knowns(target.size());
-            for (int v = 0 ; v < target.size() ; ++v)
-                params.clique_sizes->second.at(v) = find_clique(target, v, largest_clique, target_best_knowns);
-            cout << "target_cliques_time = " << duration_cast<milliseconds>(steady_clock::now() - target_started_at).count() << endl;
-        }
 
         auto result = options_vars.count("decomposition") ?
             solve_sip_by_decomposition(pattern, target, params) :

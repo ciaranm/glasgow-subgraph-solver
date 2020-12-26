@@ -39,6 +39,10 @@ class HomomorphismModel
 
         auto _check_clique_compatibility(int p, int t) const -> bool;
 
+        auto _build_pattern_clique_sizes() const -> void;
+
+        auto _build_target_clique_size(int v) const -> void;
+
     public:
         using PatternAdjacencyBitsType = uint8_t;
 
