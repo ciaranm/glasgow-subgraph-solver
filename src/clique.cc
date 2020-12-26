@@ -436,7 +436,8 @@ namespace
                             params.proof->start_level(depth + 1);
                         }
 
-                        if (params.decide && incumbent.value >= *params.decide) {
+                        if ((params.decide && incumbent.value >= *params.decide) ||
+                                (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
                             if (params.proof)
                                 params.proof->post_solution(unpermute(c));
 
@@ -471,8 +472,9 @@ namespace
                 // consider taking v
                 c.push_back(v);
 
-                if (params.decide) {
-                    if (incumbent.value >= *params.decide) {
+                if (params.decide || params.stop_after_finding) {
+                    if ((params.decide && incumbent.value >= *params.decide) ||
+                            (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
                         if (params.proof)
                             params.proof->post_solution(unpermute(c));
 

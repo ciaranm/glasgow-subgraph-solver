@@ -36,7 +36,9 @@ using std::localtime;
 using std::make_pair;
 using std::make_shared;
 using std::make_unique;
+using std::max;
 using std::nullopt;
+using std::optional;
 using std::pair;
 using std::put_time;
 using std::string;
@@ -50,13 +52,14 @@ using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
 
-auto find_clique(InputGraph & g, int v) -> int
+auto find_clique(InputGraph & g, int v, optional<int> largest) -> int
 {
     CliqueParams params;
     params.timeout = make_shared<Timeout>(0s);
     params.start_time = steady_clock::now();
     params.decide = nullopt;
     params.restarts_schedule = make_unique<NoRestartsSchedule>();
+    params.stop_after_finding = largest;
 
     vector<int> include(g.size(), -1);
     int count = 0;
@@ -403,13 +406,17 @@ auto main(int argc, char * argv[]) -> int
             params.clique_sizes.reset(new pair<vector<int>, vector<int> >(vector<int>(pattern.size()), vector<int>(target.size())));
 
             auto pattern_started_at = steady_clock::now();
-            for (int v = 0 ; v < pattern.size() ; ++v)
-                params.clique_sizes->first.at(v) = find_clique(pattern, v);
+            int largest_clique = 0;
+            for (int v = 0 ; v < pattern.size() ; ++v) {
+                auto c = find_clique(pattern, v, nullopt);
+                params.clique_sizes->first.at(v) = c;
+                largest_clique = max(largest_clique, c);
+            }
             cout << "pattern_cliques_time = " << duration_cast<milliseconds>(steady_clock::now() - pattern_started_at).count() << endl;
 
             auto target_started_at = steady_clock::now();
             for (int v = 0 ; v < target.size() ; ++v)
-                params.clique_sizes->second.at(v) = find_clique(target, v);
+                params.clique_sizes->second.at(v) = find_clique(target, v, largest_clique);
             cout << "target_cliques_time = " << duration_cast<milliseconds>(steady_clock::now() - target_started_at).count() << endl;
         }
 

@@ -34,6 +34,9 @@ struct CliqueParams
     /// Decide instead of maximise?
     std::optional<unsigned> decide;
 
+    /// Can stop after finding this size
+    std::optional<unsigned> stop_after_finding;
+
     /// Restarts schedule
     std::unique_ptr<RestartsSchedule> restarts_schedule;
 
