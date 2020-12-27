@@ -10,6 +10,7 @@
 #include <list>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,9 +27,12 @@ using std::set;
 using std::shared_ptr;
 using std::string;
 using std::string_view;
+using std::stringstream;
 using std::to_string;
 using std::vector;
 
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 
 namespace
@@ -47,19 +51,25 @@ namespace
             const vector<SVOBitset> & g,
             unsigned max_graphs,
             unsigned v,
-            optional<int> largest,
-            vector<int> & best_knowns) -> int
+            optional<int> largest_if_target,
+            vector<int> & best_knowns,
+            list<string> & build_times,
+            list<string> & solve_times,
+            list<string> & find_nodes,
+            list<string> & prove_nodes) -> int
     {
-        if (largest && (best_knowns[v] >= *largest))
+        if (largest_if_target && (best_knowns[v] >= *largest_if_target))
             return best_knowns[v];
+
+        auto start_time = steady_clock::now();
 
         CliqueParams params;
         params.timeout = timeout;
         params.start_time = steady_clock::now();
         params.decide = nullopt;
         params.restarts_schedule = make_unique<NoRestartsSchedule>();
-        if (largest)
-            params.stop_after_finding = *largest - 1;
+        if (largest_if_target)
+            params.stop_after_finding = *largest_if_target - 1;
 
         vector<int> include(size, -1), invinclude(size, 0);
         int count = 0;
@@ -77,7 +87,15 @@ namespace
                     if (f != t && include[t] != -1 && g[f * max_graphs + 0].test(t))
                         gv.add_edge(include[f], include[t]);
 
+        build_times.push_back(to_string(duration_cast<milliseconds>(steady_clock::now() - start_time).count()));
+
+        start_time = steady_clock::now();
+
         auto result = solve_clique_problem(gv, params);
+
+        solve_times.push_back(to_string(duration_cast<milliseconds>(steady_clock::now() - start_time).count()));
+        find_nodes.push_back(to_string(result.find_nodes));
+        prove_nodes.push_back(to_string(result.prove_nodes));
 
         best_knowns[v] = max<int>(best_knowns[v], result.clique.size() + 1);
         for (auto & w : result.clique)
@@ -104,9 +122,12 @@ struct HomomorphismModel::Imp
 
     vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
-    mutable bool has_pattern_clique_sizes = false;
-    mutable vector<int> pattern_clique_sizes, target_clique_sizes, pattern_cliques_best_knowns, target_cliques_best_knowns;
+    mutable bool has_pattern_cliques_sizes = false;
+    mutable vector<int> pattern_cliques_sizes, target_cliques_sizes, pattern_cliques_best_knowns, target_cliques_best_knowns;
     mutable int largest_pattern_clique = 0;
+
+    mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
+    mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
 
     Imp(const HomomorphismParams & p) :
         params(p)
@@ -264,8 +285,8 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     // make space for clique constraints
     if (params.clique_size_constraints) {
-        _imp->pattern_clique_sizes.resize(pattern.size());
-        _imp->target_clique_sizes.resize(target.size());
+        _imp->pattern_cliques_sizes.resize(pattern.size());
+        _imp->target_cliques_sizes.resize(target.size());
         _imp->pattern_cliques_best_knowns.resize(pattern.size());
         _imp->target_cliques_best_knowns.resize(target.size());
     }
@@ -294,18 +315,22 @@ auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
 auto HomomorphismModel::_build_pattern_clique_sizes() const -> void
 {
     for (unsigned v = 0 ; v < pattern_size ; ++v) {
-        auto c = find_clique(_imp->params.timeout, pattern_size, _imp->pattern_graph_rows, max_graphs, v, nullopt, _imp->pattern_cliques_best_knowns);
-        _imp->pattern_clique_sizes[v] = c;
+        auto c = find_clique(_imp->params.timeout, pattern_size, _imp->pattern_graph_rows, max_graphs, v, nullopt,
+                _imp->pattern_cliques_best_knowns, _imp->pattern_cliques_build_times, _imp->pattern_cliques_solve_times,
+                _imp->pattern_cliques_solve_find_nodes, _imp->pattern_cliques_solve_prove_nodes);
+        _imp->pattern_cliques_sizes[v] = c;
         _imp->largest_pattern_clique = max(_imp->largest_pattern_clique, c);
     }
-    _imp->has_pattern_clique_sizes = true;
+    _imp->has_pattern_cliques_sizes = true;
 }
 
 auto HomomorphismModel::_build_target_clique_size(int v) const -> void
 {
-    if (0 == _imp->target_clique_sizes[v])
-        _imp->target_clique_sizes[v] = find_clique(_imp->params.timeout, target_size, _imp->target_graph_rows, max_graphs, v,
-                _imp->largest_pattern_clique, _imp->target_cliques_best_knowns);
+    if (0 == _imp->target_cliques_sizes[v])
+        _imp->target_cliques_sizes[v] = find_clique(_imp->params.timeout, target_size, _imp->target_graph_rows, max_graphs, v,
+                _imp->largest_pattern_clique, _imp->target_cliques_best_knowns, _imp->target_cliques_build_times,
+                _imp->target_cliques_solve_times, _imp->target_cliques_solve_find_nodes, _imp->target_cliques_solve_prove_nodes);
+
 }
 
 auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
@@ -313,12 +338,12 @@ auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
     if (! _imp->params.clique_size_constraints)
         return true;
 
-    if (! _imp->has_pattern_clique_sizes)
+    if (! _imp->has_pattern_cliques_sizes)
         _build_pattern_clique_sizes();
 
     _build_target_clique_size(t);
 
-    return _imp->pattern_clique_sizes[p] <= _imp->target_clique_sizes[t];
+    return _imp->pattern_cliques_sizes[p] <= _imp->target_cliques_sizes[t];
 }
 
 auto HomomorphismModel::_check_degree_compatibility(
@@ -904,5 +929,28 @@ auto HomomorphismModel::has_less_thans() const -> bool
 auto HomomorphismModel::directed() const -> bool
 {
     return _imp->directed;
+}
+
+auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
+{
+    if (! _imp->pattern_cliques_sizes.empty()) {
+        auto join = [] (string_view t, auto & l) -> string {
+            stringstream s;
+            s << t;
+            for (auto & i : l)
+                s << " " << i;
+            return s.str();
+        };
+
+        x.emplace_back(join("pattern_cliques_build_times =", _imp->pattern_cliques_build_times));
+        x.emplace_back(join("pattern_cliques_solve_times =", _imp->pattern_cliques_solve_times));
+        x.emplace_back(join("pattern_cliques_solve_find_nodes =", _imp->pattern_cliques_solve_find_nodes));
+        x.emplace_back(join("pattern_cliques_solve_prove_nodes =", _imp->pattern_cliques_solve_prove_nodes));
+
+        x.emplace_back(join("target_cliques_build_times =", _imp->target_cliques_build_times));
+        x.emplace_back(join("target_cliques_solve_times =", _imp->target_cliques_solve_times));
+        x.emplace_back(join("target_cliques_solve_find_nodes =", _imp->target_cliques_solve_find_nodes));
+        x.emplace_back(join("target_cliques_solve_prove_nodes =", _imp->target_cliques_solve_prove_nodes));
+    }
 }
 

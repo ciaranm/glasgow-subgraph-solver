@@ -82,6 +82,7 @@ namespace
             Domains domains(model.pattern_size, HomomorphismDomain{ model.target_size });
             if (! model.initialise_domains(domains)) {
                 result.complete = true;
+                model.add_extra_stats(result.extra_stats);
                 return result;
             }
 
@@ -181,6 +182,7 @@ namespace
                 result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
             }
 
+            model.add_extra_stats(result.extra_stats);
             return result;
         }
     };

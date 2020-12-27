@@ -83,6 +83,8 @@ class HomomorphismModel
         auto target_has_loop(int t) const -> bool;
 
         auto initialise_domains(std::vector<HomomorphismDomain> & domains) const -> bool;
+
+        auto add_extra_stats(std::list<std::string> &) const -> void;
 };
 
 #endif
