@@ -7,6 +7,8 @@
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool;
 
+auto supports_distance2_graphs(const HomomorphismParams & params) -> bool;
+
 auto supports_k4_graphs(const HomomorphismParams & params) -> bool;
 
 auto supports_distance3_graphs(const HomomorphismParams & params) -> bool;

@@ -18,7 +18,7 @@ class HomomorphismModel
         std::unique_ptr<Imp> _imp;
 
         auto _build_exact_path_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-                unsigned number_of_exact_path_graphs, bool directed) -> void;
+                unsigned number_of_exact_path_graphs, bool directed, bool at_most) -> void;
 
         auto _build_distance3_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void;
 

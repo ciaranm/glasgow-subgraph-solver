@@ -41,6 +41,7 @@ namespace
     {
         return 1 +
             (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
+            (supports_distance2_graphs(params) ? 1 : 0) +
             (supports_distance3_graphs(params) ? 1 : 0) +
             (supports_k4_graphs(params) ? 1 : 0);
     }
@@ -649,8 +650,8 @@ auto HomomorphismModel::prepare() -> bool
     unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
     // build exact path graphs
     if (supports_exact_path_graphs(_imp->params)) {
-        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed);
-        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed);
+        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
+        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
 
         if (_imp->params.proof) {
             for (int g = 1 ; g <= _imp->params.number_of_exact_path_graphs ; ++g) {
@@ -711,6 +712,11 @@ auto HomomorphismModel::prepare() -> bool
         }
     }
 
+    if (supports_distance2_graphs(_imp->params)) {
+        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, 1, _imp->directed, true);
+        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, 1, _imp->directed, true);
+    }
+
     if (supports_distance3_graphs(_imp->params)) {
         _build_distance3_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental);
         _build_distance3_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
@@ -754,7 +760,7 @@ auto HomomorphismModel::prepare() -> bool
 }
 
 auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-        unsigned number_of_exact_path_graphs, bool directed) -> void
+        unsigned number_of_exact_path_graphs, bool directed, bool at_most) -> void
 {
     vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
@@ -773,13 +779,17 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
 
     for (unsigned v = 0 ; v < size ; ++v) {
         for (unsigned w = (directed ? 0 : v) ; w < size ; ++w) {
-            // nuless directed, w to v, not v to w, see above
-            unsigned path_count = path_counts[w][v];
-            for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
-                if (path_count >= p) {
-                    graph_rows[v * max_graphs + idx + p - 1].set(w);
-                    if (! directed)
-                        graph_rows[w * max_graphs + idx + p - 1].set(v);
+            if (at_most && v == w)
+                graph_rows[v * max_graphs + idx].set(w);
+            else {
+                // unless directed, w to v, not v to w, see above
+                unsigned path_count = path_counts[w][v];
+                for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
+                    if (path_count >= p) {
+                        graph_rows[v * max_graphs + idx + p - 1].set(w);
+                        if (! directed)
+                            graph_rows[w * max_graphs + idx + p - 1].set(v);
+                    }
                 }
             }
         }
