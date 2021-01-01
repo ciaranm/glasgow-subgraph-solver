@@ -468,6 +468,26 @@ auto solve_homomorphism_problem(
         return HomomorphismResult{ };
     }
 
+    // does the target have loops, and are we looking for a single non-injective mapping?
+    if ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels()
+           && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions
+           && ! params.enumerate_callback) {
+        HomomorphismResult result;
+        result.extra_stats.emplace_back("used_loops_property = true");
+        result.complete = true;
+        int loop = -1;
+        for (int t = 0 ; t < target.size() ; ++t)
+            if (target.adjacent(t, t)) {
+                loop = t;
+                break;
+            }
+
+        for (int n = 0 ; n < pattern.size() ; ++n)
+            result.mapping.emplace(n, loop);
+
+        return result;
+    }
+
     // is the pattern a clique? if so, use a clique algorithm instead
     if (can_use_clique(params) && is_simple_clique(pattern)) {
         CliqueParams clique_params;

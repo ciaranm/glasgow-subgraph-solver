@@ -748,6 +748,15 @@ auto HomomorphismModel::prepare() -> bool
     for (unsigned i = 0 ; i < target_size ; ++i)
         _imp->largest_target_degree = max(_imp->largest_target_degree, _imp->targets_degrees[0][i]);
 
+    // re-add loops
+    for (unsigned i = 0 ; i < pattern_size ; ++i)
+        if (_imp->pattern_loops[i])
+            _imp->pattern_graph_rows[i * max_graphs + 0].set(i);
+
+    for (unsigned i = 0 ; i < target_size ; ++i)
+        if (_imp->target_loops[i])
+            _imp->target_graph_rows[i * max_graphs + 0].set(i);
+
     // pattern adjacencies, compressed
     _imp->pattern_adjacencies_bits.resize(pattern_size * pattern_size);
     for (unsigned g = 0 ; g < max_graphs ; ++g)
