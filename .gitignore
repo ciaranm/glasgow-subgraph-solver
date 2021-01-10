@@ -12,3 +12,4 @@ perf.data
 perf.data.old
 *.log
 *.opb
+*.veripb
