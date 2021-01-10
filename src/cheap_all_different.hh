@@ -8,6 +8,6 @@
 
 #include <vector>
 
-auto cheap_all_different(unsigned target_size, std::vector<HomomorphismDomain> & domains, const std::unique_ptr<Proof> & proof) -> bool;
+auto cheap_all_different(unsigned target_size, std::vector<HomomorphismDomain> & domains, const std::shared_ptr<Proof> & proof) -> bool;
 
 #endif

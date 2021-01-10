@@ -347,7 +347,7 @@ auto main(int argc, char * argv[]) -> int
             bool compress_proof = options_vars.count("compress-proof");
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names, compress_proof);
+            params.proof = make_shared<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
             cout << "proof_log = " << fn << ".log" << suffix << endl;
         }

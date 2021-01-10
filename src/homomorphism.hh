@@ -105,7 +105,7 @@ struct HomomorphismParams
     PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
 
     /// Optional proof handler
-    std::unique_ptr<Proof> proof;
+    std::shared_ptr<Proof> proof;
 };
 
 struct HomomorphismResult
