@@ -481,7 +481,7 @@ namespace
                         return SearchResult::DecidedTrue;
                     }
                 } else {
-                    if (params.proof && c.size() > incumbent.value) {
+                    if (params.proof && c.size() > incumbent.value && ! params.proof_is_for_hom) {
                         params.proof->start_level(0);
                         params.proof->new_incumbent(unpermute_and_finish(c));
                         params.proof->start_level(depth + 1);
@@ -589,7 +589,7 @@ namespace
                 if constexpr (connected_)
                     a = SVOBitset{ unsigned(size), 0 };
 
-                switch (expand<connected_>(0, result.nodes, result.find_nodes, result.prove_nodes, c, new_p, a, 0)) {
+                switch (expand<connected_>(params.proof_is_for_hom ? 1 : 0, result.nodes, result.find_nodes, result.prove_nodes, c, new_p, a, 0)) {
                     case SearchResult::Complete:
                         done = true;
                         break;
@@ -612,9 +612,9 @@ namespace
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
-            if (params.proof && params.decide && incumbent.c.empty())
+            if (params.proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
                 params.proof->finish_unsat_proof();
-            else if (params.proof && ! params.decide)
+            else if (params.proof && ! params.decide && ! params.proof_is_for_hom)
                 params.proof->finish_unsat_proof();
 
             result.clique.clear();
@@ -629,7 +629,7 @@ namespace
 auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
 {
     if (params.proof) {
-        if (! params.proof->has_clique_model()) {
+        if (! params.proof->has_clique_model() && ! params.proof_is_for_hom) {
             for (int q = 0 ; q < graph.size() ; ++q)
                 params.proof->create_binary_variable(q, [&] (int v) { return graph.vertex_name(v); });
 

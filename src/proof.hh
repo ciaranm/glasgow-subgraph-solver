@@ -8,6 +8,7 @@
 #include <exception>
 #include <functional>
 #include <iosfwd>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -116,6 +117,23 @@ class Proof
         auto create_non_edge_constraint(int p, int q) -> void;
         auto backtrack_from_binary_variables(const std::vector<int> &) -> void;
         auto colour_bound(const std::vector<std::vector<int> > &) -> void;
+
+        // clique for hom
+        auto prepare_hom_clique_proof(const NamedVertex & p,
+                const NamedVertex & t,
+                unsigned size) -> void;
+
+        auto start_hom_clique_proof(const NamedVertex & p,
+                std::vector<NamedVertex> && p_clique_neighbourhood,
+                const NamedVertex & t,
+                std::map<int, NamedVertex> && t_clique_neighbourhood) -> void;
+
+        auto finish_hom_clique_proof(const NamedVertex & p, const NamedVertex & t, unsigned size) -> void;
+
+        auto add_hom_clique_non_edge(
+                const std::vector<NamedVertex> & p_clique,
+                const NamedVertex & t,
+                const NamedVertex & u) -> void;
 
         // common subgraphs
         auto create_non_null_decision_bound(int p, int t, std::optional<int> d) -> void;

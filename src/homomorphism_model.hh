@@ -43,6 +43,8 @@ class HomomorphismModel
 
         auto _build_target_clique_size(int v) const -> void;
 
+        auto _prove_no_clique(int p, int t) const -> void;
+
     public:
         using PatternAdjacencyBitsType = uint8_t;
 

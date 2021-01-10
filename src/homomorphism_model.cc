@@ -17,6 +17,7 @@
 
 using std::greater;
 using std::list;
+using std::make_optional;
 using std::make_unique;
 using std::map;
 using std::max;
@@ -344,7 +345,90 @@ auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
 
     _build_target_clique_size(t);
 
-    return _imp->pattern_cliques_sizes[p] <= _imp->target_cliques_sizes[t];
+    if (_imp->pattern_cliques_sizes[p] <= _imp->target_cliques_sizes[t])
+        return true;
+
+    if (_imp->params.proof)
+        _prove_no_clique(p, t);
+
+    return false;
+}
+
+auto HomomorphismModel::_prove_no_clique(
+        int p,
+        int t) const -> void
+{
+    vector<NamedVertex> p_clique;
+    map<int, NamedVertex> t_clique_neighbourhood;
+    unsigned decide_size;
+
+    {
+        vector<int> include(pattern_size, -1), invinclude(pattern_size, 0);
+        int count = 0;
+        for (int w = 0 ; w < int(pattern_size) ; ++w)
+            if (w != p && _imp->pattern_graph_rows[w * max_graphs + 0].test(p)) {
+                include[w] = count;
+                invinclude[count] = w;
+                ++count;
+            }
+
+        InputGraph gv(count, false, false);
+        for (unsigned f = 0 ; f < pattern_size ; ++f)
+            if (include[f] != -1)
+                for (unsigned t = 0 ; t < pattern_size ; ++t)
+                    if (f != t && include[t] != -1 && _imp->pattern_graph_rows[f * max_graphs + 0].test(t))
+                        gv.add_edge(include[f], include[t]);
+
+        CliqueParams params;
+        params.timeout = _imp->params.timeout;
+        params.start_time = steady_clock::now();
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        auto result = solve_clique_problem(gv, params);
+        for (auto & v : result.clique)
+            p_clique.push_back(pattern_vertex_for_proof(invinclude[v]));
+        decide_size = result.clique.size();
+    }
+
+    {
+        vector<int> include(target_size, -1), invinclude(target_size, 0);
+        int count = 0;
+        for (int w = 0 ; w < int(target_size) ; ++w)
+            if (w != t && _imp->target_graph_rows[w * max_graphs + 0].test(t)) {
+                t_clique_neighbourhood.emplace(count, target_vertex_for_proof(w));
+                include[w] = count;
+                invinclude[count] = w;
+                ++count;
+            }
+
+        _imp->params.proof->prepare_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(t), decide_size);
+
+        InputGraph gv(count, false, false);
+        for (unsigned f = 0 ; f < target_size ; ++f)
+            if (include[f] != -1)
+                for (unsigned t = 0 ; t < target_size ; ++t) {
+                    if (f != t && include[t] != -1) {
+                        if (_imp->target_graph_rows[f * max_graphs + 0].test(t))
+                            gv.add_edge(include[f], include[t]);
+                        else if (f < t)
+                            _imp->params.proof->add_hom_clique_non_edge(p_clique, target_vertex_for_proof(f), target_vertex_for_proof(t));
+                    }
+                }
+
+        _imp->params.proof->start_hom_clique_proof(pattern_vertex_for_proof(p), move(p_clique), target_vertex_for_proof(t), move(t_clique_neighbourhood));
+
+        CliqueParams params;
+        params.timeout = _imp->params.timeout;
+        params.start_time = steady_clock::now();
+        params.decide = make_optional(decide_size);
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        params.proof = _imp->params.proof;
+        params.proof_is_for_hom = true;
+
+        auto result = solve_clique_problem(gv, params);
+        if (result.complete && ! result.clique.empty())
+            throw ProofError{ "Oops, found a clique that shound't exist" };
+        _imp->params.proof->finish_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(t), decide_size);
+    }
 }
 
 auto HomomorphismModel::_check_degree_compatibility(

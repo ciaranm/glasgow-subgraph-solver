@@ -54,6 +54,9 @@ struct CliqueParams
 
     /// Optional proof handler
     std::shared_ptr<Proof> proof;
+
+    /// If logging proofs, only log the bound (for use by homomorphism solver for clique filtering)
+    bool proof_is_for_hom = false;
 };
 
 struct CliqueResult
