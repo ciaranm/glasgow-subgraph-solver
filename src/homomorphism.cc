@@ -413,8 +413,8 @@ auto solve_homomorphism_problem(
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with a lackey" };
         if (! params.pattern_less_constraints.empty())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with less-constraints" };
-        if (params.injectivity != Injectivity::Injective)
-            throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity" };
+        if (params.injectivity != Injectivity::Injective && params.injectivity != Injectivity::NonInjective)
+            throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity or non-injectivity" };
         if (params.induced)
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used for induced problems" };
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
@@ -428,7 +428,8 @@ auto solve_homomorphism_problem(
         }
 
         // generate constraints for injectivity
-        params.proof->create_injectivity_constraints(pattern.size(), target.size());
+        if (params.injectivity == Injectivity::Injective)
+            params.proof->create_injectivity_constraints(pattern.size(), target.size());
 
         // generate edge constraints, and also handle loops here
         for (int p = 0 ; p < pattern.size() ; ++p) {

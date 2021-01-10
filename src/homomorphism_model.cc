@@ -356,7 +356,7 @@ auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
 
 auto HomomorphismModel::_prove_no_clique(
         int p,
-        int t) const -> void
+        int tt) const -> void
 {
     vector<NamedVertex> p_clique;
     map<int, NamedVertex> t_clique_neighbourhood;
@@ -393,14 +393,14 @@ auto HomomorphismModel::_prove_no_clique(
         vector<int> include(target_size, -1), invinclude(target_size, 0);
         int count = 0;
         for (int w = 0 ; w < int(target_size) ; ++w)
-            if (w != t && _imp->target_graph_rows[w * max_graphs + 0].test(t)) {
+            if (w != tt && _imp->target_graph_rows[w * max_graphs + 0].test(tt)) {
                 t_clique_neighbourhood.emplace(count, target_vertex_for_proof(w));
                 include[w] = count;
                 invinclude[count] = w;
                 ++count;
             }
 
-        _imp->params.proof->prepare_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(t), decide_size);
+        _imp->params.proof->prepare_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
 
         InputGraph gv(count, false, false);
         for (unsigned f = 0 ; f < target_size ; ++f)
@@ -410,11 +410,13 @@ auto HomomorphismModel::_prove_no_clique(
                         if (_imp->target_graph_rows[f * max_graphs + 0].test(t))
                             gv.add_edge(include[f], include[t]);
                         else if (f < t)
-                            _imp->params.proof->add_hom_clique_non_edge(p_clique, target_vertex_for_proof(f), target_vertex_for_proof(t));
+                            _imp->params.proof->add_hom_clique_non_edge(
+                                    pattern_vertex_for_proof(p), target_vertex_for_proof(tt),
+                                    p_clique, target_vertex_for_proof(f), target_vertex_for_proof(t));
                     }
                 }
 
-        _imp->params.proof->start_hom_clique_proof(pattern_vertex_for_proof(p), move(p_clique), target_vertex_for_proof(t), move(t_clique_neighbourhood));
+        _imp->params.proof->start_hom_clique_proof(pattern_vertex_for_proof(p), move(p_clique), target_vertex_for_proof(tt), move(t_clique_neighbourhood));
 
         CliqueParams params;
         params.timeout = _imp->params.timeout;
@@ -427,7 +429,7 @@ auto HomomorphismModel::_prove_no_clique(
         auto result = solve_clique_problem(gv, params);
         if (result.complete && ! result.clique.empty())
             throw ProofError{ "Oops, found a clique that shound't exist" };
-        _imp->params.proof->finish_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(t), decide_size);
+        _imp->params.proof->finish_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
     }
 }
 

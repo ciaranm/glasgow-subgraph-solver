@@ -796,6 +796,8 @@ auto Proof::finish_hom_clique_proof(const NamedVertex & p, const NamedVertex & t
 }
 
 auto Proof::add_hom_clique_non_edge(
+        const NamedVertex & pp,
+        const NamedVertex & tt,
         const std::vector<NamedVertex> & p_clique,
         const NamedVertex & t,
         const NamedVertex & u) -> void
@@ -804,7 +806,9 @@ auto Proof::add_hom_clique_non_edge(
     for (auto & p : p_clique) {
         for (auto & q : p_clique) {
             if (p != q) {
-                *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " 1 ~x" << _imp->variable_mappings[pair{ q.first, u.first }] << " >= 1 ;" << endl;
+                *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ pp.first, tt.first }]
+                    << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }]
+                    << " 1 ~x" << _imp->variable_mappings[pair{ q.first, u.first }] << " >= 1 ;" << endl;
                 ++_imp->proof_line;
                 _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ p, t }, pair{ q, u } }, _imp->proof_line);
                 _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ q, u }, pair{ p, t } }, _imp->proof_line);
@@ -968,8 +972,8 @@ auto Proof::create_clique_encoding(
 
 auto Proof::create_clique_nonedge(int v, int w) -> void
 {
-    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[v] <<
-        " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;" << endl;
+    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[v]
+        << " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;" << endl;
     ++_imp->proof_line;
     _imp->non_edge_constraints.emplace(pair{ v, w }, _imp->proof_line);
     _imp->non_edge_constraints.emplace(pair{ w, v }, _imp->proof_line);

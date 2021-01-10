@@ -131,6 +131,8 @@ class Proof
         auto finish_hom_clique_proof(const NamedVertex & p, const NamedVertex & t, unsigned size) -> void;
 
         auto add_hom_clique_non_edge(
+                const NamedVertex & filter_p,
+                const NamedVertex & filter_t,
                 const std::vector<NamedVertex> & p_clique,
                 const NamedVertex & t,
                 const NamedVertex & u) -> void;
