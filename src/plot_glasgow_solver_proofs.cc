@@ -278,7 +278,7 @@ auto main(int argc, char * argv[]) -> int
                         stringstream line_s{ line };
                         string ignore, size_word, filename_word;
                         line_s >> ignore >> ignore >> ignore >> ignore >> size_word >> ignore >> ignore >> ignore >> filename_word;
-                        if (0 == filename_word.compare(filename_word.length() - 4, 4, ".log", 0, 4))
+                        if (0 == filename_word.compare(filename_word.length() - 4, 4, ".veripb", 0, 4))
                             keys["proof_logsize"] = size_word;
                         else if (0 == filename_word.compare(filename_word.length() - 4, 4, ".opb", 0, 4))
                             keys["proof_opbsize"] = size_word;

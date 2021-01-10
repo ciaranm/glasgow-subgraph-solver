@@ -74,7 +74,7 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description proof_logging_options{ "Proof logging options" };
         proof_logging_options.add_options()
-            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .log)")
+            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .veripb)")
             ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
             ("compress-proof",                                 "Compress the proof using bz2");
         display_options.add(proof_logging_options);
@@ -160,9 +160,9 @@ auto main(int argc, char * argv[]) -> int
             bool compress_proof = options_vars.count("compress-proof");
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names, compress_proof);
+            params.proof = make_unique<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
-            cout << "proof_log = " << fn << ".log" << suffix << endl;
+            cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }
 
         /* Prepare and start timeout */
