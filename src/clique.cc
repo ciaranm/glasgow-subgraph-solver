@@ -290,10 +290,10 @@ namespace
             unsigned colour = 0;         // current colour
             p_end = 0;
 
-            std::vector<int> p_order_prelim(size);
-            std::vector<int> colour_sizes(size);
-            std::vector<int> colour_start(size);
-            std::vector<int> sorted_order(size);
+            vector<int> p_order_prelim(size);
+            vector<int> colour_sizes(size);
+            vector<int> colour_start(size);
+            vector<int> sorted_order(size);
 
             // while we've things left to colour
             while (p_left.any()) {
