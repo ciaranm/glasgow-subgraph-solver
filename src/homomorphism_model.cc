@@ -539,19 +539,19 @@ auto HomomorphismModel::_check_degree_compatibility(
 
 auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains) const -> bool
 {
-    unsigned graphs_to_consider = max_graphs;
+    unsigned max_graphs_for_degree_things = (_imp->params.injectivity == Injectivity::LocallyInjective ? 1 : max_graphs);
 
     /* pattern and target neighbourhood degree sequences */
-    vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
-    vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
+    vector<vector<vector<int> > > patterns_ndss(max_graphs_for_degree_things);
+    vector<vector<optional<vector<int> > > > targets_ndss(max_graphs_for_degree_things);
 
     if (degree_and_nds_are_preserved(_imp->params) && ! _imp->params.no_nds) {
-        for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
+        for (unsigned g = 0 ; g < max_graphs_for_degree_things ; ++g) {
             patterns_ndss.at(g).resize(pattern_size);
             targets_ndss.at(g).resize(target_size);
         }
 
-        for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
+        for (unsigned g = 0 ; g < max_graphs_for_degree_things ; ++g) {
             for (unsigned i = 0 ; i < pattern_size ; ++i) {
                 auto ni = pattern_graph_row(g, i);
                 for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
@@ -574,7 +574,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                 ok = false;
             else if (! _check_loop_compatibility(i, j))
                 ok = false;
-            else if (! _check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, _imp->params.proof.get()))
+            else if (! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, _imp->params.proof.get()))
                 ok = false;
             else if (! _check_clique_compatibility(i, j))
                 ok = false;
@@ -593,7 +593,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
         for (unsigned i = 0 ; i < pattern_size ; ++i) {
             for (unsigned j = 0 ; j < target_size ; ++j) {
                 if (domains.at(i).values.test(j) &&
-                        ! _check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, false)) {
+                        ! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, false)) {
                     domains.at(i).values.reset(j);
                     if (0 == --domains.at(i).count)
                         return false;
