@@ -69,7 +69,8 @@ auto main(int argc, char * argv[]) -> int
             ("colour-ordering",    po::value<string>(),      "Specify colour-ordering (colour / singletons-first / sorted)")
             ("input-order",                                  "Use the input order for colouring (usually a bad idea)")
             ("restarts-constant",  po::value<int>(),         "How often to perform restarts (disabled by default)")
-            ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)");
+            ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)")
+            ("lazy-global-domination",                       "Use the lazy global domination inference rule");
         display_options.add(configuration_options);
 
         po::options_description proof_logging_options{ "Proof logging options" };
@@ -137,6 +138,9 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("colour-ordering"))
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
         params.input_order = options_vars.count("input-order");
+
+        if (options_vars.count("lazy-global-domination"))
+            params.lazy_global_domination = true;
 
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))

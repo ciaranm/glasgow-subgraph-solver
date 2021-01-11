@@ -46,6 +46,9 @@ struct CliqueParams
     /// Colour in input order, rather than degree order
     bool input_order = false;
 
+    /// Use lazy global domination rule?
+    bool lazy_global_domination = false;
+
     /// For use by the maximum common connected subgraph reduction
     std::function<auto (int, const std::function<auto (int) -> int> &) -> SVOBitset> connected;
 

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <list>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <tuple>
 #include <type_traits>
@@ -20,9 +21,11 @@ using std::find;
 using std::iota;
 using std::is_same;
 using std::list;
+using std::make_optional;
 using std::make_tuple;
 using std::mt19937;
 using std::move;
+using std::optional;
 using std::pair;
 using std::reverse;
 using std::sort;
@@ -79,6 +82,8 @@ namespace
 
         Watches<int, FlatWatchTable> watches;
 
+        vector<optional<SVOBitset> > dominations;
+
         mt19937 global_rand;
 
         int * space;
@@ -119,6 +124,9 @@ namespace
                 for (int v = 0 ; v < size ; ++v)
                     connected_table[v] = params.connected(order.at(v), [&] (int x) { return invorder.at(x); });
             }
+
+            if (params.lazy_global_domination)
+                dominations.resize(size);
         }
 
         ~CliqueRunner()
@@ -368,6 +376,26 @@ namespace
             return result;
         }
 
+        auto lazy_global_dominate(int v, SVOBitset & p) -> void
+        {
+            if (! dominations[v]) {
+                dominations[v] = make_optional<SVOBitset>(size, 0);
+
+                for (int i = 0 ; i < size ; ++i) {
+                    if (i == v)
+                        continue;
+
+                    SVOBitset niv = adj[i];
+                    niv.intersect_with_complement(adj[v]);
+                    niv.reset(v);
+                    if (! niv.any())
+                        dominations[v]->set(i);
+                }
+            }
+
+            p.intersect_with_complement(*dominations[v]);
+        }
+
         template <bool connected_>
         auto expand(
                 int depth,
@@ -401,6 +429,9 @@ namespace
                     case ColourClassOrder::Sorted:          colour_class_order_sorted(p, p_order, p_bounds, p_end); break;
                 }
             }
+
+            // for lazy global domination, what did we just reject?
+            optional<int> vrej;
 
             // for each v in p... (v comes later)
             for (int n = p_end - 1 ; n >= 0 ; --n) {
@@ -449,6 +480,9 @@ namespace
                     }
                 }
 
+                if (params.lazy_global_domination && vrej)
+                    lazy_global_dominate(*vrej, p);
+
                 auto v = p_order[n];
 
                 if constexpr (connected_) {
@@ -468,79 +502,87 @@ namespace
                     }
                 }
 
-                // consider taking v
-                c.push_back(v);
+                // might not be in p, if domination occurs
+                if ((! vrej) || p.test(v)) {
+                    // consider taking v
+                    c.push_back(v);
 
-                if (params.decide) {
-                    if (incumbent.value >= *params.decide) {
-                        if (params.proof)
-                            params.proof->post_solution(unpermute(c));
+                    if (params.decide) {
+                        if (incumbent.value >= *params.decide) {
+                            if (params.proof)
+                                params.proof->post_solution(unpermute(c));
 
-                        return SearchResult::DecidedTrue;
-                    }
-                } else {
-                    if (params.proof && c.size() > incumbent.value) {
-                        params.proof->start_level(0);
-                        params.proof->new_incumbent(unpermute_and_finish(c));
-                        params.proof->start_level(depth + 1);
-                    }
-                    incumbent.update(c, find_nodes, prove_nodes);
-                }
-
-                // filter p to contain vertices adjacent to v
-                SVOBitset new_p = p;
-                new_p &= adj[v];
-
-                if (params.restarts_schedule->might_restart())
-                    watches.propagate(v,
-                            [&] (int literal) { return c.end() == find(c.begin(), c.end(), literal); },
-                            [&] (int literal) { new_p.reset(literal); }
-                            );
-
-                if (params.proof)
-                    params.proof->start_level(depth + 1);
-
-                if (new_p.any()) {
-                    auto new_a = a;
-
-                    if constexpr (connected_) {
-                        new_a |= connected_table[v];
-                    }
-
-                    switch (expand<connected_>(depth + 1, nodes, find_nodes, prove_nodes, c, new_p, new_a, spacepos + 2 * size)) {
-                        case SearchResult::Aborted:
-                            return SearchResult::Aborted;
-
-                        case SearchResult::DecidedTrue:
                             return SearchResult::DecidedTrue;
-
-                        case SearchResult::Complete:
-                            break;
-
-                        case SearchResult::Restart:
-                            // restore assignments before posting nogoods, it's easier
-                            c.pop_back();
-
-                            // post nogoods for everything we've done so far
-                            for (int m = p_end - 1 ; m > n ; --m) {
-                                c.push_back(p_order[m]);
-                                post_nogood(c);
-                                c.pop_back();
-                            }
-
-                            return SearchResult::Restart;
+                        }
+                    } else {
+                        if (params.proof && c.size() > incumbent.value) {
+                            params.proof->start_level(0);
+                            params.proof->new_incumbent(unpermute_and_finish(c));
+                            params.proof->start_level(depth + 1);
+                        }
+                        incumbent.update(c, find_nodes, prove_nodes);
                     }
-                }
 
-                if (params.proof) {
-                    params.proof->start_level(depth);
-                    params.proof->backtrack_from_binary_variables(unpermute(c));
-                    params.proof->forget_level(depth + 1);
-                }
+                    // filter p to contain vertices adjacent to v
+                    SVOBitset new_p = p;
+                    new_p &= adj[v];
 
-                // now consider not taking v
-                c.pop_back();
-                p.reset(v);
+                    if (params.restarts_schedule->might_restart())
+                        watches.propagate(v,
+                                [&] (int literal) { return c.end() == find(c.begin(), c.end(), literal); },
+                                [&] (int literal) { new_p.reset(literal); }
+                                );
+
+                    if (params.proof)
+                        params.proof->start_level(depth + 1);
+
+                    if (new_p.any()) {
+                        auto new_a = a;
+
+                        if constexpr (connected_) {
+                            new_a |= connected_table[v];
+                        }
+
+                        switch (expand<connected_>(depth + 1, nodes, find_nodes, prove_nodes, c, new_p, new_a, spacepos + 2 * size)) {
+                            case SearchResult::Aborted:
+                                return SearchResult::Aborted;
+
+                            case SearchResult::DecidedTrue:
+                                return SearchResult::DecidedTrue;
+
+                            case SearchResult::Complete:
+                                break;
+
+                            case SearchResult::Restart:
+                                // restore assignments before posting nogoods, it's easier
+                                c.pop_back();
+
+                                // post nogoods for everything we've done so far
+                                for (int m = p_end - 1 ; m > n ; --m) {
+                                    c.push_back(p_order[m]);
+                                    post_nogood(c);
+                                    c.pop_back();
+                                }
+
+                                return SearchResult::Restart;
+                        }
+                    }
+
+                    if (params.proof) {
+                        params.proof->start_level(depth);
+                        params.proof->backtrack_from_binary_variables(unpermute(c));
+                        params.proof->forget_level(depth + 1);
+                    }
+
+                    // now consider not taking v
+                    c.pop_back();
+                    p.reset(v);
+                }
+                else {
+                    // now consider not taking v, domination route
+                    p.reset(v);
+                }
+                vrej = make_optional(v);
             }
 
             params.restarts_schedule->did_a_backtrack();
