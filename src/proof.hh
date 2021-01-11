@@ -116,6 +116,7 @@ class Proof
         auto create_non_edge_constraint(int p, int q) -> void;
         auto backtrack_from_binary_variables(const std::vector<int> &) -> void;
         auto colour_bound(const std::vector<std::vector<int> > &) -> void;
+        auto lazy_global_domination(const std::vector<int> &, int w) -> void;
 
         // common subgraphs
         auto create_non_null_decision_bound(int p, int t, std::optional<int> d) -> void;

@@ -376,7 +376,7 @@ namespace
             return result;
         }
 
-        auto lazy_global_dominate(int v, SVOBitset & p) -> void
+        auto lazy_global_dominate(int v, const vector<int> & c, SVOBitset & p) -> void
         {
             if (! dominations[v]) {
                 dominations[v] = make_optional<SVOBitset>(size, 0);
@@ -393,7 +393,19 @@ namespace
                 }
             }
 
-            p.intersect_with_complement(*dominations[v]);
+            if (! params.proof) {
+                p.intersect_with_complement(*dominations[v]);
+            }
+            else {
+                auto to_remove = *dominations[v];
+                for (auto w = to_remove.find_first() ; w != SVOBitset::npos ; w = to_remove.find_first()) {
+                    to_remove.reset(w);
+                    if (p.test(w)) {
+                        p.reset(w);
+                        params.proof->lazy_global_domination(unpermute(c), order[w]);
+                    }
+                }
+            }
         }
 
         template <bool connected_>
@@ -481,7 +493,7 @@ namespace
                 }
 
                 if (params.lazy_global_domination && vrej)
-                    lazy_global_dominate(*vrej, p);
+                    lazy_global_dominate(*vrej, c, p);
 
                 auto v = p_order[n];
 
@@ -580,6 +592,13 @@ namespace
                 }
                 else {
                     // now consider not taking v, domination route
+                    if (params.proof) {
+                        c.push_back(v);
+                        params.proof->start_level(depth);
+                        params.proof->backtrack_from_binary_variables(unpermute(c));
+                        params.proof->forget_level(depth + 1);
+                        c.pop_back();
+                    }
                     p.reset(v);
                 }
                 vrej = make_optional(v);

@@ -634,6 +634,16 @@ auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
     ++_imp->proof_line;
 }
 
+auto Proof::lazy_global_domination(const vector<int> & v, int b) -> void
+{
+    *_imp->proof_stream << "a";
+    for (auto & w : v)
+        *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
+    *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[b];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+}
+
 auto Proof::colour_bound(const vector<vector<int> > & ccs) -> void
 {
     *_imp->proof_stream << "* bound using";
