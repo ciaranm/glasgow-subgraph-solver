@@ -129,7 +129,8 @@ auto main(int argc, char * argv[]) -> int
             ("k4",                                             "Use 4-clique filtering (experimental)")
             ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
             ("decomposition",                                  "Use decomposition")
-            ("cliques",                                        "Use clique size constraints");
+            ("cliques",                                        "Use clique size constraints")
+            ("cliques-on-supplementals",                       "Use clique size constraints on supplemental graphs too");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -261,6 +262,7 @@ auto main(int argc, char * argv[]) -> int
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
         params.clique_size_constraints = options_vars.count("cliques");
+        params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 
         string pattern_automorphism_group_size = "1";
         bool was_given_automorphism_group = false;

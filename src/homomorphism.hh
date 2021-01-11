@@ -89,6 +89,9 @@ struct HomomorphismParams
     /// Are we allowed to do clique size constraints?
     bool clique_size_constraints = false;
 
+    /// If we do clique constraints, do we do them on supplemental graphs too?
+    bool clique_size_constraints_on_supplementals = false;
+
     /// Disable neighbourhood degree sequence processing?
     bool no_nds = false;
 
