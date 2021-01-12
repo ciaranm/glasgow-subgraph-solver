@@ -358,7 +358,7 @@ auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
     _build_target_clique_size(t);
 
     for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
-        if (_imp->pattern_cliques_sizes[0][p] > _imp->target_cliques_sizes[0][t]) {
+        if (_imp->pattern_cliques_sizes[g][p] > _imp->target_cliques_sizes[g][t]) {
             if (_imp->params.proof)
                 _prove_no_clique(g, p, t);
             return false;
