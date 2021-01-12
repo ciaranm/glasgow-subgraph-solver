@@ -293,10 +293,10 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     // make space for clique constraints
     if (params.clique_size_constraints) {
         for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
-            _imp->pattern_cliques_sizes.push_back(vector<int>(pattern.size()));
-            _imp->target_cliques_sizes.push_back(vector<int>(target.size()));
-            _imp->pattern_cliques_best_knowns.push_back(vector<int>(pattern.size()));
-            _imp->target_cliques_best_knowns.push_back(vector<int>(target.size()));
+            _imp->pattern_cliques_sizes.push_back(vector<int>(pattern.size(), 0));
+            _imp->target_cliques_sizes.push_back(vector<int>(target.size(), 0));
+            _imp->pattern_cliques_best_knowns.push_back(vector<int>(pattern.size(), 0));
+            _imp->target_cliques_best_knowns.push_back(vector<int>(target.size(), 0));
         }
         _imp->largest_pattern_clique.resize(_imp->max_graphs_for_clique_size_constraints);
     }
@@ -326,7 +326,7 @@ auto HomomorphismModel::_build_pattern_clique_sizes() const -> void
 {
     for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
         for (unsigned v = 0 ; v < pattern_size ; ++v) {
-            auto c = find_clique(_imp->params.timeout, pattern_size, _imp->pattern_graph_rows, g, _imp->max_graphs_for_clique_size_constraints, v, nullopt,
+            auto c = find_clique(_imp->params.timeout, pattern_size, _imp->pattern_graph_rows, g, max_graphs, v, nullopt,
                     _imp->pattern_cliques_best_knowns[g], _imp->pattern_cliques_build_times, _imp->pattern_cliques_solve_times,
                     _imp->pattern_cliques_solve_find_nodes, _imp->pattern_cliques_solve_prove_nodes);
             _imp->pattern_cliques_sizes[g][v] = c;
@@ -340,7 +340,7 @@ auto HomomorphismModel::_build_target_clique_size(int v) const -> void
 {
     if (0 == _imp->target_cliques_sizes[0][v])
         for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
-            _imp->target_cliques_sizes[g][v] = find_clique(_imp->params.timeout, target_size, _imp->target_graph_rows, g, _imp->max_graphs_for_clique_size_constraints, v,
+            _imp->target_cliques_sizes[g][v] = find_clique(_imp->params.timeout, target_size, _imp->target_graph_rows, g, max_graphs, v,
                     _imp->largest_pattern_clique[g], _imp->target_cliques_best_knowns[0], _imp->target_cliques_build_times,
                     _imp->target_cliques_solve_times, _imp->target_cliques_solve_find_nodes, _imp->target_cliques_solve_prove_nodes);
         }
