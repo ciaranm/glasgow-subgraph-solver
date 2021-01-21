@@ -137,9 +137,11 @@ auto main(int argc, char * argv[]) -> int
         if (! target_infile)
             throw GraphFileError{ target_filename, "unable to open target file", false };
 
+        auto pattern_graph = read_pattern_bigraph(move(pattern_infile), pattern_filename);
+
         auto graphs = make_pair(
-            read_pattern_bigraph(move(pattern_infile), pattern_filename),
-            read_target_bigraph(move(target_infile), target_filename));
+            pattern_graph,
+            read_target_bigraph(move(target_infile), target_filename, pattern_graph));
 
         cout << "pattern_file = " << pattern_filename << endl;
         cout << "target_file = " << target_filename << endl;
@@ -147,7 +149,7 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("print-all-solutions") && ! params.bigraph) {
             params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
                 cout << "mapping = ";
-                for (auto v : mapping)
+                for (auto v : mapping)              
                     cout << "(" << graphs.first.vertex_name(v.first) << " -> " << graphs.second.vertex_name(v.second) << ") ";
                 cout << endl;
             };
@@ -158,23 +160,20 @@ auto main(int argc, char * argv[]) -> int
                 bool lazy_flag = false;
 
                 for (auto v : mapping) {
-                    if(v.first >= 0){
-                        if(lazy_flag) cout << ", ";
-                        cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
-                        lazy_flag = true;
-                    }
+                    if(graphs.first.vertex_name(v.first).find("C_LINK") != string::npos) break;
+                    if(lazy_flag) cout << ",";
+                    lazy_flag = true;
+                    cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
                 }
-                
                 cout << "} -- {";
-
+                
                 lazy_flag = false;
-                for (auto v : mapping) {
-                    if(v.first < 0){
-                        if(lazy_flag) cout << ", ";
-                        cout << "(" << v.first+999999999 << ", " << v.second+999999999 << ")";
-                        lazy_flag = true;
-                    }
-                }
+                for (auto v : mapping) { 
+                    if(graphs.first.vertex_name(v.first).find("C_LINK") == string::npos) continue;
+                    if(lazy_flag) cout << ",";
+                    lazy_flag = true;
+                    cout << "(" << graphs.first.vertex_name(v.first).substr(7) << ", " << graphs.second.vertex_name(v.second).substr(7) << ")";
+                }              
 
                 cout << "}";
                 cout << endl;
@@ -218,11 +217,22 @@ auto main(int argc, char * argv[]) -> int
             bool lazy_flag = false;
 
             for (auto v : result.mapping) {
-                if(lazy_flag) cout << ", ";
-                cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
+                if(graphs.first.vertex_name(v.first).find("C_LINK") != string::npos) break;
+                if(lazy_flag) cout << ",";
                 lazy_flag = true;
+                cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
             }
-            cout << "} -- {}";
+            cout << "} -- {";
+            
+            lazy_flag = false;
+            for (auto v : result.mapping) { 
+                if(graphs.first.vertex_name(v.first).find("C_LINK") == string::npos) continue;
+                if(lazy_flag) cout << ",";
+                lazy_flag = true;
+                cout << "(" << graphs.first.vertex_name(v.first).substr(7) << ", " << graphs.second.vertex_name(v.second).substr(7) << ")";
+            }              
+
+            cout << "}";
             cout << endl;
         }
 
@@ -247,4 +257,3 @@ auto main(int argc, char * argv[]) -> int
         return EXIT_FAILURE;
     }
 }
-

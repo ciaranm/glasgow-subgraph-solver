@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include <iostream>
 
 using std::ifstream;
 using std::pair;
@@ -14,6 +15,7 @@ using std::string;
 using std::stoi;
 using std::to_string;
 using std::vector;
+using std::cout;
 
 namespace
 {
@@ -39,7 +41,7 @@ namespace
     }
 }
 
-auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
+auto read_target_bigraph(ifstream && infile, const string &, InputGraph pattern_graph) -> InputGraph
 {
 
     InputGraph result{ 0, true, true, true };
@@ -56,21 +58,25 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
     int s = read_num(infile);
     result.resize(r + n + s);
 
+    // Add dummy root nodes
     for (int i = 0 ; i != r ; ++i) {
         result.set_vertex_label(i, "ROOT");
         result.set_vertex_name(i, "ROOT" + to_string(i));
     }
 
+    // Add dummy site nodes
     for (int i = (r + n) ; i < (r + n + s) ; ++i) {
         result.set_vertex_label(i, "SITE");
         result.set_vertex_name(i, "SITE" + to_string(i));
     }
 
+    // Add standard place graph nodes
     for (int i = r ; i < (r + n) ; ++i) {
         result.set_vertex_label(i, labels.at(i - r));
         result.set_vertex_name(i, to_string(i - r));
     }
 
+    // Read adjacency matrix and add directed edges
     for (int i = 0 ; i != (r + n) ; ++i)
         for (int j = r ; j != (n + s + r) ; ++j) {
             char x = read_char(infile);
@@ -78,7 +84,11 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
                 result.add_directed_edge(i, j, "dir");
         }
 
+
+    // Add link graph nodes (this is where all the scary stuff happens...)
     string h = read_str(infile);
+    int closed_link_count = 0;
+    int open_link_count = 0;
     while (h == "({},") {
         pair<bool, vector<int> > he;
         he.second.resize(r + n + s);
@@ -94,10 +104,38 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
             if (c.find('}') != string::npos)
                 break;
         }
+              
+        // Create x duplicates of each hyperedge (represented by a node labelled "LINK" which is adjacent to all nodes that the hyperedge
+        // is connected to) where x is the number of pattern hyperedges, to allow many-to-one assignment
+        if(!he.first) {       
+            for(int x=0;x<pattern_graph.get_no_link_nodes();x++){     
+                result.add_link_node();       
+                result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count)); 
+                for(int i=r; i<(r+n); ++i)
+                    for(int j=0;j<he.second[i];j++)
+                        result.add_link_edge(result.size()-1, i, "dir"); 
+            }
+            closed_link_count++;
+        }
+        else {
+            for(int x=0;x<pattern_graph.get_no_link_nodes();x++){  
+                result.add_link_node();
+                result.set_vertex_name(result.size()-1, "O_LINK_" + to_string(open_link_count));
+                for(int i=r; i<(r+n); ++i)
+                    for(int j=0;j<he.second[i];j++)
+                        result.add_link_edge(result.size()-1, i, "dir"); 
+            }
+            open_link_count++;
+        }
 
-        result.add_hyperedge(move(he));
         h = read_str(infile);
     }
+
+    // (Ciaran's idea) Naive method of connecting edges between all link nodes which are not clones of one another, i.e. share different names
+    for(int i=0;i<result.size();i++)
+        for(int j=0;j<result.size();j++)
+            if(result.vertex_label(i) == "LINK" && result.vertex_label(j) == "LINK" && result.vertex_name(i) != result.vertex_name(j) and i != j)
+                result.add_link_edge(i, j, "dir");
 
     return result;
 }
@@ -116,11 +154,14 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
     int r = read_num(infile);
     int n = read_num(infile);
     int s = read_num(infile);
-    result.resize(n);
 
+
+    // Add place graph nodes
+    result.resize(n);
     for (int i = 0 ; i != n ; ++i)
         result.set_vertex_label(i, labels.at(i));
 
+    // Add adjacency matrix, and identify children of root nodes and parents of site nodes for later constraints
     for (int i = 0 ; i != (r + n) ; ++i)
         for (int j = 0 ; j != (n + s) ; ++j) {
             char x = read_char(infile);
@@ -136,7 +177,10 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
             }
         }
 
+    // Add link graph nodes
     string h = read_str(infile);
+    int closed_link_count = 0;
+    int open_link_count = 0;
     while (h == "({},") {
         pair<bool, vector<int> > he;
         he.second.resize(n);
@@ -153,7 +197,19 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
                 break;
         }
 
-        result.add_hyperedge(move(he));
+        result.add_link_node();
+
+        // Mark as either open or closed link in the vertex name for identifying in constraints later
+        if(!he.first)
+            result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count++)); 
+        else
+            result.set_vertex_name(result.size()-1, "O_LINK_" + to_string(open_link_count++)); 
+
+        // Represent the hyperedge by connecting all adjacencies to the link node
+        for(int i=0; i<n; ++i)
+            for(int j=0;j<he.second[i];j++)
+                result.add_link_edge(result.size()-1, i, "dir");
+
         h = read_str(infile);
     }
 

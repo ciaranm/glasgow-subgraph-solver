@@ -59,10 +59,15 @@ auto InputGraph::add_directed_edge(int a, int b, const string & label) -> void
     _vertex_directed_degrees[a].second++;
 }
 
-auto InputGraph::add_hyperedge(pair<bool, vector<int> > && he) -> void
+auto InputGraph::add_link_edge(int a, int b, const string & label) -> void
 {
-    _hyperedges.push_back(move(he));
+    _directed = true;
+    if (a == b)
+        _loopy = true;
+
+    _edges.emplace(make_pair(a, b), label).first->second = label;
 }
+
 
 auto InputGraph::adjacent(int a, int b) const -> bool
 {
@@ -77,16 +82,6 @@ auto InputGraph::size() const -> int
 auto InputGraph::number_of_directed_edges() const -> int
 {
     return _edges.size();
-}
-
-auto InputGraph::number_of_hyperedges() const -> int
-{
-    return _hyperedges.size();
-}
-
-auto InputGraph::get_hyperedge(int v) const -> const pair<bool, vector<int> > &
-{
-    return _hyperedges[v];
 }
 
 auto InputGraph::add_pattern_site_edge(int a, int b) -> void
@@ -120,6 +115,17 @@ auto InputGraph::no_pattern_root_edges() const -> int
     return _pattern_root_edges.size();
 }
 
+auto InputGraph::add_link_node() -> void
+{
+    resize(_size+1);
+    set_vertex_label(_size-1, "LINK");
+    _no_link_nodes++;
+}
+
+auto InputGraph::get_no_link_nodes() -> int
+{
+    return _no_link_nodes;
+}
 
 auto InputGraph::loopy() const -> bool
 {

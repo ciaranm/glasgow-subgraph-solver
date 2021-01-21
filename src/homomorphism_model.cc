@@ -63,8 +63,6 @@ struct HomomorphismModel::Imp
     vector<SVOBitset> target_graph_reachability, pattern_graph_reachability;
     vector<SVOBitset> pattern_site_reachability, pattern_root_reachability;
 
-    vector<pair<bool, vector<int> > > target_hyperedges, pattern_hyperedges;
-
     Imp(const HomomorphismParams & p) :
         params(p)
     {
@@ -245,19 +243,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         for (int a = 0 ; a != pattern.no_pattern_root_edges() ; ++a)
             _imp->pattern_root_reachability[pattern.get_pattern_root_edge(a).first].set(pattern.get_pattern_root_edge(a).second);
 
-        _imp->target_hyperedges.resize(target.number_of_hyperedges());
-        _imp->pattern_hyperedges.resize(pattern.number_of_hyperedges());
-
-        for (int a = 0 ; a != target.number_of_hyperedges() ; ++a) {
-            _imp->target_hyperedges[a].second.resize(target_size);
-            _imp->target_hyperedges[a] = target.get_hyperedge(a);
-        }
-
-        for (int a = 0 ; a != pattern.number_of_hyperedges() ; ++a) {
-            _imp->pattern_hyperedges[a].second.resize(pattern_size);
-            _imp->pattern_hyperedges[a] = pattern.get_hyperedge(a);
-        }
-
         set<int> pattern_unique;
         queue<int> pattern_reach;
 
@@ -435,31 +420,6 @@ auto HomomorphismModel::_check_degree_compatibility(
     return true;
 }
 
-auto HomomorphismModel::_check_closed_link_compatibility(int p, int t) const -> bool
-{
-    set<int> mapped;
-
-    for (unsigned i = 0 ; i < _imp->pattern_hyperedges.size() ; ++i) {
-        bool lazy_flag = false;
-        if (! _imp->pattern_hyperedges[i].first && _imp->pattern_hyperedges[i].second[p] > 0) {
-            for (unsigned j = 0 ; j < _imp->target_hyperedges.size() ; ++j) {
-                if (! _imp->target_hyperedges[j].first &&
-                    _imp->pattern_hyperedges[i].second[p] == _imp->target_hyperedges[j].second[t] &&
-                    ! mapped.count(j) &&
-                    accumulate(_imp->pattern_hyperedges[i].second.begin(), _imp->pattern_hyperedges[i].second.end(), 0) ==
-                        accumulate(_imp->target_hyperedges[j].second.begin(), _imp->target_hyperedges[j].second.end(), 0)) {
-                    mapped.insert(j);
-                    lazy_flag = true;
-                    break;
-                }
-            }
-            if (! lazy_flag)
-                return false;
-        }
-    }
-
-    return true;
-}
 
 auto HomomorphismModel::_check_bigraph_degree_compatibility(int p, int t) const -> bool
 {
@@ -515,9 +475,6 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                 ok = false;
             else if (_imp->params.bigraph && ! _check_bigraph_degree_compatibility(i, j))
                 ok = false;
-            else if (_imp->params.bigraph && ! _check_closed_link_compatibility(i, j))
-                ok = false;
-
             if (ok)
                 domains.at(i).values.set(j);
         }
@@ -937,127 +894,8 @@ auto HomomorphismModel::directed() const -> bool
     return _imp->directed;
 }
 
-auto HomomorphismModel::_bigraph_link_match(
-        const pair<bool, vector<int> > & pattern_hyperedge,
-        const pair<bool, vector<int> > & target_hyperedge,
-        const VertexToVertexMapping & mapping) const -> bool
+auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> bool
 {
-
-    // If pattern is closed and target is open, cannot ever match
-    if (target_hyperedge.first && ! pattern_hyperedge.first)
-        return false;
-
-    // Closed pattern hyperedge must match exactly with the target hyperedge
-    if (! pattern_hyperedge.first) {
-        if (accumulate(pattern_hyperedge.second.begin(), pattern_hyperedge.second.end(), 0) !=
-                accumulate(target_hyperedge.second.begin(), target_hyperedge.second.end(), 0))
-            return false;
-
-        for (unsigned i = 0 ; i < pattern_hyperedge.second.size() ; ++i)
-            if (pattern_hyperedge.second[i] != target_hyperedge.second[mapping.find(i)->second])
-                return false;
-    }
-    // Open pattern hyperedges can be subsets of the target hyperedge
-    else {
-        for (unsigned i = 0 ; i != pattern_hyperedge.second.size() ; ++i)
-            if (pattern_hyperedge.second[i] > target_hyperedge.second[mapping.find(i)->second])
-                return false;
-    }
-
-    return true;
-}
-
-auto HomomorphismModel::_backtracking_open_link_matching(
-        vector<pair<bool, vector<int> > > & pattern_links,
-        vector<pair<bool, vector<int> > > & target_links,
-        const VertexToVertexMapping & mapping) const -> bool
-{
-    for (unsigned i = 0 ; i != pattern_links.size() ; ++i) {
-        vector<int> valid_mappings;
-        for (unsigned j = 0 ; j != target_links.size() ; ++j)
-            if (_bigraph_link_match(pattern_links[i], target_links[j], mapping))
-                valid_mappings.push_back(j);
-
-        if (valid_mappings.size() == 0)
-            return false;
-        else if (valid_mappings.size() == 1) {
-            for (unsigned j = 0 ; j != pattern_links[i].second.size() ; ++j)
-                target_links[valid_mappings[0]].second[mapping.find(j)->second] -= pattern_links[i].second[j];
-            continue;
-        }
-        else {
-            for (unsigned j = 0 ; j != valid_mappings.size() ; ++j) {
-                vector<pair<bool, vector<int> > > pattern_copy, target_copy;
-
-                for (unsigned k = i + 1 ; k != pattern_links.size() ; ++k)
-                    pattern_copy.push_back(pattern_links[k]);
-
-                for (unsigned k = 0 ; k != target_links.size() ; ++k)
-                    target_copy.push_back(target_links[k]);
-
-                for (unsigned k = 0 ; k != pattern_links[i].second.size() ; ++k)
-                    target_copy[j].second[mapping.find(k)->second] -= pattern_links[i].second[k];
-
-                if (_backtracking_open_link_matching(pattern_copy, target_copy, mapping))
-                    return true;
-            }
-        }
-        return false;
-    }
-
-    return true;
-}
-
-
-auto HomomorphismModel::_closed_link_matching(const VertexToVertexMapping & mapping) const -> vector<VertexToVertexMapping>
-{
-    VertexToVertexMapping hyperedges;
-    set<int> mapped_targets;
-
-    for (unsigned i = 0 ; i != _imp->pattern_hyperedges.size() ; ++i) {
-        if (! _imp->pattern_hyperedges[i].first) {
-            vector<int> candidate_targets;
-            for (unsigned j = 0 ; j != _imp->target_hyperedges.size() ; ++j)
-                if (mapped_targets.find(j) == mapped_targets.end() &&
-                        _bigraph_link_match(_imp->pattern_hyperedges[i], _imp->target_hyperedges[j], mapping))
-                            candidate_targets.push_back(j);
-
-            if (candidate_targets.size() == 0) return std::optional<VertexToVertexMapping>();
-            if (candidate_targets.size() == 1) {
-                mapped_targets.insert(candidate_targets[0]);  
-                hyperedges.insert(std::pair<int,int>(i,candidate_targets[0]));
-            }
-            else {
-                for(int t : candidate_targets) {
-                    
-                }
-            }
-    }
-    return hyperedges;
-}
-
-auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> std::optional<VertexToVertexMapping>
-{
-    // Eliminate closed-pattern/closed-target hyperedges first
-    std::optional<VertexToVertexMapping> hyperedges = _closed_link_matching(mapping);
-    if (! hyperedges.has_value()) return hyperedges;
-    
-    vector<pair<bool, vector<int> > > open_pattern_links, target_domains;    
-    set<int> mapped_targets;
-    for(std::pair<int,int> p : hyperedges.value()) mapped_targets.insert(p.second);
-    
-    // Clean up open pattern hyperedges by matching on remaining target hyperedges
-    for (unsigned i = 0 ; i != _imp->pattern_hyperedges.size() ; ++i)
-        if (_imp->pattern_hyperedges[i].first)
-            open_pattern_links.push_back(_imp->pattern_hyperedges[i]);
-
-    for (unsigned i = 0 ; i != _imp->target_hyperedges.size() ; ++i)
-        if (mapped_targets.find(i) == mapped_targets.end())
-            target_domains.push_back(_imp->target_hyperedges[i]);
-
-    if (! _backtracking_open_link_matching(open_pattern_links, target_domains, mapping))
-        return std::optional<VertexToVertexMapping>();
-
     // Find transitive closure violations
     for (unsigned i = 0 ; i != pattern_size ; ++i) {
         if (_imp->pattern_big_constraints[i].second) {
@@ -1090,7 +928,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                         child_mappings.find(j) == child_mappings.end()) {
                     for (unsigned k = 0 ; k != pattern_size ; ++k)
                         if (_imp->pattern_big_constraints[k].first && _imp->target_graph_reachability[j].test(mapping.find(k)->second))
-                            return std::optional<VertexToVertexMapping>();
+                            return false;
 
                     // If only points to shared sites, check that all unmapped children have an adjacency superset of a site
                     if (! sites_okay) {
@@ -1110,7 +948,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                         }
 
                         if (! site_sat)
-                            return std::optional<VertexToVertexMapping>();
+                            return false;
                     }
                 }
             }
@@ -1158,13 +996,13 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                                 break;
                         }
                         if (! root_sat)
-                            return std::optional<VertexToVertexMapping>();
+                            return false;
                     }
                 }
             }
         }
     }
 
-    return hyperedges;
+    return true;
 }
 

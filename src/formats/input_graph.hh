@@ -30,9 +30,10 @@ class InputGraph
         std::vector<std::pair<int, int> > _vertex_directed_degrees;
         std::vector<std::pair<bool, bool> > _vertex_pattern_constraints;
 
-        std::vector<std::pair<bool, std::vector<int> > > _hyperedges;
         std::vector<std::pair<int, int> > _pattern_site_edges;
         std::vector<std::pair<int, int> > _pattern_root_edges;
+
+        int _no_link_nodes = 0;
 
         bool _loopy = false, _directed = false;
 
@@ -77,19 +78,20 @@ class InputGraph
         auto add_directed_edge(int a, int b, const std::string & label) -> void;
 
         /**
-         * Add a bigraph hyperedge to a subset of vertices (open or closed)
+         * Add a directed link edge from a to b, with a label.
          */
-        auto add_hyperedge(std::pair<bool, std::vector<int> > && he) -> void;
+        auto add_link_edge(int a, int b, const std::string & label) -> void;
 
         /**
-         * Number of bigraph hyperedges.
+         * Add a special link node to represent a hyperedge in a bigraph's link graph.
          */
-        auto number_of_hyperedges() const -> int;
+        auto add_link_node() -> void;
+
 
         /**
-         * Return the bigraph hyperedge of index v.
+         * Get the number of current link nodes.
          */
-        auto get_hyperedge(int v) const -> const std::pair<bool, std::vector<int> > &;
+        auto get_no_link_nodes() -> int;
 
         /**
          * Keep track of pattern site edges for dealing with that one annoying edge case
