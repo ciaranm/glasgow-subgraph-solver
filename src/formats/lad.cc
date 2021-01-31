@@ -33,6 +33,8 @@ namespace
             throw GraphFileError{ filename, "error reading size", true };
 
         for (int r = 0 ; r < result.size() ; ++r) {
+            result.set_vertex_name(r, to_string(r));
+
             if (vertex_labels) {
                 int l = read_word(infile);
                 if (! infile)
