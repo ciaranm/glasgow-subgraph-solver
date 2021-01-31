@@ -573,10 +573,20 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                 });
     };
 
+    bool done_all_diff_at_least_once = false;
+
     // whilst we've got a unit domain...
     for (typename Domains::iterator branch_domain = find_unit_domain() ;
-            branch_domain != new_domains.end() ;
+            branch_domain != new_domains.end() || ((params.injectivity == Injectivity::Injective) && ! done_all_diff_at_least_once) ;
             branch_domain = find_unit_domain()) {
+
+        if (branch_domain == new_domains.end() && params.injectivity == Injectivity::Injective) {
+            done_all_diff_at_least_once = true;
+            if (! cheap_all_different(model.target_size, new_domains, params.proof))
+                return false;
+            continue;
+        }
+
         // what are we assigning?
         HomomorphismAssignment current_assignment = { branch_domain->v, unsigned(branch_domain->values.find_first()) };
 
@@ -617,6 +627,7 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
         if (params.injectivity == Injectivity::Injective)
             if (! cheap_all_different(model.target_size, new_domains, params.proof))
                 return false;
+        done_all_diff_at_least_once = true;
     }
 
     int dcount = 0;
