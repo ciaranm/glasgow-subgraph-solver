@@ -652,7 +652,7 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
 
     for (unsigned v = 0 ; v < size ; ++v) {
         for (unsigned w = (directed ? 0 : v) ; w < size ; ++w) {
-            // nuless directed, w to v, not v to w, see above
+            // unless directed, w to v, not v to w, see above
             unsigned path_count = path_counts[w][v];
             for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
                 if (path_count >= p) {
