@@ -3,11 +3,16 @@
 #include "homomorphism_searcher.hh"
 #include "cheap_all_different.hh"
 
+#include <set>
+#include <map>
+
+using std::map;
 using std::max;
 using std::move;
 using std::mt19937;
 using std::numeric_limits;
 using std::pair;
+using std::set;
 using std::string;
 using std::swap;
 using std::to_string;
@@ -565,6 +570,65 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
     return true;
 }
 
+auto HomomorphismSearcher::propagate_occur_less_thans(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool
+{
+    map<unsigned, set<unsigned> > occurs;
+
+    auto build_occurs = [&] (int p) -> void {
+        if (occurs.count(p))
+            return;
+        set<unsigned> o;
+
+        for (auto & d : new_domains)
+            if (d.values.test(p))
+                o.insert(d.v);
+
+        occurs.emplace(p, move(o));
+    };
+
+    for (auto & [ a, b ] : model.target_occur_less_thans_in_convenient_order) {
+        build_occurs(a);
+        build_occurs(b);
+    }
+
+    for (auto & a : assignments.values)
+        occurs[a.assignment.target_vertex].insert(a.assignment.pattern_vertex);
+
+    for (auto & d : new_domains) {
+        auto d_values = d.values;
+        for (auto v = d_values.find_first() ; v != decltype(d_values)::npos ; v = d_values.find_first())
+            d_values.reset(v);
+    }
+
+    // propagate lower bounds
+    for (auto & [ a, b ] : model.target_occur_less_thans_in_convenient_order) {
+        if (occurs.find(a)->second.empty()) {
+            // no occurrence of value a, value b cannot be used either
+            occurs.find(b)->second.clear();
+            for (auto & d : new_domains)
+                if (d.values.test(b)) {
+                    d.values.reset(b);
+                    if (0 == --d.count)
+                        return false;
+                }
+        }
+        else {
+            // value a first occurs in variable x, value b cannot be used in a variable lower than x
+            unsigned x = *occurs.find(a)->second.begin();
+            for (auto & d : new_domains) {
+                if (d.v < x && d.values.test(b)) {
+                    occurs.find(b)->second.erase(d.v);
+                    d.values.reset(b);
+                    if (0 == --d.count)
+                        return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
 {
     auto find_unit_domain = [&] () {
@@ -573,61 +637,57 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                 });
     };
 
-    bool done_all_diff_at_least_once = false;
+    bool done_globals_at_least_once = false;
 
     // whilst we've got a unit domain...
     for (typename Domains::iterator branch_domain = find_unit_domain() ;
-            branch_domain != new_domains.end() || ((params.injectivity == Injectivity::Injective) && ! done_all_diff_at_least_once) ;
+            branch_domain != new_domains.end() || ! done_globals_at_least_once ;
             branch_domain = find_unit_domain()) {
+        if (branch_domain != new_domains.end()) {
+            // what are we assigning?
+            HomomorphismAssignment current_assignment = { branch_domain->v, unsigned(branch_domain->values.find_first()) };
 
-        if (branch_domain == new_domains.end() && params.injectivity == Injectivity::Injective) {
-            done_all_diff_at_least_once = true;
-            if (! cheap_all_different(model.target_size, new_domains, params.proof))
+            // ok, make the assignment
+            branch_domain->fixed = true;
+            assignments.values.push_back({ current_assignment, false, -1, -1 });
+
+            if (params.proof)
+                params.proof->unit_propagating(
+                        model.pattern_vertex_for_proof(current_assignment.pattern_vertex),
+                        model.target_vertex_for_proof(current_assignment.target_vertex));
+
+            // propagate watches
+            if (might_have_watches(params))
+                watches.propagate(current_assignment,
+                        [&] (const HomomorphismAssignment & a) { return ! assignments.contains(a); },
+                        [&] (const HomomorphismAssignment & a) {
+                                for (auto & d : new_domains) {
+                                    if (d.fixed)
+                                        continue;
+
+                                    if (d.v == a.pattern_vertex) {
+                                        d.values.reset(a.target_vertex);
+                                        break;
+                                    }
+                                }
+                            });
+
+            // propagate simple all different and adjacency
+            if (! propagate_simple_constraints(new_domains, current_assignment))
                 return false;
-            continue;
         }
 
-        // what are we assigning?
-        HomomorphismAssignment current_assignment = { branch_domain->v, unsigned(branch_domain->values.find_first()) };
-
-        // ok, make the assignment
-        branch_domain->fixed = true;
-        assignments.values.push_back({ current_assignment, false, -1, -1 });
-
-        if (params.proof)
-            params.proof->unit_propagating(
-                    model.pattern_vertex_for_proof(current_assignment.pattern_vertex),
-                    model.target_vertex_for_proof(current_assignment.target_vertex));
-
-        // propagate watches
-        if (might_have_watches(params))
-            watches.propagate(current_assignment,
-                    [&] (const HomomorphismAssignment & a) { return ! assignments.contains(a); },
-                    [&] (const HomomorphismAssignment & a) {
-                            for (auto & d : new_domains) {
-                                if (d.fixed)
-                                    continue;
-
-                                if (d.v == a.pattern_vertex) {
-                                    d.values.reset(a.target_vertex);
-                                    break;
-                                }
-                            }
-                        });
-
-        // propagate simple all different and adjacency
-        if (! propagate_simple_constraints(new_domains, current_assignment))
-            return false;
-
-        // propagate less than
+        // propagate less thans
         if (model.has_less_thans() && ! propagate_less_thans(new_domains))
+            return false;
+        if (model.has_occur_less_thans() && ! propagate_occur_less_thans(assignments, new_domains))
             return false;
 
         // propagate all different
         if (params.injectivity == Injectivity::Injective)
             if (! cheap_all_different(model.target_size, new_domains, params.proof))
                 return false;
-        done_all_diff_at_least_once = true;
+        done_globals_at_least_once = true;
     }
 
     int dcount = 0;

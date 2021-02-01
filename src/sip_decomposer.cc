@@ -23,7 +23,7 @@ namespace
             const HomomorphismParams & params,
             set<int> & isolated_pattern_vertices) -> void
     {
-        if (params.induced || (! params.pattern_less_constraints.empty())
+        if (params.induced || (! params.pattern_less_constraints.empty()) || (! params.target_occur_less_constraints.empty())
                 || params.lackey || pattern.has_vertex_labels() || (params.count_solutions && params.enumerate_callback)
                 || pattern.directed())
             return;

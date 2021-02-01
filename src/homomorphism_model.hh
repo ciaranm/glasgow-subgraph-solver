@@ -44,7 +44,8 @@ class HomomorphismModel
         unsigned pattern_size, target_size;
 
         auto has_less_thans() const -> bool;
-        std::vector<std::pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;
+        auto has_occur_less_thans() const -> bool;
+        std::vector<std::pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params);
         ~HomomorphismModel();

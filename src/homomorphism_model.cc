@@ -45,7 +45,7 @@ struct HomomorphismModel::Imp
 
     vector<vector<int> > patterns_degrees, targets_degrees;
     int largest_target_degree = 0;
-    bool has_less_thans = false, directed = false;
+    bool has_less_thans = false, has_occur_less_thans = false, directed = false;
 
     vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
     vector<int> pattern_loops, target_loops;
@@ -169,8 +169,8 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         });
     }
 
-    auto decode = [&] (string_view s) -> int {
-        auto n = pattern.vertex_from_name(s);
+    auto decode = [&] (const InputGraph & g, string_view s) -> int {
+        auto n = g.vertex_from_name(s);
         if (! n)
             throw UnsupportedConfiguration{ "No vertex named '" + string{ s } + "'" };
         return *n;
@@ -181,7 +181,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         _imp->has_less_thans = true;
         list<pair<unsigned, unsigned> > pattern_less_thans_in_wrong_order;
         for (auto & [ a, b ] : _imp->params.pattern_less_constraints) {
-            auto a_decoded = decode(a), b_decoded = decode(b);
+            auto a_decoded = decode(pattern, a), b_decoded = decode(pattern, b);
             pattern_less_thans_in_wrong_order.emplace_back(a_decoded, b_decoded);
         }
 
@@ -203,6 +203,36 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
             if (loop_detect)
                 throw UnsupportedConfiguration{ "Pattern less than constraints form a loop" };
+        }
+    }
+
+    // target less than constraints
+    if (! _imp->params.target_occur_less_constraints.empty()) {
+        _imp->has_occur_less_thans = true;
+        list<pair<unsigned, unsigned> > target_occur_less_thans_in_wrong_order;
+        for (auto & [ a, b ] : _imp->params.target_occur_less_constraints) {
+            auto a_decoded = decode(target, a), b_decoded = decode(target, b);
+            target_occur_less_thans_in_wrong_order.emplace_back(a_decoded, b_decoded);
+        }
+
+        // put them in a convenient order, so we don't need a propagation loop
+        while (! target_occur_less_thans_in_wrong_order.empty()) {
+            bool loop_detect = true;
+            set<unsigned> cannot_order_yet;
+            for (auto & [ _, b ] : target_occur_less_thans_in_wrong_order)
+                cannot_order_yet.emplace(b);
+            for (auto t = target_occur_less_thans_in_wrong_order.begin() ; t != target_occur_less_thans_in_wrong_order.end() ; ) {
+                if (cannot_order_yet.count(t->first))
+                    ++t;
+                else {
+                    loop_detect = false;
+                    target_occur_less_thans_in_convenient_order.push_back(*t);
+                    target_occur_less_thans_in_wrong_order.erase(t++);
+                }
+            }
+
+            if (loop_detect)
+                throw UnsupportedConfiguration{ "Target less than constraints form a loop" };
         }
     }
 }
@@ -803,6 +833,11 @@ auto HomomorphismModel::target_has_loop(int t) const -> bool
 auto HomomorphismModel::has_less_thans() const -> bool
 {
     return _imp->has_less_thans;
+}
+
+auto HomomorphismModel::has_occur_less_thans() const -> bool
+{
+    return _imp->has_occur_less_thans;
 }
 
 auto HomomorphismModel::directed() const -> bool

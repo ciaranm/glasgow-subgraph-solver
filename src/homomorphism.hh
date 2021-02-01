@@ -92,6 +92,9 @@ struct HomomorphismParams
     /// Less pattern constraints
     std::list<std::pair<std::string, std::string> > pattern_less_constraints;
 
+    /// Occurs less target constraints
+    std::list<std::pair<std::string, std::string> > target_occur_less_constraints;
+
     /// Optional lackey, for external side constraints
     std::unique_ptr<Lackey> lackey;
 

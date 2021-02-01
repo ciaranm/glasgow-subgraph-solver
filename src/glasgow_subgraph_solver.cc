@@ -80,7 +80,8 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum",      po::value<int>(),         "Specify a minimum number of backtracks before a timed restart can trigger")
             ("luby-constant",        po::value<int>(),         "Specify the starting constant / multiplier for Luby restarts")
             ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)")
-            ("pattern-symmetries",                             "Eliminate pattern symmetries (requires Gap)");
+            ("pattern-symmetries",                             "Eliminate pattern symmetries (requires Gap)")
+            ("target-symmetries",                              "Eliminate target symmetries (requires Gap)");
         display_options.add(search_options);
 
         po::options_description mangling_options{ "Advanced input processing options" };
@@ -97,13 +98,17 @@ auto main(int argc, char * argv[]) -> int
             ("delay-thread-creation",                          "Do not create threads until after the first restart");
         display_options.add(parallel_options);
 
-        vector<string> pattern_less_thans;
+        vector<string> pattern_less_thans, target_occur_less_thans;
         po::options_description symmetry_options{ "Manual symmetry options" };
         symmetry_options.add_options()
             ("pattern-less-than",   po::value<vector<string> >(&pattern_less_thans),
                                                                "Specify a pattern less than constraint, in the form v<w")
             ("pattern-automorphism-group-size", po::value<string>(),
-                                                               "Specify the size of the pattern graph automorphism group");
+                                                               "Specify the size of the pattern graph automorphism group")
+            ("target-occurs-less-than",   po::value<vector<string> >(&target_occur_less_thans),
+                                                               "Specify a target occurs less than constraint, in the form v<w")
+            ("target-automorphism-group-size", po::value<string>(),
+                                                               "Specify the size of the target graph automorphism group");
         display_options.add(symmetry_options);
 
         po::options_description lackey_options{ "External constraint solver options" };
@@ -259,11 +264,16 @@ auto main(int argc, char * argv[]) -> int
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
 
-        string pattern_automorphism_group_size = "1";
-        bool was_given_automorphism_group = false;
+        string pattern_automorphism_group_size = "1", target_automorphism_group_size = "1";
+        bool was_given_pattern_automorphism_group = false, was_given_target_automorphism_group = false;
         if (options_vars.count("pattern-automorphism-group-size")) {
             pattern_automorphism_group_size = options_vars["pattern-automorphism-group-size"].as<string>();
-            was_given_automorphism_group = true;
+            was_given_pattern_automorphism_group = true;
+        }
+
+        if (options_vars.count("target-automorphism-group-size")) {
+            target_automorphism_group_size = options_vars["target-automorphism-group-size"].as<string>();
+            was_given_target_automorphism_group = true;
         }
 
         for (auto & s : pattern_less_thans) {
@@ -274,6 +284,16 @@ auto main(int argc, char * argv[]) -> int
             }
             auto a = s.substr(0, p), b = s.substr(p + 1);
             params.pattern_less_constraints.emplace_back(a, b);
+        }
+
+        for (auto & s : target_occur_less_thans) {
+            auto p = s.find('<');
+            if (p == string::npos) {
+                cerr << "Invalid target occurs-less-than constraint '" << s << "'" << endl;
+                return EXIT_FAILURE;
+            }
+            auto a = s.substr(0, p), b = s.substr(p + 1);
+            params.target_occur_less_constraints.emplace_back(a, b);
         }
 
         if (options_vars.count("send-to-lackey") ^ options_vars.count("receive-from-lackey")) {
@@ -363,12 +383,30 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("pattern-symmetries")) {
             auto gap_start_time = steady_clock::now();
             find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
-            was_given_automorphism_group = true;
+            was_given_pattern_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
+            cout << "pattern_less_constraints =";
+            for (auto & [ a, b ] : params.pattern_less_constraints)
+                cout << " " << a << "<" << b;
+            cout << endl;
         }
 
-        if (was_given_automorphism_group)
+        if (was_given_pattern_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
+
+        if (options_vars.count("target-symmetries")) {
+            auto gap_start_time = steady_clock::now();
+            find_symmetries(argv[0], target, params.target_occur_less_constraints, target_automorphism_group_size);
+            was_given_target_automorphism_group = true;
+            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
+            cout << "target_occur_less_constraints =";
+            for (auto & [ a, b ] : params.target_occur_less_constraints)
+                cout << " " << a << "<" << b;
+            cout << endl;
+        }
+
+        if (was_given_target_automorphism_group)
+            cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
 
         auto result = options_vars.count("decomposition") ?
             solve_sip_by_decomposition(pattern, target, params) :
