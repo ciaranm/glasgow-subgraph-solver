@@ -35,7 +35,7 @@ auto detect_format(ifstream & infile, const string & filename) -> string
         lad_zero_labelled_line{ R"(0 \d+)" },
         lad_zero_unlabelled_line{ R"(0)" },
         lad_line{ R"(\d+\s+(\d+\s+)*\d+\s*)" },
-        csv_problem{ R"(\S+,\S+)" };
+        csv_problem{ R"(\S+[,>]\S+)" };
 
     smatch match;
     if (regex_match(line, match, dimacs_comment)) {
