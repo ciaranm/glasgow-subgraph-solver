@@ -160,7 +160,7 @@ auto find_symmetries(
             auto p = arg.find('<');
             if (p == string::npos)
                 throw GapFailedUs{ "can't parse pattern-less-than '" + arg + "': no less than" };
-            constraints.emplace_back(arg.substr(0, p), arg.substr(p + 1));
+            constraints.emplace_back(graph.vertex_name(stoi(arg.substr(0, p))), graph.vertex_name(stoi(arg.substr(p + 1))));
         }
         else
             throw GapFailedUs{ "unknown option '" + word + "'" };
