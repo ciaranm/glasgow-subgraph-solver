@@ -2,7 +2,6 @@
 
 #include "formats/bigraph.hh"
 #include "formats/input_graph.hh"
-
 #include <fstream>
 #include <map>
 #include <string>
@@ -132,12 +131,13 @@ auto read_target_bigraph(ifstream && infile, const string &, InputGraph pattern_
     }
 
     // (Ciaran's idea) Naive method of connecting edges between all link nodes which are not clones of one another, i.e. share different names
-    for(int i=0;i<result.size();i++)
-        for(int j=0;j<result.size();j++)
-            if(result.vertex_label(i) == "LINK" && result.vertex_label(j) == "LINK" && result.vertex_name(i) != result.vertex_name(j) and i != j)
-                result.add_link_edge(i, j, "dir");
+    //for(int i=0;i<result.size();i++)
+     //   for(int j=0;j<result.size();j++)
+    //        if(result.vertex_label(i) == "LINK" && result.vertex_label(j) == "LINK" && result.vertex_name(i) != result.vertex_name(j) && i != j)
+      //          result.add_link_edge(i, j, "dir");
 
     return result;
+
 }
 
 auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph

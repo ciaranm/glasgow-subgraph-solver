@@ -59,6 +59,7 @@ class HomomorphismModel
 
         const unsigned max_graphs;
         unsigned pattern_size, target_size;
+        unsigned pattern_link_count, target_link_count;
 
         auto has_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned> > pattern_less_thans_in_convenient_order;

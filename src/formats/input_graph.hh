@@ -91,7 +91,7 @@ class InputGraph
         /**
          * Get the number of current link nodes.
          */
-        auto get_no_link_nodes() -> int;
+        auto get_no_link_nodes() const -> int;
 
         /**
          * Keep track of pattern site edges for dealing with that one annoying edge case

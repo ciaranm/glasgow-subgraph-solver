@@ -28,6 +28,7 @@ using std::string;
 using std::string_view;
 using std::to_string;
 using std::vector;
+using std::cout;
 
 namespace
 {
@@ -73,7 +74,9 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     _imp(new Imp(params)),
     max_graphs(calculate_n_shape_graphs(params)),
     pattern_size(pattern.size()),
-    target_size(target.size())
+    pattern_link_count(pattern.get_no_link_nodes()),
+    target_size(target.size()),
+    target_link_count(target.get_no_link_nodes())
 {
     _imp->patterns_degrees.resize(max_graphs);
     _imp->targets_degrees.resize(max_graphs);
@@ -218,18 +221,18 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     }
 
     if (params.bigraph) {
-        _imp->pattern_dir_degrees.resize(pattern_size);
-        _imp->pattern_big_constraints.resize(pattern_size);
-        _imp->target_dir_degrees.resize(target_size);
-
-        _imp->pattern_graph_reachability.resize(pattern_size, SVOBitset{ pattern_size, 0 });
-        _imp->target_graph_reachability.resize(target_size, SVOBitset{ target_size, 0 });
-
+        _imp->pattern_dir_degrees.resize(pattern_size-pattern_link_count);
+        _imp->pattern_big_constraints.resize(pattern_size-pattern_link_count);
+        _imp->target_dir_degrees.resize(target_size-target_link_count);
+    
+        _imp->pattern_graph_reachability.resize(pattern_size-pattern_link_count, SVOBitset{ pattern_size-pattern_link_count, 0 });
+        _imp->target_graph_reachability.resize(target_size-target_link_count, SVOBitset{ target_size-target_link_count, 0 });
+    
         int site_size = 0;
         for (int a = 0 ; a != pattern.no_pattern_site_edges() ; ++a)
             if (pattern.get_pattern_site_edge(a).first + 1 > site_size)
                 site_size = pattern.get_pattern_site_edge(a).first + 1;
-        _imp->pattern_site_reachability.resize(site_size, SVOBitset{ pattern_size, 0 });
+        _imp->pattern_site_reachability.resize(site_size, SVOBitset{ pattern_size-pattern_link_count, 0 });
 
         for (int a = 0 ; a != pattern.no_pattern_site_edges() ; ++a)
             _imp->pattern_site_reachability[pattern.get_pattern_site_edge(a).first].set(pattern.get_pattern_site_edge(a).second);
@@ -238,7 +241,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         for (int a = 0 ; a != pattern.no_pattern_root_edges() ; ++a)
             if (pattern.get_pattern_root_edge(a).first + 1 > root_size)
                 root_size = pattern.get_pattern_root_edge(a).first + 1;
-        _imp->pattern_root_reachability.resize(root_size, SVOBitset{ pattern_size, 0 });
+        _imp->pattern_root_reachability.resize(root_size, SVOBitset{ pattern_size-pattern_link_count, 0 });
 
         for (int a = 0 ; a != pattern.no_pattern_root_edges() ; ++a)
             _imp->pattern_root_reachability[pattern.get_pattern_root_edge(a).first].set(pattern.get_pattern_root_edge(a).second);
@@ -250,7 +253,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         queue<int> target_reach;
 
         // Set in-out degrees of each vertex for bigraph root and site constraints
-        for (unsigned a = 0 ; a < pattern_size ; ++a) {
+        for (unsigned a = 0 ; a < pattern_size-pattern_link_count ; ++a) {
             _imp->pattern_dir_degrees[a].first = pattern.in_degree(a);
             _imp->pattern_dir_degrees[a].second = pattern.out_degree(a);
             _imp->pattern_big_constraints[a] = pattern.get_big_constraint(a);
@@ -260,7 +263,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
                 pattern_reach.push(a);
         }
 
-        for (unsigned a = 0 ; a != target_size ; ++a) {
+        for (unsigned a = 0 ; a != target_size-target_link_count ; ++a) {
             _imp->target_dir_degrees[a].first = target.in_degree(a);
             _imp->target_dir_degrees[a].second = target.out_degree(a);
 
@@ -274,7 +277,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             int v = pattern_reach.front();
             pattern_reach.pop();
             pattern_unique.erase(v);
-            for (unsigned a = 0 ; a != pattern_size ; ++a)
+            for (unsigned a = 0 ; a != pattern_size-pattern_link_count ; ++a)
                 if (pattern.adjacent(a, v)) {
                     _imp->pattern_graph_reachability[a] |= _imp->pattern_graph_reachability[v];
                     if (pattern_unique.insert(a).second)
@@ -286,7 +289,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             int v = target_reach.front();
             target_reach.pop();
             target_unique.erase(v);
-            for (unsigned a = 0 ; a != target_size ; ++a)
+            for (unsigned a = 0 ; a != target_size-target_link_count ; ++a)
                 if (target.adjacent(a, v)) {
                     _imp->target_graph_reachability[a] |= _imp->target_graph_reachability[v];
                     if (target_unique.insert(a).second)
@@ -423,6 +426,9 @@ auto HomomorphismModel::_check_degree_compatibility(
 
 auto HomomorphismModel::_check_bigraph_degree_compatibility(int p, int t) const -> bool
 {
+    if(p >= pattern_size-pattern_link_count || t >= target_size-target_link_count)
+        return true;
+
     if ((! _imp->pattern_big_constraints[p].first) && (_imp->pattern_dir_degrees[p].first != _imp->target_dir_degrees[t].first))
         return false;
     if (_imp->pattern_big_constraints[p].first && (_imp->pattern_dir_degrees[p].first > _imp->target_dir_degrees[t].first))
@@ -897,12 +903,12 @@ auto HomomorphismModel::directed() const -> bool
 auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> bool
 {
     // Find transitive closure violations
-    for (unsigned i = 0 ; i != pattern_size ; ++i) {
+    for (unsigned i = 0 ; i != pattern_size-pattern_link_count ; ++i) {
         if (_imp->pattern_big_constraints[i].second) {
             set<int> child_mappings;
 
             // Get all corresponding target node's children with a mapping
-            for (unsigned j = 0 ; j != pattern_size ; ++j)
+            for (unsigned j = 0 ; j != pattern_size-pattern_link_count ; ++j)
                 if (i != j &&
                         _imp->pattern_graph_rows[i * max_graphs].test(j) &&
                         _imp->pattern_graph_reachability[i].test(j))
@@ -921,12 +927,12 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
             }
 
             // For all target node's children without a mapping, check if it can reach any children of a root node
-            for (unsigned j = 0 ; j != target_size ; ++j) {
+            for (unsigned j = 0 ; j != target_size-target_link_count ; ++j) {
                 if (mapping.find(i)->second != int(j) &&
                         _imp->target_graph_rows[mapping.find(i)->second * max_graphs].test(j) &&
                         _imp->target_graph_reachability[mapping.find(i)->second].test(j) &&
                         child_mappings.find(j) == child_mappings.end()) {
-                    for (unsigned k = 0 ; k != pattern_size ; ++k)
+                    for (unsigned k = 0 ; k != pattern_size-pattern_link_count ; ++k)
                         if (_imp->pattern_big_constraints[k].first && _imp->target_graph_reachability[j].test(mapping.find(k)->second))
                             return false;
 
@@ -935,7 +941,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                         bool site_sat = true;
                         for (unsigned k = 0 ; k != site_mappings.size() ; ++k) {
                             site_sat = true;
-                            for (unsigned l = 0 ; l != pattern_size ; ++l) {
+                            for (unsigned l = 0 ; l != pattern_size-pattern_link_count ; ++l) {
                                 if (l != i && _imp->pattern_site_reachability[site_mappings[k]].test(l) &&
                                         ! (_imp->target_graph_rows[mapping.find(l)->second * max_graphs].test(j) &&
                                             _imp->target_graph_reachability[mapping.find(l)->second].test(j))) {
@@ -969,14 +975,14 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
 
             if (! roots_okay) {
                 set<int> parent_mappings;
-                for (unsigned j = 0 ; j != pattern_size ; ++j)
+                for (unsigned j = 0 ; j != pattern_size-pattern_link_count ; ++j)
                     if (i != j &&
                             _imp->pattern_graph_rows[i * max_graphs].test(j) &&
                             _imp->pattern_graph_reachability[j].test(i))
                         parent_mappings.insert(mapping.find(j)->second);
 
                 // If only points to shared roots, check that all unmapped parents have an adjacency superset of a root
-                for (unsigned j = 0 ; j != target_size ; ++j) {
+                for (unsigned j = 0 ; j != target_size-target_link_count ; ++j) {
                     if (mapping.find(i)->second != int(j) &&
                             _imp->target_graph_rows[j * max_graphs].test(mapping.find(i)->second) &&
                             _imp->target_graph_reachability[j].test(mapping.find(i)->second) &&
@@ -984,7 +990,7 @@ auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapp
                         bool root_sat = true;
                         for (unsigned k = 0 ; k != root_mappings.size() ; ++k) {
                             root_sat = true;
-                            for (unsigned l = 0 ; l < pattern_size ; ++l){
+                            for (unsigned l = 0 ; l < pattern_size-pattern_link_count ; ++l){
                                 if (l != i && _imp->pattern_root_reachability[root_mappings[k]].test(l) &&
                                         ! (_imp->target_graph_rows[j * max_graphs].test(mapping.find(l)->second) &&
                                             _imp->target_graph_reachability[j].test(mapping.find(l)->second))) {

@@ -122,7 +122,7 @@ auto InputGraph::add_link_node() -> void
     _no_link_nodes++;
 }
 
-auto InputGraph::get_no_link_nodes() -> int
+auto InputGraph::get_no_link_nodes() const -> int
 {
     return _no_link_nodes;
 }
