@@ -594,12 +594,6 @@ auto HomomorphismSearcher::propagate_occur_less_thans(const HomomorphismAssignme
     for (auto & a : assignments.values)
         occurs[a.assignment.target_vertex].insert(a.assignment.pattern_vertex);
 
-    for (auto & d : new_domains) {
-        auto d_values = d.values;
-        for (auto v = d_values.find_first() ; v != decltype(d_values)::npos ; v = d_values.find_first())
-            d_values.reset(v);
-    }
-
     // propagate lower bounds
     for (auto & [ a, b ] : model.target_occur_less_thans_in_convenient_order) {
         if (occurs.find(a)->second.empty()) {
