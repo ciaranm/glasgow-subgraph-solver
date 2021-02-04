@@ -3,16 +3,15 @@
 #include "homomorphism_searcher.hh"
 #include "cheap_all_different.hh"
 
-#include <set>
-#include <map>
+#include <optional>
 
-using std::map;
+using std::make_optional;
 using std::max;
 using std::move;
 using std::mt19937;
 using std::numeric_limits;
+using std::optional;
 using std::pair;
-using std::set;
 using std::string;
 using std::swap;
 using std::to_string;
@@ -570,20 +569,21 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
     return true;
 }
 
-auto HomomorphismSearcher::propagate_occur_less_thans(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool
+auto HomomorphismSearcher::propagate_occur_less_thans(
+        const optional<HomomorphismAssignment> & current_assignment,
+        const HomomorphismAssignments & assignments,
+        Domains & new_domains) -> bool
 {
-    map<unsigned, set<unsigned> > occurs;
+    vector<optional<SVOBitset> > occurs(model.target_size);
 
     auto build_occurs = [&] (int p) -> void {
-        if (occurs.count(p))
+        if (occurs[p])
             return;
-        set<unsigned> o;
 
+        occurs[p] = make_optional<SVOBitset>(model.pattern_size, 0);
         for (auto & d : new_domains)
             if (d.values.test(p))
-                o.insert(d.v);
-
-        occurs.emplace(p, move(o));
+                occurs[p]->set(d.v);
     };
 
     for (auto & [ a, b ] : model.target_occur_less_thans_in_convenient_order) {
@@ -592,13 +592,15 @@ auto HomomorphismSearcher::propagate_occur_less_thans(const HomomorphismAssignme
     }
 
     for (auto & a : assignments.values)
-        occurs[a.assignment.target_vertex].insert(a.assignment.pattern_vertex);
+        if (occurs[a.assignment.target_vertex])
+            occurs[a.assignment.target_vertex]->set(a.assignment.pattern_vertex);
 
     // propagate lower bounds
     for (auto & [ a, b ] : model.target_occur_less_thans_in_convenient_order) {
-        if (occurs.find(a)->second.empty()) {
+        auto first_a = occurs[a]->find_first();
+        if (first_a == SVOBitset::npos) {
             // no occurrence of value a, value b cannot be used either
-            occurs.find(b)->second.clear();
+            occurs[b]->reset();
             for (auto & d : new_domains)
                 if (d.values.test(b)) {
                     d.values.reset(b);
@@ -608,15 +610,48 @@ auto HomomorphismSearcher::propagate_occur_less_thans(const HomomorphismAssignme
         }
         else {
             // value a first occurs in variable x, value b cannot be used in a variable lower than x
-            unsigned x = *occurs.find(a)->second.begin();
             for (auto & d : new_domains) {
-                if (d.v < x && d.values.test(b)) {
-                    occurs.find(b)->second.erase(d.v);
+                if (d.v < first_a && d.values.test(b)) {
+                    occurs[b]->reset(d.v);
                     d.values.reset(b);
                     if (0 == --d.count)
                         return false;
                 }
             }
+        }
+    }
+
+    // propagate other way: if value b must occur (because it has been assigned) then
+    // value a must go before
+    if (current_assignment) {
+        for (auto & [ a, b ] : model.target_occur_less_thans_in_convenient_order) {
+            if (b != current_assignment->target_vertex)
+                continue;
+
+            bool saw_an_a = false;
+            for (auto & d : new_domains) {
+                if (d.v < current_assignment->pattern_vertex) {
+                    // it's before
+                    if (d.values.test(a))
+                        saw_an_a = true;
+                }
+                else if (d.v > current_assignment->pattern_vertex) {
+                    // comes after, can't use a
+                    if (d.values.test(a)) {
+                        occurs[a]->reset(d.v);
+                        d.values.reset(a);
+                        if (0 == --d.count)
+                            return false;
+                    }
+                }
+            }
+
+            for (auto & d : assignments.values)
+                if (d.assignment.pattern_vertex < current_assignment->pattern_vertex && a == d.assignment.target_vertex)
+                    saw_an_a = true;
+
+            if (! saw_an_a)
+                return false;
         }
     }
 
@@ -637,22 +672,23 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
     for (typename Domains::iterator branch_domain = find_unit_domain() ;
             branch_domain != new_domains.end() || ! done_globals_at_least_once ;
             branch_domain = find_unit_domain()) {
+        optional<HomomorphismAssignment> current_assignment;
         if (branch_domain != new_domains.end()) {
             // what are we assigning?
-            HomomorphismAssignment current_assignment = { branch_domain->v, unsigned(branch_domain->values.find_first()) };
+            current_assignment = HomomorphismAssignment{ branch_domain->v, unsigned(branch_domain->values.find_first()) };
 
             // ok, make the assignment
             branch_domain->fixed = true;
-            assignments.values.push_back({ current_assignment, false, -1, -1 });
+            assignments.values.push_back({ *current_assignment, false, -1, -1 });
 
             if (params.proof)
                 params.proof->unit_propagating(
-                        model.pattern_vertex_for_proof(current_assignment.pattern_vertex),
-                        model.target_vertex_for_proof(current_assignment.target_vertex));
+                        model.pattern_vertex_for_proof(current_assignment->pattern_vertex),
+                        model.target_vertex_for_proof(current_assignment->target_vertex));
 
             // propagate watches
             if (might_have_watches(params))
-                watches.propagate(current_assignment,
+                watches.propagate(*current_assignment,
                         [&] (const HomomorphismAssignment & a) { return ! assignments.contains(a); },
                         [&] (const HomomorphismAssignment & a) {
                                 for (auto & d : new_domains) {
@@ -667,14 +703,14 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                             });
 
             // propagate simple all different and adjacency
-            if (! propagate_simple_constraints(new_domains, current_assignment))
+            if (! propagate_simple_constraints(new_domains, *current_assignment))
                 return false;
         }
 
         // propagate less thans
         if (model.has_less_thans() && ! propagate_less_thans(new_domains))
             return false;
-        if (model.has_occur_less_thans() && ! propagate_occur_less_thans(assignments, new_domains))
+        if (model.has_occur_less_thans() && ! propagate_occur_less_thans(current_assignment, assignments, new_domains))
             return false;
 
         // propagate all different

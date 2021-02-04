@@ -97,7 +97,7 @@ class HomomorphismSearcher
 
         auto propagate_less_thans(Domains & new_domains) -> bool;
 
-        auto propagate_occur_less_thans(const HomomorphismAssignments &, Domains & new_domains) -> bool;
+        auto propagate_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
 
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 
