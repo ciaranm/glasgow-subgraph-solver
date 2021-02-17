@@ -133,46 +133,13 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
             result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count-1)); 
             for(int i=(result.size()-ports_connected-1);i<result.size()-1;i++)
                 result.add_directed_edge(i, result.size()-1, "dir");
+            result.set_vertex_label(result.size()-1, "ANCHOR");
         }                   
 
         h = read_str(infile);
-              
-        // Create x duplicates of each hyperedge (represented by a node labelled "LINK" which is adjacent to all nodes that the hyperedge
-        // is connected to) where x is the number of pattern hyperedges, to allow many-to-one assignment
-        //if(!he.first) {       
-            //for(int x=0;x<pattern_graph.get_no_link_nodes();x++){     
-            //    result.add_link_node();       
-             //   result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count)); 
-
-            //   for(int i=r; i<(r+n); ++i){
-            //        result.add_link_adjacency(i, result.size()-1, he.second[i]);
-             //       for(int j=0;j<he.second[i];j++)
-             //           result.add_directed_edge(i, result.size()-1, "dir");
-             //   }
-            //}
-        //}
-        //else {
-           // for(int x=0;x<pattern_graph.get_no_link_nodes();x++){  
-            //    result.add_link_node();
-            //    result.set_vertex_name(result.size()-1, "O_LINK_" + to_string(open_link_count));
-            //    for(int i=r; i<(r+n); ++i) {
-            //        result.add_link_adjacency(i, result.size()-1, he.second[i]);
-           //         for(int j=0;j<he.second[i];j++)
-           //             result.add_directed_edge(i, result.size()-1, "dir"); 
-           ///     }
-           // }
-        //}
-
     }
-
-    // (Ciaran's idea) Naive method of connecting edges between all link nodes which are not clones of one another, i.e. share different names
-    //for(int i=0;i<result.size();i++)
-    //    for(int j=0;j<result.size();j++)
-    //        if(result.vertex_label(i) == "LINK" && result.vertex_label(j) == "LINK" && result.vertex_name(i) != result.vertex_name(j) && i != j)
-    //            result.add_directed_edge(i, j, "dir");
    
     return result;
-
 }
 
 auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
@@ -261,24 +228,11 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
             result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count-1)); 
             for(int i=(result.size()-ports_connected-1);i<result.size()-1;i++)
                 result.add_directed_edge(i, result.size()-1, "dir");
+            result.set_vertex_label(result.size()-1, "ANCHOR");
         }            
 
             
         h = read_str(infile);
-            
-        
-        // Mark as either open or closed link in the vertex name for identifying in constraints later
-        //if(!he.first)
-        //    result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count++)); 
-       // else
-       //     result.set_vertex_name(result.size()-1, "O_LINK_" + to_string(open_link_count++)); 
-
-        // Represent the hyperedge by connecting all adjacencies to the link node
-       // for(int i=0; i<n; ++i) {
-        //    result.add_link_adjacency(i, result.size()-1, he.second[i]);
-        //    for(int j=0;j<he.second[i];j++)
-        //        result.add_directed_edge(i, result.size()-1, "dir");
-        //}
     }
 
     return result;

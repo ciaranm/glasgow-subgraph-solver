@@ -159,7 +159,7 @@ auto main(int argc, char * argv[]) -> int
 
                 for (auto v : mapping) {
                     if(graphs.first.vertex_name(v.first).find("C_LINK") != string::npos) break;
-                    //if(graphs.first.vertex_name(v.first).find("O_LINK") != string::npos) continue;
+                    if(graphs.first.vertex_label(v.first) == "LINK") continue;
                     if(lazy_flag) cout << ",";
                     lazy_flag = true;
                     cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";
@@ -217,7 +217,7 @@ auto main(int argc, char * argv[]) -> int
 
             for (auto v : result.mapping) {
                 if(graphs.first.vertex_name(v.first).find("C_LINK") != string::npos) break;
-                //if(graphs.first.vertex_name(v.first).find("O_LINK") != string::npos) continue;
+                if(graphs.first.vertex_label(v.first) == "LINK") continue;
                 if(lazy_flag) cout << ",";
                 lazy_flag = true;
                 cout << "(" << graphs.first.vertex_name(v.first) << ", " << graphs.second.vertex_name(v.second) << ")";

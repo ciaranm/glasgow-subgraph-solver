@@ -64,9 +64,6 @@ struct HomomorphismModel::Imp
     vector<SVOBitset> target_graph_reachability, pattern_graph_reachability;
     vector<SVOBitset> pattern_site_reachability, pattern_root_reachability;
 
-    //std::vector<std::map<std::string, std::vector<int>>> target_link_adjacencies;
-    //std::vector<std::map<std::string, std::vector<int>>> pattern_link_adjacencies;
-
     Imp(const HomomorphismParams & p) :
         params(p)
     {
@@ -229,15 +226,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     
         _imp->pattern_graph_reachability.resize(pattern_size-pattern_link_count, SVOBitset{ pattern_size-pattern_link_count, 0 });
         _imp->target_graph_reachability.resize(target_size-target_link_count, SVOBitset{ target_size-target_link_count, 0 });
-
-        //_imp->pattern_link_adjacencies.resize(pattern_link_count);
-        //_imp->target_link_adjacencies.resize(target_link_count);
-    
-        //for(int x=0; x<pattern_link_count; x++)
-        //    _imp->pattern_link_adjacencies[x] = pattern.get_link_adjacency_list(x+pattern_size-pattern_link_count);
-
-        //for(int x=0; x<target_link_count; x++)
-        //    _imp->target_link_adjacencies[x] = target.get_link_adjacency_list(x+target_size-target_link_count);
 
         int site_size = 0;
         for (int a = 0 ; a != pattern.no_pattern_site_edges() ; ++a)
