@@ -131,7 +131,7 @@ auto read_target_bigraph(ifstream && infile, const string &) -> InputGraph
         if(he.first){
             result.add_link_node();
             result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count-1)); 
-            for(int i=(result.size()-ports_connected);i<result.size();i++)
+            for(int i=(result.size()-ports_connected-1);i<result.size()-1;i++)
                 result.add_directed_edge(i, result.size()-1, "dir");
         }                   
 
@@ -257,9 +257,9 @@ auto read_pattern_bigraph(ifstream && infile, const string &) -> InputGraph
                     result.add_directed_edge(i, j, "dir");
         
         if(he.first){
-            result.add_link_node();
+            result.add_link_node();            
             result.set_vertex_name(result.size()-1, "C_LINK_" + to_string(closed_link_count-1)); 
-            for(int i=(result.size()-ports_connected);i<result.size();i++)
+            for(int i=(result.size()-ports_connected-1);i<result.size()-1;i++)
                 result.add_directed_edge(i, result.size()-1, "dir");
         }            
 
