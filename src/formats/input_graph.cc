@@ -6,6 +6,7 @@
 #include <limits>
 #include <string_view>
 #include <vector>
+#include <iostream>
 
 using std::distance;
 using std::find;
@@ -20,6 +21,7 @@ using std::string;
 using std::string_view;
 using std::to_string;
 using std::vector;
+using std::cout;
 
 InputGraph::InputGraph(int size, bool v, bool e, bool f) :
     _has_vertex_labels(v),
@@ -60,6 +62,9 @@ auto InputGraph::add_directed_edge(int a, int b, const string & label) -> void
         _vertex_directed_degrees[b].first++;
         _vertex_directed_degrees[a].second++;
     }
+    if(vertex_label(a) == "LINK" && vertex_label(b) == "ANCHOR")
+        _vertex_directed_degrees[b].first++;
+    
 }
 
 auto InputGraph::adjacent(int a, int b) const -> bool

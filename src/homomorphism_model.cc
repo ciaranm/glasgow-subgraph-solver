@@ -434,27 +434,13 @@ auto HomomorphismModel::_check_bigraph_degree_compatibility(int p, int t) const 
     if(p < pattern_size-pattern_link_count && t >= target_size-target_link_count)
         return false;
 
+    // Closed hyperedges need same degree to match
+    if(_imp->pattern_vertex_proof_names[p].find("C_LINK") != string::npos && _imp->target_vertex_proof_names[t].find("C_LINK") != string::npos)
+        if(_imp->pattern_dir_degrees[p].first != _imp->target_dir_degrees[t].first)
+            return false;
+
     if(p >= pattern_size-pattern_link_count && t >= target_size-target_link_count) 
         return true;
-
-    // Link matching degree constraints
-
-   // if(p >= pattern_size-pattern_link_count && t >= target_size-target_link_count) {
-    //    if(_imp->pattern_vertex_proof_names[p].at(0) == 'C' && _imp->target_vertex_proof_names[t].at(0) == 'O')
-     //       return false;
-     //   if(_imp->pattern_dir_degrees[p].first > _imp->target_dir_degrees[t].first){
-     //       return false;}
-     //   if(_imp->pattern_vertex_proof_names[p].at(0) == 'C' && _imp->target_vertex_proof_names[t].at(0) == 'C'){
-
-     //       map<std::string, vector<int>> p_adj = _imp->pattern_link_adjacencies[p+pattern_link_count-pattern_size];
-     //       map<std::string, vector<int>> t_adj = _imp->target_link_adjacencies[t+target_link_count-target_size];
-
-      //      if(p_adj.size() != t_adj.size()) return false;
-      //      for(auto a = p_adj.begin(); a != p_adj.end(); a++)
-      //          if(t_adj.find(a->first)->second != a->second) return false;
-      //  }
-      //  return true;
-   // }
 
     // Place matching degree constraints
     if ((! _imp->pattern_big_constraints[p].first) && (_imp->pattern_dir_degrees[p].first != _imp->target_dir_degrees[t].first))
