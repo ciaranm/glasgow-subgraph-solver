@@ -104,7 +104,7 @@ auto main(int argc, char * argv[]) -> int
         HomomorphismParams params;
 
         params.injectivity = Injectivity::Injective;
-        params.induced = true;
+        params.induced = false;
         params.bigraph = true;
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
 
@@ -137,11 +137,9 @@ auto main(int argc, char * argv[]) -> int
         if (! target_infile)
             throw GraphFileError{ target_filename, "unable to open target file", false };
 
-        auto pattern_graph = read_pattern_bigraph(move(pattern_infile), pattern_filename);
-
         auto graphs = make_pair(
-            pattern_graph,
-            read_target_bigraph(move(target_infile), target_filename, pattern_graph));
+            read_pattern_bigraph(move(pattern_infile), pattern_filename),
+            read_target_bigraph(move(target_infile), target_filename));
 
         cout << "pattern_file = " << pattern_filename << endl;
         cout << "target_file = " << target_filename << endl;

@@ -64,6 +64,9 @@ struct HomomorphismModel::Imp
     vector<SVOBitset> target_graph_reachability, pattern_graph_reachability;
     vector<SVOBitset> pattern_site_reachability, pattern_root_reachability;
 
+    //std::vector<std::map<std::string, std::vector<int>>> target_link_adjacencies;
+    //std::vector<std::map<std::string, std::vector<int>>> pattern_link_adjacencies;
+
     Imp(const HomomorphismParams & p) :
         params(p)
     {
@@ -84,12 +87,10 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{ "Supplemental graphs won't fit in the chosen bitset size" };
 
-    if (_imp->params.proof) {
-        for (int v = 0 ; v < pattern.size() ; ++v)
-            _imp->pattern_vertex_proof_names.push_back(pattern.vertex_name(v));
-        for (int v = 0 ; v < target.size() ; ++v)
-            _imp->target_vertex_proof_names.push_back(target.vertex_name(v));
-    }
+    for (int v = 0 ; v < pattern.size() ; ++v)
+        _imp->pattern_vertex_proof_names.push_back(pattern.vertex_name(v));
+    for (int v = 0 ; v < target.size() ; ++v)
+        _imp->target_vertex_proof_names.push_back(target.vertex_name(v));
 
     if (pattern.directed())
         _imp->directed = true;
@@ -221,13 +222,23 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     }
 
     if (params.bigraph) {
-        _imp->pattern_dir_degrees.resize(pattern_size-pattern_link_count);
+
+        _imp->pattern_dir_degrees.resize(pattern_size);
         _imp->pattern_big_constraints.resize(pattern_size-pattern_link_count);
-        _imp->target_dir_degrees.resize(target_size-target_link_count);
+        _imp->target_dir_degrees.resize(target_size);
     
         _imp->pattern_graph_reachability.resize(pattern_size-pattern_link_count, SVOBitset{ pattern_size-pattern_link_count, 0 });
         _imp->target_graph_reachability.resize(target_size-target_link_count, SVOBitset{ target_size-target_link_count, 0 });
+
+        //_imp->pattern_link_adjacencies.resize(pattern_link_count);
+        //_imp->target_link_adjacencies.resize(target_link_count);
     
+        //for(int x=0; x<pattern_link_count; x++)
+        //    _imp->pattern_link_adjacencies[x] = pattern.get_link_adjacency_list(x+pattern_size-pattern_link_count);
+
+        //for(int x=0; x<target_link_count; x++)
+        //    _imp->target_link_adjacencies[x] = target.get_link_adjacency_list(x+target_size-target_link_count);
+
         int site_size = 0;
         for (int a = 0 ; a != pattern.no_pattern_site_edges() ; ++a)
             if (pattern.get_pattern_site_edge(a).first + 1 > site_size)
@@ -253,20 +264,23 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         queue<int> target_reach;
 
         // Set in-out degrees of each vertex for bigraph root and site constraints
-        for (unsigned a = 0 ; a < pattern_size-pattern_link_count ; ++a) {
+        for (unsigned a = 0 ; a < pattern_size ; ++a) {
             _imp->pattern_dir_degrees[a].first = pattern.in_degree(a);
             _imp->pattern_dir_degrees[a].second = pattern.out_degree(a);
+        }
+        for (unsigned a = 0 ; a < pattern_size-pattern_link_count ; ++a) {
             _imp->pattern_big_constraints[a] = pattern.get_big_constraint(a);
-
             _imp->pattern_graph_reachability[a].set(a);
             if (pattern.out_degree(a) == 0)
                 pattern_reach.push(a);
         }
 
-        for (unsigned a = 0 ; a != target_size-target_link_count ; ++a) {
+        for (unsigned a = 0 ; a != target_size ; ++a) {
             _imp->target_dir_degrees[a].first = target.in_degree(a);
             _imp->target_dir_degrees[a].second = target.out_degree(a);
+        }
 
+        for (unsigned a = 0 ; a != target_size-target_link_count ; ++a) {
             _imp->target_graph_reachability[a].set(a);
             if (target.out_degree(a) == 0)
                 target_reach.push(a);
@@ -426,9 +440,35 @@ auto HomomorphismModel::_check_degree_compatibility(
 
 auto HomomorphismModel::_check_bigraph_degree_compatibility(int p, int t) const -> bool
 {
-    if(p >= pattern_size-pattern_link_count || t >= target_size-target_link_count)
+    // Cannot match a place node with a link node
+    if(p >= pattern_size-pattern_link_count && t < target_size-target_link_count)
+        return false;
+    if(p < pattern_size-pattern_link_count && t >= target_size-target_link_count)
+        return false;
+
+    if(p >= pattern_size-pattern_link_count && t >= target_size-target_link_count) 
         return true;
 
+    // Link matching degree constraints
+
+   // if(p >= pattern_size-pattern_link_count && t >= target_size-target_link_count) {
+    //    if(_imp->pattern_vertex_proof_names[p].at(0) == 'C' && _imp->target_vertex_proof_names[t].at(0) == 'O')
+     //       return false;
+     //   if(_imp->pattern_dir_degrees[p].first > _imp->target_dir_degrees[t].first){
+     //       return false;}
+     //   if(_imp->pattern_vertex_proof_names[p].at(0) == 'C' && _imp->target_vertex_proof_names[t].at(0) == 'C'){
+
+     //       map<std::string, vector<int>> p_adj = _imp->pattern_link_adjacencies[p+pattern_link_count-pattern_size];
+     //       map<std::string, vector<int>> t_adj = _imp->target_link_adjacencies[t+target_link_count-target_size];
+
+      //      if(p_adj.size() != t_adj.size()) return false;
+      //      for(auto a = p_adj.begin(); a != p_adj.end(); a++)
+      //          if(t_adj.find(a->first)->second != a->second) return false;
+      //  }
+      //  return true;
+   // }
+
+    // Place matching degree constraints
     if ((! _imp->pattern_big_constraints[p].first) && (_imp->pattern_dir_degrees[p].first != _imp->target_dir_degrees[t].first))
         return false;
     if (_imp->pattern_big_constraints[p].first && (_imp->pattern_dir_degrees[p].first > _imp->target_dir_degrees[t].first))

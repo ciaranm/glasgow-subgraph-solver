@@ -21,6 +21,6 @@ auto read_pattern_bigraph(std::ifstream && infile, const std::string & filename)
  *
  * \throw GraphFileError
  */
-auto read_target_bigraph(std::ifstream && infile, const std::string & filename, InputGraph pattern_graph) -> InputGraph;
+auto read_target_bigraph(std::ifstream && infile, const std::string & filename) -> InputGraph;
 
 #endif

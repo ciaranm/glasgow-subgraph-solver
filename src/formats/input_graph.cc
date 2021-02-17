@@ -55,23 +55,31 @@ auto InputGraph::add_directed_edge(int a, int b, const string & label) -> void
         _loopy = true;
 
     _edges.emplace(make_pair(a, b), label).first->second = label;
-    _vertex_directed_degrees[b].first++;
-    _vertex_directed_degrees[a].second++;
+
+    if(vertex_label(a) != "LINK" && vertex_label(b) != "LINK"){ 
+        _vertex_directed_degrees[b].first++;
+        _vertex_directed_degrees[a].second++;
+    }
 }
-
-auto InputGraph::add_link_edge(int a, int b, const string & label) -> void
-{
-    _directed = true;
-    if (a == b)
-        _loopy = true;
-
-    _edges.emplace(make_pair(a, b), label).first->second = label;
-}
-
 
 auto InputGraph::adjacent(int a, int b) const -> bool
 {
     return _edges.count({ a, b });
+}
+
+auto InputGraph::add_link_adjacency(int a, int b, int c) -> void
+{
+    if(c < 1) return;
+
+    if(_link_adjacencies[_no_link_nodes+b-_size].find(_vertex_labels[a]) == _link_adjacencies[_no_link_nodes+b-_size].end())
+        _link_adjacencies[_no_link_nodes+b-_size][_vertex_labels[a]] = vector<int> {};
+
+    _link_adjacencies[_no_link_nodes+b-_size].find(_vertex_labels[a])->second.push_back(c);
+}
+
+auto InputGraph::get_link_adjacency_list(int a) const -> std::map<std::string, std::vector<int>>
+{
+    return _link_adjacencies[_no_link_nodes+a-_size];
 }
 
 auto InputGraph::size() const -> int
@@ -119,6 +127,7 @@ auto InputGraph::add_link_node() -> void
 {
     resize(_size+1);
     set_vertex_label(_size-1, "LINK");
+    //_link_adjacencies.resize(_link_adjacencies.size()+1);
     _no_link_nodes++;
 }
 

@@ -33,6 +33,8 @@ class InputGraph
         std::vector<std::pair<int, int> > _pattern_site_edges;
         std::vector<std::pair<int, int> > _pattern_root_edges;
 
+        std::vector<std::map<std::string, std::vector<int>>> _link_adjacencies;
+
         int _no_link_nodes = 0;
 
         bool _loopy = false, _directed = false;
@@ -78,15 +80,9 @@ class InputGraph
         auto add_directed_edge(int a, int b, const std::string & label) -> void;
 
         /**
-         * Add a directed link edge from a to b, with a label.
-         */
-        auto add_link_edge(int a, int b, const std::string & label) -> void;
-
-        /**
          * Add a special link node to represent a hyperedge in a bigraph's link graph.
          */
         auto add_link_node() -> void;
-
 
         /**
          * Get the number of current link nodes.
@@ -115,6 +111,10 @@ class InputGraph
          * Are vertices a and b adjacent?
          */
         auto adjacent(int a, int b) const -> bool;
+
+        auto add_link_adjacency(int a, int b, int c) -> void;
+
+        auto get_link_adjacency_list(int a) const -> std::map<std::string, std::vector<int>>;
 
         /**
          * What is the degree of a given vertex?
