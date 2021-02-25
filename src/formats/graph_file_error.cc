@@ -13,6 +13,12 @@ GraphFileError::GraphFileError(const string & filename, const string & message, 
 {
 }
 
+GraphFileError::GraphFileError(const string & message) noexcept :
+    _what("Error creating graph: " + message),
+    _exists(true)
+{
+}
+
 auto GraphFileError::what() const noexcept -> const char *
 {
     return _what.c_str();

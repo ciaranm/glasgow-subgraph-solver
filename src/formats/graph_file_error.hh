@@ -18,6 +18,7 @@ class GraphFileError :
         bool _exists;
 
     public:
+        explicit GraphFileError(const std::string & message) noexcept;
         GraphFileError(const std::string & filename, const std::string & message, bool exists) noexcept;
 
         auto what() const noexcept -> const char * override;
