@@ -105,6 +105,9 @@ class HomomorphismSearcher
         auto post_nogood(
                 const HomomorphismAssignments & assignments) -> void;
 
+        auto post_solution_nogood(
+                const HomomorphismAssignments & assignments) -> void;
+
         auto softmax_shuffle(
                 std::vector<int> & branch_v,
                 unsigned branch_v_end

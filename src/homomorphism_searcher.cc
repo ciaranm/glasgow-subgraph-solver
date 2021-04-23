@@ -80,9 +80,14 @@ auto HomomorphismSearcher::restarting_search(
     if (! branch_domain) {
         if (params.bigraph) {
             VertexToVertexMapping mapping;
-            expand_to_full_result(assignments, mapping);
-            if (! model.check_extra_bigraph_constraints(mapping))
+            expand_to_full_result(assignments, mapping); 
+   
+            if (! model.check_extra_bigraph_constraints(mapping)) {
+
+                // Post solution nogood here to avoid rerunning the place graph checking constraints on isomorphic solutions
+                post_solution_nogood(assignments);  
                 return SearchResult::Unsatisfiable;
+            }
         }
 
         if (params.lackey) {
@@ -101,12 +106,17 @@ auto HomomorphismSearcher::restarting_search(
 
         if (params.count_solutions) {
             ++solution_count;
+
+            // Post solution nogood if satisfiable, add all non-link nodes
+            if(params.bigraph)
+                post_solution_nogood(assignments);  
+
             if (params.enumerate_callback) {
                 VertexToVertexMapping mapping;
                 expand_to_full_result(assignments, mapping);     
                 params.enumerate_callback(mapping);
             }
-
+ 
             return SearchResult::SatisfiableButKeepGoing;
         }
         else
@@ -315,6 +325,18 @@ auto HomomorphismSearcher::post_nogood(const HomomorphismAssignments & assignmen
 
     if (params.proof)
         params.proof->post_restart_nogood(assignments_as_proof_decisions(assignments));
+}
+
+auto HomomorphismSearcher::post_solution_nogood(const HomomorphismAssignments & assignments) -> void
+{
+    Nogood<HomomorphismAssignment> nogood;
+
+    // This ignores anchor nodes for now so solution count may be slightly off, but just want to get this registering first
+    for (auto & a : assignments.values)
+        if (a.is_decision && a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count)
+            nogood.literals.emplace_back(a.assignment);
+          
+    watches.post_nogood(move(nogood));
 }
 
 auto HomomorphismSearcher::copy_nonfixed_domains_and_make_assignment(
