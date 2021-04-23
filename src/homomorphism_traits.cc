@@ -19,7 +19,7 @@ auto supports_distance3_graphs(const HomomorphismParams & params) -> bool
 
 auto might_have_watches(const HomomorphismParams & params) -> bool
 {
-    return params.restarts_schedule->might_restart();
+    return params.restarts_schedule->might_restart() || params.bigraph;
 }
 
 auto is_nonshrinking(const HomomorphismParams & params) -> bool
