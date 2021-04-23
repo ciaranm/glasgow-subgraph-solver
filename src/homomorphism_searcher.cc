@@ -83,9 +83,13 @@ auto HomomorphismSearcher::restarting_search(
             expand_to_full_result(assignments, mapping); 
 
             if (! model.check_extra_bigraph_constraints(mapping)) {
-                // Post solution nogood here to avoid rerunning the place graph checking constraints on isomorphic solutions
-                post_solution_nogood(assignments);
-                return SearchResult::Restart;
+                if (params.use_bigraph_projection_nogoods) {
+                    // Post solution nogood here to avoid rerunning the place graph checking constraints on isomorphic solutions
+                    post_solution_nogood(assignments);
+                    return SearchResult::Restart;
+                }
+                else
+                    return SearchResult::Unsatisfiable;
             }
         }
 
@@ -112,7 +116,7 @@ auto HomomorphismSearcher::restarting_search(
                 params.enumerate_callback(mapping);
             }
 
-            if (params.bigraph) {
+            if (params.bigraph && params.use_bigraph_projection_nogoods) {
                 // Post solution nogood if satisfiable, add all non-link nodes
                 post_solution_nogood(assignments);
                 return SearchResult::Restart;

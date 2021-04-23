@@ -59,10 +59,11 @@ auto main(int argc, char * argv[]) -> int
             ("print-all-solutions",                          "Print out every solution, rather than one");
         display_options.add(problem_options);
 
-        po::options_description mangling_options{ "Advanced input processing options" };
+        po::options_description mangling_options{ "Advanced search options" };
         mangling_options.add_options()
             ("no-supplementals",                               "Do not use supplemental graphs")
-            ("no-nds",                                         "Do not use neighbourhood degree sequences");
+            ("no-nds",                                         "Do not use neighbourhood degree sequences")
+            ("no-projection-nogoods",                          "Do not use projection nogoods");
         display_options.add(mangling_options);
 
         po::options_description all_options{ "All options" };
@@ -107,6 +108,9 @@ auto main(int argc, char * argv[]) -> int
         params.induced = false;
         params.bigraph = true;
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
+        params.use_bigraph_projection_nogoods = ! options_vars.count("no-projection-nogoods");
+        params.no_nds = options_vars.count("no-nds");
+        params.no_supplementals = options_vars.count("no-supplementals");
 
         if (params.count_solutions)
             params.restarts_schedule = make_unique<NoRestartsSchedule>();
