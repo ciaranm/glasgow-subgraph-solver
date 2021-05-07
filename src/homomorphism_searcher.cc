@@ -336,11 +336,12 @@ auto HomomorphismSearcher::post_solution_nogood(const HomomorphismAssignments & 
 {
     Nogood<HomomorphismAssignment> nogood;
 
-    // This ignores anchor nodes for now so solution count may be slightly off, but just want to get this registering first
     for (auto & a : assignments.values)
-        if (a.is_decision && a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count)
-            nogood.literals.emplace_back(a.assignment);
-          
+        if (a.is_decision && (
+            a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
+            model.is_pattern_anchor(a.assignment.pattern_vertex))
+        )
+            nogood.literals.emplace_back(a.assignment);          
     watches.post_nogood(move(nogood));
 }
 

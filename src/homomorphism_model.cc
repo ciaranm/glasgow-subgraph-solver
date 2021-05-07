@@ -64,6 +64,8 @@ struct HomomorphismModel::Imp
     vector<SVOBitset> target_graph_reachability, pattern_graph_reachability;
     vector<SVOBitset> pattern_site_reachability, pattern_root_reachability;
 
+    set<int> pattern_anchor_nodes;
+
     Imp(const HomomorphismParams & p) :
         params(p)
     {
@@ -84,8 +86,11 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{ "Supplemental graphs won't fit in the chosen bitset size" };
 
-    for (int v = 0 ; v < pattern.size() ; ++v)
+    for (int v = 0 ; v < pattern.size() ; ++v) {
         _imp->pattern_vertex_proof_names.push_back(pattern.vertex_name(v));
+        if(pattern.vertex_label(v) == "ANCHOR") _imp->pattern_anchor_nodes.insert(v);
+    }
+
     for (int v = 0 ; v < target.size() ; ++v)
         _imp->target_vertex_proof_names.push_back(target.vertex_name(v));
 
@@ -912,6 +917,11 @@ auto HomomorphismModel::has_less_thans() const -> bool
 auto HomomorphismModel::directed() const -> bool
 {
     return _imp->directed;
+}
+
+auto HomomorphismModel::is_pattern_anchor(int p) const -> bool
+{
+    return _imp->pattern_anchor_nodes.find(p) != _imp->pattern_anchor_nodes.end();
 }
 
 auto HomomorphismModel::check_extra_bigraph_constraints(const VertexToVertexMapping & mapping) const -> bool
