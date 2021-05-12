@@ -122,7 +122,7 @@ class HomomorphismSearcher
     public:
         HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p);
 
-        auto propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
+        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
 
         auto propagate_hyperedge_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> bool;
 
