@@ -14,6 +14,8 @@ using std::to_string;
 using std::uniform_int_distribution;
 using std::vector;
 
+using std::cout;
+
 HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p) :
     model(m),
     params(p)
@@ -337,11 +339,10 @@ auto HomomorphismSearcher::post_solution_nogood(const HomomorphismAssignments & 
     Nogood<HomomorphismAssignment> nogood;
 
     for (auto & a : assignments.values)
-        if (a.is_decision && (
-            a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
+        if (a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
             model.is_pattern_anchor(a.assignment.pattern_vertex))
-        )
-            nogood.literals.emplace_back(a.assignment);          
+                nogood.literals.emplace_back(a.assignment);  
+    
     watches.post_nogood(move(nogood));
 }
 
