@@ -109,6 +109,7 @@ namespace
                                 if (d.v == assignment.pattern_vertex) {
                                     d.values.reset(assignment.target_vertex);
                                     d.count = d.values.count();
+                                    done = done || (0 == d.count);
                                     break;
                                 }
                         });
@@ -119,7 +120,7 @@ namespace
                 searcher.watches.clear_new_nogoods();
 
                 ++result.propagations;
-                if (searcher.propagate(domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
+                if (searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
@@ -304,7 +305,7 @@ namespace
                     }
 
                     ++thread_result.propagations;
-                    if (searchers[t]->propagate(domains, thread_assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
+                    if (searchers[t]->propagate(true, domains, thread_assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                         auto assignments_copy = thread_assignments;
 
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,

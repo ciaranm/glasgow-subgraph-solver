@@ -187,7 +187,7 @@ auto HomomorphismSearcher::restarting_search(
 
         // propagate
         ++propagations;
-        if (! propagate(new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
+        if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
             // failure? restore assignments and go on to the next thing
             if (params.proof)
                 params.proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
@@ -718,8 +718,34 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
     return true;
 }
 
-auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
+auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
 {
+    // nogoods might be watching things in initial assignments. this is possibly not the
+    // best place to put this...
+    if (initial && might_have_watches(params)) {
+        for (auto & a : assignments.values) {
+            HomomorphismAssignment current_assignment = { a.assignment.pattern_vertex, a.assignment.target_vertex };
+            bool wipeout = false;
+            watches.propagate(current_assignment,
+                    [&] (const HomomorphismAssignment & a) { return ! assignments.contains(a); },
+                    [&] (const HomomorphismAssignment & a) {
+                            for (auto & d : new_domains) {
+                                if (d.v == a.pattern_vertex) {
+                                    if (d.values.test(a.target_vertex)) {
+                                        d.values.reset(a.target_vertex);
+                                        if (0 == --d.count)
+                                            wipeout = true;
+                                    }
+                                    break;
+                                }
+                            }
+                        });
+
+            if (wipeout)
+                return false;
+        }
+    }
+
     auto find_unit_domain = [&] () {
         return find_if(new_domains.begin(), new_domains.end(), [] (HomomorphismDomain & d) {
                 return (! d.fixed) && 1 == d.count;
@@ -747,7 +773,8 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                         model.target_vertex_for_proof(current_assignment->target_vertex));
 
             // propagate watches
-            if (might_have_watches(params))
+            if (might_have_watches(params)) {
+                bool wipeout = false;
                 watches.propagate(*current_assignment,
                         [&] (const HomomorphismAssignment & a) { return ! assignments.contains(a); },
                         [&] (const HomomorphismAssignment & a) {
@@ -756,11 +783,19 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                                         continue;
 
                                     if (d.v == a.pattern_vertex) {
-                                        d.values.reset(a.target_vertex);
+                                        if (d.values.test(a.target_vertex)) {
+                                            d.values.reset(a.target_vertex);
+                                            if (0 == --d.count)
+                                                wipeout = true;
+                                        }
                                         break;
                                     }
                                 }
                             });
+
+                if (wipeout)
+                    return false;
+            }
 
             // propagate simple all different and adjacency
             if (! propagate_simple_constraints(new_domains, *current_assignment))
