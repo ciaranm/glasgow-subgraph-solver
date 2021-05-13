@@ -35,6 +35,12 @@ struct HomomorphismAssignment
     {
         return ! (*this == other);
     }
+
+    auto operator< (const HomomorphismAssignment & other) const -> bool
+    {
+        return (pattern_vertex < other.pattern_vertex) || (pattern_vertex == other.pattern_vertex &&
+                target_vertex < other.target_vertex);
+    }
 };
 
 template <typename EntryType_>

@@ -3,11 +3,14 @@
 #include "homomorphism_searcher.hh"
 #include "cheap_all_different.hh"
 
+#include <set>
+
 using std::max;
 using std::move;
 using std::mt19937;
 using std::numeric_limits;
 using std::pair;
+using std::set;
 using std::string;
 using std::swap;
 using std::to_string;
@@ -335,10 +338,12 @@ auto HomomorphismSearcher::post_nogood(const HomomorphismAssignments & assignmen
 auto HomomorphismSearcher::post_solution_nogood(const HomomorphismAssignments & assignments) -> void
 {
     Nogood<HomomorphismAssignment> nogood;
+    set<HomomorphismAssignment> no_duplicates;
 
     for (auto & a : assignments.values)
         if (a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
             model.is_pattern_anchor(a.assignment.pattern_vertex))
+            if (no_duplicates.insert(a.assignment).second)
                 nogood.literals.emplace_back(a.assignment);  
 
     watches.post_nogood(move(nogood));
