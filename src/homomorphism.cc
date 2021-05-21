@@ -122,7 +122,7 @@ namespace
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
-                                result.solution_count, 0, *params.restarts_schedule)) {
+                                result.solution_count, result.rejected_solution_count, 0, *params.restarts_schedule)) {
                         case SearchResult::Satisfiable:
                             searcher.save_result(assignments_copy, result);
                             result.complete = true;
@@ -282,7 +282,7 @@ namespace
                         auto assignments_copy = thread_assignments;
 
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
-                                    thread_result.solution_count, 0, *thread_restarts_schedule)) {
+                                    thread_result.solution_count, thread_result.rejected_solution_count, 0, *thread_restarts_schedule)) {
                             case SearchResult::Satisfiable:
                                 searchers[t]->save_result(assignments_copy, thread_result);
                                 thread_result.complete = true;

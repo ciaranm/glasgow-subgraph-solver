@@ -138,6 +138,7 @@ class HomomorphismSearcher
                 unsigned long long & nodes,
                 unsigned long long & propagations,
                 loooong & solution_count,
+                loooong & rejected_solution_count,
                 int depth,
                 RestartsSchedule & restarts_schedule) -> SearchResult;
 
