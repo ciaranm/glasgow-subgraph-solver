@@ -413,8 +413,6 @@ auto solve_homomorphism_problem(
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with less-constraints" };
         if (params.injectivity != Injectivity::Injective)
             throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity" };
-        if (params.induced)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used for induced problems" };
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
 
@@ -433,6 +431,8 @@ auto solve_homomorphism_problem(
             for (int t = 0 ; t < target.size() ; ++t) {
                 if (pattern.adjacent(p, p) && ! target.adjacent(t, t))
                     params.proof->create_forbidden_assignment_constraint(p, t);
+                else if (params.induced && ! pattern.adjacent(p, p) && target.adjacent(t, t))
+                    params.proof->create_forbidden_assignment_constraint(p, t);
 
                 // it's simpler to always have the adjacency constraints, even
                 // if the assignment is forbidden
@@ -446,8 +446,21 @@ auto solve_homomorphism_problem(
                         for (int u = 0 ; u < target.size() ; ++u)
                             if (t != u && target.adjacent(t, u))
                                 permitted.push_back(u);
-                        params.proof->create_adjacency_constraint(p, q, t, permitted);
+                        params.proof->create_adjacency_constraint(p, q, t, permitted, false);
                     }
+
+                // same for non-adjacency for induced
+                if (params.induced) {
+                    for (int q = 0 ; q < pattern.size() ; ++q)
+                        if (q != p && ! pattern.adjacent(p, q)) {
+                            // ... must be mapped to a neighbour of t
+                            vector<int> permitted;
+                            for (int u = 0 ; u < target.size() ; ++u)
+                                if (t != u && ! target.adjacent(t, u))
+                                    permitted.push_back(u);
+                            params.proof->create_adjacency_constraint(p, q, t, permitted, true);
+                        }
+                }
             }
         }
 

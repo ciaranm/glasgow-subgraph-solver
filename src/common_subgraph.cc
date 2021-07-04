@@ -384,7 +384,7 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
                                     permitted.push_back(u);
                             // or null
                             permitted.push_back(second.size());
-                            params.proof->create_adjacency_constraint(p, q, t, permitted);
+                            params.proof->create_adjacency_constraint(p, q, t, permitted, false);
                         }
                 }
             }

@@ -154,7 +154,7 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
     _imp->model_stream << "* adjacency " << p << " maps to " << t << endl;
 }
 
-auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu) -> void
+auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu, bool) -> void
 {
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{ p, t }];
     for (auto & u : uu)
