@@ -87,6 +87,12 @@ struct Proof::Imp
     int largest_level_set = 0;
 
     bool clique_encoding = false;
+
+    bool doing_hom_colour_proof = false;
+    NamedVertex hom_colour_proof_p, hom_colour_proof_t;
+    vector<NamedVertex> p_clique;
+    map<int, NamedVertex> t_clique_neighbourhood;
+    map<pair<pair<NamedVertex, NamedVertex>, pair<NamedVertex, NamedVertex> >, long> clique_for_hom_non_edge_constraints;
 };
 
 Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b) :
@@ -627,33 +633,56 @@ auto Proof::create_non_null_decision_bound(int p, int t, optional<int> d) -> voi
 
 auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
 {
-    *_imp->proof_stream << "u";
-    for (auto & w : v)
-        *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
-    *_imp->proof_stream << " >= 1 ;" << endl;
-    ++_imp->proof_line;
+    if (! _imp->doing_hom_colour_proof) {
+        *_imp->proof_stream << "u";
+        for (auto & w : v)
+            *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
+        *_imp->proof_stream << " >= 1 ;" << endl;
+        ++_imp->proof_line;
+    }
+    else {
+        *_imp->proof_stream << "* backtrack shenanigans, depth " << v.size() << endl;
+        function<auto (unsigned, const vector<pair<int, int> > &) -> void> f;
+        f = [&] (unsigned d, const vector<pair<int, int> > & trail) -> void {
+            if (d == v.size()) {
+                *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ _imp->hom_colour_proof_p.first, _imp->hom_colour_proof_t.first }];
+                for (auto & t : trail)
+                    *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[t];
+                *_imp->proof_stream << " >= 1 ;" << endl;
+                ++_imp->proof_line;
+            }
+            else {
+                for (auto & p : _imp->p_clique) {
+                    vector<pair<int, int> > new_trail{ trail };
+                    new_trail.emplace_back(pair{ p.first, _imp->t_clique_neighbourhood.find(v[d])->second.first });
+                    f(d + 1, new_trail);
+                }
+            }
+        };
+        f(0, {});
+    }
 }
 
 auto Proof::colour_bound(const vector<vector<int> > & ccs) -> void
 {
-    *_imp->proof_stream << "* bound using";
+    *_imp->proof_stream << "* bound, ccs";
     for (auto & cc : ccs) {
         *_imp->proof_stream << " [";
         for (auto & c : cc)
-            *_imp->proof_stream << " x" << _imp->binary_variable_mappings[c];
+            *_imp->proof_stream << " " << c;
         *_imp->proof_stream << " ]";
     }
     *_imp->proof_stream << endl;
 
     vector<long> to_sum;
-    for (auto & cc : ccs) {
+    auto do_one_cc = [&] (const auto & cc, const auto & non_edge_constraint) {
         if (cc.size() > 2) {
-            *_imp->proof_stream << "p " << _imp->non_edge_constraints[pair{ cc[0], cc[1] }];
+            *_imp->proof_stream << "p " << non_edge_constraint(cc[0], cc[1]);
 
             for (unsigned i = 2 ; i < cc.size() ; ++i) {
                 *_imp->proof_stream << " " << i << " *";
                 for (unsigned j = 0 ; j < i ; ++j)
-                    *_imp->proof_stream << " " << _imp->non_edge_constraints[pair{ cc[i], cc[j] }] << " +";
+                    *_imp->proof_stream << " " << non_edge_constraint(cc[i], cc[j]) << " +";
                 *_imp->proof_stream << " " << (i + 1) << " d";
             }
 
@@ -661,14 +690,130 @@ auto Proof::colour_bound(const vector<vector<int> > & ccs) -> void
             to_sum.push_back(++_imp->proof_line);
         }
         else if (cc.size() == 2) {
-            to_sum.push_back(_imp->non_edge_constraints[pair{ cc[0], cc[1] }]);
+            to_sum.push_back(non_edge_constraint(cc[0], cc[1]));
         }
+    };
+
+    for (auto & cc : ccs) {
+        if (_imp->doing_hom_colour_proof) {
+            vector<pair<NamedVertex, NamedVertex> > bigger_cc;
+            for (auto & c : cc)
+                for (auto & v : _imp->p_clique)
+                    bigger_cc.push_back(pair{ v, _imp->t_clique_neighbourhood.find(c)->second });
+
+            *_imp->proof_stream << "* colour class [";
+            for (auto & c : bigger_cc)
+                *_imp->proof_stream << " " << c.first.second << "/" << c.second.second;
+            *_imp->proof_stream << " ]" << endl;
+
+            do_one_cc(bigger_cc, [&] (const pair<NamedVertex, NamedVertex> & a, const pair<NamedVertex, NamedVertex> & b) -> long {
+                    return _imp->clique_for_hom_non_edge_constraints[pair{ a, b }];
+                    });
+        }
+        else
+            do_one_cc(cc, [&] (int a, int b) -> long { return _imp->non_edge_constraints[pair{ a, b }]; });
 
         *_imp->proof_stream << "p " << _imp->objective_line;
         for (auto & t : to_sum)
             *_imp->proof_stream << " " << t << " +";
         *_imp->proof_stream << endl;
         ++_imp->proof_line;
+    }
+}
+
+auto Proof::prepare_hom_clique_proof(const NamedVertex & p, const NamedVertex & t, unsigned size) -> void
+{
+    *_imp->proof_stream << "* clique of size " << size << " around neighbourhood of " << p.second << " but not " << t.second << endl;
+    *_imp->proof_stream << "# 1" << endl;
+    _imp->doing_hom_colour_proof = true;
+    _imp->hom_colour_proof_p = p;
+    _imp->hom_colour_proof_t = t;
+}
+
+auto Proof::start_hom_clique_proof(const NamedVertex & p, vector<NamedVertex> && p_clique, const NamedVertex & t, map<int, NamedVertex> && t_clique_neighbourhood) -> void
+{
+    _imp->p_clique = move(p_clique);
+    _imp->t_clique_neighbourhood = move(t_clique_neighbourhood);
+
+    *_imp->proof_stream << "* hom clique objective" << endl;
+    vector<long> to_sum;
+    for (auto & q : _imp->p_clique) {
+        *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+        for (auto & u : _imp->t_clique_neighbourhood)
+            *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.second.first }];
+        *_imp->proof_stream << " >= 1 ;" << endl;
+        to_sum.push_back(++_imp->proof_line);
+    }
+
+    *_imp->proof_stream << "p";
+    bool first = true;
+    for (auto & t : to_sum) {
+        *_imp->proof_stream << " " << t;
+        if (! first)
+            *_imp->proof_stream << " +";
+        first = false;
+    }
+    *_imp->proof_stream << endl;
+    _imp->objective_line = ++_imp->proof_line;
+
+    *_imp->proof_stream << "* hom clique non edges for injectivity" << endl;
+
+    for (auto & p : _imp->p_clique)
+        for (auto & q : _imp->p_clique)
+            if (p != q) {
+                for (auto & [ _, t ] : _imp->t_clique_neighbourhood) {
+                    *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " 1 ~x" << _imp->variable_mappings[pair{ q.first, t.first }] << " >= 1 ;" << endl;
+                    ++_imp->proof_line;
+                    _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ p, t }, pair{ q, t } }, _imp->proof_line);
+                    _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ q, t }, pair{ p, t } }, _imp->proof_line);
+                }
+            }
+
+    *_imp->proof_stream << "* hom clique non edges for variables" << endl;
+
+    for (auto & p : _imp->p_clique)
+        for (auto & [ _, t ] : _imp->t_clique_neighbourhood) {
+            for (auto & [ _, u ] : _imp->t_clique_neighbourhood) {
+                if (t != u) {
+                    *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " 1 ~x" << _imp->variable_mappings[pair{ p.first, u.first }] << " >= 1 ;" << endl;
+                    ++_imp->proof_line;
+                    _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ p, t }, pair{ p, u } }, _imp->proof_line);
+                    _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ p, u }, pair{ p, t } }, _imp->proof_line);
+                }
+            }
+        }
+}
+
+auto Proof::finish_hom_clique_proof(const NamedVertex & p, const NamedVertex & t, unsigned size) -> void
+{
+    *_imp->proof_stream << "* end clique of size " << size << " around neighbourhood of " << p.second << " but not " << t.second << endl;
+    *_imp->proof_stream << "# 0" << endl;
+    *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    *_imp->proof_stream << "w 1" << endl;
+    ++_imp->proof_line;
+    _imp->doing_hom_colour_proof = false;
+    _imp->clique_for_hom_non_edge_constraints.clear();
+}
+
+auto Proof::add_hom_clique_non_edge(
+        const NamedVertex & pp,
+        const NamedVertex & tt,
+        const std::vector<NamedVertex> & p_clique,
+        const NamedVertex & t,
+        const NamedVertex & u) -> void
+{
+    *_imp->proof_stream << "* hom clique non edges for " << t.second << " " << u.second << endl;
+    for (auto & p : p_clique) {
+        for (auto & q : p_clique) {
+            if (p != q) {
+                *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{ pp.first, tt.first }]
+                    << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }]
+                    << " 1 ~x" << _imp->variable_mappings[pair{ q.first, u.first }] << " >= 1 ;" << endl;
+                ++_imp->proof_line;
+                _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ p, t }, pair{ q, u } }, _imp->proof_line);
+                _imp->clique_for_hom_non_edge_constraints.emplace(pair{ pair{ q, u }, pair{ p, t } }, _imp->proof_line);
+            }
+        }
     }
 }
 
@@ -827,8 +972,8 @@ auto Proof::create_clique_encoding(
 
 auto Proof::create_clique_nonedge(int v, int w) -> void
 {
-    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[v] <<
-        " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;" << endl;
+    *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[v]
+        << " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;" << endl;
     ++_imp->proof_line;
     _imp->non_edge_constraints.emplace(pair{ v, w }, _imp->proof_line);
     _imp->non_edge_constraints.emplace(pair{ w, v }, _imp->proof_line);

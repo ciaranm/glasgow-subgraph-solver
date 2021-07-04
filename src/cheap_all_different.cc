@@ -7,7 +7,7 @@
 
 using std::conditional_t;
 using std::tuple;
-using std::unique_ptr;
+using std::shared_ptr;
 using std::vector;
 
 namespace
@@ -16,7 +16,7 @@ namespace
     auto cheap_all_different_with_optional_proofs(
             unsigned target_size,
             vector<HomomorphismDomain> & domains,
-            const unique_ptr<Proof> & proof) -> bool
+            const shared_ptr<Proof> & proof) -> bool
     {
         // Pick domains smallest first; ties are broken by smallest .v first.
         // For each count p we have a linked list, whose first member is
@@ -109,7 +109,7 @@ namespace
     }
 }
 
-auto cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const unique_ptr<Proof> & proof) -> bool
+auto cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof) -> bool
 {
     if (! proof.get())
         return cheap_all_different_with_optional_proofs<false>(target_size, domains, proof);

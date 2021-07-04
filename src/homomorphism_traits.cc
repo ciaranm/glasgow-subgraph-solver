@@ -7,6 +7,12 @@ auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
     return (! params.no_supplementals) && (params.injectivity != Injectivity::NonInjective);
 }
 
+auto supports_distance2_graphs(const HomomorphismParams & params) -> bool
+{
+    // exact path graphs are better
+    return (! params.no_supplementals) && (! supports_exact_path_graphs(params));
+}
+
 auto supports_k4_graphs(const HomomorphismParams & params) -> bool
 {
     return (! params.no_supplementals) && params.k4 && (params.injectivity != Injectivity::NonInjective);

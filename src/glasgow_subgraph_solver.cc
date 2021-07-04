@@ -35,6 +35,7 @@ using std::localtime;
 using std::make_pair;
 using std::make_shared;
 using std::make_unique;
+using std::pair;
 using std::put_time;
 using std::string;
 using std::vector;
@@ -121,7 +122,7 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description proof_logging_options{ "Proof logging options" };
         proof_logging_options.add_options()
-            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .log)")
+            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .veripb)")
             ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
             ("compress-proof",                                 "Compress the proof using bz2");
         display_options.add(proof_logging_options);
@@ -132,7 +133,9 @@ auto main(int argc, char * argv[]) -> int
             ("distance3",                                      "Use distance 3 filtering (experimental)")
             ("k4",                                             "Use 4-clique filtering (experimental)")
             ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
-            ("decomposition",                                  "Use decomposition");
+            ("decomposition",                                  "Use decomposition")
+            ("cliques",                                        "Use clique size constraints")
+            ("cliques-on-supplementals",                       "Use clique size constraints on supplemental graphs too");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -263,6 +266,8 @@ auto main(int argc, char * argv[]) -> int
             params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
+        params.clique_size_constraints = options_vars.count("cliques");
+        params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 
         string pattern_automorphism_group_size = "1", target_automorphism_group_size = "1";
         bool was_given_pattern_automorphism_group = false, was_given_target_automorphism_group = false;
@@ -364,9 +369,9 @@ auto main(int argc, char * argv[]) -> int
             bool compress_proof = options_vars.count("compress-proof");
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".log", friendly_names, compress_proof);
+            params.proof = make_shared<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
-            cout << "proof_log = " << fn << ".log" << suffix << endl;
+            cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }
 
         cout << "pattern_vertices = " << pattern.size() << endl;

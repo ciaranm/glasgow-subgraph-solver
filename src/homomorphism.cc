@@ -82,6 +82,7 @@ namespace
             Domains domains(model.pattern_size, HomomorphismDomain{ model.target_size });
             if (! model.initialise_domains(domains)) {
                 result.complete = true;
+                model.add_extra_stats(result.extra_stats);
                 return result;
             }
 
@@ -181,6 +182,7 @@ namespace
                 result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
             }
 
+            model.add_extra_stats(result.extra_stats);
             return result;
         }
     };
@@ -411,8 +413,8 @@ auto solve_homomorphism_problem(
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with a lackey" };
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used with less-constraints" };
-        if (params.injectivity != Injectivity::Injective)
-            throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity" };
+        if (params.injectivity != Injectivity::Injective && params.injectivity != Injectivity::NonInjective)
+            throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity or non-injectivity" };
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
 
@@ -424,7 +426,8 @@ auto solve_homomorphism_problem(
         }
 
         // generate constraints for injectivity
-        params.proof->create_injectivity_constraints(pattern.size(), target.size());
+        if (params.injectivity == Injectivity::Injective)
+            params.proof->create_injectivity_constraints(pattern.size(), target.size());
 
         // generate edge constraints, and also handle loops here
         for (int p = 0 ; p < pattern.size() ; ++p) {
@@ -477,6 +480,26 @@ auto solve_homomorphism_problem(
         }
 
         return HomomorphismResult{ };
+    }
+
+    // does the target have loops, and are we looking for a single non-injective mapping?
+    if ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels()
+           && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions
+           && ! params.enumerate_callback) {
+        HomomorphismResult result;
+        result.extra_stats.emplace_back("used_loops_property = true");
+        result.complete = true;
+        int loop = -1;
+        for (int t = 0 ; t < target.size() ; ++t)
+            if (target.adjacent(t, t)) {
+                loop = t;
+                break;
+            }
+
+        for (int n = 0 ; n < pattern.size() ; ++n)
+            result.mapping.emplace(n, loop);
+
+        return result;
     }
 
     // is the pattern a clique? if so, use a clique algorithm instead

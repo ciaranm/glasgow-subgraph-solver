@@ -3,26 +3,38 @@
 #include "homomorphism_model.hh"
 #include "homomorphism_traits.hh"
 #include "configuration.hh"
+#include "clique.hh"
 
+#include <chrono>
 #include <functional>
 #include <list>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 using std::greater;
 using std::list;
+using std::make_optional;
+using std::make_unique;
 using std::map;
 using std::max;
+using std::nullopt;
 using std::optional;
 using std::pair;
 using std::set;
+using std::shared_ptr;
 using std::string;
 using std::string_view;
+using std::stringstream;
 using std::to_string;
 using std::vector;
+
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using std::chrono::steady_clock;
 
 namespace
 {
@@ -30,8 +42,69 @@ namespace
     {
         return 1 +
             (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
+            (supports_distance2_graphs(params) ? 1 : 0) +
             (supports_distance3_graphs(params) ? 1 : 0) +
             (supports_k4_graphs(params) ? 1 : 0);
+    }
+
+    auto find_clique(
+            const shared_ptr<Timeout> & timeout,
+            unsigned size,
+            const vector<SVOBitset> & rows,
+            unsigned g,
+            unsigned max_graphs,
+            unsigned v,
+            optional<int> largest_if_target,
+            vector<int> & best_knowns,
+            list<string> & build_times,
+            list<string> & solve_times,
+            list<string> & find_nodes,
+            list<string> & prove_nodes) -> int
+    {
+        if (largest_if_target && (best_knowns[v] >= *largest_if_target))
+            return best_knowns[v];
+
+        auto start_time = steady_clock::now();
+
+        CliqueParams params;
+        params.timeout = timeout;
+        params.start_time = steady_clock::now();
+        params.decide = nullopt;
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        if (largest_if_target)
+            params.stop_after_finding = *largest_if_target - 1;
+
+        vector<int> include(size, -1), invinclude(size, 0);
+        int count = 0;
+        for (unsigned w = 0 ; w < size ; ++w)
+            if (w != v && rows[w * max_graphs + g].test(v)) {
+                include[w] = count;
+                invinclude[count] = w;
+                ++count;
+            }
+
+        InputGraph gv(count, false, false);
+        for (unsigned f = 0 ; f < size ; ++f)
+            if (include[f] != -1)
+                for (unsigned t = 0 ; t < size ; ++t)
+                    if (f != t && include[t] != -1 && rows[f * max_graphs + g].test(t))
+                        gv.add_edge(include[f], include[t]);
+
+        build_times.push_back(to_string(duration_cast<milliseconds>(steady_clock::now() - start_time).count()));
+
+        start_time = steady_clock::now();
+
+        auto result = solve_clique_problem(gv, params);
+
+        solve_times.push_back(to_string(duration_cast<milliseconds>(steady_clock::now() - start_time).count()));
+        find_nodes.push_back(to_string(result.find_nodes));
+        prove_nodes.push_back(to_string(result.prove_nodes));
+
+        best_knowns[v] = max<int>(best_knowns[v], result.clique.size() + 1);
+        for (auto & w : result.clique)
+            best_knowns[invinclude[w]] = max<int>(best_knowns[invinclude[w]], result.clique.size() + 1);
+
+        return result.clique.size() + 1;
     }
 }
 
@@ -52,6 +125,14 @@ struct HomomorphismModel::Imp
 
     vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
+    mutable bool has_pattern_cliques_sizes = false;
+    mutable vector<vector<int> > pattern_cliques_sizes, target_cliques_sizes, pattern_cliques_best_knowns, target_cliques_best_knowns;
+    mutable vector<int> largest_pattern_clique;
+
+    unsigned max_graphs_for_clique_size_constraints = 0;
+    mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
+    mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
+
     Imp(const HomomorphismParams & p) :
         params(p)
     {
@@ -64,6 +145,9 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     pattern_size(pattern.size()),
     target_size(target.size())
 {
+    if (_imp->params.clique_size_constraints)
+        _imp->max_graphs_for_clique_size_constraints = (_imp->params.clique_size_constraints_on_supplementals ? max_graphs : 1);
+
     _imp->patterns_degrees.resize(max_graphs);
     _imp->targets_degrees.resize(max_graphs);
 
@@ -235,6 +319,17 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
                 throw UnsupportedConfiguration{ "Target less than constraints form a loop" };
         }
     }
+
+    // make space for clique constraints
+    if (params.clique_size_constraints) {
+        for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
+            _imp->pattern_cliques_sizes.push_back(vector<int>(pattern.size(), 0));
+            _imp->target_cliques_sizes.push_back(vector<int>(target.size(), 0));
+            _imp->pattern_cliques_best_knowns.push_back(vector<int>(pattern.size(), 0));
+            _imp->target_cliques_best_knowns.push_back(vector<int>(target.size(), 0));
+        }
+        _imp->largest_pattern_clique.resize(_imp->max_graphs_for_clique_size_constraints);
+    }
 }
 
 HomomorphismModel::~HomomorphismModel() = default;
@@ -255,6 +350,132 @@ auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
         return false;
 
     return true;
+}
+
+auto HomomorphismModel::_build_pattern_clique_sizes() const -> void
+{
+    for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
+        for (unsigned v = 0 ; v < pattern_size ; ++v) {
+            auto c = find_clique(_imp->params.timeout, pattern_size, _imp->pattern_graph_rows, g, max_graphs, v, nullopt,
+                    _imp->pattern_cliques_best_knowns[g], _imp->pattern_cliques_build_times, _imp->pattern_cliques_solve_times,
+                    _imp->pattern_cliques_solve_find_nodes, _imp->pattern_cliques_solve_prove_nodes);
+            _imp->pattern_cliques_sizes[g][v] = c;
+            _imp->largest_pattern_clique[g] = max(_imp->largest_pattern_clique[g], c);
+        }
+        _imp->has_pattern_cliques_sizes = true;
+    }
+}
+
+auto HomomorphismModel::_build_target_clique_size(int v) const -> void
+{
+    if (0 == _imp->target_cliques_sizes[0][v])
+        for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
+            _imp->target_cliques_sizes[g][v] = find_clique(_imp->params.timeout, target_size, _imp->target_graph_rows, g, max_graphs, v,
+                    _imp->largest_pattern_clique[g], _imp->target_cliques_best_knowns[0], _imp->target_cliques_build_times,
+                    _imp->target_cliques_solve_times, _imp->target_cliques_solve_find_nodes, _imp->target_cliques_solve_prove_nodes);
+        }
+
+}
+
+auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
+{
+    if (! _imp->params.clique_size_constraints)
+        return true;
+
+    if (! _imp->has_pattern_cliques_sizes)
+        _build_pattern_clique_sizes();
+
+    _build_target_clique_size(t);
+
+    for (unsigned g = 0 ; g < _imp->max_graphs_for_clique_size_constraints ; ++g) {
+        if (_imp->pattern_cliques_sizes[g][p] > _imp->target_cliques_sizes[g][t]) {
+            if (_imp->params.proof)
+                _prove_no_clique(g, p, t);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+auto HomomorphismModel::_prove_no_clique(
+        unsigned g,
+        int p,
+        int tt) const -> void
+{
+    vector<NamedVertex> p_clique;
+    map<int, NamedVertex> t_clique_neighbourhood;
+    unsigned decide_size;
+
+    {
+        vector<int> include(pattern_size, -1), invinclude(pattern_size, 0);
+        int count = 0;
+        for (int w = 0 ; w < int(pattern_size) ; ++w)
+            if (w != p && _imp->pattern_graph_rows[w * max_graphs + g].test(p)) {
+                include[w] = count;
+                invinclude[count] = w;
+                ++count;
+            }
+
+        InputGraph gv(count, false, false);
+        for (unsigned f = 0 ; f < pattern_size ; ++f)
+            if (include[f] != -1)
+                for (unsigned t = 0 ; t < pattern_size ; ++t)
+                    if (f != t && include[t] != -1 && _imp->pattern_graph_rows[f * max_graphs + g].test(t))
+                        gv.add_edge(include[f], include[t]);
+
+        CliqueParams params;
+        params.timeout = _imp->params.timeout;
+        params.start_time = steady_clock::now();
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        auto result = solve_clique_problem(gv, params);
+        for (auto & v : result.clique)
+            p_clique.push_back(pattern_vertex_for_proof(invinclude[v]));
+        decide_size = result.clique.size();
+    }
+
+    {
+        vector<int> include(target_size, -1), invinclude(target_size, 0);
+        int count = 0;
+        for (int w = 0 ; w < int(target_size) ; ++w)
+            if (w != tt && _imp->target_graph_rows[w * max_graphs + g].test(tt)) {
+                t_clique_neighbourhood.emplace(count, target_vertex_for_proof(w));
+                include[w] = count;
+                invinclude[count] = w;
+                ++count;
+            }
+
+        _imp->params.proof->prepare_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
+
+        InputGraph gv(count, false, false);
+        for (unsigned f = 0 ; f < target_size ; ++f)
+            if (include[f] != -1)
+                for (unsigned t = 0 ; t < target_size ; ++t) {
+                    if (f != t && include[t] != -1) {
+                        if (_imp->target_graph_rows[f * max_graphs + g].test(t))
+                            gv.add_edge(include[f], include[t]);
+                        else if (f < t)
+                            _imp->params.proof->add_hom_clique_non_edge(
+                                    pattern_vertex_for_proof(p), target_vertex_for_proof(tt),
+                                    p_clique, target_vertex_for_proof(f), target_vertex_for_proof(t));
+                    }
+                }
+
+        _imp->params.proof->start_hom_clique_proof(pattern_vertex_for_proof(p), move(p_clique), target_vertex_for_proof(tt), move(t_clique_neighbourhood));
+
+        CliqueParams params;
+        params.timeout = _imp->params.timeout;
+        params.start_time = steady_clock::now();
+        params.decide = make_optional(decide_size);
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        params.proof = _imp->params.proof;
+        params.proof_is_for_hom = true;
+
+        auto result = solve_clique_problem(gv, params);
+        if (result.complete && ! result.clique.empty())
+            throw ProofError{ "Oops, found a clique that shound't exist" };
+        _imp->params.proof->finish_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
+    }
 }
 
 auto HomomorphismModel::_check_degree_compatibility(
@@ -363,19 +584,19 @@ auto HomomorphismModel::_check_degree_compatibility(
 
 auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains) const -> bool
 {
-    unsigned graphs_to_consider = max_graphs;
+    unsigned max_graphs_for_degree_things = (_imp->params.injectivity == Injectivity::LocallyInjective ? 1 : max_graphs);
 
     /* pattern and target neighbourhood degree sequences */
-    vector<vector<vector<int> > > patterns_ndss(graphs_to_consider);
-    vector<vector<optional<vector<int> > > > targets_ndss(graphs_to_consider);
+    vector<vector<vector<int> > > patterns_ndss(max_graphs_for_degree_things);
+    vector<vector<optional<vector<int> > > > targets_ndss(max_graphs_for_degree_things);
 
     if (degree_and_nds_are_preserved(_imp->params) && ! _imp->params.no_nds) {
-        for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
+        for (unsigned g = 0 ; g < max_graphs_for_degree_things ; ++g) {
             patterns_ndss.at(g).resize(pattern_size);
             targets_ndss.at(g).resize(target_size);
         }
 
-        for (unsigned g = 0 ; g < graphs_to_consider ; ++g) {
+        for (unsigned g = 0 ; g < max_graphs_for_degree_things ; ++g) {
             for (unsigned i = 0 ; i < pattern_size ; ++i) {
                 auto ni = pattern_graph_row(g, i);
                 for (auto j = ni.find_first() ; j != decltype(ni)::npos ; j = ni.find_first()) {
@@ -398,7 +619,9 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                 ok = false;
             else if (! _check_loop_compatibility(i, j))
                 ok = false;
-            else if (! _check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, _imp->params.proof.get()))
+            else if (! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, _imp->params.proof.get()))
+                ok = false;
+            else if (! _check_clique_compatibility(i, j))
                 ok = false;
 
             if (ok)
@@ -415,7 +638,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
         for (unsigned i = 0 ; i < pattern_size ; ++i) {
             for (unsigned j = 0 ; j < target_size ; ++j) {
                 if (domains.at(i).values.test(j) &&
-                        ! _check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, false)) {
+                        ! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, false)) {
                     domains.at(i).values.reset(j);
                     if (0 == --domains.at(i).count)
                         return false;
@@ -558,8 +781,8 @@ auto HomomorphismModel::prepare() -> bool
     unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
     // build exact path graphs
     if (supports_exact_path_graphs(_imp->params)) {
-        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed);
-        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed);
+        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
+        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
 
         if (_imp->params.proof) {
             for (int g = 1 ; g <= _imp->params.number_of_exact_path_graphs ; ++g) {
@@ -620,6 +843,11 @@ auto HomomorphismModel::prepare() -> bool
         }
     }
 
+    if (supports_distance2_graphs(_imp->params)) {
+        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, 1, _imp->directed, true);
+        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, 1, _imp->directed, true);
+    }
+
     if (supports_distance3_graphs(_imp->params)) {
         _build_distance3_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental);
         _build_distance3_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
@@ -651,6 +879,15 @@ auto HomomorphismModel::prepare() -> bool
     for (unsigned i = 0 ; i < target_size ; ++i)
         _imp->largest_target_degree = max(_imp->largest_target_degree, _imp->targets_degrees[0][i]);
 
+    // re-add loops
+    for (unsigned i = 0 ; i < pattern_size ; ++i)
+        if (_imp->pattern_loops[i])
+            _imp->pattern_graph_rows[i * max_graphs + 0].set(i);
+
+    for (unsigned i = 0 ; i < target_size ; ++i)
+        if (_imp->target_loops[i])
+            _imp->target_graph_rows[i * max_graphs + 0].set(i);
+
     // pattern adjacencies, compressed
     _imp->pattern_adjacencies_bits.resize(pattern_size * pattern_size);
     for (unsigned g = 0 ; g < max_graphs ; ++g)
@@ -663,7 +900,7 @@ auto HomomorphismModel::prepare() -> bool
 }
 
 auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-        unsigned number_of_exact_path_graphs, bool directed) -> void
+        unsigned number_of_exact_path_graphs, bool directed, bool at_most) -> void
 {
     vector<vector<unsigned> > path_counts(size, vector<unsigned>(size, 0));
 
@@ -682,13 +919,17 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
 
     for (unsigned v = 0 ; v < size ; ++v) {
         for (unsigned w = (directed ? 0 : v) ; w < size ; ++w) {
-            // unless directed, w to v, not v to w, see above
-            unsigned path_count = path_counts[w][v];
-            for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
-                if (path_count >= p) {
-                    graph_rows[v * max_graphs + idx + p - 1].set(w);
-                    if (! directed)
-                        graph_rows[w * max_graphs + idx + p - 1].set(v);
+            if (at_most && v == w)
+                graph_rows[v * max_graphs + idx].set(w);
+            else {
+                // unless directed, w to v, not v to w, see above
+                unsigned path_count = path_counts[w][v];
+                for (unsigned p = 1 ; p <= number_of_exact_path_graphs ; ++p) {
+                    if (path_count >= p) {
+                        graph_rows[v * max_graphs + idx + p - 1].set(w);
+                        if (! directed)
+                            graph_rows[w * max_graphs + idx + p - 1].set(v);
+                    }
                 }
             }
         }
@@ -843,5 +1084,28 @@ auto HomomorphismModel::has_occur_less_thans() const -> bool
 auto HomomorphismModel::directed() const -> bool
 {
     return _imp->directed;
+}
+
+auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
+{
+    if (! _imp->pattern_cliques_sizes.empty()) {
+        auto join = [] (string_view t, auto & l) -> string {
+            stringstream s;
+            s << t;
+            for (auto & i : l)
+                s << " " << i;
+            return s.str();
+        };
+
+        x.emplace_back(join("pattern_cliques_build_times =", _imp->pattern_cliques_build_times));
+        x.emplace_back(join("pattern_cliques_solve_times =", _imp->pattern_cliques_solve_times));
+        x.emplace_back(join("pattern_cliques_solve_find_nodes =", _imp->pattern_cliques_solve_find_nodes));
+        x.emplace_back(join("pattern_cliques_solve_prove_nodes =", _imp->pattern_cliques_solve_prove_nodes));
+
+        x.emplace_back(join("target_cliques_build_times =", _imp->target_cliques_build_times));
+        x.emplace_back(join("target_cliques_solve_times =", _imp->target_cliques_solve_times));
+        x.emplace_back(join("target_cliques_solve_find_nodes =", _imp->target_cliques_solve_find_nodes));
+        x.emplace_back(join("target_cliques_solve_prove_nodes =", _imp->target_cliques_solve_prove_nodes));
+    }
 }
 

@@ -86,6 +86,12 @@ struct HomomorphismParams
     /// How many exact path graphs do we have, if we have any?
     int number_of_exact_path_graphs = 4;
 
+    /// Are we allowed to do clique size constraints?
+    bool clique_size_constraints = false;
+
+    /// If we do clique constraints, do we do them on supplemental graphs too?
+    bool clique_size_constraints_on_supplementals = false;
+
     /// Disable neighbourhood degree sequence processing?
     bool no_nds = false;
 
@@ -105,7 +111,7 @@ struct HomomorphismParams
     PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
 
     /// Optional proof handler
-    std::unique_ptr<Proof> proof;
+    std::shared_ptr<Proof> proof;
 };
 
 struct HomomorphismResult

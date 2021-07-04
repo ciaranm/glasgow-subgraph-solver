@@ -18,7 +18,7 @@ class HomomorphismModel
         std::unique_ptr<Imp> _imp;
 
         auto _build_exact_path_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-                unsigned number_of_exact_path_graphs, bool directed) -> void;
+                unsigned number_of_exact_path_graphs, bool directed, bool at_most) -> void;
 
         auto _build_distance3_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void;
 
@@ -36,6 +36,14 @@ class HomomorphismModel
         auto _check_loop_compatibility(int p, int t) const -> bool;
 
         auto _check_label_compatibility(int p, int t) const -> bool;
+
+        auto _check_clique_compatibility(int p, int t) const -> bool;
+
+        auto _build_pattern_clique_sizes() const -> void;
+
+        auto _build_target_clique_size(int v) const -> void;
+
+        auto _prove_no_clique(unsigned g, int p, int t) const -> void;
 
     public:
         using PatternAdjacencyBitsType = uint8_t;
@@ -78,6 +86,8 @@ class HomomorphismModel
         auto target_has_loop(int t) const -> bool;
 
         auto initialise_domains(std::vector<HomomorphismDomain> & domains) const -> bool;
+
+        auto add_extra_stats(std::list<std::string> &) const -> void;
 };
 
 #endif
