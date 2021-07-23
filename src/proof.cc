@@ -71,6 +71,7 @@ struct Proof::Imp
     unique_ptr<ostream> proof_stream;
     bool friendly_names;
     bool bz2 = false;
+    bool super_extra_verbose = false;
 
     map<pair<long, long>, string> variable_mappings;
     map<long, string> binary_variable_mappings;
@@ -95,13 +96,14 @@ struct Proof::Imp
     map<pair<pair<NamedVertex, NamedVertex>, pair<NamedVertex, NamedVertex> >, long> clique_for_hom_non_edge_constraints;
 };
 
-Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b) :
+Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, bool s) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
     _imp->log_filename = log_file;
     _imp->friendly_names = f;
     _imp->bz2 = b;
+    _imp->super_extra_verbose = s;
 }
 
 Proof::Proof(Proof &&) = default;
@@ -977,5 +979,21 @@ auto Proof::create_clique_nonedge(int v, int w) -> void
     ++_imp->proof_line;
     _imp->non_edge_constraints.emplace(pair{ v, w }, _imp->proof_line);
     _imp->non_edge_constraints.emplace(pair{ w, v }, _imp->proof_line);
+}
+
+auto Proof::super_extra_verbose() const -> bool
+{
+    return _imp->super_extra_verbose;
+}
+
+auto Proof::entering_restarting_search(int d, const std::vector<std::pair<NamedVertex, std::vector<NamedVertex> > > & domains) -> void
+{
+    *_imp->proof_stream << "* entering search depth " << d << ", domains follow" << endl;
+    for (auto & [ p, ts ] : domains) {
+        *_imp->proof_stream << "*    " << p.second << " size " << ts.size() << " = {";
+        for (auto & t : ts)
+            *_imp->proof_stream << " " << t.second;
+        *_imp->proof_stream << " }" << endl;
+    }
 }
 

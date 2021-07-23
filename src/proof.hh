@@ -36,13 +36,15 @@ class Proof
         std::unique_ptr<Imp> _imp;
 
     public:
-        Proof(const std::string & opb_file, const std::string & log_file, bool friendly_names, bool bz2);
+        Proof(const std::string & opb_file, const std::string & log_file, bool friendly_names, bool bz2, bool super_extra_verbose = false);
         Proof(Proof &&);
         ~Proof();
         auto operator= (Proof &&) -> Proof &;
 
         Proof(const Proof &) = delete;
         auto operator= (const Proof &) -> Proof & = delete;
+
+        auto super_extra_verbose() const -> bool;
 
         // model-writing functions
         auto create_cp_variable(int pattern_vertex, int target_size,
@@ -157,6 +159,9 @@ class Proof
         // optimisation
         auto new_incumbent(const std::vector<std::pair<int, bool> > & solution) -> void;
         auto new_incumbent(const std::vector<std::tuple<NamedVertex, NamedVertex, bool> > & solution) -> void;
+
+        // super extra verbose
+        auto entering_restarting_search(int d, const std::vector<std::pair<NamedVertex, std::vector<NamedVertex> > > & domains) -> void;
 };
 
 #endif

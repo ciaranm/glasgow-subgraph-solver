@@ -76,6 +76,19 @@ auto HomomorphismSearcher::restarting_search(
         int depth,
         RestartsSchedule & restarts_schedule) -> SearchResult
 {
+    if (params.proof && params.proof->super_extra_verbose()) {
+        vector<pair<NamedVertex, vector<NamedVertex> > > proof_domains;
+        for (auto & d : domains) {
+            proof_domains.push_back(pair{ model.pattern_vertex_for_proof(d.v), vector<NamedVertex>{} });
+            auto values = d.values;
+            for (auto v = values.find_first() ; v != decltype(values)::npos ; v = values.find_first()) {
+                values.reset(v);
+                proof_domains.back().second.push_back(model.target_vertex_for_proof(v));
+            }
+        }
+        params.proof->entering_restarting_search(depth, proof_domains);
+    }
+
     if (params.timeout->should_abort())
         return SearchResult::Aborted;
 
