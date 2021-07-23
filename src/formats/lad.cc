@@ -5,11 +5,13 @@
 
 #include <fstream>
 #include <map>
+#include <string>
 
 using std::ifstream;
 using std::map;
 using std::pair;
 using std::string;
+using std::stoi;
 using std::to_string;
 
 namespace
@@ -68,8 +70,15 @@ namespace
         }
 
         string rest;
-        if (infile >> rest)
-            throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"", true };
+        while (infile >> rest) {
+            auto equals_pos = rest.find('=');
+            if (string::npos == equals_pos)
+                throw GraphFileError{ filename, "EOF not reached, next text is \"" + rest + "\"", true };
+            else {
+                string before = rest.substr(0, equals_pos), after = rest.substr(equals_pos + 1);
+                result.set_vertex_name(stoi(before), after);
+            }
+        }
         if (! infile.eof())
             throw GraphFileError{ filename, "EOF not reached", true };
 
