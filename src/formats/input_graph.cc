@@ -141,6 +141,7 @@ auto InputGraph::vertex_label(int v) const -> string_view
 auto InputGraph::set_vertex_name(int v, string_view l) -> void
 {
     sanity_check_name(l, "vertex name");
+    _imp->vertex_names.left.erase(v);
     _imp->vertex_names.insert(Names::value_type{ v, string{ l } });
 }
 
