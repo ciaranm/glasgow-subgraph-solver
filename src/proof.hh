@@ -95,7 +95,7 @@ class Proof
                 ) -> void;
 
         // new constraints
-        auto emit_hall_set_or_violator(const std::vector<int> & lhs, const std::vector<int> & rhs) -> void;
+        auto emit_hall_set_or_violator(const std::vector<NamedVertex> & lhs, const std::vector<NamedVertex> & rhs) -> void;
 
         // branch logging
         auto root_propagation_failed() -> void;

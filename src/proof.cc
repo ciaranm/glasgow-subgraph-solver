@@ -324,21 +324,27 @@ auto Proof::initial_domain_is_empty(int p) -> void
     *_imp->proof_stream << "* failure due to domain " << p << " being empty" << endl;
 }
 
-auto Proof::emit_hall_set_or_violator(const vector<int> & lhs, const vector<int> & rhs) -> void
+auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vector<NamedVertex> & rhs) -> void
 {
-    *_imp->proof_stream << "* hall set or violator size " << lhs.size() << "/" << rhs.size() << endl;
+    *_imp->proof_stream << "* hall set or violator {";
+    for (auto & l : lhs)
+        *_imp->proof_stream << " " << l.second;
+    *_imp->proof_stream << " } / {";
+    for (auto & r : rhs)
+        *_imp->proof_stream << " " << r.second;
+    *_imp->proof_stream << " }" << endl;
     *_imp->proof_stream << "p";
     bool first = true;
     for (auto & l : lhs) {
         if (first) {
             first = false;
-            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l];
+            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l.first];
         }
         else
-            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l] << " +";
+            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l.first] << " +";
     }
     for (auto & r : rhs)
-        *_imp->proof_stream << " " << _imp->injectivity_constraints[r] << " +";
+        *_imp->proof_stream << " " << _imp->injectivity_constraints[r.first] << " +";
     *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 }

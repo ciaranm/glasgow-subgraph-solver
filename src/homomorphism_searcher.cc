@@ -775,7 +775,7 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
 
         // propagate all different
         if (params.injectivity == Injectivity::Injective)
-            if (! cheap_all_different(model.target_size, new_domains, params.proof))
+            if (! cheap_all_different(model.target_size, new_domains, params.proof, &model))
                 return false;
         done_globals_at_least_once = true;
     }

@@ -16,7 +16,8 @@ namespace
     auto cheap_all_different_with_optional_proofs(
             unsigned target_size,
             vector<HomomorphismDomain> & domains,
-            const shared_ptr<Proof> & proof) -> bool
+            const shared_ptr<Proof> & proof,
+            const HomomorphismModel * const model) -> bool
     {
         // Pick domains smallest first; ties are broken by smallest .v first.
         // For each count p we have a linked list, whose first member is
@@ -27,7 +28,7 @@ namespace
         // elements
         vector<int> first(target_size + 1, -1), next(target_size, -1);
 
-        [[ maybe_unused ]] conditional_t<proof_, vector<int>, tuple<> > lhs, hall_lhs, hall_rhs;
+        [[ maybe_unused ]] conditional_t<proof_, vector<NamedVertex>, tuple<> > lhs, hall_lhs, hall_rhs;
 
         // Iterate backwards, because we insert elements at the head of
         // lists and we want the sort to be stable
@@ -52,7 +53,7 @@ namespace
                 auto & d = domains.at(domain_index);
 
                 if constexpr (proof_)
-                    lhs.push_back(d.v);
+                    lhs.push_back(model->pattern_vertex_for_proof(d.v));
 
                 [[ maybe_unused ]] conditional_t<proof_, unsigned, tuple<> > old_d_values_count;
                 if constexpr (proof_)
@@ -78,11 +79,11 @@ namespace
                 if (domains_so_far_popcount < neighbours_so_far) {
                     // hall violator, so we fail (after outputting a proof)
                     if constexpr (proof_) {
-                        vector<int> rhs;
+                        vector<NamedVertex> rhs;
                         auto d = domains_so_far;
                         for (auto v = d.find_first() ; v != decltype(d)::npos ; v = d.find_first()) {
                             d.reset(v);
-                            rhs.push_back(v);
+                            rhs.push_back(model->target_vertex_for_proof(v));
                         }
                         proof->emit_hall_set_or_violator(lhs, rhs);
                     }
@@ -92,12 +93,14 @@ namespace
                     // equivalent to hall=domains_so_far
                     hall |= domains_so_far;
                     if constexpr (proof_) {
-                        hall_lhs = lhs;
+                        hall_lhs.clear();
+                        for (auto & l : lhs)
+                            hall_lhs.push_back(l);
                         hall_rhs.clear();
                         auto d = domains_so_far;
                         for (auto v = d.find_first() ; v != decltype(d)::npos ; v = d.find_first()) {
                             d.reset(v);
-                            hall_rhs.push_back(v);
+                            hall_rhs.push_back(model->target_vertex_for_proof(v));
                         }
                     }
                 }
@@ -109,11 +112,12 @@ namespace
     }
 }
 
-auto cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof) -> bool
+auto cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof,
+        const HomomorphismModel * const model) -> bool
 {
     if (! proof.get())
-        return cheap_all_different_with_optional_proofs<false>(target_size, domains, proof);
+        return cheap_all_different_with_optional_proofs<false>(target_size, domains, proof, model);
     else
-        return cheap_all_different_with_optional_proofs<true>(target_size, domains, proof);
+        return cheap_all_different_with_optional_proofs<true>(target_size, domains, proof, model);
 }
 

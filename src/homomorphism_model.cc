@@ -656,13 +656,13 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
         unsigned domains_union_popcount = domains_union.count();
         if (domains_union_popcount < unsigned(pattern_size)) {
             if (_imp->params.proof) {
-                vector<int> hall_lhs, hall_rhs;
+                vector<NamedVertex> hall_lhs, hall_rhs;
                 for (auto & d : domains)
-                    hall_lhs.push_back(d.v);
+                    hall_lhs.push_back(pattern_vertex_for_proof(d.v));
                 auto dd = domains_union;
                 for (auto v = dd.find_first() ; v != decltype(dd)::npos ; v = dd.find_first()) {
                     dd.reset(v);
-                    hall_rhs.push_back(v);
+                    hall_rhs.push_back(target_vertex_for_proof(v));
                 }
                 _imp->params.proof->emit_hall_set_or_violator(hall_lhs, hall_rhs);
             }
@@ -766,11 +766,11 @@ auto HomomorphismModel::prepare() -> bool
                         }
                     }
 
-                    vector<int> patterns, targets;
+                    vector<NamedVertex> patterns, targets;
                     for (unsigned p = 0 ; p <= i ; ++p)
-                        patterns.push_back(p_gds.at(p).first);
+                        patterns.push_back(pattern_vertex_for_proof(p_gds.at(p).first));
                     for (unsigned t = 0 ; t < i ; ++t)
-                        targets.push_back(t_gds.at(t).first);
+                        targets.push_back(target_vertex_for_proof(t_gds.at(t).first));
 
                     _imp->params.proof->emit_hall_set_or_violator(patterns, targets);
                 }
