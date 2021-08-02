@@ -851,6 +851,100 @@ auto HomomorphismModel::prepare() -> bool
     if (supports_distance3_graphs(_imp->params)) {
         _build_distance3_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental);
         _build_distance3_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
+
+        if (_imp->params.proof) {
+            for (unsigned p = 0 ; p < pattern_size ; ++p) {
+                for (unsigned q = 0 ; q < pattern_size ; ++q) {
+                    auto named_p = pattern_vertex_for_proof(p);
+                    auto named_q = pattern_vertex_for_proof(q);
+
+                    // only do this if they're actually adjacent
+                    if (p == q || ! _imp->pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
+                        continue;
+
+                    bool actually_adjacent = false;
+                    optional<NamedVertex> path_from_p_to_q_1 = nullopt, path_from_p_to_q_2 = nullopt;
+
+                    auto n_p = _imp->pattern_graph_rows[p * max_graphs + 0];
+
+                    // are they actually distance 1 apart?
+                    if (n_p.test(q))
+                        actually_adjacent = true;
+                    else {
+                        auto n_q = _imp->pattern_graph_rows[q * max_graphs + 0];
+
+                        auto n_p_q = n_p;
+                        n_p_q &= n_q;
+                        n_p_q.reset(p);
+                        n_p_q.reset(q);
+
+                        if (n_p_q.any()) {
+                            // they're actually distance 2 apart
+                            path_from_p_to_q_1 = pattern_vertex_for_proof(n_p_q.find_first());
+                        }
+                        else {
+                            // find a path of length 3
+                            n_p.reset(p);
+                            n_p.reset(q);
+                            for (auto v = n_p.find_first() ; v != decltype(n_p)::npos && ! path_from_p_to_q_1 ; v = n_p.find_first()) {
+                                n_p.reset(v);
+                                auto n_v = _imp->pattern_graph_rows[v * max_graphs + 0];
+                                n_v.reset(v);
+                                n_v.reset(p);
+                                n_v.reset(q);
+                                for (auto w = n_v.find_first() ; w != decltype(n_v)::npos && ! path_from_p_to_q_1 ; w = n_v.find_first()) {
+                                    n_v.reset(w);
+                                    if (_imp->pattern_graph_rows[w * max_graphs + 0].test(q)) {
+                                        path_from_p_to_q_1 = pattern_vertex_for_proof(v);
+                                        path_from_p_to_q_2 = pattern_vertex_for_proof(w);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (! path_from_p_to_q_1)
+                            throw ProofError{ "Oops, there's a bug: missing path from " + named_p.second + " to " + named_q.second };
+                    }
+
+                    for (unsigned t = 0 ; t < target_size ; ++t) {
+                        auto named_t = target_vertex_for_proof(t);
+
+                        vector<NamedVertex> d1_from_t, d2_from_t, d3_from_t;
+                        set<NamedVertex> d2_from_t_set, d3_from_t_set;
+                        auto n_t = _imp->target_graph_rows[t * max_graphs + 0];
+                        n_t.set(t);
+                        for (auto v = n_t.find_first() ; v != decltype(n_t)::npos ; v = n_t.find_first()) {
+                            n_t.reset(v);
+                            d1_from_t.push_back(target_vertex_for_proof(v));
+                            auto n_v = _imp->target_graph_rows[v * max_graphs + 0];
+                            n_v.set(v);
+                            for (auto w = n_v.find_first() ; w != decltype(n_v)::npos ; w = n_v.find_first()) {
+                                n_v.reset(w);
+                                d2_from_t_set.insert(target_vertex_for_proof(w));
+                                auto n_w = _imp->target_graph_rows[w * max_graphs + 0];
+                                n_w.set(w);
+                                for (auto x = n_w.find_first() ; x != decltype(n_w)::npos ; x = n_w.find_first()) {
+                                    n_w.reset(x);
+                                    d3_from_t_set.insert(target_vertex_for_proof(x));
+                                }
+                            }
+                        }
+
+                        d2_from_t.assign(d2_from_t_set.begin(), d2_from_t_set.end());
+                        d3_from_t.assign(d3_from_t_set.begin(), d3_from_t_set.end());
+
+                        if (actually_adjacent)
+                            _imp->params.proof->create_distance3_graphs_but_actually_distance_1(next_pattern_supplemental - 1, named_p, named_q, named_t, d3_from_t);
+                        else if (path_from_p_to_q_2)
+                            _imp->params.proof->create_distance3_graphs(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
+                                    *path_from_p_to_q_2, named_t, d1_from_t, d2_from_t, d3_from_t);
+                        else
+                            _imp->params.proof->create_distance3_graphs_but_actually_distance_2(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
+                                    named_t, d1_from_t, d2_from_t, d3_from_t);
+                    }
+                }
+            }
+        }
     }
 
     if (supports_k4_graphs(_imp->params)) {
@@ -942,9 +1036,11 @@ auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, 
 {
     for (unsigned v = 0 ; v < size ; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];
+        graph_rows[v * max_graphs + idx] |= nv;
         for (auto c = nv.find_first() ; c != decltype(nv)::npos ; c = nv.find_first()) {
             nv.reset(c);
             auto nc = graph_rows[c * max_graphs + 0];
+            graph_rows[v * max_graphs + idx] |= nc;
             for (auto w = nc.find_first() ; w != decltype(nc)::npos ; w = nc.find_first()) {
                 nc.reset(w);
                 // v--c--w so v is within distance 3 of w's neighbours

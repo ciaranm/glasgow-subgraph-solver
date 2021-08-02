@@ -585,6 +585,123 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << "w 1" << endl;
 }
 
+auto Proof::create_distance3_graphs_but_actually_distance_1(
+        int g,
+        const NamedVertex & p,
+        const NamedVertex & q,
+        const NamedVertex & t,
+        const vector<NamedVertex> & d3_from_t) -> void
+{
+    *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
+        " in G^3 so by adjacency, " << q.second << " maps to one of..." << endl;
+
+    *_imp->proof_stream << "j " << _imp->adjacency_lines[tuple{ 0, p.first, q.first, t.first }]
+        << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d3_from_t)
+        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+}
+
+auto Proof::create_distance3_graphs_but_actually_distance_2(
+        int g,
+        const NamedVertex & p,
+        const NamedVertex & q,
+        const NamedVertex & path_from_p_to_q,
+        const NamedVertex & t,
+        const vector<NamedVertex> & d1_from_t,
+        const vector<NamedVertex> & d2_from_t,
+        const vector<NamedVertex> & d3_from_t
+        ) -> void
+{
+    *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
+        " in G^3 so using vertex " << path_from_p_to_q.second << ", " << q.second << " maps to one of..." << endl;
+
+    *_imp->proof_stream << "# 1" << endl;
+
+    *_imp->proof_stream << "p";
+
+    // if p maps to t then the first thing on the path from p to q has to go to one of...
+    *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, path_from_p_to_q.first, t.first }];
+    // so the second thing on the path from p to q has to go to one of...
+    for (auto & u : d1_from_t)
+        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q.first, q.first, u.first }] << " +";
+
+    *_imp->proof_stream << " 0" << endl;
+    ++_imp->proof_line;
+
+    // tidy up
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d2_from_t)
+        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    *_imp->proof_stream << "# 0" << endl;
+
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d3_from_t)
+        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+}
+
+auto Proof::create_distance3_graphs(
+        int g,
+        const NamedVertex & p,
+        const NamedVertex & q,
+        const NamedVertex & path_from_p_to_q_1,
+        const NamedVertex & path_from_p_to_q_2,
+        const NamedVertex & t,
+        const vector<NamedVertex> & d1_from_t,
+        const vector<NamedVertex> & d2_from_t,
+        const vector<NamedVertex> & d3_from_t
+        ) -> void
+{
+    *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
+        " in G^3 so using path " << path_from_p_to_q_1.second << " -- " << path_from_p_to_q_2.second << ", " << q.second << " maps to one of..." << endl;
+
+    *_imp->proof_stream << "# 1" << endl;
+
+    *_imp->proof_stream << "p";
+
+    // if p maps to t then the first thing on the path from p to q has to go to one of...
+    *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, path_from_p_to_q_1.first, t.first }];
+    // so the second thing on the path from p to q has to go to one of...
+    for (auto & u : d1_from_t)
+        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q_1.first, path_from_p_to_q_2.first, u.first }] << " +";
+
+    *_imp->proof_stream << " 0" << endl;
+    ++_imp->proof_line;
+
+    // tidy up
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d2_from_t)
+        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ path_from_p_to_q_2.first, u.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    *_imp->proof_stream << "p " << _imp->proof_line;
+    for (auto & u : d2_from_t)
+        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q_2.first, q.first, u.first }] << " +";
+    *_imp->proof_stream << " 0" << endl;
+    ++_imp->proof_line;
+
+    *_imp->proof_stream << "# 0" << endl;
+
+    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d3_from_t)
+        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+}
+
 auto Proof::create_binary_variable(int vertex,
                 const function<auto (int) -> string> & name) -> void
 {
