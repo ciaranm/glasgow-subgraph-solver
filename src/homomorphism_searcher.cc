@@ -4,7 +4,10 @@
 #include "cheap_all_different.hh"
 
 #include <optional>
+#include <tuple>
+#include <type_traits>
 
+using std::conditional_t;
 using std::make_optional;
 using std::max;
 using std::move;
@@ -15,6 +18,7 @@ using std::pair;
 using std::string;
 using std::swap;
 using std::to_string;
+using std::tuple;
 using std::uniform_int_distribution;
 using std::vector;
 
@@ -86,7 +90,7 @@ auto HomomorphismSearcher::restarting_search(
                 proof_domains.back().second.push_back(model.target_vertex_for_proof(v));
             }
         }
-        params.proof->entering_restarting_search(depth, proof_domains);
+        params.proof->show_domains("entering depth " + to_string(depth), proof_domains);
     }
 
     if (params.timeout->should_abort())
@@ -370,10 +374,15 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const 
     return result;
 }
 
-template <bool directed_, bool has_edge_labels_, bool induced_>
+template <bool directed_, bool has_edge_labels_, bool induced_, bool verbose_proofs_>
 auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void
 {
     const auto & graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
+
+    [[ maybe_unused ]] conditional_t<verbose_proofs_, SVOBitset, tuple<> > before;
+    if constexpr (verbose_proofs_) {
+        before = d.values;
+    }
 
     if constexpr (! directed_) {
         // for the original graph pair, if we're adjacent...
@@ -415,12 +424,26 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
         }
     }
 
+    if constexpr (verbose_proofs_) {
+        if (before.count() != d.values.count())
+            params.proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
+                    0, before.count() - d.values.count(), model.pattern_vertex_for_proof(d.v));
+        before = d.values;
+    }
+
     // and for each remaining graph pair...
     for (unsigned g = 1 ; g < model.max_graphs ; ++g) {
         // if we're adjacent...
         if (graph_pairs_to_consider & (1u << g)) {
             // ...then we can only be mapped to adjacent vertices
             d.values &= model.target_graph_row(g, current_assignment.target_vertex);
+        }
+
+        if constexpr (verbose_proofs_) {
+            if (before.count() != d.values.count())
+                params.proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
+                        g, before.count() - d.values.count(), model.pattern_vertex_for_proof(d.v));
+            before = d.values;
         }
     }
 
@@ -485,24 +508,48 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         // adjacency
         if (! model.has_edge_labels()) {
             if (params.induced) {
-                if (model.directed())
-                    propagate_adjacency_constraints<true, false, true>(d, current_assignment);
-                else
-                    propagate_adjacency_constraints<false, false, true>(d, current_assignment);
+                if (model.directed()) {
+                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                        propagate_adjacency_constraints<true, false, true, false>(d, current_assignment);
+                    else
+                        propagate_adjacency_constraints<true, false, true, true>(d, current_assignment);
+                }
+                else {
+                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                        propagate_adjacency_constraints<false, false, true, false>(d, current_assignment);
+                    else
+                        propagate_adjacency_constraints<false, false, true, true>(d, current_assignment);
+                }
             }
             else {
-                if (model.directed())
-                    propagate_adjacency_constraints<true, false, false>(d, current_assignment);
-                else
-                    propagate_adjacency_constraints<false, false, false>(d, current_assignment);
+                if (model.directed()) {
+                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                        propagate_adjacency_constraints<true, false, false, false>(d, current_assignment);
+                    else
+                        propagate_adjacency_constraints<true, false, false, true>(d, current_assignment);
+                }
+                else {
+                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                        propagate_adjacency_constraints<false, false, false, false>(d, current_assignment);
+                    else
+                        propagate_adjacency_constraints<false, false, false, true>(d, current_assignment);
+                }
             }
         }
         else {
             // edge labels are always directed
-            if (params.induced)
-                propagate_adjacency_constraints<true, true, true>(d, current_assignment);
-            else
-                propagate_adjacency_constraints<true, true, false>(d, current_assignment);
+            if (params.induced) {
+                if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                    propagate_adjacency_constraints<true, true, true, false>(d, current_assignment);
+                else
+                    propagate_adjacency_constraints<true, true, true, true>(d, current_assignment);
+            }
+            else {
+                if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                    propagate_adjacency_constraints<true, true, false, false>(d, current_assignment);
+                else
+                    propagate_adjacency_constraints<true, true, false, true>(d, current_assignment);
+            }
         }
 
         // we might have removed values

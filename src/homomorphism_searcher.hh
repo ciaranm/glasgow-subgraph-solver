@@ -88,7 +88,7 @@ class HomomorphismSearcher
 
         auto solution_in_proof_form(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<NamedVertex, NamedVertex> >;
 
-        template <bool directed_, bool has_edge_labels_, bool induced_>
+        template <bool directed_, bool has_edge_labels_, bool induced_, bool verbose_proofs_>
         auto propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void;
 
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool;

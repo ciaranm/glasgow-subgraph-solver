@@ -986,14 +986,19 @@ auto Proof::super_extra_verbose() const -> bool
     return _imp->super_extra_verbose;
 }
 
-auto Proof::entering_restarting_search(int d, const std::vector<std::pair<NamedVertex, std::vector<NamedVertex> > > & domains) -> void
+auto Proof::show_domains(const string & s, const std::vector<std::pair<NamedVertex, std::vector<NamedVertex> > > & domains) -> void
 {
-    *_imp->proof_stream << "* entering search depth " << d << ", domains follow" << endl;
+    *_imp->proof_stream << "* " << s << ", domains follow" << endl;
     for (auto & [ p, ts ] : domains) {
         *_imp->proof_stream << "*    " << p.second << " size " << ts.size() << " = {";
         for (auto & t : ts)
             *_imp->proof_stream << " " << t.second;
         *_imp->proof_stream << " }" << endl;
     }
+}
+
+auto Proof::propagated(const NamedVertex & p, const NamedVertex & t, int g, int n_values, const NamedVertex & q) -> void
+{
+    *_imp->proof_stream << "* adjacency propagation from " << p.second << " -> " << t.second << " in graph pairs " << g << " deleted " << n_values << " values from " << q.second << endl;
 }
 

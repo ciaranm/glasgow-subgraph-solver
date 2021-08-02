@@ -161,7 +161,8 @@ class Proof
         auto new_incumbent(const std::vector<std::tuple<NamedVertex, NamedVertex, bool> > & solution) -> void;
 
         // super extra verbose
-        auto entering_restarting_search(int d, const std::vector<std::pair<NamedVertex, std::vector<NamedVertex> > > & domains) -> void;
+        auto show_domains(const std::string & where, const std::vector<std::pair<NamedVertex, std::vector<NamedVertex> > > & domains) -> void;
+        auto propagated(const NamedVertex & p, const NamedVertex & t, int g, int n_values, const NamedVertex & q) -> void;
 };
 
 #endif
