@@ -1139,6 +1139,7 @@ auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsig
             child_params.restarts_schedule = make_unique<NoRestartsSchedule>();
             child_params.clique_detection = false;
             child_params.injectivity = injective ? Injectivity::Injective : Injectivity::NonInjective;
+            child_params.no_supplementals = true;
 
             int seen_count = 0;
             if (count > 1) {
