@@ -129,6 +129,7 @@ auto main(int argc, char * argv[]) -> int
         display_options.add(proof_logging_options);
 
         vector<string> shapes;
+        vector<int> shape_counts, shape_injectives;
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
@@ -138,7 +139,9 @@ auto main(int argc, char * argv[]) -> int
             ("decomposition",                                  "Use decomposition")
             ("cliques",                                        "Use clique size constraints")
             ("cliques-on-supplementals",                       "Use clique size constraints on supplemental graphs too")
-            ("shape",                     po::value<vector<string> >(&shapes), "Specify an extra shape graph (slow, experimental)");
+            ("shape",                     po::value<vector<string> >(&shapes), "Specify an extra shape graph (slow, experimental)")
+            ("shape-count",               po::value<vector<int> >(&shape_counts), "Specify how many times the shape must occur")
+            ("shape-injective",           po::value<vector<int> >(&shape_injectives), "Specify whether the shape must occur injectively");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -273,9 +276,9 @@ auto main(int argc, char * argv[]) -> int
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 
         if (options_vars.count("shape")) {
-            for (auto & shape : shapes) {
-                auto graph = make_unique<InputGraph>(read_file_format("csv", shape));
-                params.extra_shapes.emplace_back(move(graph), 1);
+            for (decltype(shapes.size()) s = 0 ; s != shapes.size() ; ++s) {
+                auto graph = make_unique<InputGraph>(read_file_format("csv", shapes[s]));
+                params.extra_shapes.emplace_back(move(graph), s >= shape_injectives.size() ? true : shape_injectives[s], s >= shape_counts.size() ? 1 : shape_counts[s]);
             }
         }
 
@@ -366,11 +369,12 @@ auto main(int argc, char * argv[]) -> int
             params.propagate_using_lackey = PropagateUsingLackey::Never;
 
         if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
+            params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) -> bool {
                 cout << "mapping = ";
                 for (auto v : mapping)
                     cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
                 cout << endl;
+                return true;
             };
         }
 

@@ -126,7 +126,8 @@ auto HomomorphismSearcher::restarting_search(
                 if (params.enumerate_callback) {
                     VertexToVertexMapping mapping;
                     expand_to_full_result(assignments, mapping);
-                    params.enumerate_callback(mapping);
+                    if (! params.enumerate_callback(mapping))
+                        return SearchResult::Satisfiable;
                 }
             }
 

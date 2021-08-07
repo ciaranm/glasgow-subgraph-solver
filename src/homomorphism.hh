@@ -50,7 +50,7 @@ struct HomomorphismParams
     bool count_solutions = false;
 
     /// Print solutions, for enumerating
-    std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;
+    std::function<auto (const VertexToVertexMapping &) -> bool> enumerate_callback;
 
     /// Which value-ordering heuristic?
     ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
@@ -86,8 +86,8 @@ struct HomomorphismParams
     /// How many exact path graphs do we have, if we have any?
     int number_of_exact_path_graphs = 4;
 
-    /// Any extra shapes to use
-    std::list<std::pair<std::unique_ptr<InputGraph>, int> > extra_shapes;
+    /// Any extra shapes to use, with injectivity and count
+    std::list<std::tuple<std::unique_ptr<InputGraph>, bool, int> > extra_shapes;
 
     /// Are we allowed to do clique size constraints?
     bool clique_size_constraints = false;

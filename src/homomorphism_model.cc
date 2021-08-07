@@ -953,9 +953,9 @@ auto HomomorphismModel::prepare() -> bool
         _build_k4_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
     }
 
-    for (auto & [ shape, count ] : _imp->params.extra_shapes) {
-        _build_extra_shape(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape);
-        _build_extra_shape(_imp->target_graph_rows, target_size, next_target_supplemental, *shape);
+    for (auto & [ shape, injective, count ] : _imp->params.extra_shapes) {
+        _build_extra_shape(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape, injective, count);
+        _build_extra_shape(_imp->target_graph_rows, target_size, next_target_supplemental, *shape, injective, count);
 
         if (_imp->params.proof) {
             for (unsigned p = 0 ; p < pattern_size ; ++p) {
@@ -1117,7 +1117,8 @@ auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigne
     ++idx;
 }
 
-auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, InputGraph & shape) -> void
+auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, InputGraph & shape,
+        bool injective, int count) -> void
 {
     InputGraph master_graph(size, true, false);
 
@@ -1137,11 +1138,20 @@ auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsig
             child_params.induced = false;
             child_params.restarts_schedule = make_unique<NoRestartsSchedule>();
             child_params.clique_detection = false;
+            child_params.injectivity = injective ? Injectivity::Injective : Injectivity::NonInjective;
+
+            int seen_count = 0;
+            if (count > 1) {
+                child_params.count_solutions = true;
+                child_params.enumerate_callback = [&] (const VertexToVertexMapping &) {
+                    return ++seen_count < count;
+                };
+            }
 
             master_graph.set_vertex_label(v, "from");
             master_graph.set_vertex_label(w, "to");
             auto child_result = solve_homomorphism_problem(shape, master_graph, child_params);
-            if (! child_result.mapping.empty()) {
+            if ((count > 1) ? seen_count >= count : ! child_result.mapping.empty()) {
                 graph_rows[v * max_graphs + idx].set(w);
                 graph_rows[w * max_graphs + idx].set(v);
             }

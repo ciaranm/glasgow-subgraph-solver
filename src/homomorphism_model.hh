@@ -25,7 +25,7 @@ class HomomorphismModel
         auto _build_k4_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void;
 
         auto _build_extra_shape(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-                InputGraph & shape) -> void;
+                InputGraph & shape, bool injective, int count) -> void;
 
         auto _check_degree_compatibility(
                 int p,
