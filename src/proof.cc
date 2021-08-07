@@ -585,6 +585,25 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << "w 1" << endl;
 }
 
+auto Proof::hack_in_shape_graph(
+        int g,
+        const NamedVertex & p,
+        const NamedVertex & q,
+        const NamedVertex & t,
+        const std::vector<NamedVertex> & n_t
+        ) -> void
+{
+    *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
+        " in shape graph " << g << " so " << q.second << " maps to one of..." << endl;
+    *_imp->proof_stream << "a 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : n_t)
+        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    *_imp->proof_stream << " >= 1 ;" << endl;
+    ++_imp->proof_line;
+
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+}
+
 auto Proof::create_distance3_graphs_but_actually_distance_1(
         int g,
         const NamedVertex & p,

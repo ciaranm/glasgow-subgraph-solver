@@ -44,7 +44,8 @@ namespace
             (supports_exact_path_graphs(params) ? params.number_of_exact_path_graphs : 0) +
             (supports_distance2_graphs(params) ? 1 : 0) +
             (supports_distance3_graphs(params) ? 1 : 0) +
-            (supports_k4_graphs(params) ? 1 : 0);
+            (supports_k4_graphs(params) ? 1 : 0) +
+            params.extra_shapes.size();
     }
 
     auto find_clique(
@@ -952,6 +953,35 @@ auto HomomorphismModel::prepare() -> bool
         _build_k4_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
     }
 
+    for (auto & [ shape, count ] : _imp->params.extra_shapes) {
+        _build_extra_shape(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape);
+        _build_extra_shape(_imp->target_graph_rows, target_size, next_target_supplemental, *shape);
+
+        if (_imp->params.proof) {
+            for (unsigned p = 0 ; p < pattern_size ; ++p) {
+                for (unsigned q = 0 ; q < pattern_size ; ++q) {
+                    auto named_p = pattern_vertex_for_proof(p);
+                    auto named_q = pattern_vertex_for_proof(q);
+
+                    // only do this if they're actually adjacent
+                    if (! _imp->pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
+                        continue;
+
+                    for (unsigned t = 0 ; t < target_size ; ++t) {
+                        auto named_t = target_vertex_for_proof(t);
+                        vector<NamedVertex> named_n_t;
+                        auto n_t = _imp->target_graph_rows[t * max_graphs + next_pattern_supplemental - 1];
+                        for (auto v = n_t.find_first() ; v != decltype(n_t)::npos ; v = n_t.find_first()) {
+                            n_t.reset(v);
+                            named_n_t.push_back(target_vertex_for_proof(v));
+                        }
+                        _imp->params.proof->hack_in_shape_graph(next_pattern_supplemental - 1, named_p, named_q, named_t, named_n_t);
+                    }
+                }
+            }
+        }
+    }
+
     if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs)
         throw UnsupportedConfiguration{ "something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental)
             + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) };
@@ -1081,6 +1111,42 @@ auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigne
                     }
                 }
             }
+        }
+    }
+
+    ++idx;
+}
+
+auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, InputGraph & shape) -> void
+{
+    InputGraph master_graph(size, true, false);
+
+    for (unsigned v = 0 ; v < size ; ++v) {
+        auto nv = graph_rows[v * max_graphs + 0];
+        for (unsigned w = 0 ; w < v ; ++w) {
+            if (nv.test(w))
+                master_graph.add_edge(v, w);
+        }
+    }
+
+    for (unsigned v = 0 ; v < size ; ++v) {
+        for (unsigned w = 0 ; w < v ; ++w) {
+            HomomorphismParams child_params;
+            child_params.timeout = _imp->params.timeout;
+            child_params.start_time = _imp->params.start_time;
+            child_params.induced = false;
+            child_params.restarts_schedule = make_unique<NoRestartsSchedule>();
+            child_params.clique_detection = false;
+
+            master_graph.set_vertex_label(v, "from");
+            master_graph.set_vertex_label(w, "to");
+            auto child_result = solve_homomorphism_problem(shape, master_graph, child_params);
+            if (! child_result.mapping.empty()) {
+                graph_rows[v * max_graphs + idx].set(w);
+                graph_rows[w * max_graphs + idx].set(v);
+            }
+            master_graph.set_vertex_label(v, "");
+            master_graph.set_vertex_label(w, "");
         }
     }
 

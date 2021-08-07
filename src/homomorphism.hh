@@ -86,6 +86,9 @@ struct HomomorphismParams
     /// How many exact path graphs do we have, if we have any?
     int number_of_exact_path_graphs = 4;
 
+    /// Any extra shapes to use
+    std::list<std::pair<std::unique_ptr<InputGraph>, int> > extra_shapes;
+
     /// Are we allowed to do clique size constraints?
     bool clique_size_constraints = false;
 

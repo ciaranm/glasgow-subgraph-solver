@@ -125,6 +125,14 @@ class Proof
                     const std::vector<NamedVertex> & d3_from_t
                 ) -> void;
 
+        auto hack_in_shape_graph(
+                int g,
+                const NamedVertex & p,
+                const NamedVertex & q,
+                const NamedVertex & t,
+                const std::vector<NamedVertex> & n_t
+                ) -> void;
+
         // new constraints
         auto emit_hall_set_or_violator(const std::vector<NamedVertex> & lhs, const std::vector<NamedVertex> & rhs) -> void;
 

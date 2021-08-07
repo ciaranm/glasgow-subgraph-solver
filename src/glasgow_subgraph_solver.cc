@@ -128,6 +128,7 @@ auto main(int argc, char * argv[]) -> int
             ("compress-proof",                                 "Compress the proof using bz2");
         display_options.add(proof_logging_options);
 
+        vector<string> shapes;
         po::options_description hidden_options{ "Hidden options" };
         hidden_options.add_options()
             ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
@@ -136,7 +137,8 @@ auto main(int argc, char * argv[]) -> int
             ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
             ("decomposition",                                  "Use decomposition")
             ("cliques",                                        "Use clique size constraints")
-            ("cliques-on-supplementals",                       "Use clique size constraints on supplemental graphs too");
+            ("cliques-on-supplementals",                       "Use clique size constraints on supplemental graphs too")
+            ("shape",                     po::value<vector<string> >(&shapes), "Specify an extra shape graph (slow, experimental)");
 
         po::options_description all_options{ "All options" };
         all_options.add_options()
@@ -269,6 +271,13 @@ auto main(int argc, char * argv[]) -> int
         params.no_nds = options_vars.count("no-nds");
         params.clique_size_constraints = options_vars.count("cliques");
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
+
+        if (options_vars.count("shape")) {
+            for (auto & shape : shapes) {
+                auto graph = make_unique<InputGraph>(read_file_format("csv", shape));
+                params.extra_shapes.emplace_back(move(graph), 1);
+            }
+        }
 
         string pattern_automorphism_group_size = "1", target_automorphism_group_size = "1";
         bool was_given_pattern_automorphism_group = false, was_given_target_automorphism_group = false;
