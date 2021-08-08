@@ -1130,8 +1130,8 @@ auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsig
         }
     }
 
-    for (unsigned v = 0 ; v < size ; ++v) {
-        for (unsigned w = 0 ; w < v ; ++w) {
+    for (unsigned v = 0 ; v < size && ! _imp->params.timeout->should_abort() ; ++v) {
+        for (unsigned w = 0 ; w < v && ! _imp->params.timeout->should_abort() ; ++w) {
             HomomorphismParams child_params;
             child_params.timeout = _imp->params.timeout;
             child_params.start_time = _imp->params.start_time;
