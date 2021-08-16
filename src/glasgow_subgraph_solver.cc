@@ -80,7 +80,7 @@ auto main(int argc, char * argv[]) -> int
             ("restart-interval",     po::value<int>(),         "Specify the restart interval in milliseconds for timed restarts")
             ("restart-minimum",      po::value<int>(),         "Specify a minimum number of backtracks before a timed restart can trigger")
             ("luby-constant",        po::value<int>(),         "Specify the starting constant / multiplier for Luby restarts")
-            ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random)")
+            ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random / none)")
             ("pattern-symmetries",                             "Eliminate pattern symmetries (requires Gap)")
             ("target-symmetries",                              "Eliminate target symmetries (requires Gap)");
         display_options.add(search_options);
@@ -251,7 +251,9 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("value-ordering")) {
             string value_ordering_heuristic = options_vars["value-ordering"].as<string>();
-            if (value_ordering_heuristic == "biased")
+            if (value_ordering_heuristic == "none")
+                params.value_ordering_heuristic = ValueOrdering::None;
+            else if (value_ordering_heuristic == "biased")
                 params.value_ordering_heuristic = ValueOrdering::Biased;
             else if (value_ordering_heuristic == "degree")
                 params.value_ordering_heuristic = ValueOrdering::Degree;

@@ -5,6 +5,7 @@
 
 enum class ValueOrdering
 {
+    None,
     Biased,
     Degree,
     AntiDegree,

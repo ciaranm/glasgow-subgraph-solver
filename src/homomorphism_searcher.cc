@@ -149,6 +149,9 @@ auto HomomorphismSearcher::restarting_search(
     }
 
     switch (params.value_ordering_heuristic) {
+        case ValueOrdering::None:
+            break;
+
         case ValueOrdering::Degree:
             degree_sort(branch_v, branch_v_end, false);
             break;
