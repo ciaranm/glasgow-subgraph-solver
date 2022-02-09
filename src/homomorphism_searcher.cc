@@ -284,7 +284,9 @@ auto HomomorphismSearcher::degree_sort(
         ) -> void
 {
     stable_sort(branch_v.begin(), branch_v.begin() + branch_v_end, [&] (int a, int b) -> bool {
-            return (model.target_degree(0, a) >= model.target_degree(0, b)) ^ reverse;
+            return reverse
+                ? model.target_degree(0, a) < model.target_degree(0, b)
+                : -model.target_degree(0, a) < -model.target_degree(0, b);
             });
 }
 
