@@ -107,7 +107,7 @@ namespace
             // sort on degree
             if (! params.input_order)
                 sort(order.begin(), order.end(),
-                        [&] (int a, int b) { return true ^ (degrees[a] < degrees[b] || (degrees[a] == degrees[b] && a > b)); });
+                        [&] (int a, int b) { return (degrees[a] > degrees[b] || (degrees[a] == degrees[b] && a < b)); });
 
             for (unsigned i = 0 ; i < order.size() ; ++i)
                 invorder[order[i]] = i;
