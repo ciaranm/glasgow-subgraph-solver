@@ -115,9 +115,11 @@ auto main(int argc, char * argv[]) -> int
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
         params.clique = options_vars.count("clique");
 
+#if !defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
+#endif
         cout << "commandline =";
         for (int i = 0 ; i < argc ; ++i)
             cout << " " << argv[i];

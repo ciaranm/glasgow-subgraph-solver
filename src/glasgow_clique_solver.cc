@@ -138,9 +138,11 @@ auto main(int argc, char * argv[]) -> int
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
         params.input_order = options_vars.count("input-order");
 
+#if !defined(_WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
+#endif
         cout << "commandline =";
         for (int i = 0 ; i < argc ; ++i)
             cout << " " << argv[i];

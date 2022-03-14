@@ -17,10 +17,12 @@
 #  include <boost/filesystem.hpp>
 #endif
 
+#if !defined(__WIN32)
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 using std::endl;
 using std::getline;
@@ -51,6 +53,16 @@ auto GapFailedUs::what() const noexcept -> const char *
     return _what.c_str();
 }
 
+#if defined(__WIN32)
+auto find_symmetries(
+        const char * const,
+        const InputGraph &,
+        std::list<std::pair<std::string, std::string> > &,
+        std::string &) -> void
+{
+    throw GapFailedUs{ "Linking to GAP not supported on windows" };
+}
+#else
 auto find_symmetries(
         const char * const argv0,
         const InputGraph & graph,
@@ -169,4 +181,4 @@ auto find_symmetries(
     if (! found_size)
         throw GapFailedUs{ "parsing output failed" };
 }
-
+#endif
