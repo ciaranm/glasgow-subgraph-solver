@@ -321,9 +321,11 @@ auto main(int argc, char * argv[]) -> int
             return EXIT_FAILURE;
         }
 
+#if !defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
+#endif
         cout << "commandline =";
         for (int i = 0 ; i < argc ; ++i)
             cout << " " << argv[i];
