@@ -1086,8 +1086,11 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto (int,
     for (int v = 0 ; v < p ; ++v)
         for (int w = 0 ; w < v ; ++w) {
             _imp->model_stream << "1 x" << _imp->variable_mappings[pair{ v, mapped_to_null }]
-                << " 1 x" << _imp->variable_mappings[pair{ w, mapped_to_null }]
-                << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }] << " >= 1 ;" << endl;
+                << " 1 x" << _imp->variable_mappings[pair{ w, mapped_to_null }];
+            auto var = _imp->connected_variable_mappings.find(tuple{ last_k, v, w });
+            if (var != _imp->connected_variable_mappings.end())
+                _imp->model_stream << " 1 x" << _imp->connected_variable_mappings[tuple{ last_k, v, w }];
+           _imp->model_stream << " >= 1 ;" << endl;
             ++_imp->nb_constraints;
         }
 }

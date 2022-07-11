@@ -4,7 +4,6 @@
 #include "proof.hh"
 #include "configuration.hh"
 #include "clique.hh"
-#include "proof.hh"
 
 #include <algorithm>
 #include <map>
@@ -367,7 +366,7 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         // generate edge constraints, and also handle loops here
         for (int p = 0 ; p < first.size() ; ++p) {
             for (int t = 0 ; t < second.size() ; ++t) {
-                if (first.adjacent(p, p) && ! second.adjacent(t, t))
+                if (first.adjacent(p, p) != second.adjacent(t, t))
                     params.proof->create_forbidden_assignment_constraint(p, t);
                 else if (first.vertex_label(p) != second.vertex_label(t))
                     params.proof->create_forbidden_assignment_constraint(p, t);
@@ -397,6 +396,14 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         params.proof->finalise_model();
 
         // rewrite the objective to the form we need
+        vector<tuple<NamedVertex, NamedVertex, bool> > solution;
+        for (int v = 0 ; v < first.size() ; ++v)
+            for (int w = 0 ; w < second.size() ; ++w)
+                solution.emplace_back(
+                        NamedVertex{ v, first.vertex_name(v) },
+                        NamedVertex{ w, second.vertex_name(w) },
+                        false);
+        params.proof->new_incumbent(solution);
         params.proof->rewrite_mcs_objective(first.size());
     }
 
