@@ -415,15 +415,17 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
 
         InputGraph assoc{ 0, false, false };
-        vector<pair<int, int> > assoc_encoding;
+        vector<pair<int, int> > assoc_encoding, zero_in_proof_objectives;
 
         for (int v = 0 ; v < first.size() ; ++v)
             for (int w = 0 ; w < second.size() ; ++w)
                 if ((first.adjacent(v, v) == second.adjacent(w, w)) && (first.vertex_label(v) == second.vertex_label(w)))
                     assoc_encoding.emplace_back(v, w);
+                else if (params.proof)
+                    zero_in_proof_objectives.emplace_back(v, w);
 
         if (params.proof)
-            params.proof->create_clique_encoding(assoc_encoding);
+            params.proof->create_clique_encoding(assoc_encoding, zero_in_proof_objectives);
 
         assoc.resize(assoc_encoding.size());
         for (unsigned v = 0 ; v < assoc_encoding.size() ; ++v)

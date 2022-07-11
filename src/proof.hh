@@ -187,7 +187,7 @@ class Proof
 
         // common subgraph to clique
         auto has_clique_model() const -> bool;
-        auto create_clique_encoding(const std::vector<std::pair<int, int> > &) -> void;
+        auto create_clique_encoding(const std::vector<std::pair<int, int> > &, const std::vector<std::pair<int, int> > &) -> void;
         auto create_clique_nonedge(int v, int w) -> void;
         auto not_connected_in_underlying_graph(const std::vector<int> &, int) -> void;
 

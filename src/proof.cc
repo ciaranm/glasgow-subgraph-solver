@@ -94,6 +94,8 @@ struct Proof::Imp
     vector<NamedVertex> p_clique;
     map<int, NamedVertex> t_clique_neighbourhood;
     map<pair<pair<NamedVertex, NamedVertex>, pair<NamedVertex, NamedVertex> >, long> clique_for_hom_non_edge_constraints;
+
+    vector<pair<int, int> > zero_in_proof_objectives;
 };
 
 Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, bool s) :
@@ -453,6 +455,8 @@ auto Proof::new_incumbent(const vector<pair<int, bool> > & solution) -> void
     *_imp->proof_stream << "o";
     for (auto & [ v, t ] : solution)
         *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->binary_variable_mappings[v];
+    for (auto & [ v, w ] : _imp->zero_in_proof_objectives)
+        *_imp->proof_stream << " ~" << "x" << _imp->variable_mappings[pair{ v, w }];
     *_imp->proof_stream << endl;
     _imp->objective_line = ++_imp->proof_line;
 }
@@ -1110,11 +1114,14 @@ auto Proof::has_clique_model() const -> bool
 }
 
 auto Proof::create_clique_encoding(
-        const vector<pair<int, int> > & enc) -> void
+        const vector<pair<int, int> > & enc,
+        const vector<pair<int, int> > & zero_in_proof_objectives) -> void
 {
     _imp->clique_encoding = true;
     for (unsigned i = 0 ; i < enc.size() ; ++i)
         _imp->binary_variable_mappings.emplace(i, _imp->variable_mappings[enc[i]]);
+
+    _imp->zero_in_proof_objectives = zero_in_proof_objectives;
 }
 
 auto Proof::create_clique_nonedge(int v, int w) -> void
