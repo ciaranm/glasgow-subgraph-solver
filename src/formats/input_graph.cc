@@ -10,6 +10,7 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+#include <map>
 
 #include <boost/bimap.hpp>
 #include <boost/bimap/unordered_set_of.hpp>
