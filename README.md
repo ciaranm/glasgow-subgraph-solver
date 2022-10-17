@@ -6,7 +6,7 @@ papers by subsets of Blair Archibald, Ciaran McCreesh, Patrick Prosser and James
 University of Glasgow, and Fraser Dunlop and Ruth Hoffmann at the University of St Andrews. A clique
 decision / maximum clique solver is also included.
 
-If you use this software for research, please cite [icgt/McCreeshPT20]. If you use this solver in a
+If you use this software for research, please cite [icgt/McCreeshP020]. If you use this solver in a
 non-research setting, please get in touch if you can. This software is an output of taxpayer funded
 research, and it is very helpful for us if we can demonstrate real-world impact when we write grant
 applications.
@@ -136,7 +136,7 @@ variants of this solver in [lion/KotthoffMS16], and described a refactored versi
 an optimisation variant of the problem) in [aaai/HoffmannMR17]. We also investigated search ordering
 heuristics in more detail in [jair/McCreeshPST18], and [cpaior/ArchibaldDHMPT19] describes its new
 restarting search algorithm. There is currently no paper describing the entire algorithm, but
-[icgt/McCreeshPT20] summarises the main aspects of it.
+[icgt/McCreeshP020] summarises the main aspects of it.
 
 The clique solver (with its default configuration) is a branch and bound solver that uses a greedy
 colouring both as the bound function, and as a branching heuristic. It is based upon the "domains of
@@ -210,11 +210,11 @@ References
   Sequential and Parallel Solution-Biased Search for Subgraph Algorithms. CPAIOR 2019: 20-38.
   DBLP: [cpaior/ArchibaldDHMPT19].
 
-* [icgt/McCreeshPT20]: http://dblp.org/rec/html/conf/gg/McCreeshP020
+* [icgt/McCreeshP020]: http://dblp.org/rec/html/conf/gg/McCreeshP020
   **icgt/McCreeshP020**:
   Ciaran McCreesh, Patrick Prosser, James Trimble:
   The Glasgow Subgraph Solver: Using Constraint Programming to Tackle Hard Subgraph Isomorphism
   Problem Variants. ICGT 2020: 316-324.
-  DBLP: [icgt/McCreeshPT20].
+  DBLP: [icgt/McCreeshP020].
 
 <!-- vim: set tw=100 spell spelllang=en : -->
