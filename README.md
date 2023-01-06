@@ -20,6 +20,9 @@ To build, type 'make'. You will need a C++17 compiler (we test with GCC 7.3, GCC
 7.0.1 on Linux, and Xcode 10.2 on Mac OS X) and Boost (we use 1.65.1 or later, built with threads
 enabled).
 
+(KB: updating to C++20 requires GCC 10.1, Clang 10.0.0 or later; Xcode 10.2 appears to be fine but I
+have not tested that)
+
 Running
 -------
 
