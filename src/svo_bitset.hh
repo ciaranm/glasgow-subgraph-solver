@@ -119,22 +119,12 @@ class SVOBitset
 
         auto find_first() const -> unsigned
         {
-            if (! _is_long()) {
-                for (unsigned i = 0 ; i < n_words ; ++i) {
-                    int x = countr_zero(_data.short_data[i]);
-                    if (bits_per_word != x)
-                        return i * bits_per_word + x;
-                }
-                return npos;
+            const BitWord * b = (_is_long() ? _data.long_data : _data.short_data);
+            for (unsigned i = 0 ; i < n_words ; ++i) {
+                if (0 != b[i]) // test the input to countr_zero because on some systems, the output is undefined at b[i]=0
+                    return i * bits_per_word + countr_zero(b[i]);
             }
-            else {
-                for (unsigned i = 0, i_end = n_words ; i < i_end ; ++i) {
-                    int x = countr_zero(_data.short_data[i]);
-                    if (bits_per_word != x)
-                        return i * bits_per_word + x;
-                }
-                return npos;
-            }
+            return npos;
         }
 
         auto reset(int a) -> void
