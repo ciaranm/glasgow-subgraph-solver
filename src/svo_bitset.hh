@@ -9,12 +9,14 @@
 #include <limits>
 
 #ifdef USE_PORTABLE_SNIPPETS_BUILTIN
+namespace {
 #include <portable-snippets/builtin/builtin.h>
 int popcount(unsigned long long x) {
     return psnip_builtin_popcountll(x);
 }
 int countr_zero(unsigned long long x) {
     return psnip_builtin_ctzll(x);
+}
 }
 #else
 #include <bit>
