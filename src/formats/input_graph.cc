@@ -13,6 +13,7 @@
 #include <map>
 #include <iterator>
 
+#include <boost/container/allocator.hpp>
 #include <boost/bimap.hpp>
 #include <boost/bimap/unordered_set_of.hpp>
 
@@ -37,7 +38,11 @@ using std::to_string;
 using std::transform;
 using std::vector;
 
-using Names = boost::bimaps::bimap<boost::bimaps::unordered_set_of<int>, boost::bimaps::unordered_set_of<string> >;
+using Names = boost::bimap<
+    boost::bimaps::unordered_set_of<int>,
+    boost::bimaps::unordered_set_of<string>,
+    boost::container::allocator<pair<int, string>>
+>;
 
 namespace
 {
