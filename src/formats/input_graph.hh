@@ -45,7 +45,8 @@ class InputGraph
 
         InputGraph(const InputGraph &) = default;
 
-        InputGraph(InputGraph &&) = default;
+        // InputGraph(InputGraph &&) = default;
+        InputGraph() = default;
 
         /**
          * Number of vertices.
@@ -181,6 +182,10 @@ class InputGraph
         auto end_edges() const -> EdgesIterator;
 
         auto directed() const -> bool;
+
+        auto toString() const -> std::string;
+
+        auto toDot() const -> std::string;
 };
 
 #endif

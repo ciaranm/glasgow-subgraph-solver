@@ -14,13 +14,13 @@
  *
  * \throw GraphFileError
  */
-auto read_pattern_bigraph(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_pattern_bigraph(std::istream && infile, const std::string & filename) -> InputGraph;
 
 /**
  * Read a target Bigraph format file into an InputGraph.
  *
  * \throw GraphFileError
  */
-auto read_target_bigraph(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_target_bigraph(std::istream && infile, const std::string & filename) -> InputGraph;
 
 #endif
