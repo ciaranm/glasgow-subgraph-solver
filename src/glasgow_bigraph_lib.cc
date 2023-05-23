@@ -312,6 +312,7 @@ void gbs_match_one_flat() {
     params.induced = false;
     params.bigraph = true;
     params.count_solutions = true;
+    params.no_supplementals = true;
     params.use_bigraph_projection_nogoods = false;
 
     /* Prepare and start timeout */
@@ -343,6 +344,7 @@ void gbs_match_all_flat() {
     params.induced = false;
     params.bigraph = true;
     params.count_solutions = true;
+    params.no_supplementals = true;
     params.use_bigraph_projection_nogoods = true;
 
     /* Prepare and start timeout */
@@ -398,6 +400,7 @@ int gbs_count_sols_flat() {
     params.induced = false;
     params.bigraph = true;
     params.count_solutions = true;
+    params.no_supplementals = true;
     params.use_bigraph_projection_nogoods = true;
 
     /* Prepare and start timeout */
@@ -418,6 +421,7 @@ auto gbs_equal_flat() -> bool {
     params.bigraph = true;
     // params.bigraph_equal = true;
     params.count_solutions = true; // In case the first solution doesn't do the hyperedges properly -- todo constriain this
+    params.no_supplementals = true;
 
     params.restarts_schedule = make_unique<NoRestartsSchedule>();
 
