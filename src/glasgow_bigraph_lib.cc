@@ -232,7 +232,6 @@ auto gbs_equal() -> bool {
                         l2 = stoi(match.str(2));
                         if (l1 != l2) {
                             failure = true;
-                            std::cout << "Flat equals hyperedge equality failed; Matching " << l1 << " with " << l2 << std::endl;
                             break; } // Hyperedge not identity
                     }
                 }
