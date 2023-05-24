@@ -123,7 +123,7 @@ void gbs_match_one() {
     params.injectivity = Injectivity::Injective;
     params.induced = false;
     params.bigraph = true;
-    params.count_solutions = true;
+    params.count_solutions = false;
     params.no_supplementals = true;
     params.use_bigraph_projection_nogoods = false;
 
