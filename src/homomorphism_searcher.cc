@@ -3,11 +3,14 @@
 #include "homomorphism_searcher.hh"
 #include "cheap_all_different.hh"
 
+#include <set>
+
 using std::max;
 using std::move;
 using std::mt19937;
 using std::numeric_limits;
 using std::pair;
+using std::set;
 using std::string;
 using std::swap;
 using std::to_string;
@@ -67,6 +70,7 @@ auto HomomorphismSearcher::restarting_search(
         unsigned long long & nodes,
         unsigned long long & propagations,
         loooong & solution_count,
+        loooong & rejected_solution_count,
         int depth,
         RestartsSchedule & restarts_schedule) -> SearchResult
 {
@@ -83,13 +87,14 @@ auto HomomorphismSearcher::restarting_search(
             expand_to_full_result(assignments, mapping); 
 
             if (! model.check_extra_bigraph_constraints(mapping)) {
-                if (params.use_bigraph_projection_nogoods) {
-                    // Post solution nogood here to avoid rerunning the place graph checking constraints on isomorphic solutions
-                    post_solution_nogood(assignments);
-                    return SearchResult::Restart;
-                }
-                else
-                    return SearchResult::Unsatisfiable;
+                ++rejected_solution_count;
+                // if (params.use_bigraph_projection_nogoods) {
+                //     // Post solution nogood here to avoid rerunning the place graph checking constraints on isomorphic solutions
+                //     post_solution_nogood(assignments);
+                //     return SearchResult::Restart;
+                // }
+                // else
+                return SearchResult::Unsatisfiable;
             }
         }
 
@@ -177,7 +182,7 @@ auto HomomorphismSearcher::restarting_search(
 
         // propagate
         ++propagations;
-        if (! propagate(new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
+        if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
             // failure? restore assignments and go on to the next thing
             if (params.proof)
                 params.proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
@@ -193,7 +198,7 @@ auto HomomorphismSearcher::restarting_search(
 
         // recursive search
         auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
-                solution_count, depth + 1, restarts_schedule);
+                solution_count, rejected_solution_count, depth + 1, restarts_schedule);
 
         switch (search_result) {
             case SearchResult::Satisfiable:
@@ -335,13 +340,14 @@ auto HomomorphismSearcher::post_nogood(const HomomorphismAssignments & assignmen
 auto HomomorphismSearcher::post_solution_nogood(const HomomorphismAssignments & assignments) -> void
 {
     Nogood<HomomorphismAssignment> nogood;
+    set<HomomorphismAssignment> no_duplicates;
 
     for (auto & a : assignments.values)
-        if (a.is_decision && (
-            a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
-            model.is_pattern_anchor(a.assignment.pattern_vertex))
-        )
-            nogood.literals.emplace_back(a.assignment);          
+        if (a.is_decision && (a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
+            model.is_pattern_anchor(a.assignment.pattern_vertex)))
+            if (no_duplicates.insert(a.assignment).second)
+                nogood.literals.emplace_back(a.assignment);  
+
     watches.post_nogood(move(nogood));
 }
 
@@ -595,8 +601,34 @@ auto HomomorphismSearcher::propagate_hyperedge_constraints(Domains &, const Homo
     return true;
 }
 
-auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
+auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
 {
+    // nogoods might be watching things in initial assignments. this is possibly not the
+    // best place to put this...
+    if (initial && might_have_watches(params)) {
+        for (auto & a : assignments.values) {
+            HomomorphismAssignment current_assignment = { a.assignment.pattern_vertex, a.assignment.target_vertex };
+            bool wipeout = false;
+            watches.propagate(current_assignment,
+                    [&] (const HomomorphismAssignment & a) { return ! assignments.contains(a); },
+                    [&] (const HomomorphismAssignment & a) {
+                            for (auto & d : new_domains) {
+                                if (d.v == a.pattern_vertex) {
+                                    if (d.values.test(a.target_vertex)) {
+                                        d.values.reset(a.target_vertex);
+                                        if (0 == --d.count)
+                                            wipeout = true;
+                                    }
+                                    break;
+                                }
+                            }
+                        });
+
+            if (wipeout)
+                return false;
+        }
+    }
+
     auto find_unit_domain = [&] () {
         return find_if(new_domains.begin(), new_domains.end(), [] (HomomorphismDomain & d) {
                 return (! d.fixed) && 1 == d.count;
@@ -620,7 +652,8 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                     model.target_vertex_for_proof(current_assignment.target_vertex));
 
         // propagate watches
-        if (might_have_watches(params))
+        if (might_have_watches(params)) {
+            bool wipeout = false;
             watches.propagate(current_assignment,
                     [&] (const HomomorphismAssignment & a) { return ! assignments.contains(a); },
                     [&] (const HomomorphismAssignment & a) {
@@ -629,11 +662,19 @@ auto HomomorphismSearcher::propagate(Domains & new_domains, HomomorphismAssignme
                                     continue;
 
                                 if (d.v == a.pattern_vertex) {
-                                    d.values.reset(a.target_vertex);
+                                    if (d.values.test(a.target_vertex)) {
+                                        d.values.reset(a.target_vertex);
+                                        if (0 == --d.count)
+                                            wipeout = true;
+                                    }
                                     break;
                                 }
                             }
                         });
+
+            if (wipeout)
+                return false;
+        }
 
         // propagate simple all different and adjacency
         if (! propagate_simple_constraints(new_domains, current_assignment))

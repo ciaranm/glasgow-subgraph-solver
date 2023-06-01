@@ -35,6 +35,12 @@ struct HomomorphismAssignment
     {
         return ! (*this == other);
     }
+
+    auto operator< (const HomomorphismAssignment & other) const -> bool
+    {
+        return (pattern_vertex < other.pattern_vertex) || (pattern_vertex == other.pattern_vertex &&
+                target_vertex < other.target_vertex);
+    }
 };
 
 template <typename EntryType_>
@@ -122,7 +128,7 @@ class HomomorphismSearcher
     public:
         HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p);
 
-        auto propagate(Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
+        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
 
         auto propagate_hyperedge_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> bool;
 
@@ -132,6 +138,7 @@ class HomomorphismSearcher
                 unsigned long long & nodes,
                 unsigned long long & propagations,
                 loooong & solution_count,
+                loooong & rejected_solution_count,
                 int depth,
                 RestartsSchedule & restarts_schedule) -> SearchResult;
 

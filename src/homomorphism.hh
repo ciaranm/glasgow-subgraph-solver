@@ -128,6 +128,9 @@ struct HomomorphismResult
     /// Number of solutions, only if enumerating
     loooong solution_count = 0;
 
+    /// Number of solutions that were rejected by the final bigraph check.
+    loooong rejected_solution_count = 0;
+
     /// Did we perform a complete search?
     bool complete = false;
 };
