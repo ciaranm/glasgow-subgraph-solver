@@ -191,10 +191,35 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         return *n;
     };
 
+    // Symmetry break bigraph link nodes
+    list<pair<unsigned, unsigned> > pattern_less_thans_in_wrong_order;
+    if(params.bigraph && ! params.use_bigraph_projection_nogoods) {
+        for (unsigned a = 0 ; a != pattern_size-pattern_link_count ; a++) {
+            unsigned int prev_no_children = 999999999;
+            unsigned int prev_same_clique = 999999999;
+            for (unsigned b = pattern_size-pattern_link_count ; b != pattern_size ; b++) {
+                if(_imp->pattern_graph_rows[a * max_graphs + 0].test(b)) {
+                    if(_imp->pattern_graph_rows[b * max_graphs + 0].count() == 0) {
+                        if(prev_no_children != 999999999) {
+                            pattern_less_thans_in_wrong_order.push_back(std::make_pair(prev_no_children, b));
+                        }
+                        prev_no_children = b;
+                    }
+                    else {
+                        if (prev_same_clique != 999999999 && _imp->pattern_graph_rows[prev_same_clique * max_graphs + 0].test(b)) {
+                            pattern_less_thans_in_wrong_order.push_back(std::make_pair(prev_same_clique, b));
+                        }
+                        prev_same_clique = b;
+                    }
+                } 
+            }
+        }
+    }
+
     // pattern less than constraints
-    if (! _imp->params.pattern_less_constraints.empty()) {
+    if (! _imp->params.pattern_less_constraints.empty() || ! pattern_less_thans_in_wrong_order.empty()) {
         _imp->has_less_thans = true;
-        list<pair<unsigned, unsigned> > pattern_less_thans_in_wrong_order;
+        
         for (auto & [ a, b ] : _imp->params.pattern_less_constraints) {
             auto a_decoded = decode(a), b_decoded = decode(b);
             pattern_less_thans_in_wrong_order.emplace_back(a_decoded, b_decoded);
