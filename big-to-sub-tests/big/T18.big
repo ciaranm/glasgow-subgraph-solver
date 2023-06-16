@@ -1,5 +1,5 @@
-1 7 0 5
-Internet Signal Signal Properties MAC_00_14_6c_e6_db_33 Router Machine
+{(0, Internet:0),(1, Signal:1),(2, Signal:1),(3, Properties:1),(4, MAC_00_14_6c_e6_db_33:0),(5, Router:2),(6, Machine:3)}
+1 7 0
 1111000
 0000000
 0000011
@@ -8,8 +8,8 @@ Internet Signal Signal Properties MAC_00_14_6c_e6_db_33 Router Machine
 0000000
 0000000
 0000000
-2 6 f
-3 7 f
-4 7 f
-6 f
-7 f
+({}, {}, {(1, 1), (5, 1)})
+({}, {}, {(2, 1), (6, 1)})
+({}, {}, {(3, 1), (6, 1)})
+({}, {}, {(5, 1)})
+({}, {}, {(6, 1)})

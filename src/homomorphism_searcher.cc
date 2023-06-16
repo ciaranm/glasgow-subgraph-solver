@@ -343,8 +343,8 @@ auto HomomorphismSearcher::post_solution_nogood(const HomomorphismAssignments & 
     set<HomomorphismAssignment> no_duplicates;
 
     for (auto & a : assignments.values)
-        if (a.is_decision && (a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
-            model.is_pattern_anchor(a.assignment.pattern_vertex)))
+        if (a.assignment.pattern_vertex < model.pattern_size-model.pattern_link_count || 
+            model.is_pattern_anchor(a.assignment.pattern_vertex))
             if (no_duplicates.insert(a.assignment).second)
                 nogood.literals.emplace_back(a.assignment);  
 
