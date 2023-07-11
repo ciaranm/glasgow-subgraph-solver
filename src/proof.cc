@@ -72,6 +72,7 @@ struct Proof::Imp
     bool friendly_names;
     bool bz2 = false;
     bool super_extra_verbose = false;
+    bool format2 = false;
 
     map<pair<long, long>, string> variable_mappings;
     map<long, string> binary_variable_mappings;
@@ -98,7 +99,7 @@ struct Proof::Imp
     vector<pair<int, int> > zero_in_proof_objectives;
 };
 
-Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, bool s) :
+Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, bool s, bool f2) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
@@ -106,6 +107,7 @@ Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, b
     _imp->friendly_names = f;
     _imp->bz2 = b;
     _imp->super_extra_verbose = s;
+    _imp->format2 = f2;
 }
 
 Proof::Proof(Proof &&) = default;
@@ -113,6 +115,14 @@ Proof::Proof(Proof &&) = default;
 Proof::~Proof() = default;
 
 auto Proof::operator= (Proof &&) -> Proof & = default;
+
+auto Proof::implies_add(long line) -> string
+{
+    if (_imp->format2)
+        return "ia " + to_string(line) + " :";
+    else
+        return "j " + to_string(line);
+}
 
 auto Proof::create_cp_variable(int pattern_vertex, int target_size,
         const function<auto (int) -> string> & pattern_name,
@@ -190,7 +200,10 @@ auto Proof::finalise_model() -> void
 
     _imp->proof_stream = (_imp->bz2 ? make_compressed_ostream(_imp->log_filename + ".bz2") : make_unique<ofstream>(_imp->log_filename));
 
-    *_imp->proof_stream << "pseudo-Boolean proof version 1.0" << endl;
+    if (_imp->format2)
+        *_imp->proof_stream << "pseudo-Boolean proof version 2.0" << endl;
+    else
+        *_imp->proof_stream << "pseudo-Boolean proof version 1.0" << endl;
 
     *_imp->proof_stream << "f " << _imp->nb_constraints << " 0" << endl;
     _imp->proof_line += _imp->nb_constraints;
@@ -257,10 +270,10 @@ auto Proof::incompatible_by_degrees(
     for (auto & n : n_t)
         *_imp->proof_stream << " " << _imp->injectivity_constraints[n] << " +";
 
-    *_imp->proof_stream << " 0" << endl;
+    *_imp->proof_stream << " s 0" << endl;
     ++_imp->proof_line;
 
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
     ++_imp->proof_line;
     _imp->eliminations.emplace(pair{ p.first, t.first }, _imp->proof_line);
 
@@ -312,10 +325,10 @@ auto Proof::incompatible_by_nds(
         *_imp->proof_stream << " " << _imp->eliminations[pair{ n, t_subsequence.back() }] << " +";
     }
 
-    *_imp->proof_stream << " 0" << endl;
+    *_imp->proof_stream << " s 0" << endl;
     ++_imp->proof_line;
 
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }] << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
     *_imp->proof_stream << "d " << _imp->proof_line - 1 << " 0" << endl;
@@ -493,7 +506,7 @@ auto Proof::create_exact_path_graphs(
     for (auto & b : between_p_and_q) {
         *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }];
         if (! first)
-            *_imp->proof_stream << " +";
+            *_imp->proof_stream << " s +";
         first = false;
     }
 
@@ -507,22 +520,22 @@ auto Proof::create_exact_path_graphs(
         }
     }
 
-    *_imp->proof_stream << " 0" << endl;
+    *_imp->proof_stream << " s 0" << endl;
     ++_imp->proof_line;
 
     // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : two_away_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first.first }];
     *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
     // if p maps to t then q does not map to t
-    *_imp->proof_stream << "p " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + 0" << endl;
+    *_imp->proof_stream << "p " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + s 0" << endl;
     ++_imp->proof_line;
 
     // and cancel out stray extras from injectivity
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : two_away_from_t)
         if (u.first != t)
             *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first.first }];
@@ -551,11 +564,11 @@ auto Proof::create_exact_path_graphs(
         for (auto & z : u.second)
             *_imp->proof_stream << " " << _imp->injectivity_constraints[z.first] << " +";
 
-        *_imp->proof_stream << " 0" << endl;
+        *_imp->proof_stream << " s 0" << endl;
         ++_imp->proof_line;
 
         // want: ~x_p_t + ~x_q_u >= 1
-        *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }]
+        *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }]
             << " 1 ~x" << _imp->variable_mappings[pair{ q.first, u.first.first }] << " >= 1 ;" << endl;
         things_to_add_up.push_back(++_imp->proof_line);
     }
@@ -570,14 +583,14 @@ auto Proof::create_exact_path_graphs(
                 *_imp->proof_stream << " +";
             first = false;
         }
-        *_imp->proof_stream << " 0" << endl;
+        *_imp->proof_stream << " s 0" << endl;
         ++_imp->proof_line;
     }
 
     *_imp->proof_stream << "# 0" << endl;
 
     // and finally, tidy up to get what we wanted
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : d_n_t)
         if (u != t)
             *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
@@ -618,7 +631,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
         " in G^3 so by adjacency, " << q.second << " maps to one of..." << endl;
 
-    *_imp->proof_stream << "j " << _imp->adjacency_lines[tuple{ 0, p.first, q.first, t.first }]
+    *_imp->proof_stream << implies_add(_imp->adjacency_lines[tuple{ 0, p.first, q.first, t.first }])
         << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
@@ -656,7 +669,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     ++_imp->proof_line;
 
     // tidy up
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
     *_imp->proof_stream << " >= 1 ;" << endl;
@@ -664,7 +677,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
 
     *_imp->proof_stream << "# 0" << endl;
 
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
     *_imp->proof_stream << " >= 1 ;" << endl;
@@ -702,7 +715,7 @@ auto Proof::create_distance3_graphs(
     ++_imp->proof_line;
 
     // tidy up
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ path_from_p_to_q_2.first, u.first }];
     *_imp->proof_stream << " >= 1 ;" << endl;
@@ -710,13 +723,13 @@ auto Proof::create_distance3_graphs(
 
     *_imp->proof_stream << "p " << _imp->proof_line;
     for (auto & u : d2_from_t)
-        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q_2.first, q.first, u.first }] << " +";
+        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q_2.first, q.first, u.first }] << " s +";
     *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 
     *_imp->proof_stream << "# 0" << endl;
 
-    *_imp->proof_stream << "j " << _imp->proof_line << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
     *_imp->proof_stream << " >= 1 ;" << endl;

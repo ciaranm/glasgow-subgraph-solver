@@ -35,8 +35,16 @@ class Proof
         struct Imp;
         std::unique_ptr<Imp> _imp;
 
+        auto implies_add(long) -> std::string;
+
     public:
-        Proof(const std::string & opb_file, const std::string & log_file, bool friendly_names, bool bz2, bool super_extra_verbose = false);
+        Proof(
+                const std::string & opb_file,
+                const std::string & log_file,
+                bool friendly_names,
+                bool bz2,
+                bool super_extra_verbose,
+                bool version2);
         Proof(Proof &&);
         ~Proof();
         auto operator= (Proof &&) -> Proof &;

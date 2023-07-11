@@ -125,7 +125,8 @@ auto main(int argc, char * argv[]) -> int
             ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .veripb)")
             ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
             ("verbose-proofs",                                 "Write lots of comments to the proof, for tracing")
-            ("compress-proof",                                 "Compress the proof using bz2");
+            ("compress-proof",                                 "Compress the proof using bz2")
+            ("proof-format-2",                                 "Use the under-development 2.0 format for proofs");
         display_options.add(proof_logging_options);
 
         vector<string> shapes;
@@ -386,9 +387,11 @@ auto main(int argc, char * argv[]) -> int
             bool friendly_names = options_vars.count("proof-names");
             bool verbose_proofs = options_vars.count("verbose-proofs");
             bool compress_proof = options_vars.count("compress-proof");
+            bool format2 = options_vars.count("proof-format-2");
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
-            params.proof = make_shared<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof, verbose_proofs);
+            params.proof = make_shared<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof, verbose_proofs,
+                    format2);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
             cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }
