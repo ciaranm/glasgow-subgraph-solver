@@ -217,7 +217,11 @@ auto Proof::finish_unsat_proof() -> void
     *_imp->proof_stream << "* asserting that we've proved unsat" << endl;
     *_imp->proof_stream << "u >= 1 ;" << endl;
     ++_imp->proof_line;
-    *_imp->proof_stream << "c " << _imp->proof_line << " 0" << endl;
+    if (_imp->format2)
+        *_imp->proof_stream << "output NONE" << endl << "conclusion UNSAT : -1" << endl
+            << "end pseudo-Boolean proof" << endl;
+    else
+        *_imp->proof_stream << "c " << _imp->proof_line << " 0" << endl;
 }
 
 auto Proof::failure_due_to_pattern_bigger_than_target() -> void
