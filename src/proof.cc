@@ -73,13 +73,14 @@ struct Proof::Imp
     bool bz2 = false;
     bool super_extra_verbose = false;
     bool format2 = false;
+    bool recover_encoding = false;
 
     map<pair<long, long>, string> variable_mappings;
     map<long, string> binary_variable_mappings;
     map<tuple<long, long, long>, string> connected_variable_mappings;
     map<tuple<long, long, long, long>, string> connected_variable_mappings_aux;
-    map<long, long> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
-    map<tuple<long, long, long, long>, long> adjacency_lines;
+    map<long, tuple<long, long, string> > at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
+    map<tuple<long, long, long, long>, tuple<long, long, string> > adjacency_lines;
     map<pair<long, long>, long> eliminations;
     map<pair<long, long>, long> non_edge_constraints;
     long objective_line = 0;
@@ -87,6 +88,7 @@ struct Proof::Imp
     long nb_constraints = 0;
     long proof_line = 0;
     int largest_level_set = 0;
+    int active_level;
 
     bool clique_encoding = false;
 
@@ -99,7 +101,7 @@ struct Proof::Imp
     vector<pair<int, int> > zero_in_proof_objectives;
 };
 
-Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, bool s, bool f2) :
+Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, bool s, bool f2, bool re) :
     _imp(new Imp)
 {
     _imp->opb_filename = opb_file;
@@ -108,6 +110,7 @@ Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, b
     _imp->bz2 = b;
     _imp->super_extra_verbose = s;
     _imp->format2 = f2;
+    _imp->recover_encoding = re;
 }
 
 Proof::Proof(Proof &&) = default;
@@ -135,29 +138,38 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
             _imp->variable_mappings.emplace(pair{ pattern_vertex, i }, to_string(_imp->variable_mappings.size() + 1));
 
     _imp->model_stream << "* vertex " << pattern_vertex << " domain" << endl;
+    stringstream al1_constraint;
     for (int i = 0 ; i < target_size ; ++i)
-        _imp->model_stream << "1 x" << _imp->variable_mappings[{ pattern_vertex, i }] << " ";
-    _imp->model_stream << ">= 1 ;" << endl;
-    _imp->at_least_one_value_constraints.emplace(pattern_vertex, ++_imp->nb_constraints);
+        al1_constraint << "1 x" << _imp->variable_mappings[{ pattern_vertex, i }] << " ";
+    al1_constraint << ">= 1";
+    _imp->model_stream << al1_constraint.str() << " ;" << endl;
+    long n = ++_imp->nb_constraints;
+    _imp->at_least_one_value_constraints.emplace(pattern_vertex, tuple{n, _imp->recover_encoding ? 0 : n, al1_constraint.str()});
 
+    stringstream am1_constraint;
     for (int i = 0 ; i < target_size ; ++i)
-        _imp->model_stream << "-1 x" << _imp->variable_mappings[{ pattern_vertex, i }] << " ";
-    _imp->model_stream << ">= -1 ;" << endl;
-    _imp->at_most_one_value_constraints.emplace(pattern_vertex, ++_imp->nb_constraints);
+        am1_constraint << "-1 x" << _imp->variable_mappings[{ pattern_vertex, i }] << " ";
+    am1_constraint << ">= -1";
+    _imp->model_stream << am1_constraint.str() << " ;" << endl;
+    long m = ++_imp->nb_constraints;
+    _imp->at_most_one_value_constraints.emplace(pattern_vertex, tuple{m, _imp->recover_encoding ? 0 : m, am1_constraint.str()});
 }
 
 auto Proof::create_injectivity_constraints(int pattern_size, int target_size) -> void
 {
     for (int v = 0 ; v < target_size ; ++v) {
         _imp->model_stream << "* injectivity on value " << v << endl;
+        stringstream injectivity_constraint;
 
         for (int p = 0 ; p < pattern_size ; ++p) {
             auto x = _imp->variable_mappings.find(pair{ p, v });
             if (x != _imp->variable_mappings.end())
-                _imp->model_stream << "-1 x" << x->second << " ";
+                injectivity_constraint << "-1 x" << x->second << " ";
         }
-        _imp->model_stream << ">= -1 ;" << endl;
-        _imp->injectivity_constraints.emplace(v, ++_imp->nb_constraints);
+        injectivity_constraint << ">= -1";
+        long n = ++_imp->nb_constraints;
+        _imp->injectivity_constraints.emplace(v, tuple{n, _imp->recover_encoding ? 0 : n, injectivity_constraint.str()});
+        _imp->model_stream << injectivity_constraint.str() << " ;" << endl;
     }
 }
 
@@ -176,11 +188,14 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 
 auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu, bool) -> void
 {
-    _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{ p, t }];
+    stringstream adjacency_constraint;
+    adjacency_constraint << "1 ~x" << _imp->variable_mappings[pair{ p, t }];
     for (auto & u : uu)
-        _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{ q, u }];
-    _imp->model_stream << " >= 1 ;" << endl;
-    _imp->adjacency_lines.emplace(tuple{ 0, p, q, t }, ++_imp->nb_constraints);
+        adjacency_constraint << " 1 x" << _imp->variable_mappings[pair{ q, u }];
+    adjacency_constraint << " >= 1";
+    long n = ++_imp->nb_constraints;
+    _imp->adjacency_lines.emplace(tuple{ 0, p, q, t }, tuple{n, _imp->recover_encoding ? 0 : n, adjacency_constraint.str()});
+    _imp->model_stream << adjacency_constraint.str() << " ;" << endl;
 }
 
 auto Proof::finalise_model() -> void
@@ -228,23 +243,72 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
 {
     *_imp->proof_stream << "* failure due to the pattern being bigger than the target" << endl;
 
+    for (auto & [ id, _ ] : _imp->injectivity_constraints) {
+        recover_injectivity_constraint(id);
+        recover_at_least_one_constraint(id);
+    }
+
     // we get a hall violator by adding up all of the things
     *_imp->proof_stream << "p";
     bool first = true;
 
-    for (auto & [ _, line ] : _imp->at_least_one_value_constraints) {
+    for (auto & [ _, data ] : _imp->at_least_one_value_constraints) {
         if (first) {
-            *_imp->proof_stream << " " << line;
+            *_imp->proof_stream << " " << get<1>(data);
             first = false;
         }
         else
-            *_imp->proof_stream << " " << line << " +";
+            *_imp->proof_stream << " " << get<1>(data) << " +";
     }
 
-    for (auto & [ _, line ] : _imp->injectivity_constraints)
-        *_imp->proof_stream << " " << line << " +";
+    for (auto & [ _, data ] : _imp->injectivity_constraints)
+        *_imp->proof_stream << " " << get<1>(data) << " +";
     *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
+}
+
+auto Proof::recover_adjacency_lines(int g, int p, int n, int t) -> void
+{
+    auto it = _imp->adjacency_lines.find(tuple{ g, p, n, t });
+    if (it != _imp->adjacency_lines.end() && 0 == get<1>(it->second)) {
+        *_imp->proof_stream << "# 0" << endl;
+        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        get<1>(it->second) = ++_imp->proof_line;
+        *_imp->proof_stream << "# " << _imp->active_level << endl;
+    }
+}
+
+auto Proof::recover_injectivity_constraint(int p) -> void
+{
+    auto it = _imp->injectivity_constraints.find(p);
+    if (it != _imp->injectivity_constraints.end() && 0 == get<1>(it->second)) {
+        *_imp->proof_stream << "# 0" << endl;
+        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        get<1>(it->second) = ++_imp->proof_line;
+        *_imp->proof_stream << "# " << _imp->active_level << endl;
+    }
+}
+
+auto Proof::recover_at_least_one_constraint(int p) -> void
+{
+    auto it = _imp->at_least_one_value_constraints.find(p);
+    if (it != _imp->at_least_one_value_constraints.end() && 0 == get<1>(it->second)) {
+        *_imp->proof_stream << "# 0" << endl;
+        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        get<1>(it->second) = ++_imp->proof_line;
+        *_imp->proof_stream << "# " << _imp->active_level << endl;
+    }
+}
+
+auto Proof::recover_at_most_one_constraint(int p) -> void
+{
+    auto it = _imp->at_most_one_value_constraints.find(p);
+    if (it != _imp->at_most_one_value_constraints.end() && 0 == get<1>(it->second)) {
+        *_imp->proof_stream << "# 0" << endl;
+        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        get<1>(it->second) = ++_imp->proof_line;
+        *_imp->proof_stream << "# " << _imp->active_level << endl;
+    }
 }
 
 auto Proof::incompatible_by_degrees(
@@ -256,6 +320,13 @@ auto Proof::incompatible_by_degrees(
 {
     *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << endl;
 
+    if (_imp->recover_encoding) {
+        for (auto & n : n_p)
+            recover_adjacency_lines(g, p.first, n, t.first);
+        for (auto & n : n_t)
+            recover_injectivity_constraint(n);
+    }
+
     *_imp->proof_stream << "p";
     bool first = true;
     for (auto & n : n_p) {
@@ -263,16 +334,16 @@ auto Proof::incompatible_by_degrees(
         if (_imp->adjacency_lines.count(tuple{ g, p.first, n, t.first })) {
             if (first) {
                 first = false;
-                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+                *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ g, p.first, n, t.first }]);
             }
             else
-                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+                *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ g, p.first, n, t.first }]) << " +";
         }
     }
 
     // if I map p to t, I have to map the neighbours of p to neighbours of t
     for (auto & n : n_t)
-        *_imp->proof_stream << " " << _imp->injectivity_constraints[n] << " +";
+        *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[n]) << " +";
 
     *_imp->proof_stream << " s 0" << endl;
     ++_imp->proof_line;
@@ -294,6 +365,14 @@ auto Proof::incompatible_by_nds(
 {
     *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << endl;
 
+    if (_imp->recover_encoding) {
+        for (auto & n : p_subsequence)
+            recover_adjacency_lines(g, p.first, n, t.first);
+        for (auto & t : t_subsequence)
+            if (t != t_subsequence.back())
+                recover_injectivity_constraint(t);
+    }
+
     // summing up horizontally
     *_imp->proof_stream << "p";
     bool first = true;
@@ -302,17 +381,17 @@ auto Proof::incompatible_by_nds(
         if (_imp->adjacency_lines.count(tuple{ g, p.first, n, t.first })) {
             if (first) {
                 first = false;
-                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }];
+                *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ g, p.first, n, t.first }]);
             }
             else
-                *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ g, p.first, n, t.first }] << " +";
+                *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ g, p.first, n, t.first }]) << " +";
         }
     }
 
     // injectivity in the square
     for (auto & t : t_subsequence) {
         if (t != t_subsequence.back())
-            *_imp->proof_stream << " " << _imp->injectivity_constraints.find(t)->second << " +";
+            *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints.find(t)->second) << " +";
     }
 
     // block to the right of the failing square
@@ -352,18 +431,26 @@ auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vec
     for (auto & r : rhs)
         *_imp->proof_stream << " " << r.second;
     *_imp->proof_stream << " }" << endl;
+
+    if (_imp->recover_encoding) {
+        for (auto & r : rhs)
+            recover_injectivity_constraint(r.first);
+        for (auto & l : lhs)
+            recover_at_least_one_constraint(l.first);
+    }
+
     *_imp->proof_stream << "p";
     bool first = true;
     for (auto & l : lhs) {
         if (first) {
             first = false;
-            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l.first];
+            *_imp->proof_stream << " " << get<1>(_imp->at_least_one_value_constraints[l.first]);
         }
         else
-            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[l.first] << " +";
+            *_imp->proof_stream << " " << get<1>(_imp->at_least_one_value_constraints[l.first]) << " +";
     }
     for (auto & r : rhs)
-        *_imp->proof_stream << " " << _imp->injectivity_constraints[r.first] << " +";
+        *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[r.first]) << " +";
     *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 }
@@ -415,12 +502,14 @@ auto Proof::start_level(int l) -> void
 {
     *_imp->proof_stream << "# " << l << endl;
     _imp->largest_level_set = max(_imp->largest_level_set, l);
+    _imp->active_level = l;
 }
 
 auto Proof::back_up_to_level(int l) -> void
 {
     *_imp->proof_stream << "# " << l << endl;
     _imp->largest_level_set = max(_imp->largest_level_set, l);
+    _imp->active_level = l;
 }
 
 auto Proof::forget_level(int l) -> void
@@ -432,6 +521,7 @@ auto Proof::forget_level(int l) -> void
 auto Proof::back_up_to_top() -> void
 {
     *_imp->proof_stream << "# " << 0 << endl;
+    _imp->active_level = 0;
 }
 
 auto Proof::post_restart_nogood(const vector<pair<int, int> > & decisions) -> void
@@ -501,6 +591,30 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
         " in G^[" << g << "x2] so " << q.second << " maps to one of..." << endl;
 
+    if (_imp->recover_encoding) {
+        recover_injectivity_constraint(t.first);
+
+        for (auto & b : between_p_and_q) {
+            recover_adjacency_lines(0, p.first, b.first, t.first);
+            for (auto & w : n_t)
+                recover_adjacency_lines(0, b.first, q.first, w.first);
+            recover_at_most_one_constraint(b.first);
+        }
+
+        for (auto & u : two_away_from_t) {
+            if ((u.first == t) || (d_n_t.end() != find(d_n_t.begin(), d_n_t.end(), u.first)))
+                continue;
+
+            for (auto & b : between_p_and_q) {
+                recover_adjacency_lines(0, p.first, b.first, t.first);
+                recover_adjacency_lines(0, q.first, b.first, u.first.first);
+            }
+
+            for (auto & z : u.second)
+                recover_injectivity_constraint(z.first);
+        }
+    }
+
     *_imp->proof_stream << "# 1" << endl;
 
     *_imp->proof_stream << "p";
@@ -508,7 +622,7 @@ auto Proof::create_exact_path_graphs(
     // if p maps to t then things in between_p_and_q have to go to one of these...
     bool first = true;
     for (auto & b : between_p_and_q) {
-        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }];
+        *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }]);
         if (! first)
             *_imp->proof_stream << " s +";
         first = false;
@@ -520,7 +634,7 @@ auto Proof::create_exact_path_graphs(
             // due to loops or labels, it might not be possible to map to w
             auto i = _imp->adjacency_lines.find(tuple{ 0, b.first, q.first, w.first });
             if (i != _imp->adjacency_lines.end())
-                *_imp->proof_stream << " " << i->second << " +";
+                *_imp->proof_stream << " " << get<1>(i->second) << " +";
         }
     }
 
@@ -535,7 +649,7 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // if p maps to t then q does not map to t
-    *_imp->proof_stream << "p " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + s 0" << endl;
+    *_imp->proof_stream << "p " << _imp->proof_line << " " << get<1>(_imp->injectivity_constraints[t.first]) << " + s 0" << endl;
     ++_imp->proof_line;
 
     // and cancel out stray extras from injectivity
@@ -557,16 +671,16 @@ auto Proof::create_exact_path_graphs(
         *_imp->proof_stream << "p";
         bool first = true;
         for (auto & b : between_p_and_q) {
-            *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }];
+            *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, p.first, b.first, t.first }]);
             if (! first)
                 *_imp->proof_stream << " +";
             first = false;
-            *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, q.first, b.first, u.first.first }] << " +";
-            *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[b.first] << " +";
+            *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, q.first, b.first, u.first.first }]) << " +";
+            *_imp->proof_stream << " " << get<1>(_imp->at_most_one_value_constraints[b.first]) << " +";
         }
 
         for (auto & z : u.second)
-            *_imp->proof_stream << " " << _imp->injectivity_constraints[z.first] << " +";
+            *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[z.first]) << " +";
 
         *_imp->proof_stream << " s 0" << endl;
         ++_imp->proof_line;
@@ -601,7 +715,7 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{_imp->proof_line, _imp->proof_line, ""});
 
     *_imp->proof_stream << "w 1" << endl;
 }
@@ -622,7 +736,7 @@ auto Proof::hack_in_shape_graph(
     *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{_imp->proof_line, _imp->proof_line, ""});
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_1(
@@ -635,14 +749,17 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
         " in G^3 so by adjacency, " << q.second << " maps to one of..." << endl;
 
-    *_imp->proof_stream << implies_add(_imp->adjacency_lines[tuple{ 0, p.first, q.first, t.first }])
+    if (_imp->recover_encoding)
+        recover_adjacency_lines(0, p.first, q.first, t.first);
+
+    *_imp->proof_stream << implies_add(get<1>(_imp->adjacency_lines[tuple{ 0, p.first, q.first, t.first }]))
         << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
     *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{_imp->proof_line, _imp->proof_line, ""});
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_2(
@@ -659,15 +776,21 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
         " in G^3 so using vertex " << path_from_p_to_q.second << ", " << q.second << " maps to one of..." << endl;
 
+    if (_imp->recover_encoding) {
+        recover_adjacency_lines(0, p.first, path_from_p_to_q.first, t.first);
+        for (auto & u : d1_from_t)
+            recover_adjacency_lines(0, path_from_p_to_q.first, q.first, u.first);
+    }
+
     *_imp->proof_stream << "# 1" << endl;
 
     *_imp->proof_stream << "p";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
-    *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, path_from_p_to_q.first, t.first }];
+    *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, p.first, path_from_p_to_q.first, t.first }]);
     // so the second thing on the path from p to q has to go to one of...
     for (auto & u : d1_from_t)
-        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q.first, q.first, u.first }] << " +";
+        *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, path_from_p_to_q.first, q.first, u.first }]) << " +";
 
     *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
@@ -687,7 +810,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{_imp->proof_line, _imp->proof_line, ""});
 }
 
 auto Proof::create_distance3_graphs(
@@ -705,15 +828,24 @@ auto Proof::create_distance3_graphs(
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
         " in G^3 so using path " << path_from_p_to_q_1.second << " -- " << path_from_p_to_q_2.second << ", " << q.second << " maps to one of..." << endl;
 
+    if (_imp->recover_encoding) {
+        recover_adjacency_lines(0, p.first, path_from_p_to_q_1.first, t.first);
+        for (auto & u : d1_from_t)
+            recover_adjacency_lines(0, path_from_p_to_q_1.first, path_from_p_to_q_2.first, u.first);
+        for (auto & u : d2_from_t)
+            recover_adjacency_lines(0, path_from_p_to_q_2.first, q.first, u.first);
+
+    }
+
     *_imp->proof_stream << "# 1" << endl;
 
     *_imp->proof_stream << "p";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
-    *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, p.first, path_from_p_to_q_1.first, t.first }];
+    *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, p.first, path_from_p_to_q_1.first, t.first }]);
     // so the second thing on the path from p to q has to go to one of...
     for (auto & u : d1_from_t)
-        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q_1.first, path_from_p_to_q_2.first, u.first }] << " +";
+        *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, path_from_p_to_q_1.first, path_from_p_to_q_2.first, u.first }]) << " +";
 
     *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
@@ -727,7 +859,7 @@ auto Proof::create_distance3_graphs(
 
     *_imp->proof_stream << "p " << _imp->proof_line;
     for (auto & u : d2_from_t)
-        *_imp->proof_stream << " " << _imp->adjacency_lines[tuple{ 0, path_from_p_to_q_2.first, q.first, u.first }] << " s +";
+        *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{ 0, path_from_p_to_q_2.first, q.first, u.first }]) << " s +";
     *_imp->proof_stream << " 0" << endl;
     ++_imp->proof_line;
 
@@ -739,7 +871,7 @@ auto Proof::create_distance3_graphs(
     *_imp->proof_stream << " >= 1 ;" << endl;
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, _imp->proof_line);
+    _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{_imp->proof_line, _imp->proof_line, ""});
 }
 
 auto Proof::create_binary_variable(int vertex,
@@ -987,6 +1119,15 @@ auto Proof::mcs_bound(
 {
     *_imp->proof_stream << "* failed bound" << endl;
 
+    if (_imp->recover_encoding) {
+        for (auto & [ l, r ] : partitions) {
+            for (auto & v : r)
+                recover_injectivity_constraint(v);
+            for (auto & v : l)
+                recover_at_least_one_constraint(v);
+        }
+    }
+
     vector<string> to_sum;
     for (auto & [ l, r ] : partitions) {
         if (r.size() >= l.size())
@@ -995,14 +1136,14 @@ auto Proof::mcs_bound(
         *_imp->proof_stream << "p";
         bool first = true;
         for (auto & v : l) {
-            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[v];
+            *_imp->proof_stream << " " << get<1>(_imp->at_least_one_value_constraints[v]);
            if (first)
               first = false;
            else
               *_imp->proof_stream << " +";
         }
         for (auto & v : r)
-            *_imp->proof_stream << " " << _imp->injectivity_constraints[v] << " +";
+            *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[v]) << " +";
 
         *_imp->proof_stream << endl;
         to_sum.push_back(to_string(++_imp->proof_line));
@@ -1020,9 +1161,14 @@ auto Proof::mcs_bound(
 auto Proof::rewrite_mcs_objective(int pattern_size) -> void
 {
     *_imp->proof_stream << "* get the objective function to talk about nulls, not non-nulls" << endl;
+
+    if (_imp->recover_encoding)
+        for (int v = 0 ; v < pattern_size ; ++v)
+            recover_at_most_one_constraint(v);
+
     *_imp->proof_stream << "p " << _imp->objective_line;
     for (int v = 0 ; v < pattern_size ; ++v)
-        *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[v] << " +";
+        *_imp->proof_stream << " " << get<1>(_imp->at_most_one_value_constraints[v]) << " +";
     *_imp->proof_stream << endl;
     _imp->objective_line = ++_imp->proof_line;
 }

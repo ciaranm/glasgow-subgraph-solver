@@ -126,7 +126,8 @@ auto main(int argc, char * argv[]) -> int
             ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
             ("verbose-proofs",                                 "Write lots of comments to the proof, for tracing")
             ("compress-proof",                                 "Compress the proof using bz2")
-            ("proof-format-2",                                 "Use the under-development 2.0 format for proofs");
+            ("proof-format-2",                                 "Use the under-development 2.0 format for proofs")
+            ("recover-proof-encoding",                         "Recover the proof encoding, to work with verified encoders");
         display_options.add(proof_logging_options);
 
         vector<string> shapes;
@@ -388,10 +389,11 @@ auto main(int argc, char * argv[]) -> int
             bool verbose_proofs = options_vars.count("verbose-proofs");
             bool compress_proof = options_vars.count("compress-proof");
             bool format2 = options_vars.count("proof-format-2");
+            bool recover_encoding = options_vars.count("recover-proof-encoding");
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
             params.proof = make_shared<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof, verbose_proofs,
-                    format2);
+                    format2, recover_encoding);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
             cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }

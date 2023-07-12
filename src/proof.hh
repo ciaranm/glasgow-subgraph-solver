@@ -36,6 +36,10 @@ class Proof
         std::unique_ptr<Imp> _imp;
 
         auto implies_add(long) -> std::string;
+        auto recover_adjacency_lines(int g, int p, int n, int t) -> void;
+        auto recover_injectivity_constraint(int p) -> void;
+        auto recover_at_least_one_constraint(int p) -> void;
+        auto recover_at_most_one_constraint(int p) -> void;
 
     public:
         Proof(
@@ -44,7 +48,8 @@ class Proof
                 bool friendly_names,
                 bool bz2,
                 bool super_extra_verbose,
-                bool version2);
+                bool version2,
+                bool recover_encoding);
         Proof(Proof &&);
         ~Proof();
         auto operator= (Proof &&) -> Proof &;
