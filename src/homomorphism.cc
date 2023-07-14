@@ -555,8 +555,14 @@ auto solve_homomorphism_problem(
             result = solver.solve();
         }
 
-        if (params.proof && result.complete && result.mapping.empty())
-            params.proof->finish_unsat_proof();
+        if (params.proof) {
+            if (result.complete && result.mapping.empty())
+                params.proof->finish_unsat_proof();
+            else if (! result.mapping.empty())
+                params.proof->finish_sat_proof();
+            else
+                params.proof->finish_unknown_proof();
+        }
 
         return result;
     }

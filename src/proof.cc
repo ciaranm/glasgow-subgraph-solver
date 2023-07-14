@@ -239,6 +239,20 @@ auto Proof::finish_unsat_proof() -> void
         *_imp->proof_stream << "c " << _imp->proof_line << " 0" << endl;
 }
 
+auto Proof::finish_sat_proof() -> void
+{
+    if (_imp->format2)
+        *_imp->proof_stream << "output NONE" << endl << "conclusion SAT" << endl
+            << "end pseudo-Boolean proof" << endl;
+}
+
+auto Proof::finish_unknown_proof() -> void
+{
+    if (_imp->format2)
+        *_imp->proof_stream << "output NONE" << endl << "conclusion NONE" << endl
+            << "end pseudo-Boolean proof" << endl;
+}
+
 auto Proof::failure_due_to_pattern_bigger_than_target() -> void
 {
     *_imp->proof_stream << "* failure due to the pattern being bigger than the target" << endl;
@@ -541,7 +555,10 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisi
         *_imp->proof_stream << " " << var.second << "=" << val.second;
     *_imp->proof_stream << endl;
 
-    *_imp->proof_stream << "v";
+    if (_imp->format2)
+        *_imp->proof_stream << "sol";
+    else
+        *_imp->proof_stream << "v";
     for (auto & [ var, val ] : decisions)
         *_imp->proof_stream << " x" << _imp->variable_mappings[pair{ var.first, val.first }];
     *_imp->proof_stream << endl;
@@ -550,7 +567,10 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex> > & decisi
 
 auto Proof::post_solution(const vector<int> & solution) -> void
 {
-    *_imp->proof_stream << "v";
+    if (_imp->format2)
+        *_imp->proof_stream << "sol";
+    else
+        *_imp->proof_stream << "v";
     for (auto & v : solution)
         *_imp->proof_stream << " x" << _imp->binary_variable_mappings[v];
     *_imp->proof_stream << endl;
