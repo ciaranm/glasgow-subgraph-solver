@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 
 #include <boost/iostreams/device/file.hpp>
@@ -37,6 +38,7 @@ using std::stringstream;
 using std::to_string;
 using std::tuple;
 using std::unique_ptr;
+using std::unordered_map;
 using std::vector;
 
 using boost::iostreams::bzip2_compressor;
@@ -84,6 +86,8 @@ struct Proof::Imp
     map<pair<long, long>, long> eliminations;
     map<pair<long, long>, long> non_edge_constraints;
     long objective_line = 0;
+
+    unordered_map<string, long> cached_proof_lines;
 
     long nb_constraints = 0;
     long proof_line = 0;
@@ -635,8 +639,21 @@ auto Proof::create_exact_path_graphs(
         }
     }
 
-    *_imp->proof_stream << "# 1" << endl;
+    // tidy up to get what we wanted. do this first so we can check for duplicates
+    stringstream tidied_up;
+    tidied_up << "1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d_n_t)
+        if (u != t)
+            tidied_up << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    tidied_up << " >= 1 ;" << endl;
 
+    auto it = _imp->cached_proof_lines.find(tidied_up.str());
+    if (it != _imp->cached_proof_lines.end()) {
+        _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{it->second, it->second, ""});
+        return;
+    }
+
+    *_imp->proof_stream << "# 1" << endl;
     *_imp->proof_stream << "p";
 
     // if p maps to t then things in between_p_and_q have to go to one of these...
@@ -726,17 +743,10 @@ auto Proof::create_exact_path_graphs(
     }
 
     *_imp->proof_stream << "# 0" << endl;
-
-    // and finally, tidy up to get what we wanted
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
-    for (auto & u : d_n_t)
-        if (u != t)
-            *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
-    *_imp->proof_stream << " >= 1 ;" << endl;
+    *_imp->proof_stream << implies_add(_imp->proof_line) << " " << tidied_up.str() << endl;
     ++_imp->proof_line;
-
     _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{_imp->proof_line, _imp->proof_line, ""});
-
+    _imp->cached_proof_lines.emplace(tidied_up.str(), _imp->proof_line);
     *_imp->proof_stream << "w 1" << endl;
 }
 
