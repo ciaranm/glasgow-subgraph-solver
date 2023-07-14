@@ -92,7 +92,7 @@ struct Proof::Imp
     long nb_constraints = 0;
     long proof_line = 0;
     int largest_level_set = 0;
-    int active_level;
+    int active_level = 0;
 
     bool clique_encoding = false;
 
