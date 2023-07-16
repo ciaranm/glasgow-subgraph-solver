@@ -229,6 +229,22 @@ auto Proof::finalise_model() -> void
 
     if (! *_imp->proof_stream)
         throw ProofError{ "Error writing proof file to '" + _imp->log_filename + "'" };
+
+    if (_imp->recover_encoding && ! _imp->non_edge_constraints.empty()) {
+        // unsigned delete_up_to = _imp->proof_line;
+        for (auto & [edge, _] : _imp->non_edge_constraints) {
+            if (edge.first < edge.second) {
+                *_imp->proof_stream << "red -1 x" << _imp->binary_variable_mappings[edge.first]
+                    << " -1 x" << _imp->binary_variable_mappings[edge.second] << " >= -1 ; ;" << endl;
+                auto n = ++_imp->proof_line;
+                _imp->non_edge_constraints[edge] = n;
+                _imp->non_edge_constraints[{edge.second, edge.first}] = n;
+                // *_imp->proof_stream << "core id " << n << endl;
+            }
+        }
+        // for (unsigned d = 1 ; d <= delete_up_to ; ++d)
+            // *_imp->proof_stream << "del id " << d << endl;
+    }
 }
 
 auto Proof::finish_unsat_proof() -> void
@@ -254,6 +270,13 @@ auto Proof::finish_unknown_proof() -> void
 {
     if (_imp->format2)
         *_imp->proof_stream << "output NONE" << endl << "conclusion NONE" << endl
+            << "end pseudo-Boolean proof" << endl;
+}
+
+auto Proof::finish_optimisation_proof(int size) -> void
+{
+    if (_imp->format2)
+        *_imp->proof_stream << "output NONE" << endl << "conclusion BOUNDS " << size << " " << size << endl
             << "end pseudo-Boolean proof" << endl;
 }
 
@@ -583,7 +606,10 @@ auto Proof::post_solution(const vector<int> & solution) -> void
 
 auto Proof::new_incumbent(const vector<pair<int, bool> > & solution) -> void
 {
-    *_imp->proof_stream << "o";
+    if (_imp->format2)
+        *_imp->proof_stream << "soli";
+    else
+        *_imp->proof_stream << "o";
     for (auto & [ v, t ] : solution)
         *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->binary_variable_mappings[v];
     for (auto & [ v, w ] : _imp->zero_in_proof_objectives)
@@ -925,7 +951,7 @@ auto Proof::create_objective(int n, optional<int> d) -> void
     else {
         _imp->model_prelude_stream << "min:";
         for (int v = 0 ; v < n ; ++ v)
-            _imp->model_prelude_stream << " -1 x" << _imp->binary_variable_mappings[v];
+            _imp->model_prelude_stream << " 1 ~x" << _imp->binary_variable_mappings[v];
         _imp->model_prelude_stream << " ;" << endl;
     }
 }
@@ -953,7 +979,7 @@ auto Proof::create_non_null_decision_bound(int p, int t, optional<int> d) -> voi
         _imp->model_prelude_stream << "min:";
         for (int v = 0 ; v < p ; ++v)
             for (int w = 0 ; w < t ; ++w)
-                _imp->model_prelude_stream << " -1 x" << _imp->variable_mappings[pair{ v, w }] << " ";
+                _imp->model_prelude_stream << " 1 ~x" << _imp->variable_mappings[pair{ v, w }] << " ";
         _imp->model_prelude_stream << " ;" << endl;
     }
 }
@@ -1022,6 +1048,9 @@ auto Proof::colour_bound(const vector<vector<int> > & ccs) -> void
     };
 
     for (auto & cc : ccs) {
+        if (cc.size() == 1)
+            continue;
+
         if (_imp->doing_hom_colour_proof) {
             vector<pair<NamedVertex, NamedVertex> > bigger_cc;
             for (auto & c : cc)

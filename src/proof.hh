@@ -75,6 +75,7 @@ class Proof
         auto finish_unsat_proof() -> void;
         auto finish_sat_proof() -> void;
         auto finish_unknown_proof() -> void;
+        auto finish_optimisation_proof(int size) -> void;
 
         // top of search failures
         auto failure_due_to_pattern_bigger_than_target() -> void;

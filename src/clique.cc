@@ -615,7 +615,7 @@ namespace
             if (params.proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
                 params.proof->finish_unsat_proof();
             else if (params.proof && ! params.decide && ! params.proof_is_for_hom)
-                params.proof->finish_unsat_proof();
+                params.proof->finish_optimisation_proof(size - incumbent.c.size());
 
             result.clique.clear();
             for (auto & v : incumbent.c)
