@@ -234,8 +234,8 @@ auto Proof::finalise_model() -> void
         unsigned delete_up_to = _imp->proof_line;
         for (auto & [edge, _] : _imp->non_edge_constraints) {
             if (edge.first < edge.second) {
-                *_imp->proof_stream << "red -1 x" << _imp->binary_variable_mappings[edge.first]
-                    << " -1 x" << _imp->binary_variable_mappings[edge.second] << " >= -1 ; ;" << endl;
+                *_imp->proof_stream << "ia -1 x" << _imp->binary_variable_mappings[edge.first]
+                    << " -1 x" << _imp->binary_variable_mappings[edge.second] << " >= -1 ;" << endl;
                 auto n = ++_imp->proof_line;
                 _imp->non_edge_constraints[edge] = n;
                 _imp->non_edge_constraints[{edge.second, edge.first}] = n;
