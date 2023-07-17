@@ -231,7 +231,7 @@ auto Proof::finalise_model() -> void
         throw ProofError{ "Error writing proof file to '" + _imp->log_filename + "'" };
 
     if (_imp->recover_encoding && ! _imp->non_edge_constraints.empty()) {
-        // unsigned delete_up_to = _imp->proof_line;
+        unsigned delete_up_to = _imp->proof_line;
         for (auto & [edge, _] : _imp->non_edge_constraints) {
             if (edge.first < edge.second) {
                 *_imp->proof_stream << "red -1 x" << _imp->binary_variable_mappings[edge.first]
@@ -239,11 +239,11 @@ auto Proof::finalise_model() -> void
                 auto n = ++_imp->proof_line;
                 _imp->non_edge_constraints[edge] = n;
                 _imp->non_edge_constraints[{edge.second, edge.first}] = n;
-                // *_imp->proof_stream << "core id " << n << endl;
+                *_imp->proof_stream << "core id " << n << endl;
             }
         }
-        // for (unsigned d = 1 ; d <= delete_up_to ; ++d)
-            // *_imp->proof_stream << "del id " << d << endl;
+        for (unsigned d = 1 ; d <= delete_up_to ; ++d)
+            *_imp->proof_stream << "del id " << d << endl;
     }
 }
 
