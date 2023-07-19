@@ -33,3 +33,5 @@ add_library(glasgow_subgraphs
         formats/lad.cc
         formats/read_file_format.cc
         formats/vfmcs.cc)
+
+target_link_libraries(glasgow_subgraphs LINK_PUBLIC ${Boost_LIBRARIES})
