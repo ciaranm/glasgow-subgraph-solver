@@ -1,13 +1,4 @@
-intermediate
-glasgow_subgraph_solver
-glasgow_clique_solver
-glasgow_common_subgraph_solver
-plot_glasgow_solver_outputs
-plot_glasgow_solver_proofs
-create_random_graph
-sip_to_opb
-sip_to_lad
-libcommon.a
+build
 perf.data
 perf.data.old
 *.log

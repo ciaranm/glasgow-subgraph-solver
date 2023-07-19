@@ -16,12 +16,13 @@ Please contact [Ciaran McCreesh](mailto:ciaran.mccreesh@glasgow.ac.uk) with any 
 Compiling
 ---------
 
-To build, type 'make'. You will need a C++17 compiler (we test with GCC 7.3, GCC 8.3, and Clang
-7.0.1 on Linux, and Xcode 10.2 on Mac OS X) and Boost (we use 1.65.1 or later, built with threads
-enabled).
+To build, you will need a C++20 compiler, such as GCC 10.3, as well as Boost (use
+``libboost-all-dev`` on Ubuntu).
 
-(KB: updating to C++20 requires GCC 10.1, Clang 10.0.0 or later; Xcode 10.2 appears to be fine but I
-have not tested that)
+```shell
+cmake -S . -B build
+cmake --build build
+```
 
 Running
 -------
@@ -29,21 +30,21 @@ Running
 To run:
 
 ```shell session
-$ ./glasgow_subgraph_solver pattern-file target-file
+$ ./build/glasgow_subgraph_solver pattern-file target-file
 ```
 
 If you would like induced subgraph isomorphisms rather than non-induced (that is, if non-adjacent
 vertices must be mapped to non-adjacent vertices), you must request it:
 
 ```shell session
-$ ./glasgow_subgraph_solver --induced pattern-file target-file
+$ ./build/glasgow_subgraph_solver --induced pattern-file target-file
 ```
 
 The default mode is to display the first found solution, or to prove unsatisfiability if no solution
 exists. To count or print all solutions, use one of:
 
 ```shell session
-$ ./glasgow_subgraph_solver [ --count-solutions | --print-all-solutions ] pattern-file target-file
+$ ./build/glasgow_subgraph_solver [ --count-solutions | --print-all-solutions ] pattern-file target-file
 ```
 
 Note that printing all solutions can be exponentially slower than counting solutions.
@@ -51,7 +52,7 @@ Note that printing all solutions can be exponentially slower than counting solut
 The solver supports parallel search. Usually you should enable this, as follows:
 
 ```shell session
-$ ./glasgow_subgraph_solver --parallel ...
+$ ./build/glasgow_subgraph_solver --parallel ...
 ```
 
 Note that parallel search, in its default configuration, is non-deterministic.
@@ -62,7 +63,7 @@ File Formats
 We try to auto-detect the input format, but it's best to specify it using, for example:
 
 ```shell session
-$ ./glasgow_subgraph_solver --format lad pattern-file target-file
+$ ./build/glasgow_subgraph_solver --format lad pattern-file target-file
 ```
 
 In particular, note that auto-detection can easily fail if, for example, the first vertex in the
@@ -95,7 +96,7 @@ is probably only useful for solution counting. To use it, you must have the GAP 
 system in your PATH as 'gap', with the 'digraph' library installed. Then, do:
 
 ```shell session
-$ ./glasgow_clique_solver --pattern-symmetries --count-solutions pattern-file target-file
+$ ./build/glasgow_clique_solver --pattern-symmetries --count-solutions pattern-file target-file
 ```
 
 Proof Logging
@@ -104,12 +105,12 @@ Proof Logging
 As a highly experimental feature, the solver can output a proof log. First, install the following
 program:
 
-* VeriPB from https://github.com/StephanGocht/VeriPB/ .
+* VeriPB from https://gitlab.com/MIAOresearch/software/VeriPB
 
 And then you can produce and verify a log like this:
 
 ```shell session
-$ ./glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
+$ ./build/glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
     --prove myproof --proof-solutions pattern-file target-file
 $ veripb myproof.opb myproof.log
 ```
@@ -123,7 +124,7 @@ Clique Solving
 To run the clique solver, use:
 
 ```shell session
-$ ./glasgow_clique_solver graph-file
+$ ./build/glasgow_clique_solver graph-file
 ```
 
 Details on the Algorithms

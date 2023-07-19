@@ -1,9 +1,9 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "formats/read_file_format.hh"
-#include "clique.hh"
-#include "configuration.hh"
-#include "proof.hh"
+#include <gss/formats/read_file_format.hh>
+#include <gss/clique.hh>
+#include <gss/configuration.hh>
+#include <gss/proof.hh>
 
 #include <boost/program_options.hpp>
 

@@ -1,13 +1,13 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
-#include "formats/read_file_format.hh"
-#include "homomorphism.hh"
-#include "sip_decomposer.hh"
-#include "lackey.hh"
-#include "symmetries.hh"
-#include "restarts.hh"
-#include "verify.hh"
-#include "proof.hh"
+#include <gss/formats/read_file_format.hh>
+#include <gss/homomorphism.hh>
+#include <gss/sip_decomposer.hh>
+#include <gss/lackey.hh>
+#include <gss/symmetries.hh>
+#include <gss/restarts.hh>
+#include <gss/verify.hh>
+#include <gss/proof.hh>
 
 #include <boost/program_options.hpp>
 
