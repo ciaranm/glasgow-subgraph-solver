@@ -313,7 +313,7 @@ auto Proof::recover_adjacency_lines(int g, int p, int n, int t) -> void
     auto it = _imp->adjacency_lines.find(tuple{ g, p, n, t });
     if (it != _imp->adjacency_lines.end() && 0 == get<1>(it->second)) {
         *_imp->proof_stream << "# 0" << endl;
-        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        *_imp->proof_stream << "ia " << get<2>(it->second) << " ;" << endl;
         get<1>(it->second) = ++_imp->proof_line;
         *_imp->proof_stream << "# " << _imp->active_level << endl;
     }
@@ -324,7 +324,7 @@ auto Proof::recover_injectivity_constraint(int p) -> void
     auto it = _imp->injectivity_constraints.find(p);
     if (it != _imp->injectivity_constraints.end() && 0 == get<1>(it->second)) {
         *_imp->proof_stream << "# 0" << endl;
-        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        *_imp->proof_stream << "ia " << get<2>(it->second) << " ;" << endl;
         get<1>(it->second) = ++_imp->proof_line;
         *_imp->proof_stream << "# " << _imp->active_level << endl;
     }
@@ -335,7 +335,7 @@ auto Proof::recover_at_least_one_constraint(int p) -> void
     auto it = _imp->at_least_one_value_constraints.find(p);
     if (it != _imp->at_least_one_value_constraints.end() && 0 == get<1>(it->second)) {
         *_imp->proof_stream << "# 0" << endl;
-        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        *_imp->proof_stream << "ia " << get<2>(it->second) << " ;" << endl;
         get<1>(it->second) = ++_imp->proof_line;
         *_imp->proof_stream << "# " << _imp->active_level << endl;
     }
@@ -346,7 +346,7 @@ auto Proof::recover_at_most_one_constraint(int p) -> void
     auto it = _imp->at_most_one_value_constraints.find(p);
     if (it != _imp->at_most_one_value_constraints.end() && 0 == get<1>(it->second)) {
         *_imp->proof_stream << "# 0" << endl;
-        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;" << endl;
+        *_imp->proof_stream << "ia " << get<2>(it->second) << " ;" << endl;
         get<1>(it->second) = ++_imp->proof_line;
         *_imp->proof_stream << "# " << _imp->active_level << endl;
     }
@@ -671,7 +671,7 @@ auto Proof::create_exact_path_graphs(
     for (auto & u : d_n_t)
         if (u != t)
             tidied_up << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
-    tidied_up << " >= 1 ;" << endl;
+    tidied_up << " >= 1 ;";
 
     auto it = _imp->cached_proof_lines.find(tidied_up.str());
     if (it != _imp->cached_proof_lines.end()) {
