@@ -114,8 +114,10 @@ namespace
                                 }
                         });
 
-                if (done)
+                if (done) {
+                    result.complete = true;
                     break;
+                }
 
                 searcher.watches.clear_new_nogoods();
 
