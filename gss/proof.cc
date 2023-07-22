@@ -313,7 +313,7 @@ auto Proof::recover_adjacency_lines(int g, int p, int n, int t) -> void
     auto it = _imp->adjacency_lines.find(tuple{ g, p, n, t });
     if (it != _imp->adjacency_lines.end() && 0 == get<1>(it->second)) {
         *_imp->proof_stream << "# 0\n";
-        *_imp->proof_stream << "ia " << get<2>(it->second) << " ;\n";
+        *_imp->proof_stream << "red " << get<2>(it->second) << " ; ;\n";
         get<1>(it->second) = ++_imp->proof_line;
         *_imp->proof_stream << "# " << _imp->active_level << '\n';
     }
