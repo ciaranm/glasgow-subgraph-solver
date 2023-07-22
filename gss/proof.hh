@@ -96,7 +96,11 @@ class Proof
                 const std::vector<int> & t_subsequence,
                 const std::vector<int> & t_remaining) -> void;
 
-        auto initial_domain_is_empty(int p) -> void;
+        auto incompatible_by_loops(
+                const NamedVertex & p,
+                const NamedVertex & t) -> void;
+
+        auto initial_domain_is_empty(int p, const std::string & where) -> void;
 
         // distance 2 graphs
         auto create_exact_path_graphs(

@@ -458,9 +458,20 @@ auto Proof::incompatible_by_nds(
     *_imp->proof_stream << "d " << _imp->proof_line - 1 << " 0\n";
 }
 
-auto Proof::initial_domain_is_empty(int p) -> void
+auto Proof::incompatible_by_loops(
+        const NamedVertex & p,
+        const NamedVertex & t) -> void
 {
-    *_imp->proof_stream << "* failure due to domain " << p << " being empty\n";
+    if (_imp->recover_encoding) {
+        *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to loop\n";
+        *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+        ++_imp->proof_line;
+    }
+}
+
+auto Proof::initial_domain_is_empty(int p, const string & where) -> void
+{
+    *_imp->proof_stream << "* failure due to domain " << p << " being empty at " << where << '\n';
 }
 
 auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vector<NamedVertex> & rhs) -> void
@@ -638,6 +649,20 @@ auto Proof::create_exact_path_graphs(
         const vector<NamedVertex> & d_n_t
         ) -> void
 {
+    // tidy up to get what we wanted. do this first so we can check for duplicates
+    stringstream tidied_up;
+    tidied_up << "1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
+    for (auto & u : d_n_t)
+        if (u != t)
+            tidied_up << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
+    tidied_up << " >= 1 ;";
+
+    auto it = _imp->cached_proof_lines.find(tidied_up.str());
+    if (it != _imp->cached_proof_lines.end()) {
+        _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{it->second, it->second, ""});
+        return;
+    }
+
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second <<
         " in G^[" << g << "x2] so " << q.second << " maps to one of...\n";
 
@@ -663,20 +688,6 @@ auto Proof::create_exact_path_graphs(
             for (auto & z : u.second)
                 recover_injectivity_constraint(z.first);
         }
-    }
-
-    // tidy up to get what we wanted. do this first so we can check for duplicates
-    stringstream tidied_up;
-    tidied_up << "1 ~x" << _imp->variable_mappings[pair{ p.first, t.first }];
-    for (auto & u : d_n_t)
-        if (u != t)
-            tidied_up << " 1 x" << _imp->variable_mappings[pair{ q.first, u.first }];
-    tidied_up << " >= 1 ;";
-
-    auto it = _imp->cached_proof_lines.find(tidied_up.str());
-    if (it != _imp->cached_proof_lines.end()) {
-        _imp->adjacency_lines.emplace(tuple{ g, p.first, q.first, t.first }, tuple{it->second, it->second, ""});
-        return;
     }
 
     *_imp->proof_stream << "# 1\n";

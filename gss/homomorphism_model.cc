@@ -345,8 +345,11 @@ auto HomomorphismModel::_check_label_compatibility(int p, int t) const -> bool
 
 auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
 {
-    if (pattern_has_loop(p) && ! target_has_loop(t))
+    if (pattern_has_loop(p) && ! target_has_loop(t)) {
+        if (_imp->params.proof)
+            _imp->params.proof->incompatible_by_loops(pattern_vertex_for_proof(p), target_vertex_for_proof(t));
         return false;
+    }
     else if (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t)))
         return false;
 
@@ -630,8 +633,11 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
         }
 
         domains.at(i).count = domains.at(i).values.count();
-        if (0 == domains.at(i).count)
+        if (0 == domains.at(i).count) {
+            if (_imp->params.proof)
+                _imp->params.proof->initial_domain_is_empty(domains.at(i).v, "compatibility stage");
             return false;
+        }
     }
 
     // for proof logging, we need degree information before we can output nds proofs
@@ -641,8 +647,11 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                 if (domains.at(i).values.test(j) &&
                         ! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, false)) {
                     domains.at(i).values.reset(j);
-                    if (0 == --domains.at(i).count)
+                    if (0 == --domains.at(i).count) {
+                        if (_imp->params.proof)
+                            _imp->params.proof->initial_domain_is_empty(domains.at(i).v, "nds stage");
                         return false;
+                    }
                 }
             }
         }
@@ -674,7 +683,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
     for (auto & d : domains) {
         d.count = d.values.count();
         if (0 == d.count && _imp->params.proof) {
-            _imp->params.proof->initial_domain_is_empty(d.v);
+            _imp->params.proof->initial_domain_is_empty(d.v, "post-initialisation stage");
             return false;
         }
     }
