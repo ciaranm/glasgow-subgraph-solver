@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <barrier>
 #include <condition_variable>
 #include <limits>
 #include <map>
@@ -22,12 +23,12 @@
 #include <utility>
 
 #include <boost/functional/hash.hpp>
-#include <boost/thread/barrier.hpp>
 
 using namespace gss;
 using namespace gss::innards;
 
 using std::atomic;
+using std::barrier;
 using std::function;
 using std::make_optional;
 using std::make_shared;
@@ -53,7 +54,6 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::operator""ms;
 
-using boost::barrier;
 using boost::hash_combine;
 
 namespace
@@ -286,7 +286,7 @@ namespace
                     ++number_of_restarts;
 
                     if (! just_the_first_thread) {
-                        wait_for_new_nogoods_barrier.wait();
+                        wait_for_new_nogoods_barrier.arrive_and_wait();
 
                         for (unsigned u = 0; u < n_threads; ++u)
                             if (t != u)
@@ -309,7 +309,7 @@ namespace
                             duplicate_filter_set.clear();
                         }
 
-                        synced_nogoods_barrier.wait();
+                        synced_nogoods_barrier.arrive_and_wait();
 
                         searchers[t]->watches.clear_new_nogoods();
                     }
