@@ -1,7 +1,7 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-find_package(Boost 1.74 COMPONENTS container thread REQUIRED)
+find_package(Boost 1.74 COMPONENTS container REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 add_library(glasgow_subgraphs

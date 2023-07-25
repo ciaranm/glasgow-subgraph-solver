@@ -3,7 +3,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 link_libraries(glasgow_subgraphs)
 
-find_package(Boost 1.74 COMPONENTS program_options container thread REQUIRED)
+find_package(Boost 1.74 COMPONENTS program_options container REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 add_executable(glasgow_subgraph_solver glasgow_subgraph_solver.cc)
