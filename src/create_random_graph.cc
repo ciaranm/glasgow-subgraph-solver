@@ -19,11 +19,16 @@ auto main(int argc, char * argv[]) -> int
         display_options.add_options()("help", "Display help information");
 
         po::options_description graph_options{"Graph options"};
-        graph_options.add_options()("seed", po::value<int>(), "Specify a random seed")("directed", "Generate a directed graph")("loops", po::value<double>(), "Generate loops with this probability");
+        graph_options.add_options()                             //
+            ("seed", po::value<int>(), "Specify a random seed") //
+            ("directed", "Generate a directed graph")           //
+            ("loops", po::value<double>(), "Generate loops with this probability");
         display_options.add(graph_options);
 
         po::options_description all_options{"All options"};
-        all_options.add_options()("vertices", po::value<int>(), "Specify the number of vertices")("edge-probability", po::value<double>(), "Specify the edge probability");
+        all_options.add_options()                                            //
+            ("vertices", po::value<int>(), "Specify the number of vertices") //
+            ("edge-probability", po::value<double>(), "Specify the edge probability");
 
         all_options.add(display_options);
 

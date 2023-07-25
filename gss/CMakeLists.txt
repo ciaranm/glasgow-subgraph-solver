@@ -9,7 +9,6 @@ add_library(glasgow_subgraphs
         clique.cc
         common_subgraph.cc
         configuration.cc
-        create_random_graph.cc
         graph_traits.cc
         homomorphism.cc
         homomorphism_domain.cc
