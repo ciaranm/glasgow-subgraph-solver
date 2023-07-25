@@ -3,20 +3,23 @@
 
 #include <gss/innards/svo_bitset.hh>
 
-struct HomomorphismDomain
+namespace gss::innards
 {
-    unsigned v;
-    unsigned count;
-    bool fixed = false;
-    SVOBitset values;
-
-    explicit HomomorphismDomain(unsigned s) :
-        values(s, 0)
+    struct HomomorphismDomain
     {
-    }
+        unsigned v;
+        unsigned count;
+        bool fixed = false;
+        SVOBitset values;
 
-    HomomorphismDomain(const HomomorphismDomain &) = default;
-    HomomorphismDomain(HomomorphismDomain &&) = default;
-};
+        explicit HomomorphismDomain(unsigned s) :
+            values(s, 0)
+        {
+        }
+
+        HomomorphismDomain(const HomomorphismDomain &) = default;
+        HomomorphismDomain(HomomorphismDomain &&) = default;
+    };
+}
 
 #endif

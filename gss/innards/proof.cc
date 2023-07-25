@@ -15,6 +15,9 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/stream.hpp>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::copy;
 using std::endl;
 using std::find;

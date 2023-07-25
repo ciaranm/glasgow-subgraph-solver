@@ -8,6 +8,9 @@
 #include <string>
 #include <vector>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::gcd;
 using std::pair;
 using std::set;
@@ -55,7 +58,8 @@ namespace
     }
 }
 
-auto solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> HomomorphismResult
+auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & target,
+    const HomomorphismParams & params) -> HomomorphismResult
 {
     set<int> isolated_pattern_vertices;
     find_removable_isolated_pattern_vertices(pattern, params, isolated_pattern_vertices);

@@ -19,6 +19,7 @@
 
 #include <unistd.h>
 
+using namespace gss;
 namespace po = boost::program_options;
 
 using std::boolalpha;
@@ -343,7 +344,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("send-to-lackey") && options_vars.count("receive-from-lackey")) {
             auto lackey_started_at = steady_clock::now();
-            params.lackey = make_unique<Lackey>(
+            params.lackey = make_unique<innards::Lackey>(
                 options_vars["send-to-lackey"].as<string>(),
                 options_vars["receive-from-lackey"].as<string>(),
                 pattern, target);
@@ -409,7 +410,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("pattern-symmetries")) {
             auto gap_start_time = steady_clock::now();
-            find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
+            innards::find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
             was_given_pattern_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
             cout << "pattern_less_constraints =";
@@ -423,7 +424,7 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("target-symmetries")) {
             auto gap_start_time = steady_clock::now();
-            find_symmetries(argv[0], target, params.target_occur_less_constraints, target_automorphism_group_size);
+            innards::find_symmetries(argv[0], target, params.target_occur_less_constraints, target_automorphism_group_size);
             was_given_target_automorphism_group = true;
             cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
             cout << "target_occur_less_constraints =";
@@ -474,8 +475,8 @@ auto main(int argc, char * argv[]) -> int
             cout << "lackey_propagations = " << params.lackey->number_of_propagations() << endl;
         }
 
-        verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
-            params.induced, result.mapping);
+        innards::verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective,
+            params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);
 
         return EXIT_SUCCESS;
     }

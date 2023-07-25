@@ -7,7 +7,10 @@
 
 #include <vector>
 
-auto cheap_all_different(unsigned target_size, std::vector<HomomorphismDomain> & domains, const std::shared_ptr<Proof> & proof,
-    const HomomorphismModel * const) -> bool;
+namespace gss::innards
+{
+    auto cheap_all_different(unsigned target_size, std::vector<HomomorphismDomain> & domains, const std::shared_ptr<Proof> & proof,
+        const HomomorphismModel * const) -> bool;
+}
 
 #endif

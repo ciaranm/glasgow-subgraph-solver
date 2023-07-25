@@ -3,6 +3,9 @@
 #include <tuple>
 #include <type_traits>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::conditional_t;
 using std::shared_ptr;
 using std::tuple;
@@ -110,7 +113,7 @@ namespace
     }
 }
 
-auto cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof,
+auto gss::innards::cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof,
     const HomomorphismModel * const model) -> bool
 {
     if (! proof.get())

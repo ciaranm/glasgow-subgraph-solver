@@ -14,6 +14,9 @@
 #include <utility>
 #include <vector>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::conditional_t;
 using std::find;
 using std::iota;
@@ -647,7 +650,7 @@ namespace
     };
 }
 
-auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
+auto gss::solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
 {
     CliqueRunner runner{graph, params};
     return params.connected ? runner.run<true>() : runner.run<false>();

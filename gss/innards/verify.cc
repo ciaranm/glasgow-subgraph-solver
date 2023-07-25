@@ -1,6 +1,9 @@
 #include <gss/innards/verify.hh>
 #include <map>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::map;
 using std::string;
 
@@ -14,7 +17,7 @@ auto BuggySolution::what() const noexcept -> const char *
     return _what.c_str();
 }
 
-auto verify_homomorphism(
+auto gss::innards::verify_homomorphism(
     const InputGraph & pattern,
     const InputGraph & target,
     bool injective,

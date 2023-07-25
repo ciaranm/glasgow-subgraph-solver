@@ -4,6 +4,9 @@
 #include <map>
 #include <mutex>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::endl;
 using std::function;
 using std::ifstream;

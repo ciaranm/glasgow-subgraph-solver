@@ -14,6 +14,9 @@
 #include <unistd.h>
 #endif
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::endl;
 using std::getline;
 using std::pair;
@@ -36,7 +39,7 @@ auto GapFailedUs::what() const noexcept -> const char *
 }
 
 #if defined(__WIN32)
-auto find_symmetries(
+auto gss::innards::find_symmetries(
     const char * const,
     const InputGraph &,
     std::list<std::pair<std::string, std::string>> &,
@@ -45,7 +48,7 @@ auto find_symmetries(
     throw GapFailedUs{"Linking to GAP not supported on windows"};
 }
 #else
-auto find_symmetries(
+auto gss::innards::find_symmetries(
     const char * const argv0,
     const InputGraph & graph,
     std::list<std::pair<std::string, std::string>> & constraints,

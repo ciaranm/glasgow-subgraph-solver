@@ -8,23 +8,26 @@
 #include <string>
 #include <utility>
 
-auto verify_homomorphism(
-    const InputGraph & pattern,
-    const InputGraph & target,
-    bool injective,
-    bool locally_injective,
-    bool induced,
-    const std::map<int, int> & mapping) -> void;
-
-class BuggySolution : public std::exception
+namespace gss::innards
 {
-private:
-    std::string _what;
+    auto verify_homomorphism(
+        const InputGraph & pattern,
+        const InputGraph & target,
+        bool injective,
+        bool locally_injective,
+        bool induced,
+        const std::map<int, int> & mapping) -> void;
 
-public:
-    BuggySolution(const std::string & message) noexcept;
+    class BuggySolution : public std::exception
+    {
+    private:
+        std::string _what;
 
-    auto what() const noexcept -> const char * override;
-};
+    public:
+        BuggySolution(const std::string & message) noexcept;
+
+        auto what() const noexcept -> const char * override;
+    };
+}
 
 #endif

@@ -3,6 +3,9 @@
 
 #include <boost/multiprecision/cpp_int.hpp>
 
-using loooong = boost::multiprecision::cpp_int;
+namespace gss
+{
+    using loooong = boost::multiprecision::cpp_int;
+}
 
 #endif

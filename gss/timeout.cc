@@ -10,6 +10,8 @@
 #include <iomanip>
 #include <iostream>
 
+using namespace gss;
+
 using std::atomic;
 using std::condition_variable;
 using std::cv_status;

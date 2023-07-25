@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+using namespace gss;
+
 using std::advance;
 using std::distance;
 using std::round;

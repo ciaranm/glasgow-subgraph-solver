@@ -3,6 +3,9 @@
 
 #include <gss/formats/input_graph.hh>
 
-auto is_simple_clique(const InputGraph & graph) -> bool;
+namespace gss::innards
+{
+    auto is_simple_clique(const InputGraph & graph) -> bool;
+}
 
 #endif

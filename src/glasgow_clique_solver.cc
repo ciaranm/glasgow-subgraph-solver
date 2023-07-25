@@ -15,6 +15,7 @@
 
 #include <unistd.h>
 
+using namespace gss;
 namespace po = boost::program_options;
 
 using std::boolalpha;

@@ -5,6 +5,9 @@
 #include <tuple>
 #include <type_traits>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::conditional_t;
 using std::make_optional;
 using std::max;

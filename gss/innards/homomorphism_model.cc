@@ -13,6 +13,9 @@
 #include <utility>
 #include <vector>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::greater;
 using std::list;
 using std::make_optional;

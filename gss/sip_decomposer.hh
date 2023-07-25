@@ -3,9 +3,12 @@
 
 #include <gss/homomorphism.hh>
 
-auto solve_sip_by_decomposition(
-    const InputGraph & pattern,
-    const InputGraph & target,
-    const HomomorphismParams & params) -> HomomorphismResult;
+namespace gss
+{
+    auto solve_sip_by_decomposition(
+        const InputGraph & pattern,
+        const InputGraph & target,
+        const HomomorphismParams & params) -> HomomorphismResult;
+}
 
 #endif

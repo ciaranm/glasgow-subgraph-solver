@@ -9,50 +9,53 @@
 #include <memory>
 #include <string>
 
-class DisobedientLackeyError : public std::exception
+namespace gss::innards
 {
-private:
-    std::string _what;
+    class DisobedientLackeyError : public std::exception
+    {
+    private:
+        std::string _what;
 
-public:
-    explicit DisobedientLackeyError(const std::string & message) noexcept;
+    public:
+        explicit DisobedientLackeyError(const std::string & message) noexcept;
 
-    auto what() const throw() -> const char *;
-};
+        auto what() const throw() -> const char *;
+    };
 
-class Lackey
-{
-private:
-    struct Imp;
-    std::unique_ptr<Imp> _imp;
+    class Lackey
+    {
+    private:
+        struct Imp;
+        std::unique_ptr<Imp> _imp;
 
-public:
-    Lackey(
-        const std::string & send_to_name,
-        const std::string & read_from_name,
-        const InputGraph & pattern,
-        const InputGraph & target);
-    ~Lackey();
+    public:
+        Lackey(
+            const std::string & send_to_name,
+            const std::string & read_from_name,
+            const InputGraph & pattern,
+            const InputGraph & target);
+        ~Lackey();
 
-    Lackey(const Lackey &) = delete;
-    Lackey & operator=(const Lackey &) = delete;
+        Lackey(const Lackey &) = delete;
+        Lackey & operator=(const Lackey &) = delete;
 
-    using DeletionFunction = std::function<auto(int, int)->bool>;
-    using RestrictRangeFunction = std::function<auto(int, int)->void>;
+        using DeletionFunction = std::function<auto(int, int)->bool>;
+        using RestrictRangeFunction = std::function<auto(int, int)->void>;
 
-    auto check_solution(
-        const VertexToVertexMapping &,
-        bool partial,
-        bool all_solutions,
-        const DeletionFunction & deletions) -> bool;
+        auto check_solution(
+            const VertexToVertexMapping &,
+            bool partial,
+            bool all_solutions,
+            const DeletionFunction & deletions) -> bool;
 
-    auto reduce_initial_bounds(
-        const RestrictRangeFunction & restrict_range) -> bool;
+        auto reduce_initial_bounds(
+            const RestrictRangeFunction & restrict_range) -> bool;
 
-    auto number_of_checks() const -> long;
-    auto number_of_propagations() const -> long;
-    auto number_of_deletions() const -> long;
-    auto number_of_calls() const -> long;
-};
+        auto number_of_checks() const -> long;
+        auto number_of_propagations() const -> long;
+        auto number_of_deletions() const -> long;
+        auto number_of_calls() const -> long;
+    };
+}
 
 #endif

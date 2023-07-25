@@ -2,6 +2,9 @@
 
 #include <algorithm>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::copy;
 
 SVOBitset::SVOBitset(unsigned size, unsigned bits)

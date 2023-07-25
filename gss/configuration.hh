@@ -4,15 +4,18 @@
 #include <exception>
 #include <string>
 
-class UnsupportedConfiguration : public std::exception
+namespace gss
 {
-private:
-    std::string _what;
+    class UnsupportedConfiguration : public std::exception
+    {
+    private:
+        std::string _what;
 
-public:
-    UnsupportedConfiguration(const std::string & message) noexcept;
+    public:
+        UnsupportedConfiguration(const std::string & message) noexcept;
 
-    auto what() const noexcept -> const char * override;
-};
+        auto what() const noexcept -> const char * override;
+    };
+}
 
 #endif

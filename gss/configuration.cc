@@ -1,5 +1,7 @@
 #include <gss/configuration.hh>
 
+using namespace gss;
+
 using std::string;
 
 UnsupportedConfiguration::UnsupportedConfiguration(const string & message) noexcept :

@@ -3,6 +3,9 @@
 
 #include <map>
 
-using VertexToVertexMapping = std::map<int, int>;
+namespace gss
+{
+    using VertexToVertexMapping = std::map<int, int>;
+}
 
 #endif

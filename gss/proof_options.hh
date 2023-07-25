@@ -3,15 +3,18 @@
 
 #include <string>
 
-struct ProofOptions
+namespace gss
 {
-    std::string opb_file;
-    std::string log_file;
-    bool bz2 = false;
-    bool friendly_names = true;
-    bool recover_encoding = false;
-    bool super_extra_verbose = false;
-    bool version2 = false;
-};
+    struct ProofOptions
+    {
+        std::string opb_file;
+        std::string log_file;
+        bool bz2 = false;
+        bool friendly_names = true;
+        bool recover_encoding = false;
+        bool super_extra_verbose = false;
+        bool version2 = false;
+    };
+}
 
 #endif

@@ -1,6 +1,6 @@
 #include <gss/innards/graph_traits.hh>
 
-auto is_simple_clique(const InputGraph & graph) -> bool
+auto gss::innards::is_simple_clique(const InputGraph & graph) -> bool
 {
     if (graph.has_vertex_labels() || graph.has_edge_labels() || graph.loopy())
         return false;

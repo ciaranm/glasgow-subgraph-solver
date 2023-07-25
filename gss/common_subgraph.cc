@@ -11,6 +11,9 @@
 #include <utility>
 #include <vector>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::function;
 using std::make_optional;
 using std::make_shared;
@@ -346,7 +349,8 @@ namespace
     };
 }
 
-auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & second, const CommonSubgraphParams & params) -> CommonSubgraphResult
+auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGraph & second,
+    const CommonSubgraphParams & params) -> CommonSubgraphResult
 {
     if (params.count_solutions && ! params.decide)
         throw UnsupportedConfiguration{"Solution counting only makes sense for decision problems"};

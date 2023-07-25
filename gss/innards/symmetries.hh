@@ -7,17 +7,20 @@
 #include <list>
 #include <string>
 
-class GapFailedUs : public std::exception
+namespace gss::innards
 {
-private:
-    std::string _what;
+    class GapFailedUs : public std::exception
+    {
+    private:
+        std::string _what;
 
-public:
-    GapFailedUs(const std::string & message) noexcept;
+    public:
+        GapFailedUs(const std::string & message) noexcept;
 
-    auto what() const noexcept -> const char *;
-};
+        auto what() const noexcept -> const char *;
+    };
 
-auto find_symmetries(const char * const argv0, const InputGraph & graph, std::list<std::pair<std::string, std::string>> & constraints, std::string & aut_size) -> void;
+    auto find_symmetries(const char * const argv0, const InputGraph & graph, std::list<std::pair<std::string, std::string>> & constraints, std::string & aut_size) -> void;
+}
 
 #endif

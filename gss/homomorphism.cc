@@ -24,6 +24,9 @@
 #include <boost/functional/hash.hpp>
 #include <boost/thread/barrier.hpp>
 
+using namespace gss;
+using namespace gss::innards;
+
 using std::atomic;
 using std::function;
 using std::make_optional;
@@ -403,7 +406,7 @@ namespace
     };
 }
 
-auto solve_homomorphism_problem(
+auto gss::solve_homomorphism_problem(
     const InputGraph & pattern,
     const InputGraph & target,
     const HomomorphismParams & params) -> HomomorphismResult
