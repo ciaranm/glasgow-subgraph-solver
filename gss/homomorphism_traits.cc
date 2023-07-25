@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/homomorphism_traits.hh>
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
@@ -52,4 +50,3 @@ auto can_use_clique(const HomomorphismParams & params) -> bool
 {
     return (! params.count_solutions) && (! params.lackey) && params.clique_detection && (! params.proof);
 }
-

@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/graph_traits.hh>
 
 auto is_simple_clique(const InputGraph & graph) -> bool
@@ -9,4 +7,3 @@ auto is_simple_clique(const InputGraph & graph) -> bool
 
     return (graph.size() * (graph.size() - 1)) == graph.number_of_directed_edges();
 }
-

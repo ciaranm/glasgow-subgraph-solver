@@ -1,23 +1,21 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/cheap_all_different.hh>
 
 #include <tuple>
 #include <type_traits>
 
 using std::conditional_t;
-using std::tuple;
 using std::shared_ptr;
+using std::tuple;
 using std::vector;
 
 namespace
 {
     template <bool proof_>
     auto cheap_all_different_with_optional_proofs(
-            unsigned target_size,
-            vector<HomomorphismDomain> & domains,
-            const shared_ptr<Proof> & proof,
-            const HomomorphismModel * const model) -> bool
+        unsigned target_size,
+        vector<HomomorphismDomain> & domains,
+        const shared_ptr<Proof> & proof,
+        const HomomorphismModel * const model) -> bool
     {
         // Pick domains smallest first; ties are broken by smallest .v first.
         // For each count p we have a linked list, whose first member is
@@ -28,11 +26,11 @@ namespace
         // elements
         vector<int> first(target_size + 1, -1), next(target_size, -1);
 
-        [[ maybe_unused ]] conditional_t<proof_, vector<NamedVertex>, tuple<> > lhs, hall_lhs, hall_rhs;
+        [[maybe_unused]] conditional_t<proof_, vector<NamedVertex>, tuple<>> lhs, hall_lhs, hall_rhs;
 
         // Iterate backwards, because we insert elements at the head of
         // lists and we want the sort to be stable
-        for (int i = int(domains.size()) - 1 ; i >= 0; --i) {
+        for (int i = int(domains.size()) - 1; i >= 0; --i) {
             unsigned count = domains.at(i).count;
             if (count > domains.size())
                 count = domains.size();
@@ -41,12 +39,12 @@ namespace
         }
 
         // counting all-different
-        SVOBitset domains_so_far{ target_size, 0 }, hall{ target_size, 0 };
+        SVOBitset domains_so_far{target_size, 0}, hall{target_size, 0};
         unsigned neighbours_so_far = 0;
 
-        [[ maybe_unused ]] conditional_t<proof_, unsigned, tuple<> > last_outputted_hall_size{};
+        [[maybe_unused]] conditional_t<proof_, unsigned, tuple<>> last_outputted_hall_size{};
 
-        for (unsigned i = 0 ; i <= domains.size() ; ++i) {
+        for (unsigned i = 0; i <= domains.size(); ++i) {
             // iterate over linked lists
             int domain_index = first[i];
             while (domain_index != -1) {
@@ -55,7 +53,7 @@ namespace
                 if constexpr (proof_)
                     lhs.push_back(model->pattern_vertex_for_proof(d.v));
 
-                [[ maybe_unused ]] conditional_t<proof_, unsigned, tuple<> > old_d_values_count;
+                [[maybe_unused]] conditional_t<proof_, unsigned, tuple<>> old_d_values_count;
                 if constexpr (proof_)
                     old_d_values_count = d.values.count();
 
@@ -81,7 +79,7 @@ namespace
                     if constexpr (proof_) {
                         vector<NamedVertex> rhs;
                         auto d = domains_so_far;
-                        for (auto v = d.find_first() ; v != decltype(d)::npos ; v = d.find_first()) {
+                        for (auto v = d.find_first(); v != decltype(d)::npos; v = d.find_first()) {
                             d.reset(v);
                             rhs.push_back(model->target_vertex_for_proof(v));
                         }
@@ -98,7 +96,7 @@ namespace
                             hall_lhs.push_back(l);
                         hall_rhs.clear();
                         auto d = domains_so_far;
-                        for (auto v = d.find_first() ; v != decltype(d)::npos ; v = d.find_first()) {
+                        for (auto v = d.find_first(); v != decltype(d)::npos; v = d.find_first()) {
                             d.reset(v);
                             hall_rhs.push_back(model->target_vertex_for_proof(v));
                         }
@@ -113,11 +111,10 @@ namespace
 }
 
 auto cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof,
-        const HomomorphismModel * const model) -> bool
+    const HomomorphismModel * const model) -> bool
 {
     if (! proof.get())
         return cheap_all_different_with_optional_proofs<false>(target_size, domains, proof, model);
     else
         return cheap_all_different_with_optional_proofs<true>(target_size, domains, proof, model);
 }
-

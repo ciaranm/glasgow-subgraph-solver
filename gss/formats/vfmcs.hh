@@ -1,10 +1,8 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_FORMATS_VFMCS_HH
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_FORMATS_VFMCS_HH 1
 
-#include <gss/formats/input_graph.hh>
 #include <gss/formats/graph_file_error.hh>
+#include <gss/formats/input_graph.hh>
 
 #include <iosfwd>
 #include <string>

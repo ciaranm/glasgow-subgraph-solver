@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_WATCHES_HH
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_WATCHES_HH 1
 
@@ -23,7 +21,7 @@ template <typename Decision_, template <typename> typename WatchTable_>
 struct Watches
 {
     // nogoods stored here
-    using NogoodStore = std::list<Nogood<Decision_> >;
+    using NogoodStore = std::list<Nogood<Decision_>>;
 
     NogoodStore nogoods;
 
@@ -42,12 +40,12 @@ struct Watches
 
     template <typename CanWatchFunction_, typename AssignmentIsNogoodFunction_>
     auto propagate(
-            Decision_ current_assignment,
-            const CanWatchFunction_ & can_watch,
-            const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> void
+        Decision_ current_assignment,
+        const CanWatchFunction_ & can_watch,
+        const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> void
     {
         auto & watches_to_update = table[current_assignment];
-        for (auto watch_to_update = watches_to_update.begin() ; watch_to_update != watches_to_update.end() ; ) {
+        for (auto watch_to_update = watches_to_update.begin(); watch_to_update != watches_to_update.end();) {
             auto & nogood = **watch_to_update;
 
             // make the first watch the thing we just triggered
@@ -56,7 +54,7 @@ struct Watches
 
             // can we find something else to watch?
             bool success = false;
-            for (auto new_literal = next(nogood.literals.begin(), 2) ; new_literal != nogood.literals.end() ; ++new_literal) {
+            for (auto new_literal = next(nogood.literals.begin(), 2); new_literal != nogood.literals.end(); ++new_literal) {
                 if (can_watch(*new_literal)) {
                     // we can watch new_literal instead of current_assignment in this nogood
                     success = true;
@@ -96,7 +94,7 @@ struct Watches
 
     template <typename AssignmentIsNogoodFunction_>
     auto apply_new_nogoods(
-            const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> bool
+        const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> bool
     {
         for (auto & n : need_to_watch)
             if (apply_one_new_nogood(n, assignment_is_nogood))
@@ -111,8 +109,8 @@ struct Watches
 
     template <typename AssignmentIsNogoodFunction_>
     auto apply_one_new_nogood(
-            const typename NogoodStore::iterator & n,
-            const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> bool
+        const typename NogoodStore::iterator & n,
+        const AssignmentIsNogoodFunction_ & assignment_is_nogood) -> bool
     {
         if (n->literals.empty())
             return true;
@@ -127,7 +125,7 @@ struct Watches
     }
 
     auto gather_nogoods_from(
-            Watches & other)
+        Watches & other)
     {
         for (auto & n : other.need_to_watch) {
             nogoods.emplace_back(*n);

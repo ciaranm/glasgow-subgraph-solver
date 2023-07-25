@@ -1,13 +1,11 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
-#include <gss/sip_decomposer.hh>
 #include <gss/lackey.hh>
-#include <gss/symmetries.hh>
-#include <gss/restarts.hh>
-#include <gss/verify.hh>
 #include <gss/proof.hh>
+#include <gss/restarts.hh>
+#include <gss/sip_decomposer.hh>
+#include <gss/symmetries.hh>
+#include <gss/verify.hh>
 
 #include <boost/program_options.hpp>
 
@@ -50,106 +48,104 @@ using std::chrono::system_clock;
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{ "Program options" };
-        display_options.add_options()
-            ("help",                                         "Display help information")
-            ("timeout",            po::value<int>(),         "Abort after this many seconds")
-            ("parallel",                                     "Use auto-configured parallel search (highly nondeterministic runtimes)");
+        po::options_description display_options{"Program options"};
+        display_options.add_options()                                      //
+            ("help", "Display help information")                           //
+            ("timeout", po::value<int>(), "Abort after this many seconds") //
+            ("parallel", "Use auto-configured parallel search (highly nondeterministic runtimes)");
 
-        po::options_description problem_options{ "Problem options" };
-        problem_options.add_options()
-            ("noninjective",                                 "Drop the injectivity requirement")
-            ("locally-injective",                            "Require only local injectivity")
-            ("count-solutions",                              "Count the number of solutions")
-            ("print-all-solutions",                          "Print out every solution, rather than one")
-            ("induced",                                      "Find an induced mapping");
+        po::options_description problem_options{"Problem options"};
+        problem_options.add_options()                                            //
+            ("noninjective", "Drop the injectivity requirement")                 //
+            ("locally-injective", "Require only local injectivity")              //
+            ("count-solutions", "Count the number of solutions")                 //
+            ("print-all-solutions", "Print out every solution, rather than one") //
+            ("induced", "Find an induced mapping");
         display_options.add(problem_options);
 
-        po::options_description input_options{ "Input file options" };
-        input_options.add_options()
-            ("format",             po::value<string>(),      "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)")
-            ("pattern-format",     po::value<string>(),      "Specify input file format just for the pattern graph")
-            ("target-format",      po::value<string>(),      "Specify input file format just for the target graph");
+        po::options_description input_options{"Input file options"};
+        input_options.add_options()                                                                                          //
+            ("format", po::value<string>(), "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)") //
+            ("pattern-format", po::value<string>(), "Specify input file format just for the pattern graph")                  //
+            ("target-format", po::value<string>(), "Specify input file format just for the target graph");
         display_options.add(input_options);
 
-        po::options_description search_options{ "Advanced search configuration options" };
-        search_options.add_options()
-            ("restarts",             po::value<string>(),      "Specify restart policy (luby / geometric / timed / none)")
-            ("geometric-multiplier", po::value<double>(),      "Specify multiplier for geometric restarts")
-            ("geometric-constant",   po::value<double>(),      "Specify starting constant for geometric restarts")
-            ("restart-interval",     po::value<int>(),         "Specify the restart interval in milliseconds for timed restarts")
-            ("restart-minimum",      po::value<int>(),         "Specify a minimum number of backtracks before a timed restart can trigger")
-            ("luby-constant",        po::value<int>(),         "Specify the starting constant / multiplier for Luby restarts")
-            ("value-ordering",       po::value<string>(),      "Specify value-ordering heuristic (biased / degree / antidegree / random / none)")
-            ("pattern-symmetries",                             "Eliminate pattern symmetries (requires Gap)")
-            ("target-symmetries",                              "Eliminate target symmetries (requires Gap)");
+        po::options_description search_options{"Advanced search configuration options"};
+        search_options.add_options()                                                                                                   //
+            ("restarts", po::value<string>(), "Specify restart policy (luby / geometric / timed / none)")                              //
+            ("geometric-multiplier", po::value<double>(), "Specify multiplier for geometric restarts")                                 //
+            ("geometric-constant", po::value<double>(), "Specify starting constant for geometric restarts")                            //
+            ("restart-interval", po::value<int>(), "Specify the restart interval in milliseconds for timed restarts")                  //
+            ("restart-minimum", po::value<int>(), "Specify a minimum number of backtracks before a timed restart can trigger")         //
+            ("luby-constant", po::value<int>(), "Specify the starting constant / multiplier for Luby restarts")                        //
+            ("value-ordering", po::value<string>(), "Specify value-ordering heuristic (biased / degree / antidegree / random / none)") //
+            ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")                                                      //
+            ("target-symmetries", "Eliminate target symmetries (requires Gap)");
         display_options.add(search_options);
 
-        po::options_description mangling_options{ "Advanced input processing options" };
-        mangling_options.add_options()
-            ("no-clique-detection",                            "Disable clique / independent set detection")
-            ("no-supplementals",                               "Do not use supplemental graphs")
-            ("no-nds",                                         "Do not use neighbourhood degree sequences");
+        po::options_description mangling_options{"Advanced input processing options"};
+        mangling_options.add_options()                                            //
+            ("no-clique-detection", "Disable clique / independent set detection") //
+            ("no-supplementals", "Do not use supplemental graphs")                //
+            ("no-nds", "Do not use neighbourhood degree sequences");
         display_options.add(mangling_options);
 
-        po::options_description parallel_options{ "Advanced parallelism options" };
-        parallel_options.add_options()
-            ("threads",              po::value<unsigned>(),    "Use threaded search, with this many threads (0 to auto-detect)")
-            ("triggered-restarts",                             "Have one thread trigger restarts (more nondeterminism, better performance)")
-            ("delay-thread-creation",                          "Do not create threads until after the first restart");
+        po::options_description parallel_options{"Advanced parallelism options"};
+        parallel_options.add_options()                                                                           //
+            ("threads", po::value<unsigned>(), "Use threaded search, with this many threads (0 to auto-detect)") //
+            ("triggered-restarts", "Have one thread trigger restarts (more nondeterminism, better performance)") //
+            ("delay-thread-creation", "Do not create threads until after the first restart");
         display_options.add(parallel_options);
 
         vector<string> pattern_less_thans, target_occur_less_thans;
-        po::options_description symmetry_options{ "Manual symmetry options" };
-        symmetry_options.add_options()
-            ("pattern-less-than",   po::value<vector<string> >(&pattern_less_thans),
-                                                               "Specify a pattern less than constraint, in the form v<w")
-            ("pattern-automorphism-group-size", po::value<string>(),
-                                                               "Specify the size of the pattern graph automorphism group")
-            ("target-occurs-less-than",   po::value<vector<string> >(&target_occur_less_thans),
-                                                               "Specify a target occurs less than constraint, in the form v<w")
-            ("target-automorphism-group-size", po::value<string>(),
-                                                               "Specify the size of the target graph automorphism group");
+        po::options_description symmetry_options{"Manual symmetry options"};
+        symmetry_options.add_options()                                                       //
+            ("pattern-less-than", po::value<vector<string>>(&pattern_less_thans),            //
+                "Specify a pattern less than constraint, in the form v<w")                   //
+            ("pattern-automorphism-group-size", po::value<string>(),                         //
+                "Specify the size of the pattern graph automorphism group")                  //
+            ("target-occurs-less-than", po::value<vector<string>>(&target_occur_less_thans), //
+                "Specify a target occurs less than constraint, in the form v<w")             //
+            ("target-automorphism-group-size", po::value<string>(),                          //
+                "Specify the size of the target graph automorphism group");
         display_options.add(symmetry_options);
 
-        po::options_description lackey_options{ "External constraint solver options" };
-        lackey_options.add_options()
-            ("send-to-lackey",      po::value<string>(),       "Send candidate solutions to an external solver over this named pipe")
-            ("receive-from-lackey", po::value<string>(),       "Receive responses from external solver over this named pipe")
-            ("send-partials-to-lackey",                        "Send partial solutions to the lackey")
-            ("propagate-using-lackey", po::value<string>(),    "Propagate using lackey (never / root / root-and-backjump / always)");
+        po::options_description lackey_options{"External constraint solver options"};
+        lackey_options.add_options()                                                                                       //
+            ("send-to-lackey", po::value<string>(), "Send candidate solutions to an external solver over this named pipe") //
+            ("receive-from-lackey", po::value<string>(), "Receive responses from external solver over this named pipe")    //
+            ("send-partials-to-lackey", "Send partial solutions to the lackey")                                            //
+            ("propagate-using-lackey", po::value<string>(), "Propagate using lackey (never / root / root-and-backjump / always)");
         display_options.add(lackey_options);
 
-        po::options_description proof_logging_options{ "Proof logging options" };
-        proof_logging_options.add_options()
-            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .veripb)")
-            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
-            ("verbose-proofs",                                 "Write lots of comments to the proof, for tracing")
-            ("compress-proof",                                 "Compress the proof using bz2")
-            ("proof-format-2",                                 "Use the under-development 2.0 format for proofs")
-            ("recover-proof-encoding",                         "Recover the proof encoding, to work with verified encoders");
+        po::options_description proof_logging_options{"Proof logging options"};
+        proof_logging_options.add_options()                                                                        //
+            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .veripb)") //
+            ("proof-names", "Use 'friendly' variable names in the proof, rather than x1, x2, ...")                 //
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing")                                 //
+            ("compress-proof", "Compress the proof using bz2")                                                     //
+            ("proof-format-2", "Use the under-development 2.0 format for proofs")                                  //
+            ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
         display_options.add(proof_logging_options);
 
         vector<string> shapes;
         vector<int> shape_counts, shape_injectives;
-        po::options_description hidden_options{ "Hidden options" };
-        hidden_options.add_options()
-            ("enumerate",                                      "Alias for --count-solutions (backwards compatibility)")
-            ("distance3",                                      "Use distance 3 filtering (experimental)")
-            ("k4",                                             "Use 4-clique filtering (experimental)")
-            ("n-exact-path-graphs",       po::value<int>(),    "Specify number of exact path graphs")
-            ("decomposition",                                  "Use decomposition")
-            ("cliques",                                        "Use clique size constraints")
-            ("cliques-on-supplementals",                       "Use clique size constraints on supplemental graphs too")
-            ("shape",                     po::value<vector<string> >(&shapes), "Specify an extra shape graph (slow, experimental)")
-            ("shape-count",               po::value<vector<int> >(&shape_counts), "Specify how many times the shape must occur")
-            ("shape-injective",           po::value<vector<int> >(&shape_injectives), "Specify whether the shape must occur injectively");
+        po::options_description hidden_options{"Hidden options"};
+        hidden_options.add_options()("enumerate", "Alias for --count-solutions (backwards compatibility)")        //
+            ("distance3", "Use distance 3 filtering (experimental)")                                              //
+            ("k4", "Use 4-clique filtering (experimental)")                                                       //
+            ("n-exact-path-graphs", po::value<int>(), "Specify number of exact path graphs")                      //
+            ("decomposition", "Use decomposition")                                                                //
+            ("cliques", "Use clique size constraints")                                                            //
+            ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")                //
+            ("shape", po::value<vector<string>>(&shapes), "Specify an extra shape graph (slow, experimental)")    //
+            ("shape-count", po::value<vector<int>>(&shape_counts), "Specify how many times the shape must occur") //
+            ("shape-injective", po::value<vector<int>>(&shape_injectives), "Specify whether the shape must occur injectively");
 
-        po::options_description all_options{ "All options" };
-        all_options.add_options()
-            ("pattern-file", "specify the pattern file")
-            ("target-file",  "specify the target file")
-            ;
+        po::options_description all_options{"All options"};
+        all_options.add_options()                        //
+            ("pattern-file", "specify the pattern file") //
+            ("target-file", "specify the target file");
 
         all_options.add(display_options);
         all_options.add(hidden_options);
@@ -157,14 +153,14 @@ auto main(int argc, char * argv[]) -> int
         po::positional_options_description positional_options;
         positional_options
             .add("pattern-file", 1)
-            .add("target-file", 1)
-            ;
+            .add("target-file", 1);
 
         po::variables_map options_vars;
         po::store(po::command_line_parser(argc, argv)
-                .options(all_options)
-                .positional(positional_options)
-                .run(), options_vars);
+                      .options(all_options)
+                      .positional(positional_options)
+                      .run(),
+            options_vars);
         po::notify(options_vars);
 
         /* --help? Show a message, and exit. */
@@ -229,7 +225,7 @@ auto main(int argc, char * argv[]) -> int
                 milliseconds duration = TimedRestartsSchedule::default_duration;
                 unsigned long long minimum_backtracks = TimedRestartsSchedule::default_minimum_backtracks;
                 if (options_vars.count("restart-interval"))
-                    duration = milliseconds{ options_vars["restart-interval"].as<int>() };
+                    duration = milliseconds{options_vars["restart-interval"].as<int>()};
                 if (options_vars.count("restart-minimum"))
                     minimum_backtracks = options_vars["restart-minimum"].as<int>();
                 params.restarts_schedule = make_unique<TimedRestartsSchedule>(duration, minimum_backtracks);
@@ -280,7 +276,7 @@ auto main(int argc, char * argv[]) -> int
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 
         if (options_vars.count("shape")) {
-            for (decltype(shapes.size()) s = 0 ; s != shapes.size() ; ++s) {
+            for (decltype(shapes.size()) s = 0; s != shapes.size(); ++s) {
                 auto graph = make_unique<InputGraph>(read_file_format("csv", shapes[s]));
                 params.extra_shapes.emplace_back(move(graph), s >= shape_injectives.size() ? true : shape_injectives[s], s >= shape_counts.size() ? 1 : shape_counts[s]);
             }
@@ -323,13 +319,13 @@ auto main(int argc, char * argv[]) -> int
             return EXIT_FAILURE;
         }
 
-#if !defined(__WIN32)
+#if ! defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
 #endif
         cout << "commandline =";
-        for (int i = 0 ; i < argc ; ++i)
+        for (int i = 0; i < argc; ++i)
             cout << " " << argv[i];
         cout << endl;
 
@@ -349,9 +345,9 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("send-to-lackey") && options_vars.count("receive-from-lackey")) {
             auto lackey_started_at = steady_clock::now();
             params.lackey = make_unique<Lackey>(
-                    options_vars["send-to-lackey"].as<string>(),
-                    options_vars["receive-from-lackey"].as<string>(),
-                    pattern, target);
+                options_vars["send-to-lackey"].as<string>(),
+                options_vars["receive-from-lackey"].as<string>(),
+                pattern, target);
             auto lackey_time = duration_cast<milliseconds>(steady_clock::now() - lackey_started_at);
             cout << "lackey_init_time = " << lackey_time.count() << endl;
         }
@@ -375,7 +371,7 @@ auto main(int argc, char * argv[]) -> int
             params.propagate_using_lackey = PropagateUsingLackey::Never;
 
         if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) -> bool {
+            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
                 cout << "mapping = ";
                 for (auto v : mapping)
                     cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
@@ -393,7 +389,7 @@ auto main(int argc, char * argv[]) -> int
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
             params.proof = make_shared<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof, verbose_proofs,
-                    format2, recover_encoding);
+                format2, recover_encoding);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
             cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }
@@ -404,7 +400,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "target_directed_edges = " << target.number_of_directed_edges() << endl;
 
         /* Prepare and start timeout */
-        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
+        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s);
 
         /* Start the clock */
         params.start_time = steady_clock::now();
@@ -415,7 +411,7 @@ auto main(int argc, char * argv[]) -> int
             was_given_pattern_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
             cout << "pattern_less_constraints =";
-            for (auto & [ a, b ] : params.pattern_less_constraints)
+            for (auto & [a, b] : params.pattern_less_constraints)
                 cout << " " << a << "<" << b;
             cout << endl;
         }
@@ -429,7 +425,7 @@ auto main(int argc, char * argv[]) -> int
             was_given_target_automorphism_group = true;
             cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
             cout << "target_occur_less_constraints =";
-            for (auto & [ a, b ] : params.target_occur_less_constraints)
+            for (auto & [a, b] : params.target_occur_less_constraints)
                 cout << " " << a << "<" << b;
             cout << endl;
         }
@@ -437,9 +433,7 @@ auto main(int argc, char * argv[]) -> int
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
 
-        auto result = options_vars.count("decomposition") ?
-            solve_sip_by_decomposition(pattern, target, params) :
-            solve_homomorphism_problem(pattern, target, params);
+        auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params) : solve_homomorphism_problem(pattern, target, params);
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
@@ -479,7 +473,7 @@ auto main(int argc, char * argv[]) -> int
         }
 
         verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective, params.injectivity == Injectivity::LocallyInjective,
-                params.induced, result.mapping);
+            params.induced, result.mapping);
 
         return EXIT_SUCCESS;
     }
@@ -499,4 +493,3 @@ auto main(int argc, char * argv[]) -> int
         return EXIT_FAILURE;
     }
 }
-

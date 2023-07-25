@@ -1,13 +1,11 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_CLIQUE_HH
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_CLIQUE_HH 1
 
 #include <gss/formats/input_graph.hh>
-#include <gss/restarts.hh>
-#include <gss/timeout.hh>
 #include <gss/proof-fwd.hh>
+#include <gss/restarts.hh>
 #include <gss/svo_bitset.hh>
+#include <gss/timeout.hh>
 
 #include <chrono>
 #include <functional>
@@ -50,7 +48,7 @@ struct CliqueParams
     bool input_order = false;
 
     /// For use by the maximum common connected subgraph reduction
-    std::function<auto (int, const std::function<auto (int) -> int> &) -> SVOBitset> connected;
+    std::function<auto(int, const std::function<auto(int)->int> &)->SVOBitset> connected;
 
     /// Optional proof handler
     std::shared_ptr<Proof> proof;

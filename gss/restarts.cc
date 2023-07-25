@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/restarts.hh>
 
 #include <algorithm>
@@ -172,4 +170,3 @@ auto TimedRestartsSchedule::might_restart() -> bool
 {
     return true;
 }
-

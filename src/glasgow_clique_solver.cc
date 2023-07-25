@@ -1,8 +1,6 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
-#include <gss/formats/read_file_format.hh>
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
+#include <gss/formats/read_file_format.hh>
 #include <gss/proof.hh>
 
 #include <boost/program_options.hpp>
@@ -51,54 +49,52 @@ auto colour_class_order_from_string(string_view s) -> ColourClassOrder
     else if (s == "sorted")
         return ColourClassOrder::Sorted;
     else
-        throw UnsupportedConfiguration{ "Unknown colour class order '" + string(s) + "'" };
+        throw UnsupportedConfiguration{"Unknown colour class order '" + string(s) + "'"};
 }
 
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{ "Program options" };
-        display_options.add_options()
-            ("help",                                         "Display help information")
-            ("timeout",            po::value<int>(),         "Abort after this many seconds")
-            ("format",             po::value<string>(),      "Specify input file format (auto, lad, labelledlad, dimacs)")
-            ("decide",             po::value<int>(),         "Solve this decision problem");
+        po::options_description display_options{"Program options"};
+        display_options.add_options()                                                                     //
+            ("help", "Display help information")                                                          //
+            ("timeout", po::value<int>(), "Abort after this many seconds")                                //
+            ("format", po::value<string>(), "Specify input file format (auto, lad, labelledlad, dimacs)") //
+            ("decide", po::value<int>(), "Solve this decision problem");
 
-        po::options_description configuration_options{ "Advanced configuration options" };
-        configuration_options.add_options()
-            ("colour-ordering",    po::value<string>(),      "Specify colour-ordering (colour / singletons-first / sorted)")
-            ("input-order",                                  "Use the input order for colouring (usually a bad idea)")
-            ("restarts-constant",  po::value<int>(),         "How often to perform restarts (disabled by default)")
-            ("geometric-restarts", po::value<double>(),      "Use geometric restarts with the specified multiplier (default is Luby)");
+        po::options_description configuration_options{"Advanced configuration options"};
+        configuration_options.add_options()                                                                          //
+            ("colour-ordering", po::value<string>(), "Specify colour-ordering (colour / singletons-first / sorted)") //
+            ("input-order", "Use the input order for colouring (usually a bad idea)")                                //
+            ("restarts-constant", po::value<int>(), "How often to perform restarts (disabled by default)")           //
+            ("geometric-restarts", po::value<double>(), "Use geometric restarts with the specified multiplier (default is Luby)");
         display_options.add(configuration_options);
 
-        po::options_description proof_logging_options{ "Proof logging options" };
-        proof_logging_options.add_options()
-            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .veripb)")
-            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
-            ("verbose-proofs",                                 "Write lots of comments to the proof, for tracing")
-            ("compress-proof",                                 "Compress the proof using bz2")
-            ("proof-format-2",                                 "Use the under-development 2.0 format for proofs")
-            ("recover-proof-encoding",                         "Recover the proof encoding, to work with verified encoders");
+        po::options_description proof_logging_options{"Proof logging options"};
+        proof_logging_options.add_options()                                                                        //
+            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .veripb)") //
+            ("proof-names", "Use 'friendly' variable names in the proof, rather than x1, x2, ...")                 //
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing")                                 //
+            ("compress-proof", "Compress the proof using bz2")                                                     //
+            ("proof-format-2", "Use the under-development 2.0 format for proofs")                                  //
+            ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
         display_options.add(proof_logging_options);
 
-        po::options_description all_options{ "All options" };
-        all_options.add_options()
-            ("graph-file", "Specify the graph file")
-            ;
+        po::options_description all_options{"All options"};
+        all_options.add_options()("graph-file", "Specify the graph file");
 
         all_options.add(display_options);
 
         po::positional_options_description positional_options;
         positional_options
-            .add("graph-file", 1)
-            ;
+            .add("graph-file", 1);
 
         po::variables_map options_vars;
         po::store(po::command_line_parser(argc, argv)
-                .options(all_options)
-                .positional(positional_options)
-                .run(), options_vars);
+                      .options(all_options)
+                      .positional(positional_options)
+                      .run(),
+            options_vars);
         po::notify(options_vars);
 
         /* --help? Show a message, and exit. */
@@ -141,13 +137,13 @@ auto main(int argc, char * argv[]) -> int
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
         params.input_order = options_vars.count("input-order");
 
-#if !defined(_WIN32)
+#if ! defined(_WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
 #endif
         cout << "commandline =";
-        for (int i = 0 ; i < argc ; ++i)
+        for (int i = 0; i < argc; ++i)
             cout << " " << argv[i];
         cout << endl;
 
@@ -169,13 +165,13 @@ auto main(int argc, char * argv[]) -> int
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
             params.proof = make_unique<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof, verbose_proofs,
-                    format2, recover_encoding);
+                format2, recover_encoding);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
             cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }
 
         /* Prepare and start timeout */
-        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
+        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s);
 
         /* Start the clock */
         params.start_time = steady_clock::now();
@@ -229,4 +225,3 @@ auto main(int argc, char * argv[]) -> int
         return EXIT_FAILURE;
     }
 }
-

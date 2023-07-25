@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/formats/graph_file_error.hh>
 #include <gss/formats/input_graph.hh>
 
@@ -28,4 +26,3 @@ auto GraphFileError::file_at_least_existed() const noexcept -> bool
 {
     return _exists;
 }
-

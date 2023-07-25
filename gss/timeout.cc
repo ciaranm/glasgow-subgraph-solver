@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/timeout.hh>
 
 #include <atomic>
@@ -7,10 +5,10 @@
 #include <mutex>
 #include <thread>
 
-#include <iostream>
-#include <iomanip>
-#include <ctime>
 #include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <iostream>
 
 using std::atomic;
 using std::condition_variable;
@@ -39,21 +37,21 @@ Timeout::Timeout(const seconds limit) :
     _detail->abort.store(false);
     if (0s != limit) {
         _detail->timeout_thread = thread([limit, &detail = this->_detail] {
-                auto abort_time = system_clock::now() + limit;
-                {
-                    /* Sleep until either we've reached the time limit,
-                     * or we've finished all the work. */
-                    unique_lock<mutex> guard(detail->timeout_mutex);
-                    while (! detail->abort.load()) {
-                        if (cv_status::timeout == detail->timeout_cv.wait_until(guard, abort_time)) {
-                            /* We've woken up, and it's due to a timeout. */
-                            detail->aborted = true;
-                            break;
-                        }
+            auto abort_time = system_clock::now() + limit;
+            {
+                /* Sleep until either we've reached the time limit,
+                 * or we've finished all the work. */
+                unique_lock<mutex> guard(detail->timeout_mutex);
+                while (! detail->abort.load()) {
+                    if (cv_status::timeout == detail->timeout_cv.wait_until(guard, abort_time)) {
+                        /* We've woken up, and it's due to a timeout. */
+                        detail->aborted = true;
+                        break;
                     }
                 }
-                detail->abort.store(true);
-                });
+            }
+            detail->abort.store(true);
+        });
     }
 }
 
@@ -89,4 +87,3 @@ auto Timeout::stop() -> void
         _detail->timeout_thread.join();
     }
 }
-

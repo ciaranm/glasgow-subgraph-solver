@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/thread_utils.hh>
 
 #include <thread>
@@ -14,4 +12,3 @@ auto how_many_threads(unsigned n) -> unsigned
         n = 1;
     return n;
 }
-

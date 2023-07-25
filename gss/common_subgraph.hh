@@ -1,13 +1,11 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #ifndef GLASGOW_SUBGRAPH_SOLVER_COMMON_SUBGRAPH_HH
 #define GLASGOW_SUBGRAPH_SOLVER_COMMON_SUBGRAPH_HH 1
 
 #include <gss/formats/input_graph.hh>
+#include <gss/loooong.hh>
+#include <gss/proof-fwd.hh>
 #include <gss/timeout.hh>
 #include <gss/vertex_to_vertex_mapping.hh>
-#include <gss/proof-fwd.hh>
-#include <gss/loooong.hh>
 
 #include <functional>
 #include <list>
@@ -29,7 +27,7 @@ struct CommonSubgraphParams
     bool count_solutions = false;
 
     /// Print solutions, for enumerating
-    std::function<auto (const VertexToVertexMapping &) -> void> enumerate_callback;
+    std::function<auto(const VertexToVertexMapping &)->void> enumerate_callback;
 
     /// Optional proof handler
     std::shared_ptr<Proof> proof;
@@ -60,8 +58,8 @@ struct CommonSubgraphResult
 };
 
 auto solve_common_subgraph_problem(
-        const InputGraph & first,
-        const InputGraph & second,
-        const CommonSubgraphParams & params) -> CommonSubgraphResult;
+    const InputGraph & first,
+    const InputGraph & second,
+    const CommonSubgraphParams & params) -> CommonSubgraphResult;
 
 #endif

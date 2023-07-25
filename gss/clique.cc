@@ -1,10 +1,8 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/clique.hh>
-#include <gss/watches.hh>
-#include <gss/svo_bitset.hh>
-#include <gss/proof.hh>
 #include <gss/configuration.hh>
+#include <gss/proof.hh>
+#include <gss/svo_bitset.hh>
+#include <gss/watches.hh>
 
 #include <algorithm>
 #include <list>
@@ -21,8 +19,8 @@ using std::iota;
 using std::is_same;
 using std::list;
 using std::make_tuple;
-using std::mt19937;
 using std::move;
+using std::mt19937;
 using std::pair;
 using std::reverse;
 using std::sort;
@@ -62,7 +60,7 @@ namespace
     {
         vector<EntryType_> data;
 
-        EntryType_ & operator[] (int x)
+        EntryType_ & operator[](int x)
         {
             return data[x];
         }
@@ -86,7 +84,7 @@ namespace
         CliqueRunner(const InputGraph & g, const CliqueParams & p) :
             params(p),
             size(g.size()),
-            adj(g.size(), SVOBitset{ unsigned(size), 0 }),
+            adj(g.size(), SVOBitset{unsigned(size), 0}),
             order(size),
             invorder(size),
             space(nullptr)
@@ -102,22 +100,22 @@ namespace
             // pre-calculate degrees
             vector<int> degrees;
             degrees.resize(size);
-            g.for_each_edge([&] (int f, int, string_view) { ++degrees[f]; });
+            g.for_each_edge([&](int f, int, string_view) { ++degrees[f]; });
 
             // sort on degree
             if (! params.input_order)
                 sort(order.begin(), order.end(),
-                        [&] (int a, int b) { return (degrees[a] > degrees[b] || (degrees[a] == degrees[b] && a < b)); });
+                    [&](int a, int b) { return (degrees[a] > degrees[b] || (degrees[a] == degrees[b] && a < b)); });
 
-            for (unsigned i = 0 ; i < order.size() ; ++i)
+            for (unsigned i = 0; i < order.size(); ++i)
                 invorder[order[i]] = i;
 
-            g.for_each_edge([&] (int f, int t, string_view) { adj[invorder[f]].set(invorder[t]); });
+            g.for_each_edge([&](int f, int t, string_view) { adj[invorder[f]].set(invorder[t]); });
 
             if (params.connected) {
                 connected_table.resize(size);
-                for (int v = 0 ; v < size ; ++v)
-                    connected_table[v] = params.connected(order.at(v), [&] (int x) { return invorder.at(x); });
+                for (int v = 0; v < size; ++v)
+                    connected_table[v] = params.connected(order.at(v), [&](int x) { return invorder.at(x); });
             }
         }
 
@@ -127,13 +125,13 @@ namespace
         }
 
         auto colour_class_order(
-                const SVOBitset & p,
-                int * p_order,
-                int * p_bounds,
-                int & p_end) -> void
+            const SVOBitset & p,
+            int * p_order,
+            int * p_bounds,
+            int & p_end) -> void
         {
-            SVOBitset p_left = p;      // not coloured yet
-            unsigned colour = 0;         // current colour
+            SVOBitset p_left = p; // not coloured yet
+            unsigned colour = 0;  // current colour
             p_end = 0;
 
             // while we've things left to colour
@@ -162,13 +160,13 @@ namespace
         }
 
         auto connected_colour_class_order(
-                const SVOBitset & p,
-                const SVOBitset & a,
-                int * p_order,
-                int * p_bounds,
-                int & p_end) -> void
+            const SVOBitset & p,
+            const SVOBitset & a,
+            int * p_order,
+            int * p_bounds,
+            int & p_end) -> void
         {
-            unsigned colour = 0;         // current colour
+            unsigned colour = 0; // current colour
             p_end = 0;
 
             SVOBitset p_left = p; // not coloured yet
@@ -227,17 +225,17 @@ namespace
         }
 
         auto colour_class_order_2df(
-                const SVOBitset & p,
-                int * p_order,
-                int * p_bounds,
-                int * defer,
-                int & p_end) -> void
+            const SVOBitset & p,
+            int * p_order,
+            int * p_bounds,
+            int * defer,
+            int & p_end) -> void
         {
-            SVOBitset p_left = p;      // not coloured yet
-            unsigned colour = 0;         // current colour
+            SVOBitset p_left = p; // not coloured yet
+            unsigned colour = 0;  // current colour
             p_end = 0;
 
-            unsigned d = 0;             // number deferred
+            unsigned d = 0; // number deferred
 
             // while we've things left to colour
             while (p_left.any()) {
@@ -272,7 +270,7 @@ namespace
             }
 
             // handle deferred singletons
-            for (unsigned n = 0 ; n < d ; ++n) {
+            for (unsigned n = 0; n < d; ++n) {
                 ++colour;
                 p_order[p_end] = defer[n];
                 p_bounds[p_end] = colour;
@@ -281,13 +279,13 @@ namespace
         }
 
         auto colour_class_order_sorted(
-                const SVOBitset & p,
-                int * p_order,
-                int * p_bounds,
-                int & p_end) -> void
+            const SVOBitset & p,
+            int * p_order,
+            int * p_bounds,
+            int & p_end) -> void
         {
-            SVOBitset p_left = p;      // not coloured yet
-            unsigned colour = 0;         // current colour
+            SVOBitset p_left = p; // not coloured yet
+            unsigned colour = 0;  // current colour
             p_end = 0;
 
             std::vector<int> p_order_prelim(size);
@@ -324,14 +322,14 @@ namespace
 
             // sort
             iota(sorted_order.begin(), sorted_order.begin() + colour, 0);
-            sort(sorted_order.begin(), sorted_order.begin() + colour, [&] (int a, int b) {
-                    return make_tuple(colour_sizes[b], a) < make_tuple(colour_sizes[a], b);
-                    });
+            sort(sorted_order.begin(), sorted_order.begin() + colour, [&](int a, int b) {
+                return make_tuple(colour_sizes[b], a) < make_tuple(colour_sizes[a], b);
+            });
 
             // copy out
             int p_end2 = 0;
-            for (unsigned c = 0 ; c < colour ; ++c) {
-                for (int v = colour_start[sorted_order[c]] ; v < colour_start[sorted_order[c]] + colour_sizes[sorted_order[c]] ; ++v) {
+            for (unsigned c = 0; c < colour; ++c) {
+                for (int v = colour_start[sorted_order[c]]; v < colour_start[sorted_order[c]] + colour_sizes[sorted_order[c]]; ++v) {
                     p_bounds[p_end2] = c + 1;
                     p_order[p_end2] = p_order_prelim[v];
                     ++p_end2;
@@ -340,7 +338,7 @@ namespace
         }
 
         auto post_nogood(
-                const vector<int> & c)
+            const vector<int> & c)
         {
             Nogood<int> nogood;
             nogood.literals.assign(c.begin(), c.end());
@@ -348,7 +346,7 @@ namespace
         }
 
         auto unpermute(
-                const vector<int> & v) -> vector<int>
+            const vector<int> & v) -> vector<int>
         {
             vector<int> result;
             for (auto & w : v)
@@ -357,27 +355,27 @@ namespace
         }
 
         auto unpermute_and_finish(
-                vector<int> & v) -> vector<pair<int, bool> >
+            vector<int> & v) -> vector<pair<int, bool>>
         {
-            vector<pair<int, bool> > result;
+            vector<pair<int, bool>> result;
             for (auto & w : v)
                 result.emplace_back(order[w], true);
-            for (int w = 0 ; w < size ; ++w)
-                if (result.end() == find_if(result.begin(), result.end(), [&] (auto & x) { return x.first == w; }))
+            for (int w = 0; w < size; ++w)
+                if (result.end() == find_if(result.begin(), result.end(), [&](auto & x) { return x.first == w; }))
                     result.emplace_back(w, false);
             return result;
         }
 
         template <bool connected_>
         auto expand(
-                int depth,
-                unsigned long long & nodes,
-                unsigned long long & find_nodes,
-                unsigned long long & prove_nodes,
-                vector<int> & c,
-                SVOBitset & p,
-                conditional_t<connected_, const SVOBitset &, int> a,
-                int spacepos) -> SearchResult
+            int depth,
+            unsigned long long & nodes,
+            unsigned long long & find_nodes,
+            unsigned long long & prove_nodes,
+            vector<int> & c,
+            SVOBitset & p,
+            conditional_t<connected_, const SVOBitset &, int> a,
+            int spacepos) -> SearchResult
         {
             ++nodes;
             ++prove_nodes;
@@ -396,22 +394,22 @@ namespace
             }
             else {
                 switch (params.colour_class_order) {
-                    case ColourClassOrder::ColourOrder:     colour_class_order(p, p_order, p_bounds, p_end); break;
-                    case ColourClassOrder::SingletonsFirst: colour_class_order_2df(p, p_order, p_bounds, &space[spacepos + 2 * size], p_end); break;
-                    case ColourClassOrder::Sorted:          colour_class_order_sorted(p, p_order, p_bounds, p_end); break;
+                case ColourClassOrder::ColourOrder: colour_class_order(p, p_order, p_bounds, p_end); break;
+                case ColourClassOrder::SingletonsFirst: colour_class_order_2df(p, p_order, p_bounds, &space[spacepos + 2 * size], p_end); break;
+                case ColourClassOrder::Sorted: colour_class_order_sorted(p, p_order, p_bounds, p_end); break;
                 }
             }
 
             // for each v in p... (v comes later)
-            for (int n = p_end - 1 ; n >= 0 ; --n) {
+            for (int n = p_end - 1; n >= 0; --n) {
                 // bound, timeout or early exit?
                 if (params.timeout->should_abort())
                     return SearchResult::Aborted;
 
                 if (c.size() + p_bounds[n] <= incumbent.value) {
                     if (params.proof) {
-                        vector<vector<int> > colour_classes;
-                        for (int v = 0 ; v <= n ; ++v) {
+                        vector<vector<int>> colour_classes;
+                        for (int v = 0; v <= n; ++v) {
                             if (0 == v || p_bounds[v - 1] != p_bounds[v])
                                 colour_classes.emplace_back();
                             colour_classes.back().push_back(order[p_order[v]]);
@@ -426,7 +424,7 @@ namespace
                 if constexpr (! connected_) {
                     if (p_bounds[n] == n + 1) {
                         auto c_save = c;
-                        for ( ; n >= 0 ; --n)
+                        for (; n >= 0; --n)
                             c.push_back(p_order[n]);
                         incumbent.update(c, find_nodes, prove_nodes);
 
@@ -437,7 +435,7 @@ namespace
                         }
 
                         if ((params.decide && incumbent.value >= *params.decide) ||
-                                (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
+                            (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
                             if (params.proof)
                                 params.proof->post_solution(unpermute(c));
 
@@ -457,7 +455,7 @@ namespace
                         // none of the remaining vertices can give a connected underlying graph
                         if (params.proof) {
                             auto c_unpermuted = unpermute(c);
-                            for (int v = 0 ; v <= n ; ++v)
+                            for (int v = 0; v <= n; ++v)
                                 params.proof->not_connected_in_underlying_graph(unpermute(c), order[p_order[v]]);
 
                             params.proof->start_level(depth);
@@ -474,13 +472,14 @@ namespace
 
                 if (params.decide || params.stop_after_finding) {
                     if ((params.decide && incumbent.value >= *params.decide) ||
-                            (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
+                        (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
                         if (params.proof)
                             params.proof->post_solution(unpermute(c));
 
                         return SearchResult::DecidedTrue;
                     }
-                } else {
+                }
+                else {
                     if (params.proof && c.size() > incumbent.value && ! params.proof_is_for_hom) {
                         params.proof->start_level(0);
                         params.proof->new_incumbent(unpermute_and_finish(c));
@@ -494,10 +493,10 @@ namespace
                 new_p &= adj[v];
 
                 if (params.restarts_schedule->might_restart())
-                    watches.propagate(v,
-                            [&] (int literal) { return c.end() == find(c.begin(), c.end(), literal); },
-                            [&] (int literal) { new_p.reset(literal); }
-                            );
+                    watches.propagate(
+                        v,
+                        [&](int literal) { return c.end() == find(c.begin(), c.end(), literal); },
+                        [&](int literal) { new_p.reset(literal); });
 
                 if (params.proof)
                     params.proof->start_level(depth + 1);
@@ -510,27 +509,27 @@ namespace
                     }
 
                     switch (expand<connected_>(depth + 1, nodes, find_nodes, prove_nodes, c, new_p, new_a, spacepos + 2 * size)) {
-                        case SearchResult::Aborted:
-                            return SearchResult::Aborted;
+                    case SearchResult::Aborted:
+                        return SearchResult::Aborted;
 
-                        case SearchResult::DecidedTrue:
-                            return SearchResult::DecidedTrue;
+                    case SearchResult::DecidedTrue:
+                        return SearchResult::DecidedTrue;
 
-                        case SearchResult::Complete:
-                            break;
+                    case SearchResult::Complete:
+                        break;
 
-                        case SearchResult::Restart:
-                            // restore assignments before posting nogoods, it's easier
+                    case SearchResult::Restart:
+                        // restore assignments before posting nogoods, it's easier
+                        c.pop_back();
+
+                        // post nogoods for everything we've done so far
+                        for (int m = p_end - 1; m > n; --m) {
+                            c.push_back(p_order[m]);
+                            post_nogood(c);
                             c.pop_back();
+                        }
 
-                            // post nogoods for everything we've done so far
-                            for (int m = p_end - 1 ; m > n ; --m) {
-                                c.push_back(p_order[m]);
-                                post_nogood(c);
-                                c.pop_back();
-                            }
-
-                            return SearchResult::Restart;
+                        return SearchResult::Restart;
                     }
                 }
 
@@ -566,8 +565,8 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
-            SVOBitset p{ unsigned(size), 0 };
-            for (int i = 0 ; i < size ; ++i)
+            SVOBitset p{unsigned(size), 0};
+            for (int i = 0; i < size; ++i)
                 p.set(i);
 
             while (! done) {
@@ -575,8 +574,7 @@ namespace
 
                 // start watching new nogoods
                 done = watches.apply_new_nogoods(
-                        [&] (int literal) { p.reset(literal); }
-                        );
+                    [&](int literal) { p.reset(literal); });
 
                 if (done)
                     break;
@@ -585,25 +583,25 @@ namespace
 
                 auto new_p = p;
                 vector<int> c;
-                conditional_t<connected_, SVOBitset, int> a{ };
+                conditional_t<connected_, SVOBitset, int> a{};
                 if constexpr (connected_)
-                    a = SVOBitset{ unsigned(size), 0 };
+                    a = SVOBitset{unsigned(size), 0};
 
                 switch (expand<connected_>(params.proof_is_for_hom ? 1 : 0, result.nodes, result.find_nodes, result.prove_nodes, c, new_p, a, 0)) {
-                    case SearchResult::Complete:
-                        done = true;
-                        break;
+                case SearchResult::Complete:
+                    done = true;
+                    break;
 
-                    case SearchResult::DecidedTrue:
-                        done = true;
-                        break;
+                case SearchResult::DecidedTrue:
+                    done = true;
+                    break;
 
-                    case SearchResult::Aborted:
-                        done = true;
-                        break;
+                case SearchResult::Aborted:
+                    done = true;
+                    break;
 
-                    case SearchResult::Restart:
-                        break;
+                case SearchResult::Restart:
+                    break;
                 }
 
                 params.restarts_schedule->did_a_restart();
@@ -630,13 +628,13 @@ auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params)
 {
     if (params.proof) {
         if (! params.proof->has_clique_model() && ! params.proof_is_for_hom) {
-            for (int q = 0 ; q < graph.size() ; ++q)
-                params.proof->create_binary_variable(q, [&] (int v) { return graph.vertex_name(v); });
+            for (int q = 0; q < graph.size(); ++q)
+                params.proof->create_binary_variable(q, [&](int v) { return graph.vertex_name(v); });
 
             params.proof->create_objective(graph.size(), params.decide);
 
-            for (int p = 0 ; p < graph.size() ; ++p)
-                for (int q = 0 ; q < p ; ++q)
+            for (int p = 0; p < graph.size(); ++p)
+                for (int q = 0; q < p; ++q)
                     if (! graph.adjacent(p, q))
                         params.proof->create_non_edge_constraint(p, q);
 
@@ -644,7 +642,6 @@ auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params)
         }
     }
 
-    CliqueRunner runner{ graph, params };
+    CliqueRunner runner{graph, params};
     return params.connected ? runner.run<true>() : runner.run<false>();
 }
-

@@ -1,16 +1,14 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #ifndef GLASGOW_SUBGRAPH_SOLVER_HOMOMORPHISM_HH
 #define GLASGOW_SUBGRAPH_SOLVER_HOMOMORPHISM_HH 1
 
 #include <gss/formats/input_graph.hh>
 #include <gss/lackey.hh>
 #include <gss/loooong.hh>
+#include <gss/proof-fwd.hh>
 #include <gss/restarts.hh>
 #include <gss/timeout.hh>
 #include <gss/value_ordering.hh>
 #include <gss/vertex_to_vertex_mapping.hh>
-#include <gss/proof-fwd.hh>
 
 #include <functional>
 #include <list>
@@ -50,7 +48,7 @@ struct HomomorphismParams
     bool count_solutions = false;
 
     /// Print solutions, for enumerating
-    std::function<auto (const VertexToVertexMapping &) -> bool> enumerate_callback;
+    std::function<auto(const VertexToVertexMapping &)->bool> enumerate_callback;
 
     /// Which value-ordering heuristic?
     ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
@@ -87,7 +85,7 @@ struct HomomorphismParams
     int number_of_exact_path_graphs = 4;
 
     /// Any extra shapes to use, with injectivity and count
-    std::list<std::tuple<std::unique_ptr<InputGraph>, bool, int> > extra_shapes;
+    std::list<std::tuple<std::unique_ptr<InputGraph>, bool, int>> extra_shapes;
 
     /// Are we allowed to do clique size constraints?
     bool clique_size_constraints = false;
@@ -99,10 +97,10 @@ struct HomomorphismParams
     bool no_nds = false;
 
     /// Less pattern constraints
-    std::list<std::pair<std::string, std::string> > pattern_less_constraints;
+    std::list<std::pair<std::string, std::string>> pattern_less_constraints;
 
     /// Occurs less target constraints
-    std::list<std::pair<std::string, std::string> > target_occur_less_constraints;
+    std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
 
     /// Optional lackey, for external side constraints
     std::unique_ptr<Lackey> lackey;
@@ -139,8 +137,8 @@ struct HomomorphismResult
 };
 
 auto solve_homomorphism_problem(
-        const InputGraph & pattern,
-        const InputGraph & target,
-        const HomomorphismParams & params) -> HomomorphismResult;
+    const InputGraph & pattern,
+    const InputGraph & target,
+    const HomomorphismParams & params) -> HomomorphismResult;
 
 #endif

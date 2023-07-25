@@ -1,5 +1,3 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
 #include <gss/configuration.hh>
 
 using std::string;
@@ -13,4 +11,3 @@ auto UnsupportedConfiguration::what() const noexcept -> const char *
 {
     return _what.c_str();
 }
-

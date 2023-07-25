@@ -1,21 +1,19 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
-#include <gss/formats/input_graph.hh>
 #include <gss/formats/graph_file_error.hh>
+#include <gss/formats/input_graph.hh>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <iterator>
 #include <limits>
+#include <map>
 #include <string>
 #include <type_traits>
 #include <vector>
-#include <map>
-#include <iterator>
 
-#include <boost/container/allocator.hpp>
 #include <boost/bimap.hpp>
 #include <boost/bimap/unordered_set_of.hpp>
+#include <boost/container/allocator.hpp>
 
 using std::back_inserter;
 using std::count_if;
@@ -23,13 +21,13 @@ using std::distance;
 using std::find;
 using std::function;
 using std::isgraph;
-using std::numeric_limits;
 using std::make_optional;
 using std::make_pair;
 using std::map;
 using std::max;
 using std::move;
 using std::nullopt;
+using std::numeric_limits;
 using std::optional;
 using std::pair;
 using std::string;
@@ -41,16 +39,15 @@ using std::vector;
 using Names = boost::bimap<
     boost::bimaps::unordered_set_of<int>,
     boost::bimaps::unordered_set_of<string>,
-    boost::container::allocator<pair<int, string>>
->;
+    boost::container::allocator<pair<int, string>>>;
 
 namespace
 {
     auto sanity_check_name(string_view name, const char * const explanation) -> void
     {
-        if (0 != count_if(name.begin(), name.end(), [] (unsigned char c) { return ! isgraph(c); })) {
+        if (0 != count_if(name.begin(), name.end(), [](unsigned char c) { return ! isgraph(c); })) {
             string safe_name;
-            transform(name.begin(), name.end(), back_inserter(safe_name), [] (unsigned char c) { return isgraph(c) ? c : '?'; });
+            transform(name.begin(), name.end(), back_inserter(safe_name), [](unsigned char c) { return isgraph(c) ? c : '?'; });
             throw GraphFileError("Suspicious input detected: " + string(explanation) + " '" + string(safe_name) + "' contains non-printable characters");
         }
     }
@@ -67,7 +64,7 @@ struct InputGraph::Imp
 };
 
 InputGraph::InputGraph(int size, bool v, bool e) :
-    _imp(new Imp{ })
+    _imp(new Imp{})
 {
     _imp->has_vertex_labels = v;
     _imp->has_edge_labels = e;
@@ -109,7 +106,7 @@ auto InputGraph::add_directed_edge(int a, int b, string_view label) -> void
 
 auto InputGraph::adjacent(int a, int b) const -> bool
 {
-    return _imp->edges.count({ a, b });
+    return _imp->edges.count({a, b});
 }
 
 auto InputGraph::size() const -> int
@@ -129,8 +126,8 @@ auto InputGraph::loopy() const -> bool
 
 auto InputGraph::degree(int a) const -> int
 {
-    auto lower = _imp->edges.lower_bound({ a, 0 });
-    auto upper = _imp->edges.upper_bound({ a, numeric_limits<int>::max() });
+    auto lower = _imp->edges.lower_bound({a, 0});
+    auto upper = _imp->edges.upper_bound({a, numeric_limits<int>::max()});
     return distance(lower, upper);
 }
 
@@ -149,7 +146,7 @@ auto InputGraph::set_vertex_name(int v, string_view l) -> void
 {
     sanity_check_name(l, "vertex name");
     _imp->vertex_names.left.erase(v);
-    _imp->vertex_names.insert(Names::value_type{ v, string{ l } });
+    _imp->vertex_names.insert(Names::value_type{v, string{l}});
 }
 
 auto InputGraph::vertex_name(int v) const -> string
@@ -163,7 +160,7 @@ auto InputGraph::vertex_name(int v) const -> string
 
 auto InputGraph::vertex_from_name(string_view n) const -> optional<int>
 {
-    auto it = _imp->vertex_names.right.find(string{ n });
+    auto it = _imp->vertex_names.right.find(string{n});
     if (it == _imp->vertex_names.right.end())
         return nullopt;
     else
@@ -190,9 +187,8 @@ auto InputGraph::directed() const -> bool
     return _imp->directed;
 }
 
-auto InputGraph::for_each_edge(const function<auto (int, int, std::string_view) -> void> & c) const -> void
+auto InputGraph::for_each_edge(const function<auto(int, int, std::string_view)->void> & c) const -> void
 {
-    for (auto & [ e, l ] : _imp->edges)
+    for (auto & [e, l] : _imp->edges)
         c(e.first, e.second, l);
 }
-

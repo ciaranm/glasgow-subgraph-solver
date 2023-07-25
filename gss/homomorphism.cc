@@ -1,15 +1,13 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
-#include <gss/homomorphism.hh>
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/graph_traits.hh>
+#include <gss/homomorphism.hh>
 #include <gss/homomorphism_domain.hh>
 #include <gss/homomorphism_model.hh>
 #include <gss/homomorphism_searcher.hh>
 #include <gss/homomorphism_traits.hh>
-#include <gss/thread_utils.hh>
 #include <gss/proof.hh>
+#include <gss/thread_utils.hh>
 
 #include <algorithm>
 #include <atomic>
@@ -23,8 +21,8 @@
 #include <unordered_set>
 #include <utility>
 
-#include <boost/thread/barrier.hpp>
 #include <boost/functional/hash.hpp>
+#include <boost/thread/barrier.hpp>
 
 using std::atomic;
 using std::function;
@@ -69,8 +67,7 @@ namespace
         }
     };
 
-    struct SequentialSolver :
-        HomomorphismSolver
+    struct SequentialSolver : HomomorphismSolver
     {
         using HomomorphismSolver::HomomorphismSolver;
 
@@ -79,7 +76,7 @@ namespace
             HomomorphismResult result;
 
             // domains
-            Domains domains(model.pattern_size, HomomorphismDomain{ model.target_size });
+            Domains domains(model.pattern_size, HomomorphismDomain{model.target_size});
             if (! model.initialise_domains(domains)) {
                 result.complete = true;
                 model.add_extra_stats(result.extra_stats);
@@ -97,22 +94,22 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
-            HomomorphismSearcher searcher(model, params, [] (const HomomorphismAssignments &) -> bool { return true; });
+            HomomorphismSearcher searcher(model, params, [](const HomomorphismAssignments &) -> bool { return true; });
 
             while (! done) {
                 ++number_of_restarts;
 
                 // start watching new nogoods
                 done = searcher.watches.apply_new_nogoods(
-                        [&] (const HomomorphismAssignment & assignment) {
-                            for (auto & d : domains)
-                                if (d.v == assignment.pattern_vertex) {
-                                    d.values.reset(assignment.target_vertex);
-                                    d.count = d.values.count();
-                                    done = done || (0 == d.count);
-                                    break;
-                                }
-                        });
+                    [&](const HomomorphismAssignment & assignment) {
+                        for (auto & d : domains)
+                            if (d.v == assignment.pattern_vertex) {
+                                d.values.reset(assignment.target_vertex);
+                                d.count = d.values.count();
+                                done = done || (0 == d.count);
+                                break;
+                            }
+                    });
 
                 if (done) {
                     result.complete = true;
@@ -126,30 +123,30 @@ namespace
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
-                                result.solution_count, 0, *params.restarts_schedule)) {
-                        case SearchResult::Satisfiable:
-                            searcher.save_result(assignments_copy, result);
-                            result.complete = true;
-                            done = true;
-                            break;
+                        result.solution_count, 0, *params.restarts_schedule)) {
+                    case SearchResult::Satisfiable:
+                        searcher.save_result(assignments_copy, result);
+                        result.complete = true;
+                        done = true;
+                        break;
 
-                        case SearchResult::SatisfiableButKeepGoing:
-                            result.complete = true;
-                            done = true;
-                            break;
+                    case SearchResult::SatisfiableButKeepGoing:
+                        result.complete = true;
+                        done = true;
+                        break;
 
-                        case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
-                        case SearchResult::Unsatisfiable:
-                            result.complete = true;
-                            done = true;
-                            break;
+                    case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
+                    case SearchResult::Unsatisfiable:
+                        result.complete = true;
+                        done = true;
+                        break;
 
-                        case SearchResult::Aborted:
-                            done = true;
-                            break;
+                    case SearchResult::Aborted:
+                        done = true;
+                        break;
 
-                        case SearchResult::Restart:
-                            break;
+                    case SearchResult::Restart:
+                        break;
                     }
                 }
                 else {
@@ -167,8 +164,7 @@ namespace
 
             result.extra_stats.emplace_back("shape_graphs = " + to_string(model.max_graphs));
 
-            result.extra_stats.emplace_back("search_time = " + to_string(
-                        duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+            result.extra_stats.emplace_back("search_time = " + to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
 
             if (might_have_watches(params)) {
                 result.extra_stats.emplace_back("nogoods_size = " + to_string(searcher.watches.nogoods.size()));
@@ -192,10 +188,10 @@ namespace
 
     struct VertexToVertexMappingHash
     {
-        auto operator() (const VertexToVertexMapping & v) const -> size_t
+        auto operator()(const VertexToVertexMapping & v) const -> size_t
         {
-            size_t result{ 0 };
-            for (auto & [ p, t ] : v) {
+            size_t result{0};
+            for (auto & [p, t] : v) {
                 hash_combine(result, p);
                 hash_combine(result, t);
             }
@@ -220,7 +216,7 @@ namespace
             string by_thread_nodes, by_thread_propagations;
 
             // domains
-            Domains common_domains(model.pattern_size, HomomorphismDomain{ model.target_size });
+            Domains common_domains(model.pattern_size, HomomorphismDomain{model.target_size});
             if (! model.initialise_domains(common_domains)) {
                 common_result.complete = true;
                 return common_result;
@@ -232,31 +228,31 @@ namespace
             vector<thread> threads;
             threads.reserve(n_threads);
 
-            vector<unique_ptr<HomomorphismSearcher> > searchers{ n_threads };
+            vector<unique_ptr<HomomorphismSearcher>> searchers{n_threads};
 
-            barrier wait_for_new_nogoods_barrier{ n_threads }, synced_nogoods_barrier{ n_threads };
-            atomic<bool> restart_synchroniser{ false };
+            barrier wait_for_new_nogoods_barrier{n_threads}, synced_nogoods_barrier{n_threads};
+            atomic<bool> restart_synchroniser{false};
 
             mutex duplicate_filter_set_mutex;
             unordered_set<VertexToVertexMapping, VertexToVertexMappingHash> duplicate_filter_set;
 
-            function<auto (unsigned) -> void> work_function = [&searchers, &common_domains, &threads, &work_function,
-                        &model = this->model, &params = this->params, n_threads = this->n_threads,
-                        &common_result, &common_result_mutex, &by_thread_nodes, &by_thread_propagations,
-                        &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser,
-                        &duplicate_filter_set, &duplicate_filter_set_mutex] (unsigned t) -> void
-            {
+            function<auto(unsigned)->void> work_function =
+                [&searchers, &common_domains, &threads, &work_function,
+                    &model = this->model, &params = this->params, n_threads = this->n_threads,
+                    &common_result, &common_result_mutex, &by_thread_nodes, &by_thread_propagations,
+                    &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser,
+                    &duplicate_filter_set, &duplicate_filter_set_mutex](unsigned t) -> void {
                 // do the search
                 HomomorphismResult thread_result;
 
                 bool just_the_first_thread = (0 == t) && params.delay_thread_creation;
 
-                searchers[t] = make_unique<HomomorphismSearcher>(model, params, [&] (const HomomorphismAssignments & a) -> bool {
-                        VertexToVertexMapping v;
-                        searchers[t]->expand_to_full_result(a, v);
-                        unique_lock<mutex> lock{ duplicate_filter_set_mutex };
-                        return duplicate_filter_set.insert(v).second;
-                        });
+                searchers[t] = make_unique<HomomorphismSearcher>(model, params, [&](const HomomorphismAssignments & a) -> bool {
+                    VertexToVertexMapping v;
+                    searchers[t]->expand_to_full_result(a, v);
+                    unique_lock<mutex> lock{duplicate_filter_set_mutex};
+                    return duplicate_filter_set.insert(v).second;
+                });
                 if (0 != t)
                     searchers[t]->set_seed(t);
 
@@ -280,13 +276,13 @@ namespace
                     if (! just_the_first_thread) {
                         wait_for_new_nogoods_barrier.wait();
 
-                        for (unsigned u = 0 ; u < n_threads ; ++u)
+                        for (unsigned u = 0; u < n_threads; ++u)
                             if (t != u)
                                 searchers[t]->watches.gather_nogoods_from(searchers[u]->watches);
 
                         // start watching new nogoods
                         if (searchers[t]->watches.apply_new_nogoods(
-                                [&] (const HomomorphismAssignment & assignment) {
+                                [&](const HomomorphismAssignment & assignment) {
                                     for (auto & d : domains)
                                         if (d.v == assignment.pattern_vertex) {
                                             d.values.reset(assignment.target_vertex);
@@ -311,38 +307,38 @@ namespace
                         auto assignments_copy = thread_assignments;
 
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
-                                    thread_result.solution_count, 0, *thread_restarts_schedule)) {
-                            case SearchResult::Satisfiable:
-                                searchers[t]->save_result(assignments_copy, thread_result);
-                                thread_result.complete = true;
-                                params.timeout->trigger_early_abort();
-                                searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{ });
-                                break;
+                            thread_result.solution_count, 0, *thread_restarts_schedule)) {
+                        case SearchResult::Satisfiable:
+                            searchers[t]->save_result(assignments_copy, thread_result);
+                            thread_result.complete = true;
+                            params.timeout->trigger_early_abort();
+                            searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{});
+                            break;
 
-                            case SearchResult::SatisfiableButKeepGoing:
-                                thread_result.complete = true;
-                                params.timeout->trigger_early_abort();
-                                searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{ });
-                                break;
+                        case SearchResult::SatisfiableButKeepGoing:
+                            thread_result.complete = true;
+                            params.timeout->trigger_early_abort();
+                            searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{});
+                            break;
 
-                            case SearchResult::Unsatisfiable:
-                            case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
-                                thread_result.complete = true;
-                                params.timeout->trigger_early_abort();
-                                searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{ });
-                                break;
+                        case SearchResult::Unsatisfiable:
+                        case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
+                            thread_result.complete = true;
+                            params.timeout->trigger_early_abort();
+                            searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{});
+                            break;
 
-                            case SearchResult::Aborted:
-                                searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{ });
-                                break;
+                        case SearchResult::Aborted:
+                            searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{});
+                            break;
 
-                            case SearchResult::Restart:
-                                break;
+                        case SearchResult::Restart:
+                            break;
                         }
                     }
                     else {
                         thread_result.complete = true;
-                        searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{ });
+                        searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{});
                         params.timeout->trigger_early_abort();
                     }
 
@@ -353,8 +349,8 @@ namespace
                     if (params.delay_thread_creation && just_the_first_thread) {
                         if (! thread_result.complete) {
                             just_the_first_thread = false;
-                            for (unsigned u = 1 ; u < n_threads ; ++u)
-                                threads.emplace_back([&, u] () { work_function(u); });
+                            for (unsigned u = 1; u < n_threads; ++u)
+                                threads.emplace_back([&, u]() { work_function(u); });
                         }
                         else
                             break;
@@ -365,7 +361,7 @@ namespace
                     for (auto & th : threads)
                         th.join();
 
-                unique_lock<mutex> lock{ common_result_mutex };
+                unique_lock<mutex> lock{common_result_mutex};
                 if (! thread_result.mapping.empty())
                     common_result.mapping = move(thread_result.mapping);
                 common_result.nodes += thread_result.nodes;
@@ -382,8 +378,8 @@ namespace
             if (params.delay_thread_creation)
                 work_function(0);
             else {
-                for (unsigned u = 0 ; u < n_threads ; ++u)
-                    threads.emplace_back([&, u] () { work_function(u); });
+                for (unsigned u = 0; u < n_threads; ++u)
+                    threads.emplace_back([&, u]() { work_function(u); });
 
                 for (auto & th : threads)
                     th.join();
@@ -391,8 +387,7 @@ namespace
 
             common_result.extra_stats.emplace_back("by_thread_nodes =" + by_thread_nodes);
             common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
-            common_result.extra_stats.emplace_back("search_time = " + to_string(
-                        duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+            common_result.extra_stats.emplace_back("search_time = " + to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
 
             return common_result;
         }
@@ -400,32 +395,33 @@ namespace
 }
 
 auto solve_homomorphism_problem(
-        const InputGraph & pattern,
-        const InputGraph & target,
-        const HomomorphismParams & params) -> HomomorphismResult
+    const InputGraph & pattern,
+    const InputGraph & target,
+    const HomomorphismParams & params) -> HomomorphismResult
 {
     // start by setting up proof logging, if necessary
     if (params.proof) {
         // proof logging is currently incompatible with a whole load of "extra" features,
         // but can be adapted to support most of them
         if (1 != params.n_threads)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with threads" };
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used with threads"};
         if (params.clique_detection)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with clique detection" };
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection"};
         if (params.lackey)
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with a lackey" };
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used with a lackey"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used with less-constraints" };
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
         if (params.injectivity != Injectivity::Injective && params.injectivity != Injectivity::NonInjective)
-            throw UnsupportedConfiguration{ "Proof logging can currently only be used with injectivity or non-injectivity" };
+            throw UnsupportedConfiguration{"Proof logging can currently only be used with injectivity or non-injectivity"};
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
-            throw UnsupportedConfiguration{ "Proof logging cannot yet be used on labelled graphs" };
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
 
         // set up our model file, with a set of OPB variables for each CP variable
-        for (int n = 0 ; n < pattern.size() ; ++n) {
-            params.proof->create_cp_variable(n, target.size(),
-                    [&] (int v) { return pattern.vertex_name(v); },
-                    [&] (int v) { return target.vertex_name(v); });
+        for (int n = 0; n < pattern.size(); ++n) {
+            params.proof->create_cp_variable(
+                n, target.size(),
+                [&](int v) { return pattern.vertex_name(v); },
+                [&](int v) { return target.vertex_name(v); });
         }
 
         // generate constraints for injectivity
@@ -433,8 +429,8 @@ auto solve_homomorphism_problem(
             params.proof->create_injectivity_constraints(pattern.size(), target.size());
 
         // generate edge constraints, and also handle loops here
-        for (int p = 0 ; p < pattern.size() ; ++p) {
-            for (int t = 0 ; t < target.size() ; ++t) {
+        for (int p = 0; p < pattern.size(); ++p) {
+            for (int t = 0; t < target.size(); ++t) {
                 if (pattern.adjacent(p, p) && ! target.adjacent(t, t))
                     params.proof->create_forbidden_assignment_constraint(p, t);
                 else if (params.induced && ! pattern.adjacent(p, p) && target.adjacent(t, t))
@@ -445,11 +441,11 @@ auto solve_homomorphism_problem(
                 params.proof->start_adjacency_constraints_for(p, t);
 
                 // if p can be mapped to t, then each neighbour of p...
-                for (int q = 0 ; q < pattern.size() ; ++q)
+                for (int q = 0; q < pattern.size(); ++q)
                     if (q != p && pattern.adjacent(p, q)) {
                         // ... must be mapped to a neighbour of t
                         vector<int> permitted;
-                        for (int u = 0 ; u < target.size() ; ++u)
+                        for (int u = 0; u < target.size(); ++u)
                             if (t != u && target.adjacent(t, u))
                                 permitted.push_back(u);
                         params.proof->create_adjacency_constraint(p, q, t, permitted, false);
@@ -457,11 +453,11 @@ auto solve_homomorphism_problem(
 
                 // same for non-adjacency for induced
                 if (params.induced) {
-                    for (int q = 0 ; q < pattern.size() ; ++q)
+                    for (int q = 0; q < pattern.size(); ++q)
                         if (q != p && ! pattern.adjacent(p, q)) {
                             // ... must be mapped to a neighbour of t
                             vector<int> permitted;
-                            for (int u = 0 ; u < target.size() ; ++u)
+                            for (int u = 0; u < target.size(); ++u)
                                 if (t != u && ! target.adjacent(t, u))
                                     permitted.push_back(u);
                             params.proof->create_adjacency_constraint(p, q, t, permitted, true);
@@ -482,24 +478,22 @@ auto solve_homomorphism_problem(
             params.proof->finish_unsat_proof();
         }
 
-        return HomomorphismResult{ };
+        return HomomorphismResult{};
     }
 
     // does the target have loops, and are we looking for a single non-injective mapping?
-    if ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels()
-           && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions
-           && ! params.enumerate_callback) {
+    if ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback) {
         HomomorphismResult result;
         result.extra_stats.emplace_back("used_loops_property = true");
         result.complete = true;
         int loop = -1;
-        for (int t = 0 ; t < target.size() ; ++t)
+        for (int t = 0; t < target.size(); ++t)
             if (target.adjacent(t, t)) {
                 loop = t;
                 break;
             }
 
-        for (int n = 0 ; n < pattern.size() ; ++n)
+        for (int n = 0; n < pattern.size(); ++n)
             result.mapping.emplace(n, loop);
 
         return result;
@@ -550,7 +544,7 @@ auto solve_homomorphism_problem(
         }
         else {
             if (! params.restarts_schedule->might_restart())
-                throw UnsupportedConfiguration{ "Threaded search requires restarts" };
+                throw UnsupportedConfiguration{"Threaded search requires restarts"};
 
             unsigned n_threads = how_many_threads(params.n_threads);
             ThreadedSolver solver(model, params, n_threads);
@@ -569,4 +563,3 @@ auto solve_homomorphism_problem(
         return result;
     }
 }
-

@@ -1,8 +1,6 @@
-/* vim: set sw=4 sts=4 et foldmethod=syntax : */
-
-#include <gss/formats/read_file_format.hh>
 #include <gss/common_subgraph.hh>
 #include <gss/configuration.hh>
+#include <gss/formats/read_file_format.hh>
 #include <gss/proof.hh>
 
 #include <boost/program_options.hpp>
@@ -45,50 +43,46 @@ using std::chrono::system_clock;
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{ "Program options" };
-        display_options.add_options()
-            ("help",                                         "Display help information")
-            ("timeout",            po::value<int>(),         "Abort after this many seconds")
-            ("decide",             po::value<int>(),         "Solve this decision problem")
-            ("count-solutions",                              "Count the number of solutions (--decide only)")
-            ("print-all-solutions",                          "Print out every solution, rather than one (--decide only)")
-            ("connected",                                    "Only find connected graphs")
-            ("clique",                                       "Use the clique solver")
-            ;
+        po::options_description display_options{"Program options"};
+        display_options.add_options()                                                            //
+            ("help", "Display help information")                                                 //
+            ("timeout", po::value<int>(), "Abort after this many seconds")                       //
+            ("decide", po::value<int>(), "Solve this decision problem")                          //
+            ("count-solutions", "Count the number of solutions (--decide only)")                 //
+            ("print-all-solutions", "Print out every solution, rather than one (--decide only)") //
+            ("connected", "Only find connected graphs")                                          //
+            ("clique", "Use the clique solver");
 
-        po::options_description input_options{ "Input file options" };
-        input_options.add_options()
-            ("format",             po::value<string>(),      "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)")
-            ("first-format",       po::value<string>(),      "Specify input file format just for the first graph")
-            ("second-format",      po::value<string>(),      "Specify input file format just for the second graph");
+        po::options_description input_options{"Input file options"};
+        input_options.add_options()                                                                                          //
+            ("format", po::value<string>(), "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)") //
+            ("first-format", po::value<string>(), "Specify input file format just for the first graph")                      //
+            ("second-format", po::value<string>(), "Specify input file format just for the second graph");
         display_options.add(input_options);
 
-        po::options_description proof_logging_options{ "Proof logging options" };
-        proof_logging_options.add_options()
-            ("prove",               po::value<string>(),       "Write unsat proofs to this filename (suffixed with .opb and .veripb)")
-            ("proof-names",                                    "Use 'friendly' variable names in the proof, rather than x1, x2, ...")
-            ("compress-proof",                                 "Compress the proof using bz2");
+        po::options_description proof_logging_options{"Proof logging options"};
+        proof_logging_options.add_options()                                                                        //
+            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .veripb)") //
+            ("proof-names", "Use 'friendly' variable names in the proof, rather than x1, x2, ...")                 //
+            ("compress-proof", "Compress the proof using bz2");
         display_options.add(proof_logging_options);
 
-        po::options_description all_options{ "All options" };
-        all_options.add_options()
-            ("first-file", "Specify the first graph file")
-            ("second-file", "Specify the second graph file")
-            ;
+        po::options_description all_options{"All options"};
+        all_options.add_options()("first-file", "Specify the first graph file")("second-file", "Specify the second graph file");
 
         all_options.add(display_options);
 
         po::positional_options_description positional_options;
         positional_options
             .add("first-file", 1)
-            .add("second-file", 1)
-            ;
+            .add("second-file", 1);
 
         po::variables_map options_vars;
         po::store(po::command_line_parser(argc, argv)
-                .options(all_options)
-                .positional(positional_options)
-                .run(), options_vars);
+                      .options(all_options)
+                      .positional(positional_options)
+                      .run(),
+            options_vars);
         po::notify(options_vars);
 
         /* --help? Show a message, and exit. */
@@ -115,13 +109,13 @@ auto main(int argc, char * argv[]) -> int
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
         params.clique = options_vars.count("clique");
 
-#if !defined(__WIN32)
+#if ! defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
             cout << "hostname = " << string(hostname_buf) << endl;
 #endif
         cout << "commandline =";
-        for (int i = 0 ; i < argc ; ++i)
+        for (int i = 0; i < argc; ++i)
             cout << " " << argv[i];
         cout << endl;
 
@@ -139,7 +133,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "second_file = " << options_vars["second-file"].as<string>() << endl;
 
         if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&] (const VertexToVertexMapping & mapping) {
+            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) {
                 cout << "mapping = ";
                 for (auto v : mapping)
                     cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
@@ -153,13 +147,13 @@ auto main(int argc, char * argv[]) -> int
             string fn = options_vars["prove"].as<string>();
             string suffix = compress_proof ? ".bz2" : "";
             params.proof = make_unique<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof,
-                    false, false, false);
+                false, false, false);
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
             cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }
 
         /* Prepare and start timeout */
-        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
+        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s);
 
         /* Start the clock */
         params.start_time = steady_clock::now();
@@ -216,4 +210,3 @@ auto main(int argc, char * argv[]) -> int
         return EXIT_FAILURE;
     }
 }
-
