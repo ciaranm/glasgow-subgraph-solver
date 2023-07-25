@@ -1,4 +1,4 @@
-#include <gss/lackey.hh>
+#include <gss/innards/lackey.hh>
 
 #include <fstream>
 #include <map>

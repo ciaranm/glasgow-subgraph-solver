@@ -1,4 +1,4 @@
-#include <gss/svo_bitset.hh>
+#include <gss/innards/svo_bitset.hh>
 
 #include <algorithm>
 

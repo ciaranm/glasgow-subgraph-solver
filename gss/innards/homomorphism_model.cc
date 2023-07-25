@@ -1,7 +1,7 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
-#include <gss/homomorphism_model.hh>
-#include <gss/homomorphism_traits.hh>
+#include <gss/innards/homomorphism_model.hh>
+#include <gss/innards/homomorphism_traits.hh>
 
 #include <chrono>
 #include <functional>
@@ -16,6 +16,7 @@
 using std::greater;
 using std::list;
 using std::make_optional;
+using std::make_shared;
 using std::make_unique;
 using std::map;
 using std::max;
@@ -110,6 +111,7 @@ namespace
 struct HomomorphismModel::Imp
 {
     const HomomorphismParams & params;
+    shared_ptr<Proof> proof;
 
     vector<PatternAdjacencyBitsType> pattern_adjacencies_bits;
     vector<SVOBitset> pattern_graph_rows;
@@ -132,14 +134,16 @@ struct HomomorphismModel::Imp
     mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
     mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
 
-    Imp(const HomomorphismParams & p) :
-        params(p)
+    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r) :
+        params(p),
+        proof(r)
     {
     }
 };
 
-HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params) :
-    _imp(new Imp(params)),
+HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
+    const std::shared_ptr<Proof> & proof) :
+    _imp(new Imp(params, proof)),
     max_graphs(calculate_n_shape_graphs(params)),
     pattern_size(pattern.size()),
     target_size(target.size())
@@ -153,7 +157,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
 
-    if (_imp->params.proof) {
+    if (_imp->proof) {
         for (int v = 0; v < pattern.size(); ++v)
             _imp->pattern_vertex_proof_names.push_back(pattern.vertex_name(v));
         for (int v = 0; v < target.size(); ++v)
@@ -344,8 +348,8 @@ auto HomomorphismModel::_check_label_compatibility(int p, int t) const -> bool
 auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
 {
     if (pattern_has_loop(p) && ! target_has_loop(t)) {
-        if (_imp->params.proof)
-            _imp->params.proof->incompatible_by_loops(pattern_vertex_for_proof(p), target_vertex_for_proof(t));
+        if (_imp->proof)
+            _imp->proof->incompatible_by_loops(pattern_vertex_for_proof(p), target_vertex_for_proof(t));
         return false;
     }
     else if (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t)))
@@ -390,7 +394,7 @@ auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
 
     for (unsigned g = 0; g < _imp->max_graphs_for_clique_size_constraints; ++g) {
         if (_imp->pattern_cliques_sizes[g][p] > _imp->target_cliques_sizes[g][t]) {
-            if (_imp->params.proof)
+            if (_imp->proof)
                 _prove_no_clique(g, p, t);
             return false;
         }
@@ -446,7 +450,7 @@ auto HomomorphismModel::_prove_no_clique(
                 ++count;
             }
 
-        _imp->params.proof->prepare_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
+        _imp->proof->prepare_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
 
         InputGraph gv(count, false, false);
         for (unsigned f = 0; f < target_size; ++f)
@@ -456,26 +460,26 @@ auto HomomorphismModel::_prove_no_clique(
                         if (_imp->target_graph_rows[f * max_graphs + g].test(t))
                             gv.add_edge(include[f], include[t]);
                         else if (f < t)
-                            _imp->params.proof->add_hom_clique_non_edge(
+                            _imp->proof->add_hom_clique_non_edge(
                                 pattern_vertex_for_proof(p), target_vertex_for_proof(tt),
                                 p_clique, target_vertex_for_proof(f), target_vertex_for_proof(t));
                     }
                 }
 
-        _imp->params.proof->start_hom_clique_proof(pattern_vertex_for_proof(p), move(p_clique), target_vertex_for_proof(tt), move(t_clique_neighbourhood));
+        _imp->proof->start_hom_clique_proof(pattern_vertex_for_proof(p), move(p_clique), target_vertex_for_proof(tt), move(t_clique_neighbourhood));
 
         CliqueParams params;
         params.timeout = _imp->params.timeout;
         params.start_time = steady_clock::now();
         params.decide = make_optional(decide_size);
         params.restarts_schedule = make_unique<NoRestartsSchedule>();
-        params.proof = _imp->params.proof;
+        params.extend_proof = _imp->proof;
         params.proof_is_for_hom = true;
 
         auto result = solve_clique_problem(gv, params);
         if (result.complete && ! result.clique.empty())
             throw ProofError{"Oops, found a clique that shound't exist"};
-        _imp->params.proof->finish_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
+        _imp->proof->finish_hom_clique_proof(pattern_vertex_for_proof(p), target_vertex_for_proof(tt), decide_size);
     }
 }
 
@@ -493,7 +497,7 @@ auto HomomorphismModel::_check_degree_compatibility(
     for (unsigned g = 0; g < graphs_to_consider; ++g) {
         if (target_degree(g, t) < pattern_degree(g, p)) {
             // not ok, degrees differ
-            if (_imp->params.proof) {
+            if (_imp->proof) {
                 // get the actual neighbours of p and t, in their original terms
                 vector<int> n_p, n_t;
 
@@ -508,7 +512,7 @@ auto HomomorphismModel::_check_degree_compatibility(
                     n_t.push_back(j);
                 }
 
-                _imp->params.proof->incompatible_by_degrees(g, pattern_vertex_for_proof(p), n_p,
+                _imp->proof->incompatible_by_degrees(g, pattern_vertex_for_proof(p), n_p,
                     target_vertex_for_proof(t), n_t);
             }
             return false;
@@ -537,7 +541,7 @@ auto HomomorphismModel::_check_degree_compatibility(
     for (unsigned g = 0; g < graphs_to_consider; ++g) {
         for (unsigned x = 0; x < patterns_ndss.at(g).at(p).size(); ++x) {
             if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x)) {
-                if (_imp->params.proof) {
+                if (_imp->proof) {
                     vector<int> p_subsequence, t_subsequence, t_remaining;
 
                     // need to know the NDS together with the actual vertices
@@ -565,7 +569,7 @@ auto HomomorphismModel::_check_degree_compatibility(
                     for (unsigned y = x + 1; y < t_nds.size(); ++y)
                         t_remaining.push_back(t_nds[y].first);
 
-                    _imp->params.proof->incompatible_by_nds(g, pattern_vertex_for_proof(p),
+                    _imp->proof->incompatible_by_nds(g, pattern_vertex_for_proof(p),
                         target_vertex_for_proof(t), p_subsequence, t_subsequence, t_remaining);
                 }
                 return false;
@@ -615,7 +619,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                 ok = false;
             else if (! _check_loop_compatibility(i, j))
                 ok = false;
-            else if (! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, _imp->params.proof.get()))
+            else if (! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, _imp->proof.get()))
                 ok = false;
             else if (! _check_clique_compatibility(i, j))
                 ok = false;
@@ -626,22 +630,22 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
 
         domains.at(i).count = domains.at(i).values.count();
         if (0 == domains.at(i).count) {
-            if (_imp->params.proof)
-                _imp->params.proof->initial_domain_is_empty(domains.at(i).v, "compatibility stage");
+            if (_imp->proof)
+                _imp->proof->initial_domain_is_empty(domains.at(i).v, "compatibility stage");
             return false;
         }
     }
 
     // for proof logging, we need degree information before we can output nds proofs
-    if (_imp->params.proof && degree_and_nds_are_preserved(_imp->params) && ! _imp->params.no_nds) {
+    if (_imp->proof && degree_and_nds_are_preserved(_imp->params) && ! _imp->params.no_nds) {
         for (unsigned i = 0; i < pattern_size; ++i) {
             for (unsigned j = 0; j < target_size; ++j) {
                 if (domains.at(i).values.test(j) &&
                     ! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, false)) {
                     domains.at(i).values.reset(j);
                     if (0 == --domains.at(i).count) {
-                        if (_imp->params.proof)
-                            _imp->params.proof->initial_domain_is_empty(domains.at(i).v, "nds stage");
+                        if (_imp->proof)
+                            _imp->proof->initial_domain_is_empty(domains.at(i).v, "nds stage");
                         return false;
                     }
                 }
@@ -657,7 +661,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
 
         unsigned domains_union_popcount = domains_union.count();
         if (domains_union_popcount < unsigned(pattern_size)) {
-            if (_imp->params.proof) {
+            if (_imp->proof) {
                 vector<NamedVertex> hall_lhs, hall_rhs;
                 for (auto & d : domains)
                     hall_lhs.push_back(pattern_vertex_for_proof(d.v));
@@ -666,7 +670,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                     dd.reset(v);
                     hall_rhs.push_back(target_vertex_for_proof(v));
                 }
-                _imp->params.proof->emit_hall_set_or_violator(hall_lhs, hall_rhs);
+                _imp->proof->emit_hall_set_or_violator(hall_lhs, hall_rhs);
             }
             return false;
         }
@@ -674,8 +678,8 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
 
     for (auto & d : domains) {
         d.count = d.values.count();
-        if (0 == d.count && _imp->params.proof) {
-            _imp->params.proof->initial_domain_is_empty(d.v, "post-initialisation stage");
+        if (0 == d.count && _imp->proof) {
+            _imp->proof->initial_domain_is_empty(d.v, "post-initialisation stage");
             return false;
         }
     }
@@ -745,7 +749,7 @@ auto HomomorphismModel::prepare() -> bool
 
         for (unsigned i = 0; i < p_gds.size(); ++i)
             if (p_gds.at(i).second > t_gds.at(i).second) {
-                if (_imp->params.proof) {
+                if (_imp->proof) {
                     for (unsigned p = 0; p <= i; ++p) {
                         vector<int> n_p;
                         auto np = _imp->pattern_graph_rows[p_gds.at(p).first * max_graphs + 0];
@@ -761,7 +765,7 @@ auto HomomorphismModel::prepare() -> bool
                                 n_t.push_back(j);
                             }
 
-                            _imp->params.proof->incompatible_by_degrees(0,
+                            _imp->proof->incompatible_by_degrees(0,
                                 pattern_vertex_for_proof(p_gds.at(p).first), n_p,
                                 target_vertex_for_proof(t_gds.at(t).first), n_t);
                         }
@@ -773,7 +777,7 @@ auto HomomorphismModel::prepare() -> bool
                     for (unsigned t = 0; t < i; ++t)
                         targets.push_back(target_vertex_for_proof(t_gds.at(t).first));
 
-                    _imp->params.proof->emit_hall_set_or_violator(patterns, targets);
+                    _imp->proof->emit_hall_set_or_violator(patterns, targets);
                 }
                 return false;
             }
@@ -785,7 +789,7 @@ auto HomomorphismModel::prepare() -> bool
         _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
         _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
 
-        if (_imp->params.proof) {
+        if (_imp->proof) {
             for (int g = 1; g <= _imp->params.number_of_exact_path_graphs; ++g) {
                 for (unsigned p = 0; p < pattern_size; ++p) {
                     for (unsigned q = 0; q < pattern_size; ++q) {
@@ -835,7 +839,7 @@ auto HomomorphismModel::prepare() -> bool
                                 named_two_away_from_t.emplace_back(target_vertex_for_proof(w), named_n_t_w);
                             }
 
-                            _imp->params.proof->create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
+                            _imp->proof->create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
                                 named_t, named_n_t, named_two_away_from_t, named_d_n_t);
                         }
                     }
@@ -853,7 +857,7 @@ auto HomomorphismModel::prepare() -> bool
         _build_distance3_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental);
         _build_distance3_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
 
-        if (_imp->params.proof) {
+        if (_imp->proof) {
             for (unsigned p = 0; p < pattern_size; ++p) {
                 for (unsigned q = 0; q < pattern_size; ++q) {
                     auto named_p = pattern_vertex_for_proof(p);
@@ -935,12 +939,12 @@ auto HomomorphismModel::prepare() -> bool
                         d3_from_t.assign(d3_from_t_set.begin(), d3_from_t_set.end());
 
                         if (actually_adjacent)
-                            _imp->params.proof->create_distance3_graphs_but_actually_distance_1(next_pattern_supplemental - 1, named_p, named_q, named_t, d3_from_t);
+                            _imp->proof->create_distance3_graphs_but_actually_distance_1(next_pattern_supplemental - 1, named_p, named_q, named_t, d3_from_t);
                         else if (path_from_p_to_q_2)
-                            _imp->params.proof->create_distance3_graphs(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
+                            _imp->proof->create_distance3_graphs(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
                                 *path_from_p_to_q_2, named_t, d1_from_t, d2_from_t, d3_from_t);
                         else
-                            _imp->params.proof->create_distance3_graphs_but_actually_distance_2(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
+                            _imp->proof->create_distance3_graphs_but_actually_distance_2(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
                                 named_t, d1_from_t, d2_from_t, d3_from_t);
                     }
                 }
@@ -957,7 +961,7 @@ auto HomomorphismModel::prepare() -> bool
         _build_extra_shape(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape, injective, count);
         _build_extra_shape(_imp->target_graph_rows, target_size, next_target_supplemental, *shape, injective, count);
 
-        if (_imp->params.proof) {
+        if (_imp->proof) {
             for (unsigned p = 0; p < pattern_size; ++p) {
                 for (unsigned q = 0; q < pattern_size; ++q) {
                     auto named_p = pattern_vertex_for_proof(p);
@@ -975,7 +979,7 @@ auto HomomorphismModel::prepare() -> bool
                             n_t.reset(v);
                             named_n_t.push_back(target_vertex_for_proof(v));
                         }
-                        _imp->params.proof->hack_in_shape_graph(next_pattern_supplemental - 1, named_p, named_q, named_t, named_n_t);
+                        _imp->proof->hack_in_shape_graph(next_pattern_supplemental - 1, named_p, named_q, named_t, named_n_t);
                     }
                 }
             }

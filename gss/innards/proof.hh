@@ -1,7 +1,8 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_PROOF_HH
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_PROOF_HH 1
 
-#include <gss/proof-fwd.hh>
+#include <gss/innards/proof-fwd.hh>
+#include <gss/proof_options.hh>
 
 #include <exception>
 #include <functional>
@@ -40,14 +41,7 @@ private:
     auto recover_at_most_one_constraint(int p) -> void;
 
 public:
-    Proof(
-        const std::string & opb_file,
-        const std::string & log_file,
-        bool friendly_names,
-        bool bz2,
-        bool super_extra_verbose,
-        bool version2,
-        bool recover_encoding);
+    explicit Proof(const ProofOptions &);
     Proof(Proof &&);
     ~Proof();
     auto operator=(Proof &&) -> Proof &;

@@ -1,4 +1,4 @@
-#include <gss/proof.hh>
+#include <gss/innards/proof.hh>
 
 #include <algorithm>
 #include <fstream>
@@ -103,16 +103,16 @@ struct Proof::Imp
     vector<pair<int, int>> zero_in_proof_objectives;
 };
 
-Proof::Proof(const string & opb_file, const string & log_file, bool f, bool b, bool s, bool f2, bool re) :
+Proof::Proof(const ProofOptions & options) :
     _imp(new Imp)
 {
-    _imp->opb_filename = opb_file;
-    _imp->log_filename = log_file;
-    _imp->friendly_names = f;
-    _imp->bz2 = b;
-    _imp->super_extra_verbose = s;
-    _imp->format2 = f2;
-    _imp->recover_encoding = re;
+    _imp->opb_filename = options.opb_file;
+    _imp->log_filename = options.log_file;
+    _imp->friendly_names = options.friendly_names;
+    _imp->bz2 = options.bz2;
+    _imp->super_extra_verbose = options.super_extra_verbose;
+    _imp->format2 = options.version2;
+    _imp->recover_encoding = options.recover_encoding;
 }
 
 Proof::Proof(Proof &&) = default;

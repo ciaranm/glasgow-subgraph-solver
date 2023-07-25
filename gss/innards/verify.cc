@@ -1,4 +1,4 @@
-#include <gss/verify.hh>
+#include <gss/innards/verify.hh>
 #include <map>
 
 using std::map;

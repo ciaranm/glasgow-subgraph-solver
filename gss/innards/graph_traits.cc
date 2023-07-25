@@ -1,4 +1,4 @@
-#include <gss/graph_traits.hh>
+#include <gss/innards/graph_traits.hh>
 
 auto is_simple_clique(const InputGraph & graph) -> bool
 {

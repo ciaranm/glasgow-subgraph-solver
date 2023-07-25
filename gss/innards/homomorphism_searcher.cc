@@ -1,5 +1,5 @@
-#include <gss/cheap_all_different.hh>
-#include <gss/homomorphism_searcher.hh>
+#include <gss/innards/cheap_all_different.hh>
+#include <gss/innards/homomorphism_searcher.hh>
 
 #include <optional>
 #include <tuple>
@@ -21,10 +21,11 @@ using std::uniform_int_distribution;
 using std::vector;
 
 HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
-    const DuplicateSolutionFilterer & d) :
+    const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f) :
     model(m),
     params(p),
-    _duplicate_solution_filterer(d)
+    _duplicate_solution_filterer(d),
+    proof(f)
 {
     if (might_have_watches(params)) {
         watches.table.target_size = model.target_size;
@@ -77,7 +78,7 @@ auto HomomorphismSearcher::restarting_search(
     int depth,
     RestartsSchedule & restarts_schedule) -> SearchResult
 {
-    if (params.proof && params.proof->super_extra_verbose()) {
+    if (proof && proof->super_extra_verbose()) {
         vector<pair<NamedVertex, vector<NamedVertex>>> proof_domains;
         for (auto & d : domains) {
             proof_domains.push_back(pair{model.pattern_vertex_for_proof(d.v), vector<NamedVertex>{}});
@@ -87,7 +88,7 @@ auto HomomorphismSearcher::restarting_search(
                 proof_domains.back().second.push_back(model.target_vertex_for_proof(v));
             }
         }
-        params.proof->show_domains("entering depth " + to_string(depth), proof_domains);
+        proof->show_domains("entering depth " + to_string(depth), proof_domains);
     }
 
     if (params.timeout->should_abort())
@@ -113,8 +114,8 @@ auto HomomorphismSearcher::restarting_search(
             }
         }
 
-        if (params.proof)
-            params.proof->post_solution(solution_in_proof_form(assignments));
+        if (proof)
+            proof->post_solution(solution_in_proof_form(assignments));
 
         if (params.count_solutions) {
             // we could be finding duplicate solutions, in threaded search
@@ -174,8 +175,8 @@ auto HomomorphismSearcher::restarting_search(
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
-        if (params.proof)
-            params.proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
+        if (proof)
+            proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
         // modified in-place by appending, we can restore by shrinking
         auto assignments_size = assignments.values.size();
@@ -190,8 +191,8 @@ auto HomomorphismSearcher::restarting_search(
         ++propagations;
         if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
             // failure? restore assignments and go on to the next thing
-            if (params.proof)
-                params.proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
+            if (proof)
+                proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
             assignments.values.resize(assignments_size);
             actually_hit_a_failure = true;
@@ -199,8 +200,8 @@ auto HomomorphismSearcher::restarting_search(
             continue;
         }
 
-        if (params.proof)
-            params.proof->start_level(depth + 2);
+        if (proof)
+            proof->start_level(depth + 2);
 
         // recursive search
         auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
@@ -227,10 +228,10 @@ auto HomomorphismSearcher::restarting_search(
             return SearchResult::Restart;
 
         case SearchResult::SatisfiableButKeepGoing:
-            if (params.proof) {
-                params.proof->back_up_to_level(depth + 1);
-                params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
-                params.proof->forget_level(depth + 2);
+            if (proof) {
+                proof->back_up_to_level(depth + 1);
+                proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
+                proof->forget_level(depth + 2);
             }
 
             // restore assignments
@@ -242,10 +243,10 @@ auto HomomorphismSearcher::restarting_search(
             [[std::fallthrough]];
 
         case SearchResult::Unsatisfiable:
-            if (params.proof) {
-                params.proof->back_up_to_level(depth + 1);
-                params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
-                params.proof->forget_level(depth + 2);
+            if (proof) {
+                proof->back_up_to_level(depth + 1);
+                proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
+                proof->forget_level(depth + 2);
             }
 
             // restore assignments
@@ -258,15 +259,15 @@ auto HomomorphismSearcher::restarting_search(
     }
 
     // no values remaining, backtrack, or possibly kick off a restart
-    if (params.proof)
-        params.proof->out_of_guesses(assignments_as_proof_decisions(assignments));
+    if (proof)
+        proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
     if (actually_hit_a_failure)
         restarts_schedule.did_a_backtrack();
 
     if (restarts_schedule.should_restart()) {
-        if (params.proof)
-            params.proof->back_up_to_top();
+        if (proof)
+            proof->back_up_to_top();
         post_nogood(assignments);
         return SearchResult::Restart;
     }
@@ -338,8 +339,8 @@ auto HomomorphismSearcher::post_nogood(const HomomorphismAssignments & assignmen
 
     watches.post_nogood(move(nogood));
 
-    if (params.proof)
-        params.proof->post_restart_nogood(assignments_as_proof_decisions(assignments));
+    if (proof)
+        proof->post_restart_nogood(assignments_as_proof_decisions(assignments));
 }
 
 auto HomomorphismSearcher::copy_nonfixed_domains_and_make_assignment(
@@ -427,7 +428,7 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 
     if constexpr (verbose_proofs_) {
         if (before.count() != d.values.count())
-            params.proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
+            proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
                 0, before.count() - d.values.count(), model.pattern_vertex_for_proof(d.v));
         before = d.values;
     }
@@ -442,7 +443,7 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 
         if constexpr (verbose_proofs_) {
             if (before.count() != d.values.count())
-                params.proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
+                proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
                     g, before.count() - d.values.count(), model.pattern_vertex_for_proof(d.v));
             before = d.values;
         }
@@ -510,13 +511,13 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         if (! model.has_edge_labels()) {
             if (params.induced) {
                 if (model.directed()) {
-                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                    if ((! proof) || (! proof->super_extra_verbose()))
                         propagate_adjacency_constraints<true, false, true, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<true, false, true, true>(d, current_assignment);
                 }
                 else {
-                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                    if ((! proof) || (! proof->super_extra_verbose()))
                         propagate_adjacency_constraints<false, false, true, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<false, false, true, true>(d, current_assignment);
@@ -524,13 +525,13 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
             }
             else {
                 if (model.directed()) {
-                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                    if ((! proof) || (! proof->super_extra_verbose()))
                         propagate_adjacency_constraints<true, false, false, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<true, false, false, true>(d, current_assignment);
                 }
                 else {
-                    if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                    if ((! proof) || (! proof->super_extra_verbose()))
                         propagate_adjacency_constraints<false, false, false, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<false, false, false, true>(d, current_assignment);
@@ -540,13 +541,13 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         else {
             // edge labels are always directed
             if (params.induced) {
-                if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                if ((! proof) || (! proof->super_extra_verbose()))
                     propagate_adjacency_constraints<true, true, true, false>(d, current_assignment);
                 else
                     propagate_adjacency_constraints<true, true, true, true>(d, current_assignment);
             }
             else {
-                if ((! params.proof) || (! params.proof->super_extra_verbose()))
+                if ((! proof) || (! proof->super_extra_verbose()))
                     propagate_adjacency_constraints<true, true, false, false>(d, current_assignment);
                 else
                     propagate_adjacency_constraints<true, true, false, true>(d, current_assignment);
@@ -769,8 +770,8 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             branch_domain->fixed = true;
             assignments.values.push_back({*current_assignment, false, -1, -1});
 
-            if (params.proof)
-                params.proof->unit_propagating(
+            if (proof)
+                proof->unit_propagating(
                     model.pattern_vertex_for_proof(current_assignment->pattern_vertex),
                     model.target_vertex_for_proof(current_assignment->target_vertex));
 
@@ -813,7 +814,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
         // propagate all different
         if (params.injectivity == Injectivity::Injective)
-            if (! cheap_all_different(model.target_size, new_domains, params.proof, &model))
+            if (! cheap_all_different(model.target_size, new_domains, proof, &model))
                 return false;
         done_globals_at_least_once = true;
     }

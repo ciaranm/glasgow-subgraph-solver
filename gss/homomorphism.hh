@@ -2,9 +2,10 @@
 #define GLASGOW_SUBGRAPH_SOLVER_HOMOMORPHISM_HH 1
 
 #include <gss/formats/input_graph.hh>
-#include <gss/lackey.hh>
+#include <gss/innards/lackey.hh>
+#include <gss/innards/proof-fwd.hh>
 #include <gss/loooong.hh>
-#include <gss/proof-fwd.hh>
+#include <gss/proof_options.hh>
 #include <gss/restarts.hh>
 #include <gss/timeout.hh>
 #include <gss/value_ordering.hh>
@@ -13,6 +14,7 @@
 #include <functional>
 #include <list>
 #include <memory>
+#include <optional>
 #include <string>
 
 enum class Injectivity
@@ -111,8 +113,8 @@ struct HomomorphismParams
     /// Propagate using the lackey?
     PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
 
-    /// Optional proof handler
-    std::shared_ptr<Proof> proof;
+    /// Optional proof options
+    std::optional<ProofOptions> proof_options;
 };
 
 struct HomomorphismResult

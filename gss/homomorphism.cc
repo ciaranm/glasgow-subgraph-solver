@@ -1,13 +1,13 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
-#include <gss/graph_traits.hh>
 #include <gss/homomorphism.hh>
-#include <gss/homomorphism_domain.hh>
-#include <gss/homomorphism_model.hh>
-#include <gss/homomorphism_searcher.hh>
-#include <gss/homomorphism_traits.hh>
-#include <gss/proof.hh>
-#include <gss/thread_utils.hh>
+#include <gss/innards/graph_traits.hh>
+#include <gss/innards/homomorphism_domain.hh>
+#include <gss/innards/homomorphism_model.hh>
+#include <gss/innards/homomorphism_searcher.hh>
+#include <gss/innards/homomorphism_traits.hh>
+#include <gss/innards/proof.hh>
+#include <gss/innards/thread_utils.hh>
 
 #include <algorithm>
 #include <atomic>
@@ -27,12 +27,14 @@
 using std::atomic;
 using std::function;
 using std::make_optional;
+using std::make_shared;
 using std::make_unique;
 using std::map;
 using std::move;
 using std::mutex;
 using std::optional;
 using std::pair;
+using std::shared_ptr;
 using std::size_t;
 using std::sort;
 using std::string;
@@ -59,10 +61,13 @@ namespace
 
         const HomomorphismModel & model;
         const HomomorphismParams & params;
+        const std::shared_ptr<Proof> proof;
 
-        HomomorphismSolver(const HomomorphismModel & m, const HomomorphismParams & p) :
+        HomomorphismSolver(const HomomorphismModel & m, const HomomorphismParams & p,
+            const std::shared_ptr<Proof> & r) :
             model(m),
-            params(p)
+            params(p),
+            proof(r)
         {
         }
     };
@@ -94,7 +99,8 @@ namespace
             bool done = false;
             unsigned number_of_restarts = 0;
 
-            HomomorphismSearcher searcher(model, params, [](const HomomorphismAssignments &) -> bool { return true; });
+            HomomorphismSearcher searcher(
+                model, params, [](const HomomorphismAssignments &) -> bool { return true; }, proof);
 
             while (! done) {
                 ++number_of_restarts;
@@ -150,8 +156,8 @@ namespace
                     }
                 }
                 else {
-                    if (params.proof)
-                        params.proof->root_propagation_failed();
+                    if (proof)
+                        proof->root_propagation_failed();
                     result.complete = true;
                     done = true;
                 }
@@ -203,8 +209,9 @@ namespace
     {
         unsigned n_threads;
 
-        ThreadedSolver(const HomomorphismModel & m, const HomomorphismParams & p, unsigned t) :
-            HomomorphismSolver(m, p),
+        ThreadedSolver(const HomomorphismModel & m, const HomomorphismParams & p,
+            const std::shared_ptr<Proof> & r, unsigned t) :
+            HomomorphismSolver(m, p, r),
             n_threads(t)
         {
         }
@@ -238,7 +245,7 @@ namespace
 
             function<auto(unsigned)->void> work_function =
                 [&searchers, &common_domains, &threads, &work_function,
-                    &model = this->model, &params = this->params, n_threads = this->n_threads,
+                    &model = this->model, &params = this->params, proof = this->proof, n_threads = this->n_threads,
                     &common_result, &common_result_mutex, &by_thread_nodes, &by_thread_propagations,
                     &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser,
                     &duplicate_filter_set, &duplicate_filter_set_mutex](unsigned t) -> void {
@@ -247,12 +254,14 @@ namespace
 
                 bool just_the_first_thread = (0 == t) && params.delay_thread_creation;
 
-                searchers[t] = make_unique<HomomorphismSearcher>(model, params, [&](const HomomorphismAssignments & a) -> bool {
-                    VertexToVertexMapping v;
-                    searchers[t]->expand_to_full_result(a, v);
-                    unique_lock<mutex> lock{duplicate_filter_set_mutex};
-                    return duplicate_filter_set.insert(v).second;
-                });
+                searchers[t] = make_unique<HomomorphismSearcher>(
+                    model, params, [&](const HomomorphismAssignments & a) -> bool {
+                        VertexToVertexMapping v;
+                        searchers[t]->expand_to_full_result(a, v);
+                        unique_lock<mutex> lock{duplicate_filter_set_mutex};
+                        return duplicate_filter_set.insert(v).second;
+                    },
+                    proof);
                 if (0 != t)
                     searchers[t]->set_seed(t);
 
@@ -400,7 +409,8 @@ auto solve_homomorphism_problem(
     const HomomorphismParams & params) -> HomomorphismResult
 {
     // start by setting up proof logging, if necessary
-    if (params.proof) {
+    shared_ptr<Proof> proof;
+    if (params.proof_options) {
         // proof logging is currently incompatible with a whole load of "extra" features,
         // but can be adapted to support most of them
         if (1 != params.n_threads)
@@ -416,9 +426,11 @@ auto solve_homomorphism_problem(
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
 
+        proof = make_shared<Proof>(*params.proof_options);
+
         // set up our model file, with a set of OPB variables for each CP variable
         for (int n = 0; n < pattern.size(); ++n) {
-            params.proof->create_cp_variable(
+            proof->create_cp_variable(
                 n, target.size(),
                 [&](int v) { return pattern.vertex_name(v); },
                 [&](int v) { return target.vertex_name(v); });
@@ -426,19 +438,19 @@ auto solve_homomorphism_problem(
 
         // generate constraints for injectivity
         if (params.injectivity == Injectivity::Injective)
-            params.proof->create_injectivity_constraints(pattern.size(), target.size());
+            proof->create_injectivity_constraints(pattern.size(), target.size());
 
         // generate edge constraints, and also handle loops here
         for (int p = 0; p < pattern.size(); ++p) {
             for (int t = 0; t < target.size(); ++t) {
                 if (pattern.adjacent(p, p) && ! target.adjacent(t, t))
-                    params.proof->create_forbidden_assignment_constraint(p, t);
+                    proof->create_forbidden_assignment_constraint(p, t);
                 else if (params.induced && ! pattern.adjacent(p, p) && target.adjacent(t, t))
-                    params.proof->create_forbidden_assignment_constraint(p, t);
+                    proof->create_forbidden_assignment_constraint(p, t);
 
                 // it's simpler to always have the adjacency constraints, even
                 // if the assignment is forbidden
-                params.proof->start_adjacency_constraints_for(p, t);
+                proof->start_adjacency_constraints_for(p, t);
 
                 // if p can be mapped to t, then each neighbour of p...
                 for (int q = 0; q < pattern.size(); ++q)
@@ -448,7 +460,7 @@ auto solve_homomorphism_problem(
                         for (int u = 0; u < target.size(); ++u)
                             if (t != u && target.adjacent(t, u))
                                 permitted.push_back(u);
-                        params.proof->create_adjacency_constraint(p, q, t, permitted, false);
+                        proof->create_adjacency_constraint(p, q, t, permitted, false);
                     }
 
                 // same for non-adjacency for induced
@@ -460,22 +472,22 @@ auto solve_homomorphism_problem(
                             for (int u = 0; u < target.size(); ++u)
                                 if (t != u && ! target.adjacent(t, u))
                                     permitted.push_back(u);
-                            params.proof->create_adjacency_constraint(p, q, t, permitted, true);
+                            proof->create_adjacency_constraint(p, q, t, permitted, true);
                         }
                 }
             }
         }
 
         // output the model file
-        params.proof->finalise_model();
+        proof->finalise_model();
     }
 
     // first sanity check: if we're finding an injective mapping, and there
     // aren't enough vertices, fail immediately.
     if (is_nonshrinking(params) && (pattern.size() > target.size())) {
-        if (params.proof) {
-            params.proof->failure_due_to_pattern_bigger_than_target();
-            params.proof->finish_unsat_proof();
+        if (proof) {
+            proof->failure_due_to_pattern_bigger_than_target();
+            proof->finish_unsat_proof();
         }
 
         return HomomorphismResult{};
@@ -526,20 +538,20 @@ auto solve_homomorphism_problem(
     }
     else {
         // just solve the problem
-        HomomorphismModel model(target, pattern, params);
+        HomomorphismModel model(target, pattern, params, proof);
 
         if (! model.prepare()) {
             HomomorphismResult result;
             result.extra_stats.emplace_back("model_consistent = false");
             result.complete = true;
-            if (params.proof)
-                params.proof->finish_unsat_proof();
+            if (proof)
+                proof->finish_unsat_proof();
             return result;
         }
 
         HomomorphismResult result;
         if (1 == params.n_threads) {
-            SequentialSolver solver(model, params);
+            SequentialSolver solver(model, params, proof);
             result = solver.solve();
         }
         else {
@@ -547,17 +559,17 @@ auto solve_homomorphism_problem(
                 throw UnsupportedConfiguration{"Threaded search requires restarts"};
 
             unsigned n_threads = how_many_threads(params.n_threads);
-            ThreadedSolver solver(model, params, n_threads);
+            ThreadedSolver solver(model, params, proof, n_threads);
             result = solver.solve();
         }
 
-        if (params.proof) {
+        if (proof) {
             if (result.complete && result.mapping.empty())
-                params.proof->finish_unsat_proof();
+                proof->finish_unsat_proof();
             else if (! result.mapping.empty())
-                params.proof->finish_sat_proof();
+                proof->finish_sat_proof();
             else
-                params.proof->finish_unknown_proof();
+                proof->finish_unknown_proof();
         }
 
         return result;

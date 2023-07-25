@@ -1,11 +1,12 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
-#include <gss/proof.hh>
-#include <gss/svo_bitset.hh>
-#include <gss/watches.hh>
+#include <gss/innards/proof.hh>
+#include <gss/innards/svo_bitset.hh>
+#include <gss/innards/watches.hh>
 
 #include <algorithm>
 #include <list>
+#include <memory>
 #include <numeric>
 #include <random>
 #include <tuple>
@@ -18,11 +19,13 @@ using std::find;
 using std::iota;
 using std::is_same;
 using std::list;
+using std::make_shared;
 using std::make_tuple;
 using std::move;
 using std::mt19937;
 using std::pair;
 using std::reverse;
+using std::shared_ptr;
 using std::sort;
 using std::string_view;
 using std::swap;
@@ -70,6 +73,7 @@ namespace
     {
         const CliqueParams & params;
         Incumbent incumbent;
+        shared_ptr<Proof> proof;
 
         int size;
         vector<SVOBitset> adj, connected_table;
@@ -89,6 +93,25 @@ namespace
             invorder(size),
             space(nullptr)
         {
+            if (p.proof_options)
+                proof = make_shared<Proof>(*p.proof_options);
+            else if (p.extend_proof)
+                proof = p.extend_proof;
+
+            if (proof && ! proof->has_clique_model() && ! params.proof_is_for_hom) {
+                for (int q = 0; q < g.size(); ++q)
+                    proof->create_binary_variable(q, [&](int v) { return g.vertex_name(v); });
+
+                proof->create_objective(g.size(), params.decide);
+
+                for (int p = 0; p < g.size(); ++p)
+                    for (int q = 0; q < p; ++q)
+                        if (! g.adjacent(p, q))
+                            proof->create_non_edge_constraint(p, q);
+
+                proof->finalise_model();
+            }
+
             space = new int[size * (size + 1) * 2];
 
             if (params.restarts_schedule->might_restart())
@@ -288,10 +311,10 @@ namespace
             unsigned colour = 0;  // current colour
             p_end = 0;
 
-            std::vector<int> p_order_prelim(size);
-            std::vector<int> colour_sizes(size);
-            std::vector<int> colour_start(size);
-            std::vector<int> sorted_order(size);
+            vector<int> p_order_prelim(size);
+            vector<int> colour_sizes(size);
+            vector<int> colour_start(size);
+            vector<int> sorted_order(size);
 
             // while we've things left to colour
             while (p_left.any()) {
@@ -407,14 +430,14 @@ namespace
                     return SearchResult::Aborted;
 
                 if (c.size() + p_bounds[n] <= incumbent.value) {
-                    if (params.proof) {
+                    if (proof) {
                         vector<vector<int>> colour_classes;
                         for (int v = 0; v <= n; ++v) {
                             if (0 == v || p_bounds[v - 1] != p_bounds[v])
                                 colour_classes.emplace_back();
                             colour_classes.back().push_back(order[p_order[v]]);
                         }
-                        params.proof->colour_bound(colour_classes);
+                        proof->colour_bound(colour_classes);
                     }
                     break;
                 }
@@ -428,16 +451,16 @@ namespace
                             c.push_back(p_order[n]);
                         incumbent.update(c, find_nodes, prove_nodes);
 
-                        if (params.proof && ! params.decide) {
-                            params.proof->start_level(0);
-                            params.proof->new_incumbent(unpermute_and_finish(c));
-                            params.proof->start_level(depth + 1);
+                        if (proof && ! params.decide) {
+                            proof->start_level(0);
+                            proof->new_incumbent(unpermute_and_finish(c));
+                            proof->start_level(depth + 1);
                         }
 
                         if ((params.decide && incumbent.value >= *params.decide) ||
                             (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
-                            if (params.proof)
-                                params.proof->post_solution(unpermute(c));
+                            if (proof)
+                                proof->post_solution(unpermute(c));
 
                             return SearchResult::DecidedTrue;
                         }
@@ -453,14 +476,14 @@ namespace
                 if constexpr (connected_) {
                     if ((! c.empty()) && (! a.test(v))) {
                         // none of the remaining vertices can give a connected underlying graph
-                        if (params.proof) {
+                        if (proof) {
                             auto c_unpermuted = unpermute(c);
                             for (int v = 0; v <= n; ++v)
-                                params.proof->not_connected_in_underlying_graph(unpermute(c), order[p_order[v]]);
+                                proof->not_connected_in_underlying_graph(unpermute(c), order[p_order[v]]);
 
-                            params.proof->start_level(depth);
-                            params.proof->backtrack_from_binary_variables(unpermute(c));
-                            params.proof->forget_level(depth + 1);
+                            proof->start_level(depth);
+                            proof->backtrack_from_binary_variables(unpermute(c));
+                            proof->forget_level(depth + 1);
                         }
 
                         break;
@@ -473,17 +496,17 @@ namespace
                 if (params.decide || params.stop_after_finding) {
                     if ((params.decide && incumbent.value >= *params.decide) ||
                         (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
-                        if (params.proof)
-                            params.proof->post_solution(unpermute(c));
+                        if (proof)
+                            proof->post_solution(unpermute(c));
 
                         return SearchResult::DecidedTrue;
                     }
                 }
                 else {
-                    if (params.proof && c.size() > incumbent.value && ! params.proof_is_for_hom) {
-                        params.proof->start_level(0);
-                        params.proof->new_incumbent(unpermute_and_finish(c));
-                        params.proof->start_level(depth + 1);
+                    if (proof && c.size() > incumbent.value && ! params.proof_is_for_hom) {
+                        proof->start_level(0);
+                        proof->new_incumbent(unpermute_and_finish(c));
+                        proof->start_level(depth + 1);
                     }
                     incumbent.update(c, find_nodes, prove_nodes);
                 }
@@ -498,8 +521,8 @@ namespace
                         [&](int literal) { return c.end() == find(c.begin(), c.end(), literal); },
                         [&](int literal) { new_p.reset(literal); });
 
-                if (params.proof)
-                    params.proof->start_level(depth + 1);
+                if (proof)
+                    proof->start_level(depth + 1);
 
                 if (new_p.any()) {
                     auto new_a = a;
@@ -533,10 +556,10 @@ namespace
                     }
                 }
 
-                if (params.proof) {
-                    params.proof->start_level(depth);
-                    params.proof->backtrack_from_binary_variables(unpermute(c));
-                    params.proof->forget_level(depth + 1);
+                if (proof) {
+                    proof->start_level(depth);
+                    proof->backtrack_from_binary_variables(unpermute(c));
+                    proof->forget_level(depth + 1);
                 }
 
                 // now consider not taking v
@@ -610,10 +633,10 @@ namespace
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
-            if (params.proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
-                params.proof->finish_unsat_proof();
-            else if (params.proof && ! params.decide && ! params.proof_is_for_hom)
-                params.proof->finish_optimisation_proof(size - incumbent.c.size());
+            if (proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
+                proof->finish_unsat_proof();
+            else if (proof && ! params.decide && ! params.proof_is_for_hom)
+                proof->finish_optimisation_proof(size - incumbent.c.size());
 
             result.clique.clear();
             for (auto & v : incumbent.c)
@@ -626,22 +649,6 @@ namespace
 
 auto solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
 {
-    if (params.proof) {
-        if (! params.proof->has_clique_model() && ! params.proof_is_for_hom) {
-            for (int q = 0; q < graph.size(); ++q)
-                params.proof->create_binary_variable(q, [&](int v) { return graph.vertex_name(v); });
-
-            params.proof->create_objective(graph.size(), params.decide);
-
-            for (int p = 0; p < graph.size(); ++p)
-                for (int q = 0; q < p; ++q)
-                    if (! graph.adjacent(p, q))
-                        params.proof->create_non_edge_constraint(p, q);
-
-            params.proof->finalise_model();
-        }
-    }
-
     CliqueRunner runner{graph, params};
     return params.connected ? runner.run<true>() : runner.run<false>();
 }

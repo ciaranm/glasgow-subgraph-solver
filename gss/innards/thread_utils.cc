@@ -1,4 +1,4 @@
-#include <gss/thread_utils.hh>
+#include <gss/innards/thread_utils.hh>
 
 #include <thread>
 

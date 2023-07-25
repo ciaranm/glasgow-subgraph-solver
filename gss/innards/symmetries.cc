@@ -1,4 +1,4 @@
-#include <gss/symmetries.hh>
+#include <gss/innards/symmetries.hh>
 
 #include <filesystem>
 #include <istream>

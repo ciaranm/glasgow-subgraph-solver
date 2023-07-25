@@ -3,9 +3,9 @@
 
 #include <gss/formats/input_graph.hh>
 #include <gss/homomorphism.hh>
-#include <gss/homomorphism_domain.hh>
-#include <gss/proof.hh>
-#include <gss/svo_bitset.hh>
+#include <gss/innards/homomorphism_domain.hh>
+#include <gss/innards/proof.hh>
+#include <gss/innards/svo_bitset.hh>
 
 #include <memory>
 
@@ -55,7 +55,8 @@ public:
     auto has_occur_less_thans() const -> bool;
     std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
-    HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params);
+    HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
+        const std::shared_ptr<Proof> & proof);
     ~HomomorphismModel();
 
     auto pattern_vertex_for_proof(int v) const -> NamedVertex;

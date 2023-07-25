@@ -1,7 +1,7 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_DOMAIN_HH
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_DOMAIN_HH 1
 
-#include <gss/svo_bitset.hh>
+#include <gss/innards/svo_bitset.hh>
 
 struct HomomorphismDomain
 {

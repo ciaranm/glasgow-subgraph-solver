@@ -1,4 +1,4 @@
-#include <gss/homomorphism_traits.hh>
+#include <gss/innards/homomorphism_traits.hh>
 
 auto supports_exact_path_graphs(const HomomorphismParams & params) -> bool
 {
@@ -48,5 +48,5 @@ auto global_degree_is_preserved(const HomomorphismParams & params) -> bool
 
 auto can_use_clique(const HomomorphismParams & params) -> bool
 {
-    return (! params.count_solutions) && (! params.lackey) && params.clique_detection && (! params.proof);
+    return (! params.count_solutions) && (! params.lackey) && params.clique_detection && (! params.proof_options);
 }

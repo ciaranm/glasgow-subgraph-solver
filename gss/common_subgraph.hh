@@ -2,8 +2,9 @@
 #define GLASGOW_SUBGRAPH_SOLVER_COMMON_SUBGRAPH_HH 1
 
 #include <gss/formats/input_graph.hh>
+#include <gss/innards/proof-fwd.hh>
 #include <gss/loooong.hh>
-#include <gss/proof-fwd.hh>
+#include <gss/proof_options.hh>
 #include <gss/timeout.hh>
 #include <gss/vertex_to_vertex_mapping.hh>
 
@@ -29,8 +30,8 @@ struct CommonSubgraphParams
     /// Print solutions, for enumerating
     std::function<auto(const VertexToVertexMapping &)->void> enumerate_callback;
 
-    /// Optional proof handler
-    std::shared_ptr<Proof> proof;
+    /// Optional proof options
+    std::optional<ProofOptions> proof_options;
 
     /// Connected?
     bool connected = false;

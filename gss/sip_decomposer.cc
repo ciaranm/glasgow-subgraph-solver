@@ -1,6 +1,6 @@
 #include <gss/homomorphism.hh>
+#include <gss/innards/proof.hh>
 #include <gss/loooong.hh>
-#include <gss/proof.hh>
 #include <gss/sip_decomposer.hh>
 
 #include <numeric>

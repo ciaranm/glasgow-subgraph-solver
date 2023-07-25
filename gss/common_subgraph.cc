@@ -1,7 +1,7 @@
 #include <gss/clique.hh>
 #include <gss/common_subgraph.hh>
 #include <gss/configuration.hh>
-#include <gss/proof.hh>
+#include <gss/innards/proof.hh>
 
 #include <algorithm>
 #include <map>
@@ -13,6 +13,7 @@
 
 using std::function;
 using std::make_optional;
+using std::make_shared;
 using std::make_unique;
 using std::map;
 using std::min;
@@ -20,6 +21,7 @@ using std::nullopt;
 using std::optional;
 using std::pair;
 using std::set;
+using std::shared_ptr;
 using std::string;
 using std::string_view;
 using std::tuple;
@@ -59,11 +61,14 @@ namespace
         const InputGraph & first;
         const InputGraph & second;
         const CommonSubgraphParams & params;
+        shared_ptr<Proof> proof;
 
-        CommonSubgraphRunner(const InputGraph & f, const InputGraph & s, const CommonSubgraphParams & p) :
+        CommonSubgraphRunner(const InputGraph & f, const InputGraph & s, const CommonSubgraphParams & p,
+            const shared_ptr<Proof> & r) :
             first(f),
             second(s),
-            params(p)
+            params(p),
+            proof(r)
         {
         }
 
@@ -156,14 +161,14 @@ namespace
             auto branch_domains = find_branch_partition(domains, permitted_branch_variables);
             if (branch_domains == domains.partitions.end()) {
                 if (assignments.assigned.size() > incumbent.assigned.size()) {
-                    if (params.proof) {
+                    if (proof) {
                         if (params.decide) {
                             vector<pair<NamedVertex, NamedVertex>> solution;
                             for (auto & [l, r] : assignments.assigned)
                                 solution.emplace_back(
                                     NamedVertex{l, first.vertex_name(l)},
                                     NamedVertex{r, second.vertex_name(r)});
-                            params.proof->post_solution(solution);
+                            proof->post_solution(solution);
                         }
                         else {
                             vector<tuple<NamedVertex, NamedVertex, bool>> solution;
@@ -173,10 +178,10 @@ namespace
                                         NamedVertex{v, first.vertex_name(v)},
                                         NamedVertex{w, second.vertex_name(w)},
                                         assignments.assigned.end() != find(assignments.assigned.begin(), assignments.assigned.end(), pair{v, w}));
-                            params.proof->start_level(0);
-                            params.proof->new_incumbent(solution);
-                            params.proof->rewrite_mcs_objective(first.size());
-                            params.proof->start_level(depth);
+                            proof->start_level(0);
+                            proof->new_incumbent(solution);
+                            proof->rewrite_mcs_objective(first.size());
+                            proof->start_level(depth);
                         }
                     }
 
@@ -206,10 +211,10 @@ namespace
                 int left_branch = *branch_domains->first.begin();
                 for (auto & right_branch : branch_domains->second) {
                     // branch with left_branch assigned to right_branch
-                    if (params.proof) {
-                        params.proof->guessing(depth, NamedVertex{left_branch, first.vertex_name(left_branch)},
+                    if (proof) {
+                        proof->guessing(depth, NamedVertex{left_branch, first.vertex_name(left_branch)},
                             NamedVertex{right_branch, second.vertex_name(right_branch)});
-                        params.proof->start_level(depth + 1);
+                        proof->start_level(depth + 1);
                     }
 
                     auto new_domains = branch_assigning(domains, left_branch, right_branch);
@@ -232,23 +237,23 @@ namespace
                         case SearchResult::Complete: break;
                         }
                     }
-                    else if (params.proof)
-                        params.proof->mcs_bound(new_domains.partitions);
+                    else if (proof)
+                        proof->mcs_bound(new_domains.partitions);
 
-                    if (params.proof) {
-                        params.proof->start_level(depth);
-                        params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
-                        params.proof->forget_level(depth + 1);
+                    if (proof) {
+                        proof->start_level(depth);
+                        proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
+                        proof->forget_level(depth + 1);
                     }
 
                     assignments.assigned.pop_back();
                 }
 
                 // now with left_branch assigned to null
-                if (params.proof) {
-                    params.proof->guessing(depth, NamedVertex{left_branch, first.vertex_name(left_branch)},
+                if (proof) {
+                    proof->guessing(depth, NamedVertex{left_branch, first.vertex_name(left_branch)},
                         NamedVertex{second.size(), "null"});
-                    params.proof->start_level(depth + 1);
+                    proof->start_level(depth + 1);
                 }
 
                 auto new_domains = branch_rejecting(domains, left_branch);
@@ -261,18 +266,18 @@ namespace
                     case SearchResult::Complete: break;
                     }
                 }
-                else if (params.proof)
-                    params.proof->mcs_bound(new_domains.partitions);
-                if (params.proof) {
-                    params.proof->start_level(depth);
-                    params.proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
-                    params.proof->forget_level(depth + 1);
+                else if (proof)
+                    proof->mcs_bound(new_domains.partitions);
+                if (proof) {
+                    proof->start_level(depth);
+                    proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
+                    proof->forget_level(depth + 1);
                 }
                 assignments.rejected.pop_back();
             }
 
-            if (params.proof)
-                params.proof->out_of_guesses(assignments_as_proof_decisions(assignments));
+            if (proof)
+                proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
             return SearchResult::Complete;
         }
@@ -303,8 +308,8 @@ namespace
 
             if (params.decide && (bound(domains) < *params.decide)) {
                 result.complete = true;
-                if (params.proof)
-                    params.proof->mcs_bound(domains.partitions);
+                if (proof)
+                    proof->mcs_bound(domains.partitions);
             }
             else {
                 switch (search(0, assignments, incumbent, domains, result.nodes, result.solution_count, nullopt)) {
@@ -331,10 +336,10 @@ namespace
                 }
             }
 
-            if (params.proof && params.decide && result.complete && result.mapping.empty())
-                params.proof->finish_unsat_proof();
-            else if (params.proof && ! params.decide && result.complete)
-                params.proof->finish_unsat_proof();
+            if (proof && params.decide && result.complete && result.mapping.empty())
+                proof->finish_unsat_proof();
+            else if (proof && ! params.decide && result.complete)
+                proof->finish_unsat_proof();
 
             return result;
         }
@@ -346,28 +351,31 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
     if (params.count_solutions && ! params.decide)
         throw UnsupportedConfiguration{"Solution counting only makes sense for decision problems"};
 
-    if (params.proof) {
+    shared_ptr<Proof> proof;
+    if (params.proof_options) {
+        proof = make_shared<Proof>(*params.proof_options);
+
         for (int n = 0; n < first.size(); ++n) {
-            params.proof->create_cp_variable(
+            proof->create_cp_variable(
                 n, second.size() + 1,
                 [&](int v) { return first.vertex_name(v); },
                 [&](int v) { if (v == second.size()) return string("null"); else return second.vertex_name(v); });
         }
 
-        params.proof->create_non_null_decision_bound(first.size(), second.size(), params.decide);
+        proof->create_non_null_decision_bound(first.size(), second.size(), params.decide);
 
         // generate constraints for injectivity
-        params.proof->create_injectivity_constraints(first.size(), second.size());
+        proof->create_injectivity_constraints(first.size(), second.size());
 
         // generate edge constraints, and also handle loops here
         for (int p = 0; p < first.size(); ++p) {
             for (int t = 0; t < second.size(); ++t) {
                 if (first.adjacent(p, p) != second.adjacent(t, t))
-                    params.proof->create_forbidden_assignment_constraint(p, t);
+                    proof->create_forbidden_assignment_constraint(p, t);
                 else if (first.vertex_label(p) != second.vertex_label(t))
-                    params.proof->create_forbidden_assignment_constraint(p, t);
+                    proof->create_forbidden_assignment_constraint(p, t);
                 else {
-                    params.proof->start_adjacency_constraints_for(p, t);
+                    proof->start_adjacency_constraints_for(p, t);
 
                     // if p can be mapped to t, then each (non-)neighbour of p...
                     for (int q = 0; q < first.size(); ++q)
@@ -379,17 +387,17 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
                                     permitted.push_back(u);
                             // or null
                             permitted.push_back(second.size());
-                            params.proof->create_adjacency_constraint(p, q, t, permitted, false);
+                            proof->create_adjacency_constraint(p, q, t, permitted, false);
                         }
                 }
             }
         }
 
         if (params.connected)
-            params.proof->create_connected_constraints(first.size(), second.size(), [&](int a, int b) { return first.adjacent(a, b); });
+            proof->create_connected_constraints(first.size(), second.size(), [&](int a, int b) { return first.adjacent(a, b); });
 
         // output the model file
-        params.proof->finalise_model();
+        proof->finalise_model();
 
         // rewrite the objective to the form we need
         vector<tuple<NamedVertex, NamedVertex, bool>> solution;
@@ -399,8 +407,8 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
                     NamedVertex{v, first.vertex_name(v)},
                     NamedVertex{w, second.vertex_name(w)},
                     false);
-        params.proof->new_incumbent(solution);
-        params.proof->rewrite_mcs_objective(first.size());
+        proof->new_incumbent(solution);
+        proof->rewrite_mcs_objective(first.size());
     }
 
     if (params.clique) {
@@ -417,11 +425,11 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
             for (int w = 0; w < second.size(); ++w)
                 if ((first.adjacent(v, v) == second.adjacent(w, w)) && (first.vertex_label(v) == second.vertex_label(w)))
                     assoc_encoding.emplace_back(v, w);
-                else if (params.proof)
+                else if (proof)
                     zero_in_proof_objectives.emplace_back(v, w);
 
-        if (params.proof)
-            params.proof->create_clique_encoding(assoc_encoding, zero_in_proof_objectives);
+        if (proof)
+            proof->create_clique_encoding(assoc_encoding, zero_in_proof_objectives);
 
         assoc.resize(assoc_encoding.size());
         for (unsigned v = 0; v < assoc_encoding.size(); ++v)
@@ -437,11 +445,11 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
                         }
                     }
 
-                    if (params.proof && ! edge)
-                        params.proof->create_clique_nonedge(v, w);
+                    if (proof && ! edge)
+                        proof->create_clique_nonedge(v, w);
                 }
 
-        clique_params.proof = params.proof;
+        clique_params.extend_proof = proof;
 
         if (params.connected) {
             clique_params.connected = [&](int x, const function<auto(int)->int> & invorder) -> SVOBitset {
@@ -469,7 +477,7 @@ auto solve_common_subgraph_problem(const InputGraph & first, const InputGraph & 
         return result;
     }
     else {
-        CommonSubgraphRunner runner{first, second, params};
+        CommonSubgraphRunner runner{first, second, params, proof};
         return runner.run();
     }
 }

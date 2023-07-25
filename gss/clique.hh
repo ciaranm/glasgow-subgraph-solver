@@ -2,9 +2,10 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_CLIQUE_HH 1
 
 #include <gss/formats/input_graph.hh>
-#include <gss/proof-fwd.hh>
+#include <gss/innards/proof-fwd.hh>
+#include <gss/innards/svo_bitset.hh>
+#include <gss/proof_options.hh>
 #include <gss/restarts.hh>
-#include <gss/svo_bitset.hh>
 #include <gss/timeout.hh>
 
 #include <chrono>
@@ -50,8 +51,11 @@ struct CliqueParams
     /// For use by the maximum common connected subgraph reduction
     std::function<auto(int, const std::function<auto(int)->int> &)->SVOBitset> connected;
 
-    /// Optional proof handler
-    std::shared_ptr<Proof> proof;
+    /// Optional proof options
+    std::optional<ProofOptions> proof_options;
+
+    /// Optional ability to extend an existing proof (for use by other solvers)
+    std::shared_ptr<Proof> extend_proof;
 
     /// If logging proofs, only log the bound (for use by homomorphism solver for clique filtering)
     bool proof_is_for_hom = false;

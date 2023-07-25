@@ -1,7 +1,6 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/formats/read_file_format.hh>
-#include <gss/proof.hh>
 
 #include <boost/program_options.hpp>
 
@@ -157,15 +156,18 @@ auto main(int argc, char * argv[]) -> int
         cout << "file = " << options_vars["graph-file"].as<string>() << endl;
 
         if (options_vars.count("prove")) {
-            bool friendly_names = options_vars.count("proof-names");
-            bool verbose_proofs = options_vars.count("verbose-proofs");
-            bool compress_proof = options_vars.count("compress-proof");
-            bool format2 = options_vars.count("proof-format-2");
-            bool recover_encoding = options_vars.count("recover-proof-encoding");
             string fn = options_vars["prove"].as<string>();
+            bool compress_proof = options_vars.contains("compress-proof");
             string suffix = compress_proof ? ".bz2" : "";
-            params.proof = make_unique<Proof>(fn + ".opb", fn + ".veripb", friendly_names, compress_proof, verbose_proofs,
-                format2, recover_encoding);
+            ProofOptions proof_options{
+                .opb_file = fn + ".opb",
+                .log_file = fn + ".veripb",
+                .bz2 = compress_proof,
+                .friendly_names = options_vars.contains("proof-names"),
+                .recover_encoding = options_vars.contains("recover-proof-encoding"),
+                .super_extra_verbose = options_vars.contains("verbose-proofs"),
+                .version2 = options_vars.contains("proof-format-2")};
+            params.proof_options = proof_options;
             cout << "proof_model = " << fn << ".opb" << suffix << endl;
             cout << "proof_log = " << fn << ".veripb" << suffix << endl;
         }

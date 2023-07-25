@@ -5,26 +5,26 @@ find_package(Boost 1.74 COMPONENTS iostreams container thread REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 add_library(glasgow_subgraphs
-        cheap_all_different.cc
         clique.cc
         common_subgraph.cc
         configuration.cc
-        graph_traits.cc
         homomorphism.cc
-        homomorphism_domain.cc
-        homomorphism_model.cc
-        homomorphism_searcher.cc
-        homomorphism_traits.cc
-        lackey.cc
-        proof.cc
         restarts.cc
         sip_decomposer.cc
-        svo_bitset.cc
-        symmetries.cc
-        thread_utils.cc
         timeout.cc
-        verify.cc
-        watches.cc
+        innards/cheap_all_different.cc
+        innards/graph_traits.cc
+        innards/homomorphism_domain.cc
+        innards/homomorphism_model.cc
+        innards/homomorphism_searcher.cc
+        innards/homomorphism_traits.cc
+        innards/lackey.cc
+        innards/proof.cc
+        innards/svo_bitset.cc
+        innards/symmetries.cc
+        innards/thread_utils.cc
+        innards/verify.cc
+        innards/watches.cc
         formats/csv.cc
         formats/dimacs.cc
         formats/graph_file_error.cc

@@ -1,4 +1,4 @@
-#include <gss/cheap_all_different.hh>
+#include <gss/innards/cheap_all_different.hh>
 
 #include <tuple>
 #include <type_traits>

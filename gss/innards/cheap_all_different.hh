@@ -1,9 +1,9 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_CHEAP_ALL_DIFFERENT_HH
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_CHEAP_ALL_DIFFERENT_HH 1
 
-#include <gss/homomorphism_domain.hh>
-#include <gss/homomorphism_model.hh>
-#include <gss/proof.hh>
+#include <gss/innards/homomorphism_domain.hh>
+#include <gss/innards/homomorphism_model.hh>
+#include <gss/innards/proof.hh>
 
 #include <vector>
 

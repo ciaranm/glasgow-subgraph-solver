@@ -2,10 +2,10 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_SEARCHER_HH 1
 
 #include <gss/homomorphism.hh>
-#include <gss/homomorphism_domain.hh>
-#include <gss/homomorphism_model.hh>
-#include <gss/homomorphism_traits.hh>
-#include <gss/watches.hh>
+#include <gss/innards/homomorphism_domain.hh>
+#include <gss/innards/homomorphism_model.hh>
+#include <gss/innards/homomorphism_traits.hh>
+#include <gss/innards/watches.hh>
 
 #include <functional>
 #include <random>
@@ -80,6 +80,8 @@ private:
     const HomomorphismParams & params;
     const DuplicateSolutionFilterer _duplicate_solution_filterer;
 
+    const std::shared_ptr<Proof> proof;
+
     std::mt19937 global_rand;
 
     auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
@@ -118,7 +120,7 @@ private:
 
 public:
     HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
-        const DuplicateSolutionFilterer &);
+        const DuplicateSolutionFilterer &, const std::shared_ptr<Proof> &);
 
     auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 
