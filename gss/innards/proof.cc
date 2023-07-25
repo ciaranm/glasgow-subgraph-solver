@@ -10,11 +10,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include <boost/iostreams/device/file.hpp>
-#include <boost/iostreams/filter/bzip2.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/stream.hpp>
-
 using namespace gss;
 using namespace gss::innards;
 
@@ -42,21 +37,6 @@ using std::unique_ptr;
 using std::unordered_map;
 using std::vector;
 
-using boost::iostreams::bzip2_compressor;
-using boost::iostreams::file_sink;
-using boost::iostreams::filtering_ostream;
-
-namespace
-{
-    auto make_compressed_ostream(const string & fn) -> unique_ptr<ostream>
-    {
-        auto out = make_unique<filtering_ostream>();
-        out->push(bzip2_compressor());
-        out->push(file_sink(fn));
-        return out;
-    }
-}
-
 ProofError::ProofError(const string & m) noexcept :
     _message("Proof error: " + m)
 {
@@ -73,7 +53,6 @@ struct Proof::Imp
     stringstream model_stream, model_prelude_stream;
     unique_ptr<ostream> proof_stream;
     bool friendly_names;
-    bool bz2 = false;
     bool super_extra_verbose = false;
     bool format2 = false;
     bool recover_encoding = false;
@@ -112,7 +91,6 @@ Proof::Proof(const ProofOptions & options) :
     _imp->opb_filename = options.opb_file;
     _imp->log_filename = options.log_file;
     _imp->friendly_names = options.friendly_names;
-    _imp->bz2 = options.bz2;
     _imp->super_extra_verbose = options.super_extra_verbose;
     _imp->format2 = options.version2;
     _imp->recover_encoding = options.recover_encoding;
@@ -205,7 +183,7 @@ auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> &
 
 auto Proof::finalise_model() -> void
 {
-    unique_ptr<ostream> f = (_imp->bz2 ? make_compressed_ostream(_imp->opb_filename + ".bz2") : make_unique<ofstream>(_imp->opb_filename));
+    unique_ptr<ostream> f = make_unique<ofstream>(_imp->opb_filename);
 
     *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
        << " #constraint= " << _imp->nb_constraints << '\n';
@@ -217,7 +195,7 @@ auto Proof::finalise_model() -> void
     if (! *f)
         throw ProofError{"Error writing opb file to '" + _imp->opb_filename + "'"};
 
-    _imp->proof_stream = (_imp->bz2 ? make_compressed_ostream(_imp->log_filename + ".bz2") : make_unique<ofstream>(_imp->log_filename));
+    _imp->proof_stream = make_unique<ofstream>(_imp->log_filename);
 
     if (_imp->format2)
         *_imp->proof_stream << "pseudo-Boolean proof version 2.0\n";

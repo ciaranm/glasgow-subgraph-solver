@@ -75,7 +75,6 @@ auto main(int argc, char * argv[]) -> int
             ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .veripb)") //
             ("proof-names", "Use 'friendly' variable names in the proof, rather than x1, x2, ...")                 //
             ("verbose-proofs", "Write lots of comments to the proof, for tracing")                                 //
-            ("compress-proof", "Compress the proof using bz2")                                                     //
             ("proof-format-2", "Use the under-development 2.0 format for proofs")                                  //
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
         display_options.add(proof_logging_options);
@@ -158,19 +157,16 @@ auto main(int argc, char * argv[]) -> int
 
         if (options_vars.count("prove")) {
             string fn = options_vars["prove"].as<string>();
-            bool compress_proof = options_vars.contains("compress-proof");
-            string suffix = compress_proof ? ".bz2" : "";
             ProofOptions proof_options{
                 .opb_file = fn + ".opb",
                 .log_file = fn + ".veripb",
-                .bz2 = compress_proof,
                 .friendly_names = options_vars.contains("proof-names"),
                 .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs"),
                 .version2 = options_vars.contains("proof-format-2")};
             params.proof_options = proof_options;
-            cout << "proof_model = " << fn << ".opb" << suffix << endl;
-            cout << "proof_log = " << fn << ".veripb" << suffix << endl;
+            cout << "proof_model = " << fn << ".opb" << endl;
+            cout << "proof_log = " << fn << ".veripb" << endl;
         }
 
         /* Prepare and start timeout */
