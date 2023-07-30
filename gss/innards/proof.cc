@@ -207,22 +207,6 @@ auto Proof::finalise_model() -> void
 
     if (! *_imp->proof_stream)
         throw ProofError{"Error writing proof file to '" + _imp->log_filename + "'"};
-
-    if (_imp->recover_encoding && ! _imp->non_edge_constraints.empty()) {
-        unsigned delete_up_to = _imp->proof_line;
-        for (auto & [edge, _] : _imp->non_edge_constraints) {
-            if (edge.first < edge.second) {
-                *_imp->proof_stream << "ia -1 x" << _imp->binary_variable_mappings[edge.first]
-                                    << " -1 x" << _imp->binary_variable_mappings[edge.second] << " >= -1 ;\n";
-                auto n = ++_imp->proof_line;
-                _imp->non_edge_constraints[edge] = n;
-                _imp->non_edge_constraints[{edge.second, edge.first}] = n;
-                *_imp->proof_stream << "core id " << n << '\n';
-            }
-        }
-        for (unsigned d = 1; d <= delete_up_to; ++d)
-            *_imp->proof_stream << "del id " << d << '\n';
-    }
 }
 
 auto Proof::finish_unsat_proof() -> void
@@ -945,8 +929,10 @@ auto Proof::create_non_edge_constraint(int p, int q) -> void
     _imp->model_stream << "-1 x" << _imp->binary_variable_mappings[p] << " -1 x" << _imp->binary_variable_mappings[q] << " >= -1 ;\n";
 
     ++_imp->nb_constraints;
-    _imp->non_edge_constraints.emplace(pair{p, q}, _imp->nb_constraints);
-    _imp->non_edge_constraints.emplace(pair{q, p}, _imp->nb_constraints);
+    if (! _imp->recover_encoding) {
+        _imp->non_edge_constraints.emplace(pair{p, q}, _imp->nb_constraints);
+        _imp->non_edge_constraints.emplace(pair{q, p}, _imp->nb_constraints);
+    }
 }
 
 auto Proof::create_non_null_decision_bound(int p, int t, optional<int> d) -> void
@@ -1010,6 +996,25 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
         *_imp->proof_stream << " ]";
     }
     *_imp->proof_stream << '\n';
+
+    if (_imp->recover_encoding && ! _imp->doing_hom_colour_proof) {
+        for (auto & cc : ccs) {
+            if (cc.size() == 1)
+                continue;
+
+            for (unsigned i = 0 ; i < cc.size() ; ++i)
+                for (unsigned j = i + 1 ; j < cc.size() ; ++j)
+                    if (! _imp->non_edge_constraints.contains(pair{cc[i], cc[j]})) {
+                        *_imp->proof_stream << "# 0\n";
+                        *_imp->proof_stream << "ea -1 x" << _imp->binary_variable_mappings[cc[i]]
+                            << " -1 x" << _imp->binary_variable_mappings[cc[j]] << " >= -1 ;\n";
+                        auto n = ++_imp->proof_line;
+                        _imp->non_edge_constraints[{cc[i], cc[j]}] = n;
+                        _imp->non_edge_constraints[{cc[j], cc[i]}] = n;
+                        *_imp->proof_stream << "# " << _imp->active_level << '\n';
+                    }
+        }
+    }
 
     vector<long> to_sum;
     auto do_one_cc = [&](const auto & cc, const auto & non_edge_constraint) {
