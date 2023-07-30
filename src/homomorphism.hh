@@ -46,6 +46,9 @@ struct HomomorphismParams
     /// Is a bigraph?
     bool bigraph = false;
 
+    /// Are we checking for bigraph equality or just matching?
+    bool equality_check = false;
+
     /// If it is a bigraph, use nogood trickery for projection?
     bool use_bigraph_projection_nogoods = true;
 

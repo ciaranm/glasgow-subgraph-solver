@@ -444,6 +444,27 @@ auto solve_homomorphism_problem(
         return HomomorphismResult{ };
     }
 
+    // If doing bigraph equality checking, fail immediately if the number of 
+    // regions, sites, entities or hyperedge ports aren't consistent
+    if(params.bigraph && params.equality_check) {
+        if((pattern.size() != target.size()) || (pattern.get_no_link_nodes() != target.get_no_link_nodes()))
+            return HomomorphismResult{ };
+
+        int p_regions = 0;
+        int p_sites = 0;
+        int t_regions = 0;
+        int t_sites = 0;
+        for(int i = 0; i < pattern.size(); i++) {
+            if(pattern.vertex_name(i) == "ROOT") p_regions++;
+            if(pattern.vertex_name(i) == "SITE") p_sites++;
+            if(target.vertex_name(i) == "ROOT") t_regions++;
+            if(target.vertex_name(i) == "SITE") t_sites++;
+        }
+        if(p_regions != t_regions || p_sites != t_sites) {
+            return HomomorphismResult{ }; 
+        }
+    }
+
     // is the pattern a clique? if so, use a clique algorithm instead
     if (can_use_clique(params) && is_simple_clique(pattern)) {
         CliqueParams clique_params;
