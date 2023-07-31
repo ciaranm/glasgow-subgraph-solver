@@ -151,7 +151,7 @@ void gbs_match_all() {
     params.bigraph = true;
     params.count_solutions = true;
     params.no_supplementals = true;
-    params.use_bigraph_projection_nogoods = true;
+    params.use_bigraph_projection_nogoods = false;
 
     /* Prepare and start timeout */
     params.restarts_schedule = make_unique<NoRestartsSchedule>();
@@ -171,7 +171,7 @@ int gbs_count_sols() {
     params.bigraph = true;
     params.count_solutions = true;
     params.no_supplementals = true;
-    params.use_bigraph_projection_nogoods = true;
+    params.use_bigraph_projection_nogoods = false;
 
     /* Prepare and start timeout */
     params.restarts_schedule = make_unique<NoRestartsSchedule>();
