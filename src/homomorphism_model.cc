@@ -216,6 +216,14 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         }
     }
 
+    if(params.bigraph && params.equality_check) {
+        for (unsigned a = 0 ; a != pattern_size-pattern_link_count ; a++) {
+            for (unsigned b = 0 ; b != pattern_size-pattern_link_count ; b++) {    
+
+            }        
+        }
+    }
+
     // pattern less than constraints
     if (! _imp->params.pattern_less_constraints.empty() || ! pattern_less_thans_in_wrong_order.empty()) {
         _imp->has_less_thans = true;
@@ -453,6 +461,12 @@ auto HomomorphismModel::_check_degree_compatibility(
     return true;
 }
 
+auto HomomorphismModel::_check_bigraph_equality_regions(int p, int t) const -> bool
+{
+    return ((_imp->pattern_vertex_proof_names[p].find("ROOT") == string::npos) ||
+        (_imp->target_vertex_proof_names[t].find("ROOT") == string::npos) ||
+        (_imp->pattern_vertex_proof_names[p] == _imp->target_vertex_proof_names[t]));
+}
 
 auto HomomorphismModel::_check_bigraph_degree_compatibility(int p, int t) const -> bool
 {
@@ -522,6 +536,8 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
             else if (! _check_degree_compatibility(i, j, graphs_to_consider, patterns_ndss, targets_ndss, _imp->params.proof.get()))
                 ok = false;
             else if (_imp->params.bigraph && ! _check_bigraph_degree_compatibility(i, j))
+                ok = false;
+            else if (_imp->params.bigraph && _imp->params.equality_check && ! _check_bigraph_equality_regions(i, j))
                 ok = false;
             if (ok)
                 domains.at(i).values.set(j);

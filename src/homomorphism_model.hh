@@ -52,6 +52,8 @@ class HomomorphismModel
 
         auto _check_closed_link_compatibility(int p, int t) const -> bool;
 
+        auto _check_bigraph_equality_regions(int p, int t) const -> bool;
+        
         auto _check_bigraph_degree_compatibility(int p, int t) const -> bool;
 
     public:
