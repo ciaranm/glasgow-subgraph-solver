@@ -91,7 +91,11 @@ auto read_target_bigraph(istream && infile, const string &) -> InputGraph
     while (h == "({},") {
         pair<bool, vector<int> > he;
         he.second.resize(r + n + s);
-        he.first = (read_str(infile) == "{},");
+
+        string link_name = read_str(infile);
+        he.first = (link_name == "{},");
+        if (!he.first)
+            link_name = link_name.substr(1, link_name.length()-3);
 
         read_char(infile);
 
@@ -106,11 +110,11 @@ auto read_target_bigraph(istream && infile, const string &) -> InputGraph
 
         string port_id;
         if(he.first){
-            port_id = "C" + to_string(closed_link_count);
+            port_id = "CLOSEDHYPEREDGE_" + to_string(closed_link_count);
             closed_link_count++;
         }
         else{ 
-            port_id = "L" + to_string(open_link_count);    
+            port_id = "OPENHYPEREDGE_" + link_name;
             open_link_count++;
         }
 

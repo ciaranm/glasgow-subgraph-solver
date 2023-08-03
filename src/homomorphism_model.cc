@@ -216,14 +216,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         }
     }
 
-    if(params.bigraph && params.equality_check) {
-        for (unsigned a = 0 ; a != pattern_size-pattern_link_count ; a++) {
-            for (unsigned b = 0 ; b != pattern_size-pattern_link_count ; b++) {    
-
-            }        
-        }
-    }
-
     // pattern less than constraints
     if (! _imp->params.pattern_less_constraints.empty() || ! pattern_less_thans_in_wrong_order.empty()) {
         _imp->has_less_thans = true;
@@ -468,6 +460,23 @@ auto HomomorphismModel::_check_bigraph_equality_regions(int p, int t) const -> b
         (_imp->pattern_vertex_proof_names[p] == _imp->target_vertex_proof_names[t]));
 }
 
+auto HomomorphismModel::_check_bigraph_equality_links(int p, int t) const -> bool
+{
+    string name1 = _imp->pattern_vertex_proof_names[p];
+    string name2 = _imp->target_vertex_proof_names[t];
+
+    if ((name1.find("OPENHYPEREDGE") == string::npos) || (name2.find("OPENHYPEREDGE") == string::npos))
+        return true;
+
+    name1 = name1.substr(5, name1.length()-1);
+    name1 = name1.substr(0, name1.find('_'));
+    
+    name2 = name2.substr(5, name2.length()-1);
+    name2 = name2.substr(0, name2.find('_'));
+    
+    return name1 == name2;
+}
+
 auto HomomorphismModel::_check_bigraph_degree_compatibility(int p, int t) const -> bool
 {
     // Cannot match a place node with a link node
@@ -538,6 +547,8 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
             else if (_imp->params.bigraph && ! _check_bigraph_degree_compatibility(i, j))
                 ok = false;
             else if (_imp->params.bigraph && _imp->params.equality_check && ! _check_bigraph_equality_regions(i, j))
+                ok = false;
+            else if (_imp->params.bigraph && _imp->params.equality_check && ! _check_bigraph_equality_links(i, j))
                 ok = false;
             if (ok)
                 domains.at(i).values.set(j);

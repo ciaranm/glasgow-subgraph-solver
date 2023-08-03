@@ -189,6 +189,7 @@ auto gbs_equal() -> bool {
     params.injectivity = Injectivity::Injective;
     params.induced = false;
     params.bigraph = true;
+    params.equality_check = true;
     // params.bigraph_equal = true;
     // Get all in case the first solution doesn't do the hyperedges properly
     // TODO constriain this in search
