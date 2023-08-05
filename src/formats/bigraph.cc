@@ -110,11 +110,11 @@ auto read_target_bigraph(istream && infile, const string &) -> InputGraph
 
         string port_id;
         if(he.first){
-            port_id = "_CLX_" + to_string(closed_link_count);
+            port_id = ":CLX:" + to_string(closed_link_count);
             closed_link_count++;
         }
         else{ 
-            port_id = "_OPX_" + link_name;
+            port_id = ":OPX:" + link_name;
             open_link_count++;
         }
 
@@ -124,7 +124,7 @@ auto read_target_bigraph(istream && infile, const string &) -> InputGraph
                 result.add_link_node();
                 result.set_vertex_label(result.size()-1, "LINK");
                 result.add_directed_edge(i, result.size()-1, "dir");
-                result.set_vertex_name(result.size()-1, port_id + "_" + to_string(ports_connected)); 
+                result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
                 ports_connected++;
             }
 
@@ -210,11 +210,11 @@ auto read_pattern_bigraph(istream && infile, const string &) -> InputGraph
 
         string port_id;
         if(he.first){
-            port_id = "_CLX_" + to_string(closed_link_count);
+            port_id = ":CLX:" + to_string(closed_link_count);
             closed_link_count++;
         }
         else{ 
-            port_id = "_OPX_" + link_name;
+            port_id = ":OPX:" + link_name;
             open_link_count++;
         }
 
@@ -224,7 +224,7 @@ auto read_pattern_bigraph(istream && infile, const string &) -> InputGraph
                 result.add_link_node();                
                 result.set_vertex_label(result.size()-1, "LINK");
                 result.add_directed_edge(i, result.size()-1, "dir");
-                result.set_vertex_name(result.size()-1, port_id + "_" + to_string(ports_connected)); 
+                result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
                 ports_connected++;          
             }
                 

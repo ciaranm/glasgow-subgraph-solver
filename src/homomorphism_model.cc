@@ -465,14 +465,14 @@ auto HomomorphismModel::_check_bigraph_equality_links(int p, int t) const -> boo
     string name1 = _imp->pattern_vertex_proof_names[p];
     string name2 = _imp->target_vertex_proof_names[t];
     
-    if ((name1.find("_OPX_") == string::npos) || (name2.find("_OPX_") == string::npos))
+    if ((name1.find(":OPX:") == string::npos) || (name2.find(":OPX:") == string::npos))
         return true;
 
     name1 = name1.substr(5, name1.length()-1);
-    name1 = name1.substr(0, name1.find('_'));
+    name1 = name1.substr(0, name1.find(':'));
     
     name2 = name2.substr(5, name2.length()-1);
-    name2 = name2.substr(0, name2.find('_'));
+    name2 = name2.substr(0, name2.find(':'));
     
     return name1 == name2;
 }
