@@ -391,7 +391,7 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
                                     permitted.push_back(u);
                             // or null
                             permitted.push_back(second.size());
-                            proof->create_adjacency_constraint(p, q, t, permitted, false);
+                            proof->create_adjacency_constraint(p, q, t, permitted, vector<int>{}, false);
                         }
                 }
             }

@@ -446,24 +446,22 @@ auto gss::solve_homomorphism_problem(
         // generate edge constraints, and also handle loops here
         for (int p = 0; p < pattern.size(); ++p) {
             for (int t = 0; t < target.size(); ++t) {
-                if (pattern.adjacent(p, p) && ! target.adjacent(t, t))
-                    proof->create_forbidden_assignment_constraint(p, t);
-                else if (params.induced && ! pattern.adjacent(p, p) && target.adjacent(t, t))
-                    proof->create_forbidden_assignment_constraint(p, t);
-
                 // it's simpler to always have the adjacency constraints, even
                 // if the assignment is forbidden
                 proof->start_adjacency_constraints_for(p, t);
 
                 // if p can be mapped to t, then each neighbour of p...
                 for (int q = 0; q < pattern.size(); ++q)
-                    if (q != p && pattern.adjacent(p, q)) {
+                    if (pattern.adjacent(p, q)) {
                         // ... must be mapped to a neighbour of t
-                        vector<int> permitted;
+                        vector<int> permitted, cancel_out;
                         for (int u = 0; u < target.size(); ++u)
-                            if (t != u && target.adjacent(t, u))
+                            if (target.adjacent(t, u)) {
                                 permitted.push_back(u);
-                        proof->create_adjacency_constraint(p, q, t, permitted, false);
+                                if (t == u)
+                                    cancel_out.push_back(t);
+                            }
+                        proof->create_adjacency_constraint(p, q, t, permitted, cancel_out, false);
                     }
 
                 // same for non-adjacency for induced
@@ -475,7 +473,7 @@ auto gss::solve_homomorphism_problem(
                             for (int u = 0; u < target.size(); ++u)
                                 if (t != u && ! target.adjacent(t, u))
                                     permitted.push_back(u);
-                            proof->create_adjacency_constraint(p, q, t, permitted, true);
+                            proof->create_adjacency_constraint(p, q, t, permitted, vector<int>{}, true);
                         }
                 }
             }

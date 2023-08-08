@@ -169,16 +169,36 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
     _imp->model_stream << "* adjacency " << p << " maps to " << t << '\n';
 }
 
-auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu, bool) -> void
+auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu, const vector<int> & cancel,
+        bool) -> void
 {
-    stringstream adjacency_constraint;
-    adjacency_constraint << "1 ~x" << _imp->variable_mappings[pair{p, t}];
-    for (auto & u : uu)
-        adjacency_constraint << " 1 x" << _imp->variable_mappings[pair{q, u}];
-    adjacency_constraint << " >= 1";
-    long n = ++_imp->nb_constraints;
-    _imp->adjacency_lines.emplace(tuple{0, p, q, t}, tuple{n, _imp->recover_encoding ? 0 : n, adjacency_constraint.str()});
-    _imp->model_stream << adjacency_constraint.str() << " ;\n";
+    if (! _imp->recover_encoding) {
+        stringstream adjacency_constraint;
+        adjacency_constraint << "1 ~x" << _imp->variable_mappings[pair{p, t}];
+        for (auto & u : uu)
+            if (cancel.end() == find(cancel.begin(), cancel.end(), u))
+                adjacency_constraint << " 1 x" << _imp->variable_mappings[pair{q, u}];
+        adjacency_constraint << " >= 1";
+        long n = ++_imp->nb_constraints;
+        _imp->adjacency_lines.emplace(tuple{0, p, q, t}, tuple{n, n, adjacency_constraint.str()});
+        _imp->model_stream << adjacency_constraint.str() << " ;\n";
+    }
+    else {
+        stringstream adjacency_constraint_for_opb, adjacency_constraint_to_recover;
+        adjacency_constraint_for_opb << "1 ~x" << _imp->variable_mappings[pair{p, t}];
+        adjacency_constraint_to_recover << "1 ~x" << _imp->variable_mappings[pair{p, t}];
+        for (auto & u : uu) {
+            adjacency_constraint_for_opb << " 1 x" << _imp->variable_mappings[pair{q, u}];
+            if (cancel.end() == find(cancel.begin(), cancel.end(), u))
+                adjacency_constraint_to_recover << " 1 x" << _imp->variable_mappings[pair{q, u}];
+        }
+        adjacency_constraint_for_opb << " >= 1";
+        adjacency_constraint_to_recover << " >= 1";
+
+        long n = ++_imp->nb_constraints;
+        _imp->adjacency_lines.emplace(tuple{0, p, q, t}, tuple{n, 0, adjacency_constraint_to_recover.str()});
+        _imp->model_stream << adjacency_constraint_for_opb.str() << " ;\n";
+    }
 }
 
 auto Proof::finalise_model() -> void
@@ -318,6 +338,16 @@ auto Proof::recover_at_most_one_constraint(int p) -> void
     }
 }
 
+auto Proof::need_elimination(int p, int t) -> void
+{
+    if (! _imp->eliminations.contains(pair{p, t})) {
+        *_imp->proof_stream << "# 0\n";
+        *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
+        _imp->eliminations[pair{p, t}] = ++_imp->proof_line;
+        *_imp->proof_stream << "# " << _imp->active_level << '\n';
+    }
+}
+
 auto Proof::incompatible_by_degrees(
     int g,
     const NamedVertex & p,
@@ -379,6 +409,12 @@ auto Proof::incompatible_by_nds(
             if (t != t_subsequence.back())
                 recover_injectivity_constraint(t);
     }
+
+    for (auto & n : p_subsequence)
+        for (auto & u : t_remaining)
+            need_elimination(n, u);
+    for (auto & n : p_subsequence)
+        need_elimination(n, t_subsequence.back());
 
     // summing up horizontally
     *_imp->proof_stream << "p";

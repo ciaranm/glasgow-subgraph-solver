@@ -41,6 +41,7 @@ namespace gss::innards
         auto recover_injectivity_constraint(int p) -> void;
         auto recover_at_least_one_constraint(int p) -> void;
         auto recover_at_most_one_constraint(int p) -> void;
+        auto need_elimination(int p, int t) -> void;
 
     public:
         explicit Proof(const ProofOptions &);
@@ -61,7 +62,8 @@ namespace gss::innards
         auto create_injectivity_constraints(int pattern_size, int target_size) -> void;
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
-        auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u, bool induced) -> void;
+        auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u,
+               const std::vector<int> & cancel_out, bool induced) -> void;
 
         auto finalise_model() -> void;
 
