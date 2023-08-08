@@ -393,8 +393,24 @@ auto main(int argc, char * argv[]) -> int
             cout << "proof_log = " << fn << ".veripb" << endl;
         }
 
+        auto describe = [&] (const InputGraph & g) {
+            if (g.directed())
+                cout << " directed";
+            if (g.loopy())
+                cout << " loopy";
+            if (g.has_vertex_labels())
+                cout << " vertex_labels";
+            if (g.has_edge_labels())
+                cout << " edge_labels";
+            cout << endl;
+        };
+
+        cout << "pattern_properties =";
+        describe(pattern);
         cout << "pattern_vertices = " << pattern.size() << endl;
         cout << "pattern_directed_edges = " << pattern.number_of_directed_edges() << endl;
+        cout << "target_properties =";
+        describe(target);
         cout << "target_vertices = " << target.size() << endl;
         cout << "target_directed_edges = " << target.number_of_directed_edges() << endl;
 
