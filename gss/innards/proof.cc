@@ -1288,7 +1288,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
         }
 
     int last_k = 0;
-    for (int k = 2; k < t; k *= 2) {
+    for (int k = 2 ; ; k *= 2) {
         last_k = k;
         _imp->model_stream << "* selected vertices must be connected, walk " << k << '\n';
         for (int v = 0; v < p; ++v)
@@ -1332,6 +1332,9 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
                 _imp->model_stream << "1 x" << n << " 1 ~x" << _imp->connected_variable_mappings[tuple{k / 2, v, w}] << " >= 1 ;\n";
                 ++_imp->nb_constraints;
             }
+
+        if (k >= min(p, t))
+            break;
     }
 
     _imp->model_stream << "* if two vertices are used, they must be connected\n";
