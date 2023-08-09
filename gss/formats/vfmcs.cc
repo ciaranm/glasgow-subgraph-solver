@@ -25,7 +25,7 @@ namespace
         if (! infile)
             throw GraphFileError{filename, "error reading size", true};
 
-        InputGraph result{size, true, false};
+        InputGraph result{size, vertex_labels, false};
 
         // to be like the CP 2011 labelling scheme...
         int m = result.size() * 33 / 100;
