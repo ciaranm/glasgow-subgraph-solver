@@ -17,3 +17,6 @@ target_link_libraries(glasgow_common_subgraph_solver LINK_PUBLIC ${Boost_LIBRARI
 
 add_executable(create_random_graph create_random_graph.cc)
 target_link_libraries(create_random_graph LINK_PUBLIC ${Boost_LIBRARIES})
+
+add_executable(convert_to_lad convert_to_lad.cc)
+target_link_libraries(convert_to_lad LINK_PUBLIC ${Boost_LIBRARIES})
