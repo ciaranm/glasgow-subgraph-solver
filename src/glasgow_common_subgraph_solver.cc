@@ -134,6 +134,27 @@ auto main(int argc, char * argv[]) -> int
         cout << "first_file = " << options_vars["first-file"].as<string>() << endl;
         cout << "second_file = " << options_vars["second-file"].as<string>() << endl;
 
+        auto describe = [&] (const InputGraph & g) {
+            if (g.directed())
+                cout << " directed";
+            if (g.loopy())
+                cout << " loopy";
+            if (g.has_vertex_labels())
+                cout << " vertex_labels";
+            if (g.has_edge_labels())
+                cout << " edge_labels";
+            cout << endl;
+        };
+
+        cout << "first_properties =";
+        describe(first);
+        cout << "first_vertices = " << first.size() << endl;
+        cout << "first_directed_edges = " << first.number_of_directed_edges() << endl;
+        cout << "second_properties =";
+        describe(second);
+        cout << "second_vertices = " << second.size() << endl;
+        cout << "second_directed_edges = " << second.number_of_directed_edges() << endl;
+
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&](const VertexToVertexMapping & mapping) {
                 cout << "mapping = ";
