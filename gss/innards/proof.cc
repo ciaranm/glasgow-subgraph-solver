@@ -75,6 +75,7 @@ struct Proof::Imp
     int active_level = 0;
 
     bool clique_encoding = false;
+    bool doing_mcs_by_clique = false;
 
     bool doing_hom_colour_proof = false;
     NamedVertex hom_colour_proof_p, hom_colour_proof_t;
@@ -971,21 +972,19 @@ auto Proof::create_non_edge_constraint(int p, int q) -> void
     }
 }
 
-auto Proof::create_non_null_decision_bound(int p, int t, optional<int> d) -> void
+auto Proof::create_null_decision_bound(int p, int t, optional<int> d) -> void
 {
     if (d) {
         _imp->model_stream << "* objective\n";
         for (int v = 0; v < p; ++v)
-            for (int w = 0; w < t; ++w)
-                _imp->model_stream << "1 x" << _imp->variable_mappings[pair{v, w}] << " ";
+            _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{v, t}] << " ";
         _imp->model_stream << ">= " << *d << " ;\n";
         _imp->objective_line = ++_imp->nb_constraints;
     }
     else {
         _imp->model_prelude_stream << "min:";
         for (int v = 0; v < p; ++v)
-            for (int w = 0; w < t; ++w)
-                _imp->model_prelude_stream << " 1 ~x" << _imp->variable_mappings[pair{v, w}] << " ";
+            _imp->model_prelude_stream << " 1 x" << _imp->variable_mappings[pair{v, t}] << " ";
         _imp->model_prelude_stream << " ;\n";
     }
 }
@@ -1095,6 +1094,13 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
             do_one_cc(cc, [&](int a, int b) -> long { return _imp->non_edge_constraints[pair{a, b}]; });
 
         *_imp->proof_stream << "p " << _imp->objective_line;
+
+        if (_imp->doing_mcs_by_clique) {
+            for (auto & [_, v] : _imp->at_least_one_value_constraints) {
+                *_imp->proof_stream << " " << get<1>(v) << " +";
+            }
+        }
+
         for (auto & t : to_sum)
             *_imp->proof_stream << " " << t << " +";
         *_imp->proof_stream << '\n';
@@ -1244,17 +1250,14 @@ auto Proof::mcs_bound(
 
 auto Proof::rewrite_mcs_objective(int pattern_size) -> void
 {
-    *_imp->proof_stream << "* get the objective function to talk about nulls, not non-nulls\n";
-
-    if (_imp->recover_encoding)
+    if (! _imp->recover_encoding) {
+        *_imp->proof_stream << "* get the objective function to talk about nulls, not non-nulls\n";
+        *_imp->proof_stream << "p " << _imp->objective_line;
         for (int v = 0; v < pattern_size; ++v)
-            recover_at_most_one_constraint(v);
-
-    *_imp->proof_stream << "p " << _imp->objective_line;
-    for (int v = 0; v < pattern_size; ++v)
-        *_imp->proof_stream << " " << get<1>(_imp->at_most_one_value_constraints[v]) << " +";
-    *_imp->proof_stream << '\n';
-    _imp->objective_line = ++_imp->proof_line;
+            *_imp->proof_stream << " " << get<1>(_imp->at_most_one_value_constraints[v]) << " +";
+        *_imp->proof_stream << '\n';
+        _imp->objective_line = ++_imp->proof_line;
+    }
 }
 
 auto Proof::create_connected_constraints(int p, int t, const function<auto(int, int)->bool> & adj) -> void
@@ -1285,7 +1288,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
         }
 
     int last_k = 0;
-    for (int k = 2; k < 2 * t; k *= 2) {
+    for (int k = 2; k < t; k *= 2) {
         last_k = k;
         _imp->model_stream << "* selected vertices must be connected, walk " << k << '\n';
         for (int v = 0; v < p; ++v)
@@ -1367,6 +1370,11 @@ auto Proof::create_clique_encoding(
         _imp->binary_variable_mappings.emplace(i, _imp->variable_mappings[enc[i]]);
 
     _imp->zero_in_proof_objectives = zero_in_proof_objectives;
+    _imp->doing_mcs_by_clique = true;
+
+    if (_imp->recover_encoding)
+        for (auto & [k, _] : _imp->at_least_one_value_constraints)
+            recover_at_least_one_constraint(k);
 }
 
 auto Proof::create_clique_nonedge(int v, int w) -> void

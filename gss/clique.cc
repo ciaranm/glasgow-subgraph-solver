@@ -638,6 +638,8 @@ namespace
 
             if (proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
                 proof->finish_unsat_proof();
+            else if (proof && ! params.decide && params.adjust_objective_for_mcs)
+                proof->finish_optimisation_proof(*params.adjust_objective_for_mcs - incumbent.c.size());
             else if (proof && ! params.decide && ! params.proof_is_for_hom)
                 proof->finish_optimisation_proof(size - incumbent.c.size());
 

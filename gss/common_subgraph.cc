@@ -366,7 +366,7 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
                 [&](int v) { if (v == second.size()) return string("null"); else return second.vertex_name(v); });
         }
 
-        proof->create_non_null_decision_bound(first.size(), second.size(), params.decide);
+        proof->create_null_decision_bound(first.size(), second.size(), params.decide);
 
         // generate constraints for injectivity
         proof->create_injectivity_constraints(first.size(), second.size());
@@ -404,15 +404,17 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
         proof->finalise_model();
 
         // rewrite the objective to the form we need
-        vector<tuple<NamedVertex, NamedVertex, bool>> solution;
-        for (int v = 0; v < first.size(); ++v)
-            for (int w = 0; w < second.size(); ++w)
-                solution.emplace_back(
-                    NamedVertex{v, first.vertex_name(v)},
-                    NamedVertex{w, second.vertex_name(w)},
-                    false);
-        proof->new_incumbent(solution);
-        proof->rewrite_mcs_objective(first.size());
+        if (! params.decide) {
+            vector<tuple<NamedVertex, NamedVertex, bool>> solution;
+            for (int v = 0; v < first.size(); ++v)
+                for (int w = 0; w < second.size(); ++w)
+                    solution.emplace_back(
+                        NamedVertex{v, first.vertex_name(v)},
+                        NamedVertex{w, second.vertex_name(w)},
+                        false);
+            proof->new_incumbent(solution);
+            proof->rewrite_mcs_objective(first.size());
+        }
     }
 
     if (params.clique) {
@@ -421,6 +423,7 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
         clique_params.start_time = params.start_time;
         clique_params.decide = params.decide;
         clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        clique_params.adjust_objective_for_mcs = make_optional(first.size());
 
         InputGraph assoc{0, false, false};
         vector<pair<int, int>> assoc_encoding, zero_in_proof_objectives;

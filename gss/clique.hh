@@ -61,6 +61,9 @@ namespace gss
 
         /// If logging proofs, only log the bound (for use by homomorphism solver for clique filtering)
         bool proof_is_for_hom = false;
+
+        /// If logging proofs, adjust the objective if solving MCS
+        std::optional<int> adjust_objective_for_mcs = std::nullopt;
     };
 
     struct CliqueResult

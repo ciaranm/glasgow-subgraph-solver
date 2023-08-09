@@ -191,7 +191,7 @@ namespace gss::innards
             const NamedVertex & u) -> void;
 
         // common subgraphs
-        auto create_non_null_decision_bound(int p, int t, std::optional<int> d) -> void;
+        auto create_null_decision_bound(int p, int t, std::optional<int> d) -> void;
         auto rewrite_mcs_objective(int pattern_size) -> void;
         auto mcs_bound(
             const std::vector<std::pair<std::set<int>, std::set<int>>> & partitions) -> void;
