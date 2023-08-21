@@ -52,6 +52,9 @@ struct HomomorphismParams
     /// If it is a bigraph, use nogood trickery for projection?
     bool use_bigraph_projection_nogoods = true;
 
+    /// Do the input bigraphs use directed hyperedges?
+    bool directed = false;
+
     /// Noninjective?
     Injectivity injectivity = Injectivity::Injective;
 

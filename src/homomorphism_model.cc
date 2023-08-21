@@ -212,7 +212,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
                         prev_same_clique = b;
                     }
                 } 
-            }
+            } 
         }
     }
 
@@ -453,6 +453,17 @@ auto HomomorphismModel::_check_degree_compatibility(
     return true;
 }
 
+auto HomomorphismModel::_check_open_directed_hyperedges(int p, int t) const -> bool
+{
+    string name1 = _imp->pattern_vertex_proof_names[p];
+    string name2 = _imp->target_vertex_proof_names[t];
+
+    if ((name1.find(":OPX:") == string::npos) || (name2.find(":OPX:") == string::npos))
+        return true;
+
+    return name1.substr(name1.length()-1, name1.length()) == name2.substr(name2.length()-1, name2.length());
+}
+
 auto HomomorphismModel::_check_bigraph_equality_regions(int p, int t) const -> bool
 {
     return ((_imp->pattern_vertex_proof_names[p].find("ROOT") == string::npos) ||
@@ -549,6 +560,8 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
             else if (_imp->params.bigraph && _imp->params.equality_check && ! _check_bigraph_equality_regions(i, j))
                 ok = false;
             else if (_imp->params.bigraph && _imp->params.equality_check && ! _check_bigraph_equality_links(i, j))
+                ok = false;
+            else if (_imp->params.bigraph && _imp->params.directed && ! _check_open_directed_hyperedges(i, j))
                 ok = false;
             if (ok)
                 domains.at(i).values.set(j);

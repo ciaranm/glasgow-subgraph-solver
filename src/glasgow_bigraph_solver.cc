@@ -64,7 +64,8 @@ auto main(int argc, char * argv[]) -> int
             ("no-supplementals",                               "Do not use supplemental graphs")
             ("no-nds",                                         "Do not use neighbourhood degree sequences")
             ("no-projection-nogoods",                          "Do not use projection nogoods")
-            ("equality-check",                                 "Check for equality between two bigraphs rather than matching");
+            ("equality-check",                                 "Check for equality between two bigraphs rather than matching")
+            ("directed-hyperedges",                            "Use directed bigraph input parsing");
         display_options.add(mangling_options);
 
         po::options_description all_options{ "All options" };
@@ -113,6 +114,8 @@ auto main(int argc, char * argv[]) -> int
         params.no_nds = options_vars.count("no-nds");
         params.no_supplementals = options_vars.count("no-supplementals");
         params.equality_check = options_vars.count("equality-check");
+        params.directed = options_vars.count("directed-hyperedges");
+
 
         if (params.count_solutions)
             params.restarts_schedule = make_unique<NoRestartsSchedule>();
@@ -147,13 +150,13 @@ auto main(int argc, char * argv[]) -> int
         std::pair<InputGraph, InputGraph> graphs;
         if(params.equality_check) {
             graphs = make_pair(
-                read_target_bigraph(move(pattern_infile), pattern_filename),
-                read_target_bigraph(move(target_infile), target_filename));            
+                read_target_bigraph(move(pattern_infile), pattern_filename, params.directed),
+                read_target_bigraph(move(target_infile), target_filename, params.directed));            
         }
         else{
             graphs = make_pair(
-                read_pattern_bigraph(move(pattern_infile), pattern_filename),
-                read_target_bigraph(move(target_infile), target_filename));
+                read_pattern_bigraph(move(pattern_infile), pattern_filename, params.directed),
+                read_target_bigraph(move(target_infile), target_filename, params.directed));
         }
 
         cout << "pattern_file = " << pattern_filename << endl;

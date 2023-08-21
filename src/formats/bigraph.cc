@@ -40,7 +40,7 @@ namespace
     }
 }
 
-auto read_target_bigraph(istream && infile, const string &) -> InputGraph
+auto read_target_bigraph(istream && infile, const string &, bool directed) -> InputGraph
 {
 
     InputGraph result{ 0, true, true, true };
@@ -90,22 +90,55 @@ auto read_target_bigraph(istream && infile, const string &) -> InputGraph
     int open_link_count = 0;
     while (h == "({},") {
         pair<bool, vector<int> > he;
+        vector<int> outgoing_he;
         he.second.resize(r + n + s);
+        if(directed)
+            outgoing_he.resize(r + n + s);
 
         string link_name = read_str(infile);
-        he.first = (link_name == "{},");
-        if (!he.first)
-            link_name = link_name.substr(1, link_name.length()-3);
 
+        he.first = (link_name == "{},");
+        string open_link_dir;
+        if (!he.first) {
+            if(directed) {
+                link_name = link_name.substr(2, link_name.length()-3);
+                open_link_dir = (read_char(infile) == 'i') ? "i" : "o";
+                read_str(infile);
+            }
+            else
+                link_name = link_name.substr(1, link_name.length()-3);
+        }
         read_char(infile);
 
-        while (true) {
-            string e = read_str(infile);
+        // Deal with hanging link case
+        string e = read_str(infile);
+        if (e == "})") {
+            h = read_str(infile);
+            continue;           
+        }
+        
+        if(directed) {
+            string ci = read_str(infile);
+            string co = read_str(infile);
+
+            he.second[stoi(e.substr(1, e.find(',') - 1)) + r] = stoi(ci.substr(0, ci.length()-1));
+            outgoing_he[stoi(e.substr(1, e.find(',') - 1)) + r] = stoi(co.substr(0, co.find(')')));
+            while (co.find('}') == string::npos) {
+                e = read_str(infile);
+                ci = read_str(infile);
+                co = read_str(infile);
+                he.second[stoi(e.substr(1, e.find(',') - 1)) + r] = stoi(ci.substr(0, ci.length()-1));
+                outgoing_he[stoi(e.substr(1, e.find(',') - 1)) + r] = stoi(co.substr(0, co.find(')')));
+            }
+        }
+        else {
             string c = read_str(infile);
             he.second[stoi(e.substr(1, e.find(',') - 1)) + r] = stoi(c.substr(0, c.find(')')));
-
-            if (c.find('}') != string::npos)
-                break;
+            while (c.find('}') == string::npos) {
+                e = read_str(infile);
+                c = read_str(infile);
+                he.second[stoi(e.substr(1, e.find(',') - 1)) + r] = stoi(c.substr(0, c.find(')')));     
+            }
         }
 
         string port_id;
@@ -119,14 +152,29 @@ auto read_target_bigraph(istream && infile, const string &) -> InputGraph
         }
 
         int ports_connected = 0;
-        for(int i=r; i<(r+n); i++)
+        for(int i=r; i<(r+n); i++) {
             for(int j=0;j<he.second[i];j++){
                 result.add_link_node();
                 result.set_vertex_label(result.size()-1, "LINK");
                 result.add_directed_edge(i, result.size()-1, "dir");
-                result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
+                if(!directed || he.first)
+                    result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
+                else
+                    result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected) + ":" + open_link_dir); 
                 ports_connected++;
             }
+            if(directed)
+                for(int j=0;j<outgoing_he[i];j++){
+                    result.add_link_node();
+                    result.set_vertex_label(result.size()-1, "LINK");
+                    result.add_directed_edge(result.size()-1, i, "dir");
+                    if(he.first)
+                        result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
+                    else
+                        result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected) + ":" + open_link_dir); 
+                    ports_connected++;
+                }
+        }
 
         for(int i=(result.size()-ports_connected);i<result.size();i++)
             for(int j=(result.size()-ports_connected);j<result.size();j++)
@@ -147,7 +195,7 @@ auto read_target_bigraph(istream && infile, const string &) -> InputGraph
     return result;
 }
 
-auto read_pattern_bigraph(istream && infile, const string &) -> InputGraph
+auto read_pattern_bigraph(istream && infile, const string &, bool directed) -> InputGraph
 {
     InputGraph result{ 0, true, true, true };
 
@@ -190,22 +238,53 @@ auto read_pattern_bigraph(istream && infile, const string &) -> InputGraph
     int open_link_count = 0;
     while (h == "({},") {
         pair<bool, vector<int> > he;
+        vector<int> outgoing_he;
         he.second.resize(n);
+        if(directed)
+            outgoing_he.resize(n);
 
         string link_name = read_str(infile);
         he.first = (link_name == "{},");
-        if (!he.first)
-            link_name = link_name.substr(1, link_name.length()-3);
-
+        string open_link_dir;
+        if (!he.first) {
+            if(directed) {
+                link_name = link_name.substr(2, link_name.length()-3);
+                open_link_dir = (read_char(infile) == 'i') ? "i" : "o";
+                read_str(infile);
+            }
+            else
+                link_name = link_name.substr(1, link_name.length()-3);
+        }
         read_char(infile);
 
-        while (true) {
-            string e = read_str(infile);
+        // Deal with hanging link case
+        string e = read_str(infile);
+        if (e == "})") {
+            h = read_str(infile);
+            continue;           
+        }
+
+        if(directed) {
+            string ci = read_str(infile);
+            string co = read_str(infile);
+            he.second[stoi(e.substr(1, e.find(',') - 1))] = stoi(ci.substr(0, ci.length()-1));
+            outgoing_he[stoi(e.substr(1, e.find(',') - 1))] = stoi(co.substr(0, co.find(')')));
+            while (co.find('}') == string::npos) {
+                e = read_str(infile);
+                ci = read_str(infile);
+                co = read_str(infile);
+                he.second[stoi(e.substr(1, e.find(',') - 1))] = stoi(ci.substr(0, ci.length()-1));
+                outgoing_he[stoi(e.substr(1, e.find(',') - 1))] = stoi(co.substr(0, co.find(')')));
+            }
+        }
+        else {
             string c = read_str(infile);
             he.second[stoi(e.substr(1, e.find(',') - 1))] = stoi(c.substr(0, c.find(')')));
-
-            if (c.find('}') != string::npos)
-                break;
+            while (c.find('}') == string::npos) {
+                e = read_str(infile);
+                c = read_str(infile);
+                he.second[stoi(e.substr(1, e.find(',') - 1)) ] = stoi(c.substr(0, c.find(')')));     
+            }
         }
 
         string port_id;
@@ -219,14 +298,29 @@ auto read_pattern_bigraph(istream && infile, const string &) -> InputGraph
         }
 
         int ports_connected = 0;
-        for(int i=0; i<n; i++)
+        for(int i=0; i<n; i++) {
             for(int j=0;j<he.second[i];j++){
                 result.add_link_node();                
                 result.set_vertex_label(result.size()-1, "LINK");
                 result.add_directed_edge(i, result.size()-1, "dir");
-                result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
+                if(!directed || he.first)
+                    result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
+                else
+                    result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected) + ":" + open_link_dir); 
                 ports_connected++;          
             }
+            if(directed)
+                for(int j=0;j<outgoing_he[i];j++){
+                    result.add_link_node();                
+                    result.set_vertex_label(result.size()-1, "LINK");
+                    result.add_directed_edge(result.size()-1, i, "dir");
+                    if(he.first)
+                        result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected)); 
+                    else
+                        result.set_vertex_name(result.size()-1, port_id + ":" + to_string(ports_connected) + ":" + open_link_dir); 
+                    ports_connected++;          
+                }
+        }
                 
         for(int i=(result.size()-ports_connected);i<result.size();i++)
             for(int j=(result.size()-ports_connected);j<result.size();j++)
