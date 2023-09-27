@@ -4,6 +4,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 find_package(Boost 1.74 COMPONENTS container REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
+include_directories(${dejavu_SOURCE_DIR})
+
 add_library(glasgow_subgraphs
         clique.cc
         common_subgraph.cc
@@ -12,6 +14,7 @@ add_library(glasgow_subgraphs
         restarts.cc
         sip_decomposer.cc
         timeout.cc
+        innards/automorphisms.cc
         innards/cheap_all_different.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc

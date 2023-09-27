@@ -1,5 +1,6 @@
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
+#include <gss/innards/automorphisms.hh>
 #include <gss/innards/lackey.hh>
 #include <gss/innards/symmetries.hh>
 #include <gss/innards/verify.hh>
@@ -79,8 +80,10 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum", po::value<int>(), "Specify a minimum number of backtracks before a timed restart can trigger")         //
             ("luby-constant", po::value<int>(), "Specify the starting constant / multiplier for Luby restarts")                        //
             ("value-ordering", po::value<string>(), "Specify value-ordering heuristic (biased / degree / antidegree / random / none)") //
-            ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")                                                      //
-            ("target-symmetries", "Eliminate target symmetries (requires Gap)");
+            ("pattern-symmetries-gap", "Eliminate pattern symmetries (requires Gap)")                                                  //
+            ("target-symmetries-gap", "Eliminate target symmetries (requires Gap)")                                                    //
+            ("pattern-symmetries-dejavu", "Eliminate pattern symmetries (requires Dejavu)")                                            //
+            ("target-symmetries-dejavu", "Eliminate target symmetries (requires Dejavu)");
         display_options.add(search_options);
 
         po::options_description mangling_options{"Advanced input processing options"};
@@ -420,7 +423,7 @@ auto main(int argc, char * argv[]) -> int
         /* Start the clock */
         params.start_time = steady_clock::now();
 
-        if (options_vars.count("pattern-symmetries")) {
+        if (options_vars.count("pattern-symmetries-gap")) {
             auto gap_start_time = steady_clock::now();
             innards::find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
             was_given_pattern_automorphism_group = true;
@@ -430,15 +433,35 @@ auto main(int argc, char * argv[]) -> int
                 cout << " " << a << "<" << b;
             cout << endl;
         }
+        else if (options_vars.count("pattern-symmetries-dejavu")) {
+            auto dejavu_start_time = steady_clock::now();
+            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern);
+            was_given_pattern_automorphism_group = true;
+            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+            cout << "pattern_less_constraints =";
+            for (auto & [a, b] : params.pattern_less_constraints)
+                cout << " " << a << "<" << b;
+            cout << endl;
+        }
 
         if (was_given_pattern_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
 
-        if (options_vars.count("target-symmetries")) {
+        if (options_vars.count("target-symmetries-gap")) {
             auto gap_start_time = steady_clock::now();
             innards::find_symmetries(argv[0], target, params.target_occur_less_constraints, target_automorphism_group_size);
             was_given_target_automorphism_group = true;
             cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
+            cout << "target_occur_less_constraints =";
+            for (auto & [a, b] : params.target_occur_less_constraints)
+                cout << " " << a << "<" << b;
+            cout << endl;
+        }
+        else if (options_vars.count("target-symmetries-dejavu")) {
+            auto dejavu_start_time = steady_clock::now();
+            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target);
+            was_given_target_automorphism_group = true;
+            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
             cout << "target_occur_less_constraints =";
             for (auto & [a, b] : params.target_occur_less_constraints)
                 cout << " " << a << "<" << b;

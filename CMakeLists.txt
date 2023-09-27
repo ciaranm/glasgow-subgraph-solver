@@ -43,6 +43,15 @@ if (NOT GCS_DEBUG_MODE)
     add_compile_options(-O3)
 endif (NOT GCS_DEBUG_MODE)
 
+Include(FetchContent)
+Set(FETCHCONTENT_QUIET FALSE)
+FetchContent_Declare(
+        dejavu
+        GIT_REPOSITORY https://github.com/markusa4/dejavu.git
+        GIT_TAG 2a1554c36812fd3120e41747a4d185e191b6c84b
+)
+FetchContent_MakeAvailable(dejavu)
+
 enable_testing()
 
 include_directories(.)
