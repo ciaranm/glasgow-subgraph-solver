@@ -259,7 +259,7 @@ auto HomomorphismSearcher::restarting_search(
             ++discrepancy_count;
         }
 
-        if (params.use_pattern_orbits) {
+        if (model.has_pattern_orbits) {
             bool stab_trivial = false;
             dejavu::groups::orbit o{int(model.pattern_size)};
             vector<int> base;

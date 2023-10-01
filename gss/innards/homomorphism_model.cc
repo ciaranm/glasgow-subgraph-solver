@@ -325,6 +325,9 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             aut << s.get_automorphism_group_size();
             _imp->pattern_automorphism_group_size = aut.str();
         }
+
+        if (s.get_automorphism_group_size() != dejavu::big_number())
+            has_pattern_orbits = true;
     }
 
     // target less than constraints
