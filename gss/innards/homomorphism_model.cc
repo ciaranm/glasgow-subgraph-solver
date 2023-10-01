@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include <dejavu.h>
+
 using namespace gss;
 using namespace gss::innards;
 
@@ -136,6 +138,8 @@ struct HomomorphismModel::Imp
     unsigned max_graphs_for_clique_size_constraints = 0;
     mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
     mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
+
+    string pattern_automorphism_group_size;
 
     Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r) :
         params(p),
@@ -293,6 +297,33 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
             if (loop_detect)
                 throw UnsupportedConfiguration{"Pattern less than constraints form a loop"};
+        }
+    }
+
+    // pattern orbit representatives
+    if (params.use_pattern_orbits) {
+        dejavu::static_graph g;
+        g.initialize_graph(pattern.size(), pattern.number_of_directed_edges() / 2);
+        vector<int> vertices;
+        for (int v = 0, v_end = pattern.size(); v != v_end; ++v)
+            vertices.push_back(g.add_vertex(0, pattern.degree(v)));
+        pattern.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                g.add_edge(vertices[f], vertices[t]);
+        });
+
+        pattern_orbits_schreier.reset(new dejavu::groups::random_schreier{pattern.size()});
+        vector<int> base;
+        pattern_orbits_schreier->set_base(base);
+
+        dejavu::hooks::schreier_hook hook(*pattern_orbits_schreier);
+        dejavu::solver s;
+        s.automorphisms(&g, hook.get_hook());
+
+        {
+            stringstream aut;
+            aut << s.get_automorphism_group_size();
+            _imp->pattern_automorphism_group_size = aut.str();
         }
     }
 
@@ -1286,4 +1317,7 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
         x.emplace_back(join("target_cliques_solve_find_nodes =", _imp->target_cliques_solve_find_nodes));
         x.emplace_back(join("target_cliques_solve_prove_nodes =", _imp->target_cliques_solve_prove_nodes));
     }
+
+    if (! _imp->pattern_automorphism_group_size.empty())
+        x.emplace_back("pattern_automorphism_group_size = " + _imp->pattern_automorphism_group_size);
 }

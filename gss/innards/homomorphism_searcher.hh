@@ -130,7 +130,7 @@ namespace gss::innards
 
         auto restarting_search(
             HomomorphismAssignments & assignments,
-            const Domains & domains,
+            Domains & domains,
             unsigned long long & nodes,
             unsigned long long & propagations,
             loooong & solution_count,

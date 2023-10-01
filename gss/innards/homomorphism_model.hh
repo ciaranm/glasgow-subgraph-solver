@@ -7,6 +7,8 @@
 #include <gss/innards/proof.hh>
 #include <gss/innards/svo_bitset.hh>
 
+#include <dejavu.h>
+
 #include <memory>
 
 namespace gss::innards
@@ -56,6 +58,8 @@ namespace gss::innards
         auto has_less_thans() const -> bool;
         auto has_occur_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
+
+        std::unique_ptr<dejavu::groups::random_schreier> pattern_orbits_schreier;
 
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
             const std::shared_ptr<Proof> & proof);
