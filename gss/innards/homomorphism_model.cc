@@ -303,10 +303,17 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     // pattern orbit representatives
     if (params.use_pattern_orbits) {
         dejavu::static_graph g;
-        g.initialize_graph(pattern.size(), pattern.number_of_directed_edges() / 2);
+        unsigned long n_simple_edges = 0;
+        pattern.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                ++n_simple_edges;
+        });
+        g.initialize_graph(pattern.size(), n_simple_edges);
         vector<int> vertices;
-        for (int v = 0, v_end = pattern.size(); v != v_end; ++v)
-            vertices.push_back(g.add_vertex(0, pattern.degree(v)));
+        for (int v = 0, v_end = pattern.size(); v != v_end; ++v) {
+            bool loop = pattern.adjacent(v, v);
+            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? pattern.degree(v) - 1 : pattern.degree(v)));
+        }
         pattern.for_each_edge([&](int f, int t, string_view) {
             if (f < t)
                 g.add_edge(vertices[f], vertices[t]);
