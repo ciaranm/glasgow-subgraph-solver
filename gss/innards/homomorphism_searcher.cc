@@ -176,8 +176,17 @@ auto HomomorphismSearcher::restarting_search(
     // override whether we use the lackey for propagation, in case we are inside a backjump
     bool use_lackey_for_propagation = false;
 
+    vector<uint8_t> skip_due_to_target_orbit(model.target_size, 0);
+    dejavu::groups::orbit target_orbit{int(model.target_size)};
+    vector<int> target_base;
+    if (model.has_target_orbits)
+        model.target_orbits_schreier->set_base(target_base);
+
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
+        if (skip_due_to_target_orbit.at(*f_v))
+            continue;
+
         if (proof)
             proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
@@ -304,6 +313,16 @@ auto HomomorphismSearcher::restarting_search(
                         }
                     }
                 }
+            }
+        }
+
+        if (model.has_target_orbits) {
+            model.target_orbits_schreier->get_stabilizer_orbit(target_base.size(), target_orbit);
+            if (target_orbit.orbit_size(*f_v) > 1) {
+                target_base.push_back(*f_v);
+                model.target_orbits_schreier->set_base(target_base);
+                for (auto & f : model.target_orbits_schreier->get_fixed_orbit(target_base.size() - 1))
+                    skip_due_to_target_orbit.at(f) = 1;
             }
         }
     }

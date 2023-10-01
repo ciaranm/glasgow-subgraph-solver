@@ -139,7 +139,7 @@ struct HomomorphismModel::Imp
     mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
     mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
 
-    string pattern_automorphism_group_size;
+    string pattern_automorphism_group_size, target_automorphism_group_size;
 
     Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r) :
         params(p),
@@ -335,6 +335,43 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
         if (s.get_automorphism_group_size() != dejavu::big_number())
             has_pattern_orbits = true;
+    }
+
+    // target orbit representatives
+    if (params.use_target_orbits) {
+        dejavu::static_graph g;
+        unsigned long n_simple_edges = 0;
+        target.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                ++n_simple_edges;
+        });
+        g.initialize_graph(target.size(), n_simple_edges);
+        vector<int> vertices;
+        for (int v = 0, v_end = target.size(); v != v_end; ++v) {
+            bool loop = target.adjacent(v, v);
+            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? target.degree(v) - 1 : target.degree(v)));
+        }
+        target.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                g.add_edge(vertices[f], vertices[t]);
+        });
+
+        target_orbits_schreier.reset(new dejavu::groups::random_schreier{target.size()});
+        vector<int> base;
+        target_orbits_schreier->set_base(base);
+
+        dejavu::hooks::schreier_hook hook(*target_orbits_schreier);
+        dejavu::solver s;
+        s.automorphisms(&g, hook.get_hook());
+
+        {
+            stringstream aut;
+            aut << s.get_automorphism_group_size();
+            _imp->target_automorphism_group_size = aut.str();
+        }
+
+        if (s.get_automorphism_group_size() != dejavu::big_number())
+            has_target_orbits = true;
     }
 
     // target less than constraints
@@ -1330,4 +1367,7 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
 
     if (! _imp->pattern_automorphism_group_size.empty())
         x.emplace_back("pattern_automorphism_group_size = " + _imp->pattern_automorphism_group_size);
+
+    if (! _imp->target_automorphism_group_size.empty())
+        x.emplace_back("target_automorphism_group_size = " + _imp->target_automorphism_group_size);
 }

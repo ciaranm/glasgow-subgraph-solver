@@ -84,7 +84,8 @@ auto main(int argc, char * argv[]) -> int
             ("target-symmetries-gap", "Eliminate target symmetries (requires Gap)")                                                    //
             ("pattern-symmetries-dejavu", "Eliminate pattern symmetries (requires Dejavu)")                                            //
             ("target-symmetries-dejavu", "Eliminate target symmetries (requires Dejavu)")                                              //
-            ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)");
+            ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")                                    //
+            ("target-orbits-dejavu", "Eliminate target symmetries dynamically (requires Dejavu)");
         display_options.add(search_options);
 
         po::options_description mangling_options{"Advanced input processing options"};
@@ -470,6 +471,9 @@ auto main(int argc, char * argv[]) -> int
             for (auto & [a, b] : params.target_occur_less_constraints)
                 cout << " " << a << "<" << b;
             cout << endl;
+        }
+        else if (options_vars.count("target-orbits-dejavu")) {
+            params.use_target_orbits = true;
         }
 
         if (was_given_target_automorphism_group)

@@ -61,6 +61,8 @@ namespace gss::innards
 
         bool has_pattern_orbits = false;
         std::unique_ptr<dejavu::groups::random_schreier> pattern_orbits_schreier;
+        bool has_target_orbits = false;
+        std::unique_ptr<dejavu::groups::random_schreier> target_orbits_schreier;
 
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
             const std::shared_ptr<Proof> & proof);

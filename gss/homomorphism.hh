@@ -106,6 +106,9 @@ namespace gss
         /// Pattern orbit tracking
         bool use_pattern_orbits = false;
 
+        /// Target orbit tracking
+        bool use_target_orbits = false;
+
         /// Occurs less target constraints
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
 
