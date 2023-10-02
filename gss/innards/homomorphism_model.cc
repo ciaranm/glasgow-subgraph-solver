@@ -320,8 +320,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         });
 
         pattern_orbits_schreier.reset(new dejavu::groups::random_schreier{pattern.size()});
-        vector<int> base;
-        pattern_orbits_schreier->set_base(base);
+        pattern_orbits_schreier->set_base(pattern_orbit_base);
 
         dejavu::hooks::schreier_hook hook(*pattern_orbits_schreier);
         dejavu::solver s;
@@ -357,8 +356,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         });
 
         target_orbits_schreier.reset(new dejavu::groups::random_schreier{target.size()});
-        vector<int> base;
-        target_orbits_schreier->set_base(base);
+        target_orbits_schreier->set_base(target_orbit_base);
 
         dejavu::hooks::schreier_hook hook(*target_orbits_schreier);
         dejavu::solver s;

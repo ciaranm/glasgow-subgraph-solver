@@ -200,27 +200,37 @@ auto HomomorphismSearcher::restarting_search(
         dejavu::groups::orbit pattern_orbit_partition{model.pattern_size};
         bool this_vertex_has_pattern_orbit = false;
         if (model.has_pattern_orbits) {
-            pattern_orbit_base.push_back(branch_domain->v);
-            model.pattern_orbits_schreier->get_stabilizer_orbit(pattern_orbit_base.size(), pattern_orbit_partition);
-            if (pattern_orbit_partition.orbit_size(branch_domain->v) == 1)
-                pattern_orbit_base.pop_back();
-            else {
-                model.pattern_orbits_schreier->set_base(pattern_orbit_base);
-                this_vertex_has_pattern_orbit = true;
+            if (pattern_orbit_base != model.pattern_orbit_base) {
+                model.pattern_orbit_base = pattern_orbit_base;
+                model.pattern_orbits_schreier->set_base(model.pattern_orbit_base);
             }
+            pattern_orbit_base.push_back(branch_domain->v);
+            model.pattern_orbit_base.push_back(branch_domain->v);
+            model.pattern_orbits_schreier->get_stabilizer_orbit(pattern_orbit_base.size(), pattern_orbit_partition);
+            if (pattern_orbit_partition.orbit_size(branch_domain->v) == 1) {
+                pattern_orbit_base.pop_back();
+                model.pattern_orbit_base.pop_back();
+            }
+            else
+                this_vertex_has_pattern_orbit = true;
         }
 
         dejavu::groups::orbit target_orbit_partition{model.target_size};
         bool this_vertex_has_target_orbit = false;
         if (model.has_target_orbits) {
-            target_orbit_base.push_back(*f_v);
-            model.target_orbits_schreier->get_stabilizer_orbit(target_orbit_base.size(), target_orbit_partition);
-            if (target_orbit_partition.orbit_size(*f_v) == 1)
-                target_orbit_base.pop_back();
-            else {
-                model.target_orbits_schreier->set_base(target_orbit_base);
-                this_vertex_has_target_orbit = true;
+            if (target_orbit_base != model.target_orbit_base) {
+                model.target_orbit_base = target_orbit_base;
+                model.target_orbits_schreier->set_base(model.target_orbit_base);
             }
+            target_orbit_base.push_back(*f_v);
+            model.target_orbit_base.push_back(*f_v);
+            model.target_orbits_schreier->get_stabilizer_orbit(target_orbit_base.size(), target_orbit_partition);
+            if (target_orbit_partition.orbit_size(*f_v) == 1) {
+                target_orbit_base.pop_back();
+                model.target_orbit_base.pop_back();
+            }
+            else
+                this_vertex_has_target_orbit = true;
         }
 
         // propagate
