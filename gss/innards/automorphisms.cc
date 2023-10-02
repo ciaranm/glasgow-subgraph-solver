@@ -12,10 +12,17 @@ using namespace gss::innards;
 auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i) -> OrderConstraints
 {
     dejavu::static_graph g;
-    g.initialize_graph(i.size(), i.number_of_directed_edges() / 2);
+    unsigned long n_simple_edges = 0;
+    i.for_each_edge([&](int f, int t, string_view) {
+        if (f < t)
+            ++n_simple_edges;
+    });
+    g.initialize_graph(i.size(), n_simple_edges);
     vector<int> vertices;
-    for (int v = 0, v_end = i.size(); v != v_end; ++v)
-        vertices.push_back(g.add_vertex(0, i.degree(v)));
+    for (int v = 0, v_end = i.size(); v != v_end; ++v) {
+        bool loop = i.adjacent(v, v);
+        vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? i.degree(v) - 1 : i.degree(v)));
+    }
     i.for_each_edge([&](int f, int t, string_view) {
         if (f < t)
             g.add_edge(vertices[f], vertices[t]);
