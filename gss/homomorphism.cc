@@ -131,8 +131,9 @@ namespace
                 if (searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                     auto assignments_copy = assignments;
 
+                    vector<int> pattern_orbit_base, target_orbit_base;
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
-                        result.solution_count, 0, *params.restarts_schedule)) {
+                        result.solution_count, 0, *params.restarts_schedule, pattern_orbit_base, target_orbit_base)) {
                     case SearchResult::Satisfiable:
                         searcher.save_result(assignments_copy, result);
                         result.complete = true;
@@ -318,8 +319,9 @@ namespace
                     if (searchers[t]->propagate(true, domains, thread_assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                         auto assignments_copy = thread_assignments;
 
+                        vector<int> pattern_orbit_base, target_orbit_base;
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
-                            thread_result.solution_count, 0, *thread_restarts_schedule)) {
+                            thread_result.solution_count, 0, *thread_restarts_schedule, pattern_orbit_base, target_orbit_base)) {
                         case SearchResult::Satisfiable:
                             searchers[t]->save_result(assignments_copy, thread_result);
                             thread_result.complete = true;

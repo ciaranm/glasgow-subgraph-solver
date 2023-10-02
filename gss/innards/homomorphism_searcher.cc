@@ -79,7 +79,9 @@ auto HomomorphismSearcher::restarting_search(
     unsigned long long & propagations,
     loooong & solution_count,
     int depth,
-    RestartsSchedule & restarts_schedule) -> SearchResult
+    RestartsSchedule & restarts_schedule,
+    vector<int> & pattern_orbit_base,
+    vector<int> & target_orbit_base) -> SearchResult
 {
     if (proof && proof->super_extra_verbose()) {
         vector<pair<NamedVertex, vector<NamedVertex>>> proof_domains;
@@ -176,15 +178,11 @@ auto HomomorphismSearcher::restarting_search(
     // override whether we use the lackey for propagation, in case we are inside a backjump
     bool use_lackey_for_propagation = false;
 
-    vector<uint8_t> skip_due_to_target_orbit(model.target_size, 0);
-    dejavu::groups::orbit target_orbit{int(model.target_size)};
-    vector<int> target_base;
-    if (model.has_target_orbits)
-        model.target_orbits_schreier->set_base(target_base);
+    vector<uint8_t> skip_target_vertex_due_to_orbits(model.target_size, 0);
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
-        if (skip_due_to_target_orbit.at(*f_v))
+        if (skip_target_vertex_due_to_orbits.at(*f_v))
             continue;
 
         if (proof)
@@ -198,6 +196,32 @@ auto HomomorphismSearcher::restarting_search(
 
         // set up new domains
         Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
+
+        dejavu::groups::orbit pattern_orbit_partition{model.pattern_size};
+        bool this_vertex_has_pattern_orbit = false;
+        if (model.has_pattern_orbits) {
+            pattern_orbit_base.push_back(branch_domain->v);
+            model.pattern_orbits_schreier->get_stabilizer_orbit(pattern_orbit_base.size(), pattern_orbit_partition);
+            if (pattern_orbit_partition.orbit_size(branch_domain->v) == 1)
+                pattern_orbit_base.pop_back();
+            else {
+                model.pattern_orbits_schreier->set_base(pattern_orbit_base);
+                this_vertex_has_pattern_orbit = true;
+            }
+        }
+
+        dejavu::groups::orbit target_orbit_partition{model.target_size};
+        bool this_vertex_has_target_orbit = false;
+        if (model.has_target_orbits) {
+            target_orbit_base.push_back(*f_v);
+            model.target_orbits_schreier->get_stabilizer_orbit(target_orbit_base.size(), target_orbit_partition);
+            if (target_orbit_partition.orbit_size(*f_v) == 1)
+                target_orbit_base.pop_back();
+            else {
+                model.target_orbits_schreier->set_base(target_orbit_base);
+                this_vertex_has_target_orbit = true;
+            }
+        }
 
         // propagate
         ++propagations;
@@ -214,8 +238,9 @@ auto HomomorphismSearcher::restarting_search(
                 proof->start_level(depth + 2);
 
             // recursive search
+            auto pattern_orbit_base_copy = pattern_orbit_base, target_orbit_base_copy = target_orbit_base;
             auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
-                solution_count, depth + 1, restarts_schedule);
+                solution_count, depth + 1, restarts_schedule, pattern_orbit_base_copy, target_orbit_base_copy);
 
             switch (search_result) {
             case SearchResult::Satisfiable:
@@ -268,62 +293,22 @@ auto HomomorphismSearcher::restarting_search(
             ++discrepancy_count;
         }
 
-        if (model.has_pattern_orbits) {
-            bool stab_trivial = false;
-            dejavu::groups::orbit o{int(model.pattern_size)};
-            vector<int> base;
-            model.pattern_orbits_schreier->set_base(base);
-            while (! stab_trivial) {
-                model.pattern_orbits_schreier->get_stabilizer_orbit(base.size(), o);
-                stab_trivial = true;
-                for (auto & a : assignments.values) {
-                    if (a.is_decision) {
-                        if (o.orbit_size(a.assignment.pattern_vertex) > 1) {
-                            stab_trivial = false;
-                            base.push_back(a.assignment.pattern_vertex);
-                        }
-                    }
-                }
-
-                if (! stab_trivial)
-                    model.pattern_orbits_schreier->set_base(base);
-            }
-
-            if (o.orbit_size(branch_domain->v) > 1) {
-                base.push_back(branch_domain->v);
-                model.pattern_orbits_schreier->set_base(base);
-            }
-
-            const vector<int> * fixed_orbit = nullptr;
-            for (int x = base.size() - 1; x >= 0; --x) {
-                auto v = base.at(x);
-                if (v == branch_domain->v) {
-                    fixed_orbit = &model.pattern_orbits_schreier->get_fixed_orbit(x);
-                    break;
-                }
-            }
-
-            if (fixed_orbit != nullptr) {
-                for (auto & d : domains) {
-                    if (d.v != branch_domain->v && fixed_orbit->end() != find(fixed_orbit->begin(), fixed_orbit->end(), d.v)) {
-                        if (d.values.test(*f_v)) {
-                            d.values.reset(*f_v);
-                            if (0 == --d.count)
-                                return SearchResult::Unsatisfiable;
-                        }
+        if (this_vertex_has_pattern_orbit) {
+            for (auto & d : domains) {
+                if (d.v != branch_domain->v && pattern_orbit_partition.are_in_same_orbit(d.v, branch_domain->v)) {
+                    if (d.values.test(*f_v)) {
+                        d.values.reset(*f_v);
+                        if (0 == --d.count)
+                            return SearchResult::Unsatisfiable;
                     }
                 }
             }
         }
 
-        if (model.has_target_orbits) {
-            model.target_orbits_schreier->get_stabilizer_orbit(target_base.size(), target_orbit);
-            if (target_orbit.orbit_size(*f_v) > 1) {
-                target_base.push_back(*f_v);
-                model.target_orbits_schreier->set_base(target_base);
-                for (auto & f : model.target_orbits_schreier->get_fixed_orbit(target_base.size() - 1))
-                    skip_due_to_target_orbit.at(f) = 1;
-            }
+        if (this_vertex_has_target_orbit) {
+            for (auto f_w = next(f_v); f_w != f_end; ++f_w)
+                if (target_orbit_partition.are_in_same_orbit(*f_v, *f_w))
+                    skip_target_vertex_due_to_orbits.at(*f_w) = 1;
         }
     }
 

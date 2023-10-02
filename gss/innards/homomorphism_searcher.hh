@@ -135,7 +135,9 @@ namespace gss::innards
             unsigned long long & propagations,
             loooong & solution_count,
             int depth,
-            RestartsSchedule & restarts_schedule) -> SearchResult;
+            RestartsSchedule & restarts_schedule,
+            std::vector<int> & pattern_orbit_base,
+            std::vector<int> & target_orbit_base) -> SearchResult;
 
         auto save_result(const HomomorphismAssignments & assignments, HomomorphismResult & result) -> void;
 
