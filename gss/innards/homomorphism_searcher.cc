@@ -180,6 +180,24 @@ auto HomomorphismSearcher::restarting_search(
 
     vector<uint8_t> skip_target_vertex_due_to_orbits(model.target_size, 0);
 
+    dejavu::groups::orbit pattern_orbit_partition{model.pattern_size};
+    bool this_vertex_has_pattern_orbit = false;
+    if (model.has_pattern_orbits) {
+        if (pattern_orbit_base != model.pattern_orbit_base) {
+            model.pattern_orbit_base = pattern_orbit_base;
+            model.pattern_orbits_schreier->set_base(model.pattern_orbit_base);
+        }
+        pattern_orbit_base.push_back(branch_domain->v);
+        model.pattern_orbit_base.push_back(branch_domain->v);
+        model.pattern_orbits_schreier->get_stabilizer_orbit(pattern_orbit_base.size(), pattern_orbit_partition);
+        if (pattern_orbit_partition.orbit_size(branch_domain->v) == 1) {
+            pattern_orbit_base.pop_back();
+            model.pattern_orbit_base.pop_back();
+        }
+        else
+            this_vertex_has_pattern_orbit = true;
+    }
+
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
         if (skip_target_vertex_due_to_orbits.at(*f_v))
@@ -196,24 +214,6 @@ auto HomomorphismSearcher::restarting_search(
 
         // set up new domains
         Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
-
-        dejavu::groups::orbit pattern_orbit_partition{model.pattern_size};
-        bool this_vertex_has_pattern_orbit = false;
-        if (model.has_pattern_orbits) {
-            if (pattern_orbit_base != model.pattern_orbit_base) {
-                model.pattern_orbit_base = pattern_orbit_base;
-                model.pattern_orbits_schreier->set_base(model.pattern_orbit_base);
-            }
-            pattern_orbit_base.push_back(branch_domain->v);
-            model.pattern_orbit_base.push_back(branch_domain->v);
-            model.pattern_orbits_schreier->get_stabilizer_orbit(pattern_orbit_base.size(), pattern_orbit_partition);
-            if (pattern_orbit_partition.orbit_size(branch_domain->v) == 1) {
-                pattern_orbit_base.pop_back();
-                model.pattern_orbit_base.pop_back();
-            }
-            else
-                this_vertex_has_pattern_orbit = true;
-        }
 
         dejavu::groups::orbit target_orbit_partition{model.target_size};
         bool this_vertex_has_target_orbit = false;
