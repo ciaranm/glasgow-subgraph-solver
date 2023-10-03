@@ -200,107 +200,107 @@ auto HomomorphismSearcher::restarting_search(
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
-        if (skip_target_vertex_due_to_orbits.at(*f_v))
-            continue;
-
-        if (proof)
-            proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
-
-        // modified in-place by appending, we can restore by shrinking
-        auto assignments_size = assignments.values.size();
-
-        // make the assignment
-        assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
-
-        // set up new domains
-        Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
-
         dejavu::groups::orbit target_orbit_partition{model.target_size};
         bool this_vertex_has_target_orbit = false;
-        if (model.has_target_orbits) {
-            if (target_orbit_base != model.target_orbit_base) {
-                model.target_orbit_base = target_orbit_base;
-                model.target_orbits_schreier->set_base(model.target_orbit_base);
-            }
-            target_orbit_base.push_back(*f_v);
-            model.target_orbit_base.push_back(*f_v);
-            model.target_orbits_schreier->get_stabilizer_orbit(target_orbit_base.size(), target_orbit_partition);
-            if (target_orbit_partition.orbit_size(*f_v) == 1) {
-                target_orbit_base.pop_back();
-                model.target_orbit_base.pop_back();
-            }
-            else
-                this_vertex_has_target_orbit = true;
-        }
 
-        // propagate
-        ++propagations;
-        if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
-            // failure? restore assignments and go on to the next thing
+        if (! skip_target_vertex_due_to_orbits.at(*f_v)) {
             if (proof)
-                proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
+                proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
-            assignments.values.resize(assignments_size);
-            actually_hit_a_failure = true;
-        }
-        else {
-            if (proof)
-                proof->start_level(depth + 2);
+            // modified in-place by appending, we can restore by shrinking
+            auto assignments_size = assignments.values.size();
 
-            // recursive search
-            auto pattern_orbit_base_copy = pattern_orbit_base, target_orbit_base_copy = target_orbit_base;
-            auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
-                solution_count, depth + 1, restarts_schedule, pattern_orbit_base_copy, target_orbit_base_copy);
+            // make the assignment
+            assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
 
-            switch (search_result) {
-            case SearchResult::Satisfiable:
-                return SearchResult::Satisfiable;
+            // set up new domains
+            Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
 
-            case SearchResult::Aborted:
-                return SearchResult::Aborted;
-
-            case SearchResult::Restart:
-                // restore assignments before posting nogoods, it's easier
-                assignments.values.resize(assignments_size);
-
-                // post nogoods for everything we've done so far
-                for (auto l = branch_v.begin(); l != f_v; ++l) {
-                    assignments.values.push_back({{branch_domain->v, unsigned(*l)}, true, -2, -2});
-                    post_nogood(assignments);
-                    assignments.values.pop_back();
+            if (model.has_target_orbits) {
+                if (target_orbit_base != model.target_orbit_base) {
+                    model.target_orbit_base = target_orbit_base;
+                    model.target_orbits_schreier->set_base(model.target_orbit_base);
                 }
-
-                return SearchResult::Restart;
-
-            case SearchResult::SatisfiableButKeepGoing:
-                if (proof) {
-                    proof->back_up_to_level(depth + 1);
-                    proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
-                    proof->forget_level(depth + 2);
+                target_orbit_base.push_back(*f_v);
+                model.target_orbit_base.push_back(*f_v);
+                model.target_orbits_schreier->get_stabilizer_orbit(target_orbit_base.size(), target_orbit_partition);
+                if (target_orbit_partition.orbit_size(*f_v) == 1) {
+                    target_orbit_base.pop_back();
+                    model.target_orbit_base.pop_back();
                 }
+                else
+                    this_vertex_has_target_orbit = true;
+            }
 
-                // restore assignments
-                assignments.values.resize(assignments_size);
-                break;
+            // propagate
+            ++propagations;
+            if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
+                // failure? restore assignments and go on to the next thing
+                if (proof)
+                    proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
-            case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
-                use_lackey_for_propagation = true;
-                [[std::fallthrough]];
-
-            case SearchResult::Unsatisfiable:
-                if (proof) {
-                    proof->back_up_to_level(depth + 1);
-                    proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
-                    proof->forget_level(depth + 2);
-                }
-
-                // restore assignments
                 assignments.values.resize(assignments_size);
                 actually_hit_a_failure = true;
-                break;
             }
+            else {
+                if (proof)
+                    proof->start_level(depth + 2);
 
-            ++discrepancy_count;
+                // recursive search
+                auto pattern_orbit_base_copy = pattern_orbit_base, target_orbit_base_copy = target_orbit_base;
+                auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
+                    solution_count, depth + 1, restarts_schedule, pattern_orbit_base_copy, target_orbit_base_copy);
+
+                switch (search_result) {
+                case SearchResult::Satisfiable:
+                    return SearchResult::Satisfiable;
+
+                case SearchResult::Aborted:
+                    return SearchResult::Aborted;
+
+                case SearchResult::Restart:
+                    // restore assignments before posting nogoods, it's easier
+                    assignments.values.resize(assignments_size);
+
+                    // post nogoods for everything we've done so far
+                    for (auto l = branch_v.begin(); l != f_v; ++l) {
+                        assignments.values.push_back({{branch_domain->v, unsigned(*l)}, true, -2, -2});
+                        post_nogood(assignments);
+                        assignments.values.pop_back();
+                    }
+
+                    return SearchResult::Restart;
+
+                case SearchResult::SatisfiableButKeepGoing:
+                    if (proof) {
+                        proof->back_up_to_level(depth + 1);
+                        proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
+                        proof->forget_level(depth + 2);
+                    }
+
+                    // restore assignments
+                    assignments.values.resize(assignments_size);
+                    break;
+
+                case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
+                    use_lackey_for_propagation = true;
+                    [[std::fallthrough]];
+
+                case SearchResult::Unsatisfiable:
+                    if (proof) {
+                        proof->back_up_to_level(depth + 1);
+                        proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
+                        proof->forget_level(depth + 2);
+                    }
+
+                    // restore assignments
+                    assignments.values.resize(assignments_size);
+                    actually_hit_a_failure = true;
+                    break;
+                }
+
+                ++discrepancy_count;
+            }
         }
 
         if (this_vertex_has_pattern_orbit) {
