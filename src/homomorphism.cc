@@ -375,6 +375,7 @@ auto solve_homomorphism_problem(
         const InputGraph & target,
         const HomomorphismParams & params) -> HomomorphismResult
 {
+
     // start by setting up proof logging, if necessary
     if (params.proof) {
         // proof logging is currently incompatible with a whole load of "extra" features,

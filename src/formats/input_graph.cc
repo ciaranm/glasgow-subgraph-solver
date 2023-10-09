@@ -267,7 +267,7 @@ auto InputGraph::toString() const -> std::string
         auto x = "F";
         auto y = "F";
         if (p.first) x = "T";
-        if (p.second) x = "F";
+        if (p.second) y = "T";
         ss << boost::format("[%s-->%s];") % x % y;
     }
     ss << "\n";

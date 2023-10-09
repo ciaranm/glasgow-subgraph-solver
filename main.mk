@@ -7,6 +7,7 @@ SUBMAKEFILES := \
     src/glasgow_clique_solver.mk \
     src/glasgow_common_subgraph_solver.mk \
     src/glasgow_bigraph_solver.mk \
+    src/glasgow_common_bigraph_solver.mk \
     src/glasgow_bigraph_lib.mk \
     src/glasgow_bigraph_lib_static.mk \
     src/sip_to_opb.mk \

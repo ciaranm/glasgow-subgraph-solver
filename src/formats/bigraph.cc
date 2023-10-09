@@ -42,7 +42,6 @@ namespace
 
 auto read_target_bigraph(istream && infile, const string &, bool directed) -> InputGraph
 {
-
     InputGraph result{ 0, true, true, true };
 
     std::vector<std::string> labels;
@@ -212,6 +211,7 @@ auto read_pattern_bigraph(istream && infile, const string &, bool directed) -> I
 
 
     // Add place graph nodes
+    
     result.resize(n);
     for (int i = 0 ; i != n ; ++i)
         result.set_vertex_label(i, labels.at(i));
@@ -338,7 +338,7 @@ auto read_pattern_bigraph(istream && infile, const string &, bool directed) -> I
             
         h = read_str(infile);
     }
-
+    
     return result;
 }
 

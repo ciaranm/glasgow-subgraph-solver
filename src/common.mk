@@ -2,6 +2,7 @@ TARGET := libcommon.a
 
 SOURCES := \
     formats/bigraph.cc \
+    formats/common_bigraph.cc \
     formats/csv.cc \
     formats/dimacs.cc \
     formats/graph_file_error.cc \
