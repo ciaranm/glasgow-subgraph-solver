@@ -116,7 +116,6 @@ auto main(int argc, char * argv[]) -> int
         params.equality_check = options_vars.count("equality-check");
         params.directed = options_vars.count("directed-hyperedges");
 
-
         if (params.count_solutions)
             params.restarts_schedule = make_unique<NoRestartsSchedule>();
         else

@@ -189,7 +189,6 @@ auto Bigraph::encode(bool target) const -> InputGraph
                 result.add_directed_edge(k, i, "dir");
         }
     }
-
     return result;
 }
 
@@ -208,6 +207,7 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph
     int r = read_num(infile);
     int n = read_num(infile);
     int s = read_num(infile);    
+    big.largest_component_index = n-1;
 
     for(int i=0;i<r;i++) big.regions.insert(i);
     for(int i=0;i<s;i++) big.sites.insert(i);
@@ -254,6 +254,7 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
     std::vector<Bigraph> components;
     for(unsigned int i=0;i<big.entities.size();i++){
         components.push_back(Bigraph());
+        components[i].largest_component_index = i;
         components[i].reachability = big.reachability;
         components[i].entities.push_back(Entity(big.entities[i].id, big.entities[i].control, big.entities[i].arity));
 
@@ -291,35 +292,33 @@ auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
         if(b.entities[0].regions.size() > 0 && *(b.entities[0].regions.begin()) < 0) {
             auto below_comp = find(a.entities[i].sites.begin(), a.entities[i].sites.end(), *(b.entities[0].regions.begin()));
             if(below_comp != a.entities[i].sites.end()) {
-                Entity new_entity = b.entities[0].copy();
-
-                a.entities.push_back(new_entity);
-                a.entities[i].children.push_back(new_entity);
-                new_entity.parent = &a.entities[i];
+                a.entities.push_back(b.entities[0].copy());
+                a.entities[i].children.push_back(a.entities[a.entities.size()-1]);
+                a.entities[a.entities.size()-1].parent = &a.entities[i];
 
                 a.entities[i].sites.erase(*b.entities[0].regions.begin());
                 a.sites.erase(*b.entities[0].regions.begin());
-                new_entity.regions.clear();
+                a.entities[a.entities.size()-1].regions.clear();
 
-                a.sites.insert(new_entity.sites.begin(), new_entity.sites.end());
+                a.sites.insert(a.entities[a.entities.size()-1].sites.begin(), a.entities[a.entities.size()-1].sites.end());
+                a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
                 return a;
             }
         }
         else if(a.entities[i].regions.size() > 0 && *(a.entities[i].regions.begin()) < 0) {
             auto above_comp = find(b.entities[0].sites.begin(), b.entities[0].sites.end(), *(a.entities[i].regions.begin()));
             if(above_comp != b.entities[0].sites.end()) {
-                Entity new_entity = b.entities[0].copy();
+                a.entities.push_back(b.entities[0].copy());
+                a.entities[a.entities.size()-1].children.push_back(a.entities[i]);
+                a.entities[i].parent = &a.entities[a.entities.size()-1];
 
-                a.entities.push_back(new_entity);
-                new_entity.children.push_back(a.entities[i]);
-                a.entities[i].parent = &new_entity;
-
-                new_entity.sites.erase(*a.entities[i].regions.begin());
+                a.entities[a.entities.size()-1].sites.erase(*a.entities[i].regions.begin());
                 a.regions.erase(*a.entities[i].regions.begin()); 
                 a.entities[i].regions.clear();
 
-                a.regions.insert(new_entity.regions.begin(), new_entity.regions.end());
-                a.sites.insert(new_entity.sites.begin(), new_entity.sites.end());
+                a.regions.insert(a.entities[a.entities.size()-1].regions.begin(), a.entities[a.entities.size()-1].regions.end());
+                a.sites.insert(a.entities[a.entities.size()-1].sites.begin(), a.entities[a.entities.size()-1].sites.end());
+                a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
                 return a;
             }
         }
@@ -335,5 +334,6 @@ auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
     a.entities.push_back(new_entity);
     a.regions.insert(new_entity.regions.begin(), new_entity.regions.end());
     a.sites.insert(new_entity.sites.begin(), new_entity.sites.end());
+    a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
     return a;
 }

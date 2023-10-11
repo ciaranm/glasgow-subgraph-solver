@@ -37,6 +37,7 @@ class Bigraph {
         std::set<int> sites;
         std::vector<Entity> entities;
         std::vector<std::vector<bool>> reachability;
+        int largest_component_index;
 
         Bigraph();
 

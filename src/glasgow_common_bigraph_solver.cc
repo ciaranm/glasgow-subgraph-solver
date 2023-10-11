@@ -96,6 +96,19 @@ auto main(int argc, char * argv[]) -> int
         params.equality_check = false;
         params.directed = false;
 
+        if (params.count_solutions)
+            params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        else
+            params.restarts_schedule = make_unique<LubyRestartsSchedule>(LubyRestartsSchedule::default_multiplier);
+
+        char hostname_buf[255];
+        if (0 == gethostname(hostname_buf, 255))
+            cout << "hostname = " << string(hostname_buf) << endl;
+        cout << "commandline =";
+        for (int i = 0 ; i < argc ; ++i)
+            cout << " " << argv[i];
+        cout << endl;
+
         string bigraph_1_filename = options_vars["bigraph-1"].as<string>();
         string bigraph_2_filename = options_vars["bigraph-2"].as<string>();
 
@@ -108,27 +121,49 @@ auto main(int argc, char * argv[]) -> int
             throw GraphFileError{ bigraph_2_filename, "unable to open target file", false };
 
         Bigraph big1 = read_bigraph(move(bigraph_1_infile), bigraph_1_filename);
-        Bigraph big2 = read_bigraph(move(bigraph_2_infile), bigraph_2_filename);
+        Bigraph big2 = read_bigraph(move(bigraph_2_infile), bigraph_2_filename); 
+
+        /* Prepare and start timeout */
+        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
+
+        /* Start the clock */
+        params.start_time = steady_clock::now();
+
         InputGraph big2_encoding = big2.encode(true);
 
         std::vector<Bigraph> components = full_decomp(big1);
         std::vector<Bigraph> candidates;
 
-        cout << big1.toString() + '\n';
-
-        for(int i=0;i<components.size();i++){ 
-            cout << "BBBBBBBBBBBBBBB";
-            auto aaa = components[i].encode(false);
-            cout << "AAAAAAAAAAAAAAA";
-            auto result = solve_homomorphism_problem(aaa, big2_encoding, params);
-            //cout << components[i].toString() + '\n';
+        for(auto c : components){ 
+            auto result = solve_homomorphism_problem(c.encode(false), big2_encoding, params);
+            if(! result.mapping.empty())
+                candidates.push_back(c);
         }
-        
+        if (candidates.size() == 0) {
+            cout << "Solutions found: 0";
+            return EXIT_SUCCESS;
+        }
 
-        //auto a = element_compose(components[0], components[1]);
-        //if(a.has_value())
-        //    cout << a.value().toString();
-
+        bool finished_flag = false;
+        while(! finished_flag) {
+            std::vector<Bigraph> new_candidates;
+            for(int i=0;i<candidates.size();i++){
+                for(int j=candidates[i].largest_component_index+1;j<components.size(); j++) {
+                    auto new_comp = element_compose(candidates[i], components[j]);
+                    if(new_comp.has_value()) {
+                        auto result = solve_homomorphism_problem(new_comp.value().encode(false), big2_encoding, params);
+                        if(! result.mapping.empty())
+                            new_candidates.push_back(new_comp.value());
+                    }
+                }
+            }
+            if(new_candidates.size() == 0)
+                finished_flag = true;
+            else
+                candidates = new_candidates;
+        }
+        auto lol = candidates[0];
+        cout << lol.toString();
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {
