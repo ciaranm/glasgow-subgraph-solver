@@ -17,13 +17,13 @@ using std::set;
 class Entity {
     public:
         int id;
-        std::vector<Entity> children;
+        std::vector<int> child_indices;
         std::set<int> regions;
         std::set<int> sites;
 
         string control;
         int arity;
-        Entity *parent = NULL;
+        int parent_index = -1;
 
         Entity(int i, string ctrl, int ar);
         Entity();
@@ -50,9 +50,14 @@ class Bigraph {
         auto copy() -> Bigraph;
 };
 
+
 auto read_bigraph(istream && infile, const string &) -> Bigraph;
 
 auto full_decomp(Bigraph big) -> std::vector<Bigraph>;
+
+auto free_all_entities(Bigraph a) -> Bigraph;
+
+auto remove_abstractions(Bigraph a) -> Bigraph;
 
 auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>;
 

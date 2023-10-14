@@ -120,8 +120,8 @@ auto main(int argc, char * argv[]) -> int
         if (! bigraph_2_infile)
             throw GraphFileError{ bigraph_2_filename, "unable to open target file", false };
 
-        Bigraph big1 = read_bigraph(move(bigraph_1_infile), bigraph_1_filename);
-        Bigraph big2 = read_bigraph(move(bigraph_2_infile), bigraph_2_filename); 
+        Bigraph big1 = free_all_entities(read_bigraph(move(bigraph_1_infile), bigraph_1_filename));
+        Bigraph big2 = free_all_entities(read_bigraph(move(bigraph_2_infile), bigraph_2_filename)); 
 
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
@@ -162,8 +162,10 @@ auto main(int argc, char * argv[]) -> int
             else
                 candidates = new_candidates;
         }
-        auto lol = candidates[0];
-        cout << lol.toString();
+
+        cout << "Solutions found: " << candidates.size() << '\n';
+        for (auto z : candidates)
+            cout << z.toString();
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {

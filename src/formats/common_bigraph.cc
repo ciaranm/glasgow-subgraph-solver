@@ -91,8 +91,8 @@ auto Bigraph::toString() const -> string
     
     for(unsigned int i=0;i<entities.size();i++) {
         Entity e = entities[i];
-        if(e.parent != NULL){
-            auto it = find(entities.begin(), entities.end(), *e.parent);
+        if(e.parent_index != -1){
+            auto it = find(entities.begin(), entities.end(), entities[e.parent_index]);
             int k = it - entities.begin();
             matrix[regions.size()+k][i] = 1;
         }
@@ -180,8 +180,8 @@ auto Bigraph::encode(bool target) const -> InputGraph
     }
     for(unsigned int i=0;i<entities.size();i++) {
         Entity e = entities[i];
-        if(e.parent != NULL){
-            auto it = find(entities.begin(), entities.end(), *e.parent);
+        if(e.parent_index != -1){
+            auto it = find(entities.begin(), entities.end(), entities[e.parent_index]);
             int k = it - entities.begin();
             if(target)
                 result.add_directed_edge(regions.size() + k, regions.size() + i, "dir");
@@ -190,6 +190,41 @@ auto Bigraph::encode(bool target) const -> InputGraph
         }
     }
     return result;
+}
+
+auto free_all_entities(Bigraph a) -> Bigraph
+{
+    if(a.regions.size() > 0) {
+        int max_region = *a.regions.rbegin();
+        for(int i=0;i<a.entities.size();i++) {
+            if(a.entities[i].parent_index == -1 && a.entities[i].regions.size() == 0) {
+                max_region++;
+                a.entities[i].regions.insert(max_region);
+                a.regions.insert(max_region);
+            }
+            else if(a.entities[i].regions.size() > 0) {
+                for(int j=i;j<a.entities.size();j++) {
+                    if(*a.entities[i].regions.begin() == *a.entities[j].regions.begin()) {
+                        max_region++;
+                        a.entities[j].regions.clear();
+                        a.entities[j].regions.insert(max_region);
+                        a.regions.insert(max_region);
+                    }
+                }
+            }
+        }
+    }
+    if(a.sites.size() > 0) {
+        int max_site = *a.sites.rbegin();
+        for(int i=0;i<a.entities.size();i++) {
+            if(a.entities[i].sites.size() == 0) {
+                max_site++;
+                a.entities[i].sites.insert(max_site);
+                a.sites.insert(max_site);
+            }
+        }
+    }
+    return a;
 }
 
 auto read_bigraph(istream && infile, const string &) -> Bigraph
@@ -223,8 +258,8 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph
                     big.entities[i-r].sites.insert(j-n);
                 }
                 else {
-                    big.entities[j].parent = &big.entities[i-r];
-                    big.entities[i-r].children.push_back(big.entities[j]);
+                    big.entities[j].parent_index = i-r;
+                    big.entities[i-r].child_indices.push_back(j);
                 }
             }
         } 
@@ -234,14 +269,14 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph
 
     for(int i=0;i<n;i++) {
         big.reachability[i][i] = 1;
-        if(big.entities[i].children.size() == 0) {
+        if(big.entities[i].child_indices.size() == 0) {
             Entity t = big.entities[i];
-            while(t.parent != NULL) {
+            while(t.parent_index != -1) {
                 for(int j=0;j<n;j++)
-                    if(big.reachability[(*t.parent).id][j] == 0 && big.reachability[t.id][j] == 1) {
-                        big.reachability[(*t.parent).id][j] = 1;
+                    if(big.reachability[big.entities[t.parent_index].id][j] == 0 && big.reachability[t.id][j] == 1) {
+                        big.reachability[big.entities[t.parent_index].id][j] = 1;
                     }
-                t = *t.parent;
+                t = big.entities[t.parent_index];
             }
         }
     }
@@ -264,14 +299,14 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
         components[i].sites.insert(big.entities[i].sites.begin(), big.entities[i].sites.end());
         components[i].entities[0].sites.insert(big.entities[i].sites.begin(), big.entities[i].sites.end());
 
-        if(big.entities[i].parent != NULL) {
+        if(big.entities[i].parent_index != -1) {
             components[i].regions.insert((big.entities[i].id * -1) - 1);
             components[i].entities[0].regions.insert((big.entities[i].id * -1) - 1);
         }
 
-        for(unsigned int j=0;j<big.entities[i].children.size();j++) {
-            components[i].sites.insert((big.entities[i].children[j].id * -1) - 1);
-            components[i].entities[0].sites.insert((big.entities[i].children[j].id * -1) - 1);
+        for(unsigned int j=0;j<big.entities[i].child_indices.size();j++) {
+            components[i].sites.insert((big.entities[big.entities[i].child_indices[j]].id * -1) - 1);
+            components[i].entities[0].sites.insert((big.entities[big.entities[i].child_indices[j]].id * -1) - 1);
         }
 
     }
@@ -293,8 +328,9 @@ auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
             auto below_comp = find(a.entities[i].sites.begin(), a.entities[i].sites.end(), *(b.entities[0].regions.begin()));
             if(below_comp != a.entities[i].sites.end()) {
                 a.entities.push_back(b.entities[0].copy());
-                a.entities[i].children.push_back(a.entities[a.entities.size()-1]);
-                a.entities[a.entities.size()-1].parent = &a.entities[i];
+
+                a.entities[i].child_indices.push_back(a.entities.size()-1);
+                a.entities[a.entities.size()-1].parent_index = i;
 
                 a.entities[i].sites.erase(*b.entities[0].regions.begin());
                 a.sites.erase(*b.entities[0].regions.begin());
@@ -309,8 +345,9 @@ auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
             auto above_comp = find(b.entities[0].sites.begin(), b.entities[0].sites.end(), *(a.entities[i].regions.begin()));
             if(above_comp != b.entities[0].sites.end()) {
                 a.entities.push_back(b.entities[0].copy());
-                a.entities[a.entities.size()-1].children.push_back(a.entities[i]);
-                a.entities[i].parent = &a.entities[a.entities.size()-1];
+
+                a.entities[a.entities.size()-1].child_indices.push_back(i);
+                a.entities[i].parent_index = a.entities.size()-1;
 
                 a.entities[a.entities.size()-1].sites.erase(*a.entities[i].regions.begin());
                 a.regions.erase(*a.entities[i].regions.begin()); 
@@ -330,10 +367,9 @@ auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
     if(! is_tensor_possible) 
         return std::nullopt;
 
-    Entity new_entity = b.entities[0].copy();
-    a.entities.push_back(new_entity);
-    a.regions.insert(new_entity.regions.begin(), new_entity.regions.end());
-    a.sites.insert(new_entity.sites.begin(), new_entity.sites.end());
+    a.entities.push_back(b.entities[0].copy());
+    a.regions.insert(a.entities[a.entities.size()-1].regions.begin(), a.entities[a.entities.size()-1].regions.end());
+    a.sites.insert(a.entities[a.entities.size()-1].sites.begin(), a.entities[a.entities.size()-1].sites.end());
     a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
     return a;
 }
