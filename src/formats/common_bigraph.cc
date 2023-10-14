@@ -79,7 +79,7 @@ auto Bigraph::toString() const -> string
 {
     string out = "{";
     for(unsigned int i=0;i<entities.size();i++) {
-        out += '(' + to_string(i) + ", " + entities[i].control + ':' + to_string(entities[i].arity) + ')';
+        out += '(' + to_string(entities[i].id) + ", " + entities[i].control + ':' + to_string(entities[i].arity) + ')';
         if(i < entities.size()-1) out += ',';
     }
     out += "}\n" + to_string(regions.size()) + ' ' + to_string(entities.size()) + ' ' + to_string(sites.size()) + '\n';
@@ -222,6 +222,22 @@ auto free_all_entities(Bigraph a) -> Bigraph
                 a.entities[i].sites.insert(max_site);
                 a.sites.insert(max_site);
             }
+        }
+    }
+    return a;
+}
+
+auto remove_redundant_sites(Bigraph a) -> Bigraph
+{
+    for(int i=0;i<a.entities.size();i++) {
+        if(a.entities[i].sites.size() > 1) {
+            int start = *a.entities[i].sites.begin();
+            for(int s : a.entities[i].sites){
+                if(s != start) {
+                    a.sites.erase(s); 
+                }
+            }
+            a.entities[i].sites.erase(++a.entities[i].sites.begin(), a.entities[i].sites.end());
         }
     }
     return a;

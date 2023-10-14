@@ -165,7 +165,7 @@ auto main(int argc, char * argv[]) -> int
 
         cout << "Solutions found: " << candidates.size() << '\n';
         for (auto z : candidates)
-            cout << z.toString();
+            cout << remove_redundant_sites(z).toString();
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {
