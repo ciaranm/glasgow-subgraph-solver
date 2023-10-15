@@ -1037,9 +1037,13 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
     // count number of paths from w to v (unless directed, only w >= v, so not v to w)
     for (unsigned v = 0; v < size; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];
+        if (at_most)
+            nv.set(v);
         for (auto c = nv.find_first(); c != decltype(nv)::npos; c = nv.find_first()) {
             nv.reset(c);
             auto nc = graph_rows[c * max_graphs + 0];
+            if (at_most)
+                nc.set(c);
             for (auto w = nc.find_first(); w != decltype(nc)::npos && (directed ? true : w <= v); w = nc.find_first()) {
                 nc.reset(w);
                 ++path_counts[v][w];
