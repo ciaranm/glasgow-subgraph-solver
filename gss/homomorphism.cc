@@ -509,6 +509,8 @@ auto gss::solve_homomorphism_problem(
         for (int n = 0; n < pattern.size(); ++n)
             result.mapping.emplace(n, loop);
 
+        ++result.solution_count;
+
         return result;
     }
 
