@@ -43,6 +43,17 @@ if (NOT GCS_DEBUG_MODE)
     add_compile_options(-O3)
 endif (NOT GCS_DEBUG_MODE)
 
+Include(FetchContent)
+Set(FETCHCONTENT_QUIET FALSE)
+FetchContent_Declare(
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG 65cc7fd2ae39a7a543767f661b096d7d521ee4f0 # v3.2.0
+)
+FetchContent_MakeAvailable(Catch2)
+
+SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
+
 enable_testing()
 
 include_directories(.)

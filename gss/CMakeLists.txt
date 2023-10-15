@@ -34,3 +34,12 @@ add_library(glasgow_subgraphs
         formats/vfmcs.cc)
 
 target_link_libraries(glasgow_subgraphs LINK_PUBLIC ${Boost_LIBRARIES})
+link_libraries(glasgow_subgraphs)
+
+add_executable(subgraph_isomorphism_test subgraph_isomorphism_test.cc)
+target_link_libraries(subgraph_isomorphism_test PRIVATE Catch2::Catch2WithMain)
+add_test(NAME subgraph_isomorphism_test COMMAND $<TARGET_FILE:subgraph_isomorphism_test>)
+
+add_executable(homomorphism_test homomorphism_test.cc)
+target_link_libraries(homomorphism_test PRIVATE Catch2::Catch2WithMain)
+add_test(NAME homomorphism_test COMMAND $<TARGET_FILE:homomorphism_test>)
