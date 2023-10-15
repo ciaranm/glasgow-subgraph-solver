@@ -2,12 +2,14 @@
 #include <gss/formats/input_graph.hh>
 
 #include <fstream>
+#include <istream>
 #include <optional>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
 
 using std::ifstream;
+using std::istream;
 using std::nullopt;
 using std::optional;
 using std::string;
@@ -17,7 +19,7 @@ using std::vector;
 
 namespace
 {
-    auto read_csv(ifstream && infile, const string & filename, const optional<unordered_map<string, string>> & rename_map) -> InputGraph
+    auto read_csv(istream && infile, const string & filename, const optional<unordered_map<string, string>> & rename_map) -> InputGraph
     {
         if (! infile)
             throw GraphFileError{filename, "error opening file", false};
@@ -103,12 +105,12 @@ namespace
     }
 }
 
-auto read_csv(ifstream && infile, const string & filename) -> InputGraph
+auto read_csv(istream && infile, const string & filename) -> InputGraph
 {
     return read_csv(move(infile), filename, nullopt);
 }
 
-auto read_csv_name(std::ifstream && infile, const std::string & filename, const std::string & name_map_filename) -> InputGraph
+auto read_csv_name(std::istream && infile, const std::string & filename, const std::string & name_map_filename) -> InputGraph
 {
     ifstream name_map_file{name_map_filename};
     if (! name_map_file)

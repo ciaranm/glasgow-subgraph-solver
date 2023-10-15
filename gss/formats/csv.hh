@@ -12,8 +12,8 @@
  *
  * \throw GraphFileError
  */
-auto read_csv(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_csv(std::istream && infile, const std::string & filename) -> InputGraph;
 
-auto read_csv_name(std::ifstream && infile, const std::string & filename, const std::string & name_map_filename) -> InputGraph;
+auto read_csv_name(std::istream && infile, const std::string & filename, const std::string & name_map_filename) -> InputGraph;
 
 #endif
