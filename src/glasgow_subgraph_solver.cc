@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <unistd.h>
@@ -33,6 +34,7 @@ using std::localtime;
 using std::make_pair;
 using std::make_shared;
 using std::make_unique;
+using std::optional;
 using std::pair;
 using std::put_time;
 using std::string;
@@ -58,9 +60,10 @@ auto main(int argc, char * argv[]) -> int
         problem_options.add_options()                                            //
             ("noninjective", "Drop the injectivity requirement")                 //
             ("locally-injective", "Require only local injectivity")              //
+            ("induced", "Find an induced mapping")                               //
             ("count-solutions", "Count the number of solutions")                 //
             ("print-all-solutions", "Print out every solution, rather than one") //
-            ("induced", "Find an induced mapping");
+            ("solution-limit", po::value<unsigned long long>(), "Stop after finding this many solutions (only when --print-all-solutions)");
         display_options.add(problem_options);
 
         po::options_description input_options{"Input file options"};
@@ -369,13 +372,18 @@ auto main(int argc, char * argv[]) -> int
         else
             params.propagate_using_lackey = PropagateUsingLackey::Never;
 
+        optional<unsigned long long> solutions_remaining;
+        if (options_vars.contains("solution-limit"))
+            solutions_remaining = options_vars["solution-limit"].as<unsigned long long>();
+
         if (options_vars.count("print-all-solutions")) {
             params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
                 cout << "mapping = ";
                 for (auto v : mapping)
                     cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
                 cout << endl;
-                return true;
+
+                return (! solutions_remaining) || (0 != --*solutions_remaining);
             };
         }
 
@@ -454,7 +462,7 @@ auto main(int argc, char * argv[]) -> int
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
 
         cout << "status = ";
-        if (params.timeout->aborted())
+        if (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining))
             cout << "aborted";
         else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
             cout << "true";
