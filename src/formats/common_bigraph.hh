@@ -25,6 +25,7 @@ class Entity {
         int arity;
         int parent_index = -1;
 
+
         Entity(int i, string ctrl, int ar);
         Entity();
 
@@ -36,6 +37,11 @@ class Bigraph {
         std::set<int> regions;
         std::set<int> sites;
         std::vector<Entity> entities;
+        int original_size = 0;
+
+        std::vector<std::pair<string, std::vector<int>>> hyperedges;
+        std::vector<std::pair<string, std::vector<int>>> closures;
+
         std::vector<std::vector<bool>> reachability;
         int largest_component_index;
 

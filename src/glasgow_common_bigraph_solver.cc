@@ -135,10 +135,13 @@ auto main(int argc, char * argv[]) -> int
         std::vector<Bigraph> candidates;
 
         for(auto c : components){ 
-            auto result = solve_homomorphism_problem(c.encode(false), big2_encoding, params);
-            if(! result.mapping.empty())
-                candidates.push_back(c);
+            if(c.entities.size() > 0) {
+                auto result = solve_homomorphism_problem(c.encode(false), big2_encoding, params);
+                if(! result.mapping.empty())
+                    candidates.push_back(c);
+            }
         }
+
         if (candidates.size() == 0) {
             cout << "Solutions found: 0";
             return EXIT_SUCCESS;
@@ -165,7 +168,7 @@ auto main(int argc, char * argv[]) -> int
 
         cout << "Solutions found: " << candidates.size() << '\n';
         for (auto z : candidates)
-            cout << remove_redundant_sites(z).toString();
+            cout << remove_redundant_sites(z).toString() << "---\n";
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {
