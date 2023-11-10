@@ -54,7 +54,8 @@ auto main(int argc, char * argv[]) -> int
 
         po::options_description problem_options{ "Problem options" };
         problem_options.add_options()
-            ("print-all-solutions",                          "Print out every solution, rather than one");
+            ("print-all-solutions",                          "Print out every solution, rather than one")
+            ("minimal-LTS",                                  "Find the miminal context for a grounded agent in a LTS");
         display_options.add(problem_options);
 
         po::options_description all_options{ "All options" };
@@ -95,6 +96,7 @@ auto main(int argc, char * argv[]) -> int
         params.no_supplementals = true;
         params.equality_check = false;
         params.directed = false;
+        bool lts = options_vars.count("minimal-LTS");
 
         if (params.count_solutions)
             params.restarts_schedule = make_unique<NoRestartsSchedule>();
@@ -129,48 +131,100 @@ auto main(int argc, char * argv[]) -> int
         /* Start the clock */
         params.start_time = steady_clock::now();
 
-        InputGraph big2_encoding = big2.encode(true);
+        InputGraph big2_encoding = big2.encode(true, false);
 
         std::vector<Bigraph> components = full_decomp(big1);
-        std::vector<Bigraph> candidates;
+        std::vector<std::pair<Bigraph, bool>> candidates;
+        std::vector<std::pair<Bigraph, bool>> prev_solutions;
+        bool full_solution_exists = false;
+        int matcher_calls = 0;
 
         for(auto c : components){ 
-            if(c.entities.size() > 0) {
-                auto result = solve_homomorphism_problem(c.encode(false), big2_encoding, params);
-                if(! result.mapping.empty())
-                    candidates.push_back(c);
+            if((!lts || c.entities[0].is_leaf) && c.entities.size() > 0) {
+                auto result = solve_homomorphism_problem(c.encode(false, false), big2_encoding, params);
+                matcher_calls++;
+                if(! result.mapping.empty() && !lts) {
+                    full_solution_exists = true;
+                    candidates.push_back(std::make_pair(c, true));
+                }
+                else if(! result.mapping.empty()) {
+                    auto new_result = solve_homomorphism_problem(c.encode(false, true), big2_encoding, params);
+                    matcher_calls++;
+                    if(! new_result.mapping.empty()) {
+                        full_solution_exists = true;
+                        candidates.push_back(std::make_pair(c, true)); 
+                    }
+                    else
+                        candidates.push_back(std::make_pair(c, false)); 
+                }
             }
         }
 
         if (candidates.size() == 0) {
-            cout << "Solutions found: 0";
+            cout << "Solutions found: 0\n";
+            cout << "Matcher calls: " << matcher_calls << "\n";
             return EXIT_SUCCESS;
         }
-
+        if (full_solution_exists)
+            prev_solutions = candidates;
         bool finished_flag = false;
         while(! finished_flag) {
-            std::vector<Bigraph> new_candidates;
-            for(int i=0;i<candidates.size();i++){
-                for(int j=candidates[i].largest_component_index+1;j<components.size(); j++) {
-                    auto new_comp = element_compose(candidates[i], components[j]);
+            std::vector<std::pair<Bigraph, bool>> new_candidates;
+            full_solution_exists = false;
+            for(unsigned int i=0;i<candidates.size();i++){
+                int start_pos;
+                if(lts) start_pos = 0;
+                else start_pos = candidates[i].first.largest_component_index+1;
+                for(unsigned int j=start_pos;j<components.size(); j++) {
+                    auto new_comp = element_compose(candidates[i].first, components[j], lts);
                     if(new_comp.has_value()) {
-                        auto result = solve_homomorphism_problem(new_comp.value().encode(false), big2_encoding, params);
-                        if(! result.mapping.empty())
-                            new_candidates.push_back(new_comp.value());
+                        InputGraph big1_encoding = new_comp.value().encode(false, false);
+                        auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
+                        matcher_calls++;
+                        if(! result.mapping.empty() && !lts) {
+                            new_candidates.push_back(std::make_pair(new_comp.value(), true));
+                            full_solution_exists = true;
+                        }
+                        else if(! result.mapping.empty()) {
+                            InputGraph big1_extra = new_comp.value().encode(false, true);
+                            auto new_result = solve_homomorphism_problem(big1_extra, big2_encoding, params);
+                            matcher_calls++;
+                            if(! new_result.mapping.empty()) {
+                                new_candidates.push_back(std::make_pair(new_comp.value(), true)); 
+                                full_solution_exists = true;
+                            }
+                            else
+                                new_candidates.push_back(std::make_pair(new_comp.value(), false)); 
+                        }
                     }
                 }
             }
             if(new_candidates.size() == 0)
-                finished_flag = true;
-            else
+                finished_flag = true; 
+            else {
+                if(full_solution_exists)
+                    prev_solutions = new_candidates;
                 candidates = new_candidates;
+            }
         }
 
-        cout << "Solutions found: " << candidates.size() << '\n';
-        for (auto z : candidates)
-            cout << remove_redundant_sites(z).toString() << "---\n";
+        string output = "---\n";
+        int count = 0;
+        bool print_flag = false;
+        for (auto z : prev_solutions)
+            if(z.second) {
+                count++;
+                if(!print_flag)
+                    output += remove_redundant_sites(z.first).toString() + "---\n";
+                if(!options_vars.count("print-all-solutions"))
+                    print_flag = true;
+            }
+        output = "Solutions found: " + std::to_string(count) + "\n" + "Matcher calls: " + std::to_string(matcher_calls) + "\n" + output;
+        cout << output;
         return EXIT_SUCCESS;
     }
+
+
     catch (const GraphFileError & e) {
         cerr << "Error: " << e.what() << endl;
         return EXIT_FAILURE;

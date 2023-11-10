@@ -25,6 +25,7 @@ class Entity {
         int arity;
         int parent_index = -1;
 
+        bool is_leaf;
 
         Entity(int i, string ctrl, int ar);
         Entity();
@@ -51,7 +52,7 @@ class Bigraph {
 
         auto toString() const -> string;
 
-        auto encode(bool target) const -> InputGraph;
+        auto encode(bool target, bool special_lts_case) const -> InputGraph;
 
         auto copy() -> Bigraph;
 };
@@ -65,5 +66,5 @@ auto free_all_entities(Bigraph a) -> Bigraph;
 
 auto remove_redundant_sites(Bigraph a) -> Bigraph;
 
-auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>;
+auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>;
 

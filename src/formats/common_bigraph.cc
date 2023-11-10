@@ -44,6 +44,7 @@ Entity::Entity(int i, string ctrl, int ar){
     id = i;
     control = ctrl;
     arity = ar;
+    is_leaf = false;
 }
 Entity::Entity(){}
 
@@ -152,17 +153,18 @@ auto Bigraph::toString() const -> string
     return out;
 }
 
-auto Bigraph::encode(bool target) const -> InputGraph
+auto Bigraph::encode(bool target, bool special_lts_case) const -> InputGraph
 {
     InputGraph result{ 0, true, true, true };
 
     if(target) result.resize(entities.size() + regions.size() + sites.size());
+    else if (special_lts_case) result.resize(entities.size() + regions.size());
     else result.resize(entities.size());
 
     std::vector<int> id_map;
     id_map.resize(original_size);
 
-    if(target) {
+    if(target || special_lts_case) {
         for(unsigned int i=0; i<regions.size();i++) {
             result.set_vertex_label(i, "ROOT");
             result.set_vertex_name(i, "ROOT" + to_string(i));
@@ -172,10 +174,11 @@ auto Bigraph::encode(bool target) const -> InputGraph
             result.set_vertex_name(i, to_string(i-regions.size()));
             id_map[entities[i-regions.size()].id] = i-regions.size()+1;
         }
-        for(unsigned int i=regions.size()+entities.size(); i<regions.size()+entities.size()+sites.size();i++) {
-            result.set_vertex_label(i, "SITE");
-            result.set_vertex_name(i, "SITE" + to_string(i));
-        }
+        if(target)
+            for(unsigned int i=regions.size()+entities.size(); i<regions.size()+entities.size()+sites.size();i++) {
+                result.set_vertex_label(i, "SITE");
+                result.set_vertex_name(i, "SITE" + to_string(i));
+            }
     }
     else {
         for(unsigned int i=0; i<entities.size();i++) {
@@ -188,7 +191,7 @@ auto Bigraph::encode(bool target) const -> InputGraph
     for(auto r : regions) {
         for(unsigned int i=0;i<entities.size();i++) {
             if(find(entities[i].regions.begin(), entities[i].regions.end(), r) != entities[i].regions.end()) {
-                if(target)
+                if(target || special_lts_case)
                     result.add_directed_edge(index, regions.size() + i, "dir");
                 else {
                     result.set_child_of_root(i);
@@ -204,6 +207,10 @@ auto Bigraph::encode(bool target) const -> InputGraph
             if(find(entities[i].sites.begin(), entities[i].sites.end(), s) != entities[i].sites.end()) {
                 if(target)
                     result.add_directed_edge(regions.size() + i, regions.size() + entities.size() + index, "dir");
+                else if(special_lts_case) {
+                    result.set_parent_of_site(regions.size() + i);
+                    result.add_pattern_site_edge(index, regions.size() + i);                    
+                }
                 else {
                     result.set_parent_of_site(i);
                     result.add_pattern_site_edge(index, i);
@@ -217,7 +224,7 @@ auto Bigraph::encode(bool target) const -> InputGraph
         if(e.parent_index != -1){
             auto it = find(entities.begin(), entities.end(), entities[e.parent_index]);
             int k = it - entities.begin();
-            if(target)
+            if(target || special_lts_case)
                 result.add_directed_edge(regions.size() + k, regions.size() + i, "dir");
             else
                 result.add_directed_edge(k, i, "dir");
@@ -232,7 +239,7 @@ auto Bigraph::encode(bool target) const -> InputGraph
             for(unsigned int k=0;k<hyperedges[i].second[j];k++){
                 result.add_link_node();                
                 result.set_vertex_label(result.size()-1, "LINK");
-                if(target)
+                if(target || special_lts_case)
                     result.add_directed_edge(regions.size()+id_map[j]-1, result.size()-1, "dir");     
                 else
                     result.add_directed_edge(id_map[j]-1, result.size()-1, "dir");     
@@ -254,7 +261,7 @@ auto Bigraph::encode(bool target) const -> InputGraph
             for(unsigned int k=0;k<closures[i].second[j];k++){
                 result.add_link_node();                
                 result.set_vertex_label(result.size()-1, "LINK");
-                if(target)
+                if(target || special_lts_case)
                     result.add_directed_edge(regions.size()+id_map[j]-1, result.size()-1, "dir");     
                 else {
                     result.add_directed_edge(id_map[j]-1, result.size()-1, "dir");}
@@ -425,6 +432,7 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph
         big.reachability[i][i] = 1;
         if(big.entities[i].child_indices.size() == 0) {
             Entity t = big.entities[i];
+            big.entities[i].is_leaf = true;
             while(t.parent_index != -1) {
                 for(int j=0;j<n;j++)
                     if(big.reachability[big.entities[t.parent_index].id][j] == 0 && big.reachability[t.id][j] == 1) {
@@ -448,6 +456,7 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
         components[i].largest_component_index = i;
         components[i].reachability = big.reachability;
         components[i].entities.push_back(Entity(big.entities[i].id, big.entities[i].control, big.entities[i].arity));
+        components[i].entities[0].is_leaf = big.entities[i].is_leaf;
 
         components[i].regions.insert(big.entities[i].regions.begin(), big.entities[i].regions.end());
         components[i].entities[0].regions.insert(big.entities[i].regions.begin(), big.entities[i].regions.end());
@@ -494,7 +503,7 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
     return components;
 }
 
-auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
+auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
 {
     // Add closure only if all adjacent ports exist
     if(b.entities.size() == 0 && b.closures.size() == 1) {
@@ -531,7 +540,7 @@ auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
 
     // Look for compatible region/site pairs (have the same id)
     for(unsigned int i=0; i<a.entities.size();i++) {
-        if(below_index == -1 && (b.entities[0].regions.size() > 0 && *(b.entities[0].regions.begin()) < 0)) {
+        if(!lts && below_index == -1 && (b.entities[0].regions.size() > 0 && *(b.entities[0].regions.begin()) < 0)) {
             auto below_comp = find(a.entities[i].sites.begin(), a.entities[i].sites.end(), *(b.entities[0].regions.begin()));
             if(below_comp != a.entities[i].sites.end()) below_index = i;
         }
@@ -547,7 +556,7 @@ auto element_compose(Bigraph a, Bigraph b) -> std::optional<Bigraph>
 
     // If no compatible region/site pairs, check if tensor product is allowed, return null if not
     if(below_index == -1 && above_index == -1){
-        if(! is_tensor_possible) 
+        if(! is_tensor_possible || (lts && !b.entities[0].is_leaf)) 
             return std::nullopt;
 
         a.entities.push_back(b.entities[0].copy());
