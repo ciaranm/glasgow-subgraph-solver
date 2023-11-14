@@ -122,8 +122,17 @@ auto main(int argc, char * argv[]) -> int
         if (! bigraph_2_infile)
             throw GraphFileError{ bigraph_2_filename, "unable to open target file", false };
 
-        Bigraph big1 = free_all_entities(read_bigraph(move(bigraph_1_infile), bigraph_1_filename));
-        Bigraph big2 = free_all_entities(read_bigraph(move(bigraph_2_infile), bigraph_2_filename)); 
+        Bigraph big1;
+        Bigraph big2;
+
+        if(!lts) {
+            big1 = free_hyperedges(free_sites(free_regions(read_bigraph(move(bigraph_1_infile), bigraph_1_filename))));
+            big2 = free_hyperedges(free_sites(free_regions(read_bigraph(move(bigraph_2_infile), bigraph_2_filename)))); 
+        }
+        else {
+            big1 = free_hyperedges(read_bigraph(move(bigraph_1_infile), bigraph_1_filename));
+            big2 = free_hyperedges(read_bigraph(move(bigraph_2_infile), bigraph_2_filename));
+        }
 
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
@@ -140,22 +149,30 @@ auto main(int argc, char * argv[]) -> int
         int matcher_calls = 0;
 
         for(auto c : components){ 
-            if((!lts || c.entities[0].is_leaf) && c.entities.size() > 0) {
-                auto result = solve_homomorphism_problem(c.encode(false, false), big2_encoding, params);
-                matcher_calls++;
-                if(! result.mapping.empty() && !lts) {
-                    full_solution_exists = true;
-                    candidates.push_back(std::make_pair(c, true));
-                }
-                else if(! result.mapping.empty()) {
-                    auto new_result = solve_homomorphism_problem(c.encode(false, true), big2_encoding, params);
+            if(! lts) {
+                if(c.entities.size() > 0) {
+                    auto result = solve_homomorphism_problem(c.encode(false, false), big2_encoding, params);
                     matcher_calls++;
-                    if(! new_result.mapping.empty()) {
+                    if(! result.mapping.empty()) {
                         full_solution_exists = true;
-                        candidates.push_back(std::make_pair(c, true)); 
+                        candidates.push_back(std::make_pair(c, true));
                     }
-                    else
-                        candidates.push_back(std::make_pair(c, false)); 
+                }
+            }
+            else {
+                if(c.entities.size() > 0 && c.entities[0].is_leaf) {
+                    auto result = solve_homomorphism_problem(free_regions(c).encode(false, false), big2_encoding, params);
+                    matcher_calls++;
+                    if(! result.mapping.empty()) {
+                        auto new_result = solve_homomorphism_problem(c.encode(false, true), big2_encoding, params);
+                        matcher_calls++;
+                        if(! new_result.mapping.empty()) {
+                            full_solution_exists = true;
+                            candidates.push_back(std::make_pair(c, true)); 
+                        }
+                        else
+                            candidates.push_back(std::make_pair(c, false)); 
+                    }
                 }
             }
         }
@@ -165,36 +182,47 @@ auto main(int argc, char * argv[]) -> int
             cout << "Matcher calls: " << matcher_calls << "\n";
             return EXIT_SUCCESS;
         }
+
         if (full_solution_exists)
             prev_solutions = candidates;
+        
         bool finished_flag = false;
         while(! finished_flag) {
             std::vector<std::pair<Bigraph, bool>> new_candidates;
             full_solution_exists = false;
             for(unsigned int i=0;i<candidates.size();i++){
-                int start_pos;
-                if(lts) start_pos = 0;
-                else start_pos = candidates[i].first.largest_component_index+1;
-                for(unsigned int j=start_pos;j<components.size(); j++) {
-                    auto new_comp = element_compose(candidates[i].first, components[j], lts);
-                    if(new_comp.has_value()) {
-                        InputGraph big1_encoding = new_comp.value().encode(false, false);
-                        auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
-                        matcher_calls++;
-                        if(! result.mapping.empty() && !lts) {
-                            new_candidates.push_back(std::make_pair(new_comp.value(), true));
-                            full_solution_exists = true;
-                        }
-                        else if(! result.mapping.empty()) {
-                            InputGraph big1_extra = new_comp.value().encode(false, true);
-                            auto new_result = solve_homomorphism_problem(big1_extra, big2_encoding, params);
+                if(! lts) {
+                    for(unsigned int j=candidates[i].first.largest_component_index+1;j<components.size(); j++) {
+                        auto new_comp = element_compose(candidates[i].first, components[j], lts);
+                        if(new_comp.has_value()) {
+                            InputGraph big1_encoding = new_comp.value().encode(false, false);
+                            auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
                             matcher_calls++;
-                            if(! new_result.mapping.empty()) {
-                                new_candidates.push_back(std::make_pair(new_comp.value(), true)); 
+                            if(! result.mapping.empty()) {
+                                new_candidates.push_back(std::make_pair(new_comp.value(), true));
                                 full_solution_exists = true;
                             }
-                            else
-                                new_candidates.push_back(std::make_pair(new_comp.value(), false)); 
+                        }
+                    }
+                }
+                else{
+                    for(unsigned int j=0;j<components.size(); j++) {
+                        auto new_comp = element_compose(candidates[i].first, components[j], lts);
+                        if(new_comp.has_value()) {
+                            InputGraph big1_encoding = free_regions(new_comp.value()).encode(false, false);
+                            auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
+                            matcher_calls++;
+                            if(! result.mapping.empty()) {
+                                InputGraph big1_extra = new_comp.value().encode(false, true);
+                                auto new_result = solve_homomorphism_problem(big1_extra, big2_encoding, params);
+                                matcher_calls++;
+                                if(! new_result.mapping.empty()) {
+                                    new_candidates.push_back(std::make_pair(new_comp.value(), true)); 
+                                    full_solution_exists = true;
+                                }
+                                else
+                                    new_candidates.push_back(std::make_pair(new_comp.value(), false)); 
+                            }
                         }
                     }
                 }

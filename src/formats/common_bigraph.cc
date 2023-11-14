@@ -186,8 +186,8 @@ auto Bigraph::encode(bool target, bool special_lts_case) const -> InputGraph
             id_map[entities[i].id] = i+1;        
         }
     }
-
-    int index = 0;
+    
+    int index = 0;    
     for(auto r : regions) {
         for(unsigned int i=0;i<entities.size();i++) {
             if(find(entities[i].regions.begin(), entities[i].regions.end(), r) != entities[i].regions.end()) {
@@ -201,6 +201,17 @@ auto Bigraph::encode(bool target, bool special_lts_case) const -> InputGraph
         }
         index++;
     }
+    
+    if(special_lts_case) {
+        for(unsigned int i=0;i<entities.size();i++) {
+            if(entities[i].parent_index == -1 && entities[i].regions.size() == 0) {
+                result.set_child_of_root(i+regions.size());
+                result.add_pattern_root_edge(index, i+regions.size());
+                index++;
+            }
+        }
+    }
+
     index = 0;
     for(auto s : sites) {
         for(unsigned int i=0;i<entities.size();i++) {
@@ -284,7 +295,22 @@ auto Bigraph::encode(bool target, bool special_lts_case) const -> InputGraph
     return result;
 }
 
-auto free_all_entities(Bigraph a) -> Bigraph
+auto free_sites(Bigraph a) -> Bigraph
+{
+    if(a.sites.size() > 0) {
+        int max_site = *a.sites.rbegin();
+        for(int i=0;i<a.entities.size();i++) {
+            if(a.entities[i].sites.size() == 0) {
+                max_site++;
+                a.entities[i].sites.insert(max_site);
+                a.sites.insert(max_site);
+            }
+        }
+    }
+    return a;
+}
+
+auto free_regions(Bigraph a) -> Bigraph
 {
     if(a.regions.size() > 0) {
         int max_region = *a.regions.rbegin();
@@ -306,17 +332,11 @@ auto free_all_entities(Bigraph a) -> Bigraph
             }
         }
     }
-    if(a.sites.size() > 0) {
-        int max_site = *a.sites.rbegin();
-        for(int i=0;i<a.entities.size();i++) {
-            if(a.entities[i].sites.size() == 0) {
-                max_site++;
-                a.entities[i].sites.insert(max_site);
-                a.sites.insert(max_site);
-            }
-        }
-    }
+    return a;
+}
 
+auto free_hyperedges(Bigraph a) -> Bigraph
+{
     std::vector<std::pair<string, std::vector<int>>> new_he_set;
     for(int i=0;i<a.hyperedges.size();i++) {
         for(int j=0;j<a.hyperedges[i].second.size();j++){

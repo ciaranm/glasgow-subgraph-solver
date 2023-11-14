@@ -62,7 +62,11 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph;
 
 auto full_decomp(Bigraph big) -> std::vector<Bigraph>;
 
-auto free_all_entities(Bigraph a) -> Bigraph;
+auto free_sites(Bigraph a) -> Bigraph;
+
+auto free_regions(Bigraph a) -> Bigraph;
+
+auto free_hyperedges(Bigraph a) -> Bigraph;
 
 auto remove_redundant_sites(Bigraph a) -> Bigraph;
 
