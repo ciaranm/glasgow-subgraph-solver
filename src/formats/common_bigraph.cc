@@ -5,6 +5,7 @@
 #include "formats/input_graph.hh"
 #include <fstream>
 #include <iostream>
+#include <cmath>
 #include <vector>
 #include <map>
 #include <string>
@@ -139,11 +140,11 @@ auto Bigraph::toString() const -> string
     for(unsigned int i=0;i<closures.size();i++) {
         bool lazy_flag = false;
         out += "({}, {}, {";
-        for(unsigned int j=0;j<closures[i].second.size();j++) {
-            if(closures[i].second[j] > 0) {
+        for(unsigned int j=0;j<closures[i].adjacencies.second.size();j++) {
+            if(closures[i].adjacencies.second[j] > 0) {
                 if(lazy_flag)
                     out += ", ";
-                out += "(" + to_string(j) + ", " + to_string(closures[i].second[j]) + ")";
+                out += "(" + to_string(j) + ", " + to_string(closures[i].adjacencies.second[j]) + ")";
                 lazy_flag = true;
             }
         }
@@ -268,8 +269,8 @@ auto Bigraph::encode(bool target, bool special_lts_case) const -> InputGraph
     for(unsigned int i=0;i<closures.size();i++) {
         int ports_connected = 0;
         string port_id = ":CLX:" + to_string(i);
-        for(unsigned int j=0;j<closures[i].second.size();j++){
-            for(unsigned int k=0;k<closures[i].second[j];k++){
+        for(unsigned int j=0;j<closures[i].adjacencies.second.size();j++){
+            for(unsigned int k=0;k<closures[i].adjacencies.second[j];k++){
                 result.add_link_node();                
                 result.set_vertex_label(result.size()-1, "LINK");
                 if(target || special_lts_case)
@@ -438,8 +439,12 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph
             he.second[stoi(e.substr(1, e.find(',') - 1)) ] = stoi(c.substr(0, c.find(')')));     
         }
 
-        if(is_closed)
-            big.closures.push_back(he);
+        if(is_closed) {
+            Closure c;
+            c.adjacencies = he;
+            c.id = no_closures - 1;
+            big.closures.push_back(c);
+        }
         else
             big.hyperedges.push_back(he);
 
@@ -475,6 +480,7 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
         components[i].original_size = big.entities.size();
         components[i].largest_component_index = i;
         components[i].reachability = big.reachability;
+        components[i].nogood_id = std::pow(2, big.entities.size() + big.closures.size() - (i + 1));
         components[i].entities.push_back(Entity(big.entities[i].id, big.entities[i].control, big.entities[i].arity));
         components[i].entities[0].is_leaf = big.entities[i].is_leaf;
 
@@ -504,9 +510,9 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
             }
         }
         for(int j=0;j<big.closures.size();j++) {
-            for(int k=0;k<big.closures[j].second[i];k++) {
+            for(int k=0;k<big.closures[j].adjacencies.second[i];k++) {
                 std::pair<string, std::vector<int>> he;
-                he.first = big.closures[j].first;
+                he.first = big.closures[j].adjacencies.first;
                 he.second.resize(big.entities.size());
                 he.second[i] = 1;
                 components[i].hyperedges.push_back(he);
@@ -516,6 +522,7 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
 
     for(int i=0;i<big.closures.size();i++) {
         components.push_back(Bigraph());
+        components[i+big.entities.size()].nogood_id = std::pow(2, big.entities.size() + big.closures.size() - (i + 1));
         components[i+big.entities.size()].closures.push_back(big.closures[i]);
         components[i+big.entities.size()].largest_component_index = big.entities.size()+i;
     }
@@ -528,9 +535,9 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
     // Add closure only if all adjacent ports exist
     if(b.entities.size() == 0 && b.closures.size() == 1) {
         std::vector<int> copy;
-        copy.resize(b.closures[0].second.size());
+        copy.resize(b.closures[0].adjacencies.second.size());
         for(int i=0; i<a.hyperedges.size();i++) {
-            if(a.hyperedges[i].first == b.closures[0].first) {
+            if(a.hyperedges[i].first == b.closures[0].adjacencies.first) {
                 for(int j=0;j<a.hyperedges[i].second.size();j++) {
                     copy[j] += a.hyperedges[i].second[j];
                 }
@@ -539,9 +546,10 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
             }
         }
 
-        if(copy == b.closures[0].second) {
+        if(copy == b.closures[0].adjacencies.second) {
             a.closures.push_back(b.closures[0]);
             a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
+            a.nogood_id = a.nogood_id | b.nogood_id;
             return a;
         }
         return std::nullopt;
@@ -583,6 +591,7 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
         a.regions.insert(a.entities[a.entities.size()-1].regions.begin(), a.entities[a.entities.size()-1].regions.end());
         a.sites.insert(a.entities[a.entities.size()-1].sites.begin(), a.entities[a.entities.size()-1].sites.end());
         a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
+        a.nogood_id = a.nogood_id | b.nogood_id;
 
         for(int i=0;i<b.hyperedges.size();i++)
             a.hyperedges.push_back(b.hyperedges[i]);
@@ -616,5 +625,6 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
     }
     for(int i=0;i<b.hyperedges.size();i++)
         a.hyperedges.push_back(b.hyperedges[i]);
+    a.nogood_id = a.nogood_id | b.nogood_id;
     return a;
 }

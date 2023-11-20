@@ -14,6 +14,12 @@ using std::istream;
 using std::string;
 using std::set;
 
+class Closure {
+    public:
+        int id;
+        std::pair<string, std::vector<int>> adjacencies;
+};
+
 class Entity {
     public:
         int id;
@@ -35,13 +41,14 @@ class Entity {
 
 class Bigraph {
     public:
+        int nogood_id = 0;
         std::set<int> regions;
         std::set<int> sites;
         std::vector<Entity> entities;
         int original_size = 0;
 
         std::vector<std::pair<string, std::vector<int>>> hyperedges;
-        std::vector<std::pair<string, std::vector<int>>> closures;
+        std::vector<Closure> closures;
 
         std::vector<std::vector<bool>> reachability;
         int largest_component_index;
