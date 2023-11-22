@@ -1,4 +1,5 @@
 #include <cstdint>
+#include "homomorphism.hh"
 #include "formats/input_graph.hh"
 #include <map>
 #include <fstream>
@@ -75,7 +76,7 @@ auto free_regions(Bigraph a) -> Bigraph;
 
 auto free_hyperedges(Bigraph a) -> Bigraph;
 
-auto remove_redundant_sites(Bigraph a) -> Bigraph;
+auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pair<int,int>> mapping) -> Bigraph;
 
 auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>;
 

@@ -128,16 +128,20 @@ auto main(int argc, char * argv[]) -> int
         if (! bigraph_2_infile)
             throw GraphFileError{ bigraph_2_filename, "unable to open target file", false };
 
+        Bigraph original_big1;
+        Bigraph original_big2;
         Bigraph big1;
         Bigraph big2;
 
+        original_big1 = read_bigraph(move(bigraph_1_infile), bigraph_1_filename);
+        original_big2 = read_bigraph(move(bigraph_2_infile), bigraph_2_filename);
         if(!lts) {
-            big1 = free_hyperedges(free_sites(free_regions(read_bigraph(move(bigraph_1_infile), bigraph_1_filename))));
-            big2 = free_hyperedges(free_sites(free_regions(read_bigraph(move(bigraph_2_infile), bigraph_2_filename)))); 
+            big1 = free_hyperedges(free_sites(free_regions(original_big1)));
+            big2 = free_hyperedges(free_sites(free_regions(original_big2))); 
         }
         else {
-            big1 = free_hyperedges(read_bigraph(move(bigraph_1_infile), bigraph_1_filename));
-            big2 = free_hyperedges(read_bigraph(move(bigraph_2_infile), bigraph_2_filename));
+            big1 = free_hyperedges(original_big1);
+            big2 = free_hyperedges(original_big2);
         }
 
         /* Prepare and start timeout */
@@ -266,24 +270,26 @@ auto main(int argc, char * argv[]) -> int
         string output = "";
         int count = 0;
         bool print_flag = false;
+
         for (auto z : prev_solutions)
             if(! z.result.mapping.empty()) {
                 count++;
                 if(!print_flag) {
+                    std::vector<std::pair<int, int>> translated_mapping;
                     output += "mapping = {";
                     bool lazy_flag = false;
                     for (auto v : z.result.mapping) {
                         if(z.encoding.vertex_name(v.first).find("C_LINK") != string::npos) break;
                         if(z.encoding.vertex_label(v.first) == "LINK") continue;
+                        if(z.encoding.vertex_name(v.first).find("ROOT") != string::npos) continue;
                         if(lazy_flag) output += ",";
                         lazy_flag = true;
-                        if(z.encoding.vertex_name(v.first).find("ROOT") != string::npos){
-                            output += "(" + z.encoding.vertex_name(v.first) + ", " + big2_encoding.vertex_name(v.second) + ")";
-                        }
-                        else{
-                            output += "(" + std::to_string(z.bigraph.entities[std::stoi(z.encoding.vertex_name(v.first))].id);
-                            output += ", " + big2_encoding.vertex_name(v.second) + ")";
-                        }
+
+                        std::pair<int, int> map_pair;
+                        map_pair.first = z.bigraph.entities[std::stoi(z.encoding.vertex_name(v.first))].id;
+                        map_pair.second = std::stoi(big2_encoding.vertex_name(v.second));
+                        output += "(" + std::to_string(map_pair.first) + ", " + std::to_string(map_pair.second) + ")";
+                        translated_mapping.push_back(map_pair);
                     }
                     output += "} -- {";
                     
@@ -296,7 +302,7 @@ auto main(int argc, char * argv[]) -> int
                         output += ", " + big2_encoding.vertex_name(v.second).substr(7) + ")";
                     }              
                     output += "}\n---\n";
-                    output += remove_redundant_sites(z.bigraph).toString() + "---\n";
+                    output += make_RPO(original_big1, original_big2, z.bigraph, translated_mapping).toString() + "---\n";
                     if(!options_vars.count("print-all-solutions"))
                         print_flag = true;
                 }

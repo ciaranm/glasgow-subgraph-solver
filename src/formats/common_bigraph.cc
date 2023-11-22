@@ -1,6 +1,7 @@
 /* vim: set sw=4 sts=4 et foldmethod=syntax : */
 
 #include <algorithm>
+#include "homomorphism.hh"
 #include "formats/common_bigraph.hh"
 #include "formats/input_graph.hh"
 #include <fstream>
@@ -354,20 +355,79 @@ auto free_hyperedges(Bigraph a) -> Bigraph
     return a;
 }
 
-auto remove_redundant_sites(Bigraph a) -> Bigraph
+auto verify_link_RPO(Bigraph sol, std::vector<std::vector<int>> he_set) -> bool
 {
-    for(int i=0;i<a.entities.size();i++) {
-        if(a.entities[i].sites.size() > 1) {
-            int start = *a.entities[i].sites.begin();
-            for(int s : a.entities[i].sites){
+
+}
+
+auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pair<int,int>> mapping) -> Bigraph
+{
+    for(int i=0;i<solution.entities.size();i++) {
+
+        // remove redundant sites
+        if(solution.entities[i].sites.size() > 1) {
+            int start = *solution.entities[i].sites.begin();
+            for(int s : solution.entities[i].sites){
                 if(s != start) {
-                    a.sites.erase(s); 
+                    solution.sites.erase(s); 
                 }
             }
-            a.entities[i].sites.erase(++a.entities[i].sites.begin(), a.entities[i].sites.end());
+            solution.entities[i].sites.erase(++solution.entities[i].sites.begin(), solution.entities[i].sites.end());
+        }
+
+        for(auto r : mapping) {
+            if(r.first == solution.entities[i].id) {
+                // close sites if we can          
+
+                if(big1.entities[r.first].sites.size() == 0 && big2.entities[r.second].sites.size() == 0 &&
+                solution.entities[i].child_indices.size() == big1.entities[r.first].child_indices.size() &&
+                solution.entities[i].child_indices.size() == big2.entities[r.second].child_indices.size()      
+                ) {
+                    for(int s : solution.entities[i].sites){
+                        solution.sites.erase(s); 
+                    }
+                    solution.entities[i].sites.clear();
+                }
+
+                // close regions if we can
+                if(big1.entities[r.first].regions.size() == 0 && big1.entities[r.first].parent_index == -1 &&
+                    big2.entities[r.second].regions.size() == 0 && big2.entities[r.second].parent_index == -1) {
+                    for(int s : solution.entities[i].regions){
+                        solution.regions.erase(s); 
+                    }              
+                    solution.entities[i].regions.clear();      
+                }
+                break;
+            }
         }
     }
-    return a;
+
+    //join hyperedges back up
+    //if(sol.hyperedges.size() > 1) {
+    //    std::vector<std::vector<int>> translated_hyperedges;
+    //    for(int i=0;i<target.hyperedges.size();i++) {
+    //        std::vector<int> new_he;
+    //        new_he.resize(sol.hyperedges[0].second.size());
+    //        bool relevance_flag = false;
+    //        for(auto r : result) {
+    //            if(target.hyperedges[i].second[r.second] > 0)
+    //                relevance_flag == true;
+    //            new_he[r.first] = target.hyperedges[i].second[r.second];
+    //        }
+    //        if(relevance_flag)
+    //            translated_hyperedges.push_back(new_he);
+    //    }
+
+    //    for(int i=0; i<sol.hyperedges.size();i++) {
+    //        for(int j=i+1;j<sol.hyperedges.size();j++) {
+    //            if(sol.hyperedges[i].first == sol.hyperedges[j].first) {
+                    // do things here
+    //            }
+    //        }
+    //    }
+    //}
+ 
+    return solution;
 }
 
 auto read_bigraph(istream && infile, const string &) -> Bigraph
