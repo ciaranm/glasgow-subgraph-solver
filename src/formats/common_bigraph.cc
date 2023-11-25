@@ -355,15 +355,9 @@ auto free_hyperedges(Bigraph a) -> Bigraph
     return a;
 }
 
-auto verify_link_RPO(Bigraph sol, std::vector<std::vector<int>> he_set) -> bool
-{
-
-}
-
 auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pair<int,int>> mapping) -> Bigraph
 {
     for(int i=0;i<solution.entities.size();i++) {
-
         // remove redundant sites
         if(solution.entities[i].sites.size() > 1) {
             int start = *solution.entities[i].sites.begin();
@@ -375,40 +369,55 @@ auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pai
             solution.entities[i].sites.erase(++solution.entities[i].sites.begin(), solution.entities[i].sites.end());
         }
 
-        for(auto r : mapping) {
-            if(r.first == solution.entities[i].id) {
-                // close sites if we can          
+        // close sites if we can          
+        if(big1.entities[mapping[i].first].sites.size() == 0 && big2.entities[mapping[i].second].sites.size() == 0 &&
+        solution.entities[i].child_indices.size() == big1.entities[mapping[i].first].child_indices.size() &&
+        solution.entities[i].child_indices.size() == big2.entities[mapping[i].second].child_indices.size()      
+        ) {
+            for(int s : solution.entities[i].sites){
+                solution.sites.erase(s); 
+            }
+            solution.entities[i].sites.clear();
+        }
 
-                if(big1.entities[r.first].sites.size() == 0 && big2.entities[r.second].sites.size() == 0 &&
-                solution.entities[i].child_indices.size() == big1.entities[r.first].child_indices.size() &&
-                solution.entities[i].child_indices.size() == big2.entities[r.second].child_indices.size()      
-                ) {
-                    for(int s : solution.entities[i].sites){
-                        solution.sites.erase(s); 
-                    }
-                    solution.entities[i].sites.clear();
-                }
+        // close regions if we can
+        if(big1.entities[mapping[i].first].regions.size() == 0 && big1.entities[mapping[i].first].parent_index == -1 &&
+            big2.entities[mapping[i].second].regions.size() == 0 && big2.entities[mapping[i].second].parent_index == -1) {
+            for(int s : solution.entities[i].regions){
+                solution.regions.erase(s); 
+            }              
+            solution.entities[i].regions.clear();      
+        }
+    }
 
-                // close regions if we can
-                if(big1.entities[r.first].regions.size() == 0 && big1.entities[r.first].parent_index == -1 &&
-                    big2.entities[r.second].regions.size() == 0 && big2.entities[r.second].parent_index == -1) {
-                    for(int s : solution.entities[i].regions){
-                        solution.regions.erase(s); 
-                    }              
-                    solution.entities[i].regions.clear();      
-                }
-                break;
+    // close all shared roots
+    for(int i=0;i<solution.entities.size();i++) {
+        for(int j=i+1;j<solution.entities.size();j++) {
+            if(solution.entities[i].regions.size() > 0 && solution.entities[j].regions.size() > 0 &&
+                *solution.entities[i].regions.begin() != *solution.entities[j].regions.begin() &&
+                big1.entities[mapping[i].first].regions.size() > 0 && big2.entities[mapping[i].second].regions.size() > 0 &&
+                big1.entities[mapping[j].first].regions.size() > 0 && big2.entities[mapping[j].second].regions.size() > 0 &&
+                *big1.entities[mapping[i].first].regions.begin() == *big1.entities[mapping[j].first].regions.begin() &&
+                *big2.entities[mapping[i].second].regions.begin() == *big2.entities[mapping[j].second].regions.begin()) {
+                    solution.regions.erase(*solution.entities[j].regions.begin());
+                    solution.entities[j].regions.clear();
+                    solution.entities[j].regions.insert(*solution.entities[i].regions.begin());
             }
         }
     }
 
     //join hyperedges back up
-    //if(sol.hyperedges.size() > 1) {
+
+    // add unmapped closures too!
+
+    //if(solution.hyperedges.size() > 1) {
     //    std::vector<std::vector<int>> translated_hyperedges;
-    //    for(int i=0;i<target.hyperedges.size();i++) {
+    //    for(int i=0;i<big2.hyperedges.size();i++) {
     //        std::vector<int> new_he;
-    //        new_he.resize(sol.hyperedges[0].second.size());
+    //        new_he.resize(solution.hyperedges[0].second.size());
     //        bool relevance_flag = false;
+            
+
     //        for(auto r : result) {
     //            if(target.hyperedges[i].second[r.second] > 0)
     //                relevance_flag == true;
@@ -422,10 +431,10 @@ auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pai
     //        for(int j=i+1;j<sol.hyperedges.size();j++) {
     //            if(sol.hyperedges[i].first == sol.hyperedges[j].first) {
                     // do things here
-    //            }
+       //         }
     //        }
     //    }
-    //}
+   // }
  
     return solution;
 }

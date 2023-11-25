@@ -137,11 +137,11 @@ auto main(int argc, char * argv[]) -> int
         original_big2 = read_bigraph(move(bigraph_2_infile), bigraph_2_filename);
         if(!lts) {
             big1 = free_hyperedges(free_sites(free_regions(original_big1)));
-            big2 = free_hyperedges(free_sites(free_regions(original_big2))); 
+            big2 = free_sites(free_regions(original_big2)); 
         }
         else {
             big1 = free_hyperedges(original_big1);
-            big2 = free_hyperedges(original_big2);
+            big2 = original_big2;
         }
 
         /* Prepare and start timeout */
@@ -162,29 +162,33 @@ auto main(int argc, char * argv[]) -> int
         for(auto c : components){ 
             if(! lts) {
                 if(c.entities.size() > 0) {
-                    auto encoding = c.encode(false, false);
-                    auto result = solve_homomorphism_problem(encoding, big2_encoding, params);
-                    matcher_calls++;
-                    if(! result.mapping.empty()) {
-                        full_solution_exists = true;
-                        candidates.push_back(MCB_solution{c, encoding, result});
+                    for(unsigned int i=0;i<big2.entities.size();i++) {
+                        if (big2.entities[i].control == c.entities[0].control) {
+                            HomomorphismResult r;
+                            r.mapping.insert({0, i});
+                            candidates.push_back(MCB_solution{c, c.encode(false, false), HomomorphismResult()});
+                            break;
+                        }
                     }
                 }
             }
             else {
                 if(c.entities.size() > 0 && c.entities[0].is_leaf) {
-                    auto encoding = free_regions(c).encode(false, false);
-                    auto result = solve_homomorphism_problem(encoding, big2_encoding, params);
-                    matcher_calls++;
-                    if(! result.mapping.empty()) {
-                        auto new_encoding = c.encode(false, true);
-                        auto new_result = solve_homomorphism_problem(new_encoding, big2_encoding, params);
-                        matcher_calls++;
-                        if(! new_result.mapping.empty()) {
-                            full_solution_exists = true;
+                    int mapper = -1;
+                    HomomorphismResult r;
+                    for(unsigned int i=0;i<big2.entities.size();i++) {
+                        if (big2.entities[i].control == c.entities[0].control) {
+                            mapper = i;
+                            if(big2.entities[i].regions.size() == c.entities[0].regions.size()) {
+                                full_solution_exists = true;
+                                r.mapping.insert({0, i});
+                                break;        
+                            }
                         }
-                        candidates.push_back(MCB_solution{c, new_encoding, new_result}); 
                     }
+                    if (mapper < 0)
+                        continue;                          
+                    candidates.push_back(MCB_solution{c, c.encode(false, true), r});           
                 }
             }
         }
@@ -276,6 +280,7 @@ auto main(int argc, char * argv[]) -> int
                 count++;
                 if(!print_flag) {
                     std::vector<std::pair<int, int>> translated_mapping;
+                    translated_mapping.resize(z.bigraph.entities.size() + z.bigraph.closures.size());
                     output += "mapping = {";
                     bool lazy_flag = false;
                     for (auto v : z.result.mapping) {
@@ -289,7 +294,7 @@ auto main(int argc, char * argv[]) -> int
                         map_pair.first = z.bigraph.entities[std::stoi(z.encoding.vertex_name(v.first))].id;
                         map_pair.second = std::stoi(big2_encoding.vertex_name(v.second));
                         output += "(" + std::to_string(map_pair.first) + ", " + std::to_string(map_pair.second) + ")";
-                        translated_mapping.push_back(map_pair);
+                        translated_mapping[std::stoi(z.encoding.vertex_name(v.first))] = make_pair(map_pair.first, map_pair.second);
                     }
                     output += "} -- {";
                     
@@ -298,8 +303,12 @@ auto main(int argc, char * argv[]) -> int
                         if(z.encoding.vertex_name(v.first).find("C_LINK") == string::npos) continue;
                         if(lazy_flag) cout << ",";
                         lazy_flag = true;
-                        output += "(" + std::to_string(z.bigraph.closures[std::stoi(z.encoding.vertex_name(v.first).substr(7))].id);
-                        output += ", " + big2_encoding.vertex_name(v.second).substr(7) + ")";
+
+                        std::pair<int, int> map_pair;
+                        map_pair.first = z.bigraph.closures[std::stoi(z.encoding.vertex_name(v.first).substr(7))].id;
+                        map_pair.second = std::stoi(big2_encoding.vertex_name(v.second).substr(7));
+                        output += "(" + std::to_string(map_pair.first) + ", " + std::to_string(map_pair.second) + ")";
+                        translated_mapping[std::stoi(z.encoding.vertex_name(v.first).substr(7)) + z.bigraph.entities.size()] = make_pair(map_pair.first, map_pair.second);
                     }              
                     output += "}\n---\n";
                     output += make_RPO(original_big1, original_big2, z.bigraph, translated_mapping).toString() + "---\n";
