@@ -18,7 +18,9 @@ using std::set;
 class Closure {
     public:
         int id;
-        std::pair<string, std::vector<int>> adjacencies;
+        int port_count;
+        string name;
+        std::vector<int> adjacencies;
 };
 
 class Entity {
@@ -54,6 +56,8 @@ class Bigraph {
         std::vector<std::vector<bool>> reachability;
         int largest_component_index;
 
+        std::vector<std::vector<int>> mappings;
+        
         Bigraph();
 
         auto decomp(std::vector<int> values) -> Bigraph;
@@ -78,5 +82,5 @@ auto free_hyperedges(Bigraph a) -> Bigraph;
 
 auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pair<int,int>> mapping) -> Bigraph;
 
-auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>;
+auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional<Bigraph>;
 

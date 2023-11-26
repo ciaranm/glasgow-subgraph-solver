@@ -44,12 +44,6 @@ using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
 
-struct MCB_solution {
-    Bigraph bigraph;
-    InputGraph encoding;
-    HomomorphismResult result;
-};
-
 auto main(int argc, char * argv[]) -> int
 {
     try {
@@ -152,113 +146,161 @@ auto main(int argc, char * argv[]) -> int
 
         InputGraph big2_encoding = big2.encode(true, false);
 
-        std::vector<Bigraph> components = full_decomp(big1);
-
-        std::vector<MCB_solution> candidates;
-        std::vector<MCB_solution> prev_solutions;
+        vector<Bigraph> decomp = full_decomp(big1);
+        vector<Bigraph> components;
+        vector<Bigraph> candidates;
+        vector<Bigraph> prev_solutions;
         bool full_solution_exists = false;
         int matcher_calls = 0;
 
-        for(auto c : components){ 
-            if(! lts) {
+        for(auto c : decomp){ 
+            if(! lts) {     
+                Bigraph comp = c;
+                Bigraph sol;
+                bool empty_flag = true;
                 if(c.entities.size() > 0) {
                     for(unsigned int i=0;i<big2.entities.size();i++) {
                         if (big2.entities[i].control == c.entities[0].control) {
-                            HomomorphismResult r;
-                            r.mapping.insert({0, i});
-                            candidates.push_back(MCB_solution{c, c.encode(false, false), HomomorphismResult()});
+                            if(empty_flag) {
+                                empty_flag = false;
+                                sol = c;
+                            }
+                            vector<int> new_map(big1.entities.size() + big1.closures.size(), -1);
+                            new_map[c.entities[0].id] = i;
+                            sol.mappings.push_back(new_map);
+                            comp.mappings.push_back(new_map);
                             break;
                         }
                     }
                 }
-            }
-            else {
-                if(c.entities.size() > 0 && c.entities[0].is_leaf) {
-                    int mapper = -1;
-                    HomomorphismResult r;
-                    for(unsigned int i=0;i<big2.entities.size();i++) {
-                        if (big2.entities[i].control == c.entities[0].control) {
-                            mapper = i;
-                            if(big2.entities[i].regions.size() == c.entities[0].regions.size()) {
-                                full_solution_exists = true;
-                                r.mapping.insert({0, i});
-                                break;        
+                else if(c.closures.size() > 0) {
+                    for(unsigned int i=0;i<big2.closures.size();i++) {
+                        if(c.closures[0].port_count != big2.closures[i].port_count)
+                            continue;
+
+                        bool matchable = true; // can this edge match to this one specific edge in G2?
+                        vector<bool> occupied(big2.closures[i].adjacencies.size(), false);
+                        for(unsigned int j=0;j<c.closures[0].adjacencies.size();j++) {
+                            bool matched = false; // can this adjacency match to an adjacency in G2?
+                            for(unsigned int k=0;k<big2.closures[i].adjacencies.size();k++) {
+                                if((!occupied[k]) && c.closures[0].adjacencies[j] == big2.closures[i].adjacencies[k] &&
+                                    big1.entities[j].control == big2.entities[k].control) {
+                                        occupied[k] = true;
+                                        matched = true;
+                                        break;
+                                    }
+                            }
+                            if(!matched) {
+                                matchable = false;
+                                break;
                             }
                         }
+                        if(matchable) {
+                            if(empty_flag){
+                                empty_flag = false;
+                                sol = c;
+                            }
+                            vector<int> new_map(big1.entities.size() + big1.closures.size(), -1);
+                            new_map[big1.entities.size() + c.closures[0].id] = i+big2.entities.size();
+                            sol.mappings.push_back(new_map);
+                            comp.mappings.push_back(new_map);
+                            break;                            
+                        }
                     }
-                    if (mapper < 0)
-                        continue;                          
-                    candidates.push_back(MCB_solution{c, c.encode(false, true), r});           
                 }
+                if(!empty_flag)
+                    candidates.push_back(sol);    
+                components.push_back(comp);              
+            }
+            else {
+              //  if(c.entities.size() > 0 && c.entities[0].is_leaf) {
+              //      int mapper = -1;
+              //      HomomorphismResult r;
+              //      for(unsigned int i=0;i<big2.entities.size();i++) {
+              //          if (big2.entities[i].control == c.entities[0].control) {
+              //              mapper = i;
+              //              if(big2.entities[i].regions.size() == c.entities[0].regions.size()) {
+              //                  full_solution_exists = true;
+              //                  r.mapping.insert({0, i});
+              //                  break;        
+              //              }
+              //          }
+              //      }
+              //      if (mapper < 0)
+              //          continue;                          
+               //     candidates.push_back(MCB_solution{c, c.encode(false, true), r});           
+              //  }
             }
         }
-
+        
         if (candidates.size() == 0) {
             cout << "Solutions found: 0\n";
             cout << "Matcher calls: " << matcher_calls << "\n";
             return EXIT_SUCCESS;
         }
 
-        if (full_solution_exists)
+        if (full_solution_exists) {
             prev_solutions = candidates;
-        
-        bool finished_flag = false;
+        }
+
         vector<int> nogood_list;
+        for(auto c : candidates) 
+            if(c.mappings.size() == 0)
+                nogood_list.push_back(c.nogood_id);
+
+        bool finished_flag = false;        
         while(! finished_flag) {
-            std::vector<MCB_solution> new_candidates;
+            vector<Bigraph> new_candidates;
             full_solution_exists = false;
             for(unsigned int i=0;i<candidates.size();i++){
                 if(! lts) {
-                    for(unsigned int j=candidates[i].bigraph.largest_component_index+1;j<components.size(); j++) {
-                        auto new_comp = element_compose(candidates[i].bigraph, components[j], lts);
-                        if(new_comp.has_value()) {
-                            bool nogood_flag = false;
-                            for (int n : nogood_list) {
-                                if ((new_comp.value().nogood_id | n) == new_comp.value().nogood_id) {
-                                    nogood_flag = true;
-                                    break;
-                                }
+                    for(unsigned int j=candidates[i].largest_component_index+1;j<components.size(); j++) {
+                        bool nogood_flag = false;
+                        int nogood = candidates[i].nogood_id | components[j].nogood_id;
+                        for (int n : nogood_list) {
+                            if ((nogood | n) == nogood) {
+                                nogood_flag = true;
+                                break;
                             }
-                            if (nogood_flag) continue;
-                            InputGraph big1_encoding = new_comp.value().encode(false, false);
-                            auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
-                            matcher_calls++;
-                            if(! result.mapping.empty()) {
-                                new_candidates.push_back(MCB_solution{new_comp.value(), big1_encoding, result});
-                                full_solution_exists = true;
-                            }
-                            else
-                                nogood_list.push_back(new_comp.value().nogood_id);
                         }
+                        if (nogood_flag)
+                            continue;
+                        auto new_comp = element_compose(candidates[i], components[j], big2, lts);
+                        if(new_comp.has_value()) {
+                            new_candidates.push_back(new_comp.value());
+                            full_solution_exists = true;
+                        }
+                        else 
+                            nogood_list.push_back(nogood);
                     }
                 }
                 else{
-                    for(unsigned int j=0;j<components.size(); j++) {
-                        auto new_comp = element_compose(candidates[i].bigraph, components[j], lts);
-                        if(new_comp.has_value()) {
-                            bool nogood_flag = false;
-                            for (int n : nogood_list) {
-                                if(new_comp.value().nogood_id == n) {
-                                    nogood_flag = true;
-                                    break;
-                                }
-                            }
-                            if(nogood_flag) continue;
-                            nogood_list.push_back(new_comp.value().nogood_id);
-                            InputGraph big1_encoding = free_regions(new_comp.value()).encode(false, false);
-                            auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
-                            matcher_calls++;
-                            if(! result.mapping.empty()) {
-                                InputGraph big1_extra = new_comp.value().encode(false, true);
-                                auto new_result = solve_homomorphism_problem(big1_extra, big2_encoding, params);
-                                matcher_calls++;
-                                if(! new_result.mapping.empty()) {
-                                    full_solution_exists = true;
-                                }
-                                new_candidates.push_back(MCB_solution{new_comp.value(), big1_extra, new_result}); 
-                            }
-                        }
-                    }
+             //       for(unsigned int j=0;j<components.size(); j++) {
+             //           auto new_comp = element_compose(candidates[i].bigraph, components[j], lts);
+             //           if(new_comp.has_value()) {
+             //               bool nogood_flag = false;
+             //               for (int n : nogood_list) {
+             //                   if(new_comp.value().nogood_id == n) {
+             //                       nogood_flag = true;
+             //                       break;
+             //                   }
+             //               }
+             //               if(nogood_flag) continue;
+             //               nogood_list.push_back(new_comp.value().nogood_id);
+             //               InputGraph big1_encoding = free_regions(new_comp.value()).encode(false, false);
+              //              auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
+              //              matcher_calls++;
+              //              if(! result.mapping.empty()) {
+              //                  InputGraph big1_extra = new_comp.value().encode(false, true);
+              //                  auto new_result = solve_homomorphism_problem(big1_extra, big2_encoding, params);
+              //                  matcher_calls++;
+              //                  if(! new_result.mapping.empty()) {
+              //                      full_solution_exists = true;
+               //                 }
+               //                 new_candidates.push_back(MCB_solution{new_comp.value(), big1_extra, new_result}); 
+               //             }
+              //          }
+               //     }
                 }
             }
             if(new_candidates.size() == 0)
@@ -275,22 +317,27 @@ auto main(int argc, char * argv[]) -> int
         int count = 0;
         bool print_flag = false;
 
-        for (auto z : prev_solutions)
-            if(! z.result.mapping.empty()) {
-                count++;
-                if(!print_flag) {
-                    std::vector<std::pair<int, int>> translated_mapping;
-                    translated_mapping.resize(z.bigraph.entities.size() + z.bigraph.closures.size());
-                    output += "mapping = {";
-                    bool lazy_flag = false;
-                    for (auto v : z.result.mapping) {
-                        if(z.encoding.vertex_name(v.first).find("C_LINK") != string::npos) break;
-                        if(z.encoding.vertex_label(v.first) == "LINK") continue;
-                        if(z.encoding.vertex_name(v.first).find("ROOT") != string::npos) continue;
-                        if(lazy_flag) output += ",";
-                        lazy_flag = true;
+        for (auto z : prev_solutions) {
+            cout << z.toString() + '\n';
+        }
 
-                        std::pair<int, int> map_pair;
+
+        //for (auto z : prev_solutions)
+        //    if(! z.mappings.size() > 0) {
+        //        count++;
+        //        if(!print_flag) {
+        //            vector<std::pair<int, int>> translated_mapping;
+        //            translated_mapping.resize(z.bigraph.entities.size() + z.bigraph.closures.size());
+        //            output += "mapping = {";
+        //            bool lazy_flag = false;
+        //            for (auto v : z.result.mapping) {
+        //                if(z.encoding.vertex_name(v.first).find("C_LINK") != string::npos) break;
+        //                if(z.encoding.vertex_label(v.first) == "LINK") continue;
+        //                if(z.encoding.vertex_name(v.first).find("ROOT") != string::npos) continue;
+        //                if(lazy_flag) output += ",";
+        //                lazy_flag = true;
+
+         /*                std::pair<int, int> map_pair;
                         map_pair.first = z.bigraph.entities[std::stoi(z.encoding.vertex_name(v.first))].id;
                         map_pair.second = std::stoi(big2_encoding.vertex_name(v.second));
                         output += "(" + std::to_string(map_pair.first) + ", " + std::to_string(map_pair.second) + ")";
@@ -317,7 +364,8 @@ auto main(int argc, char * argv[]) -> int
                 }
             }
         output = "Solutions found: " + std::to_string(count) + "\n" + "Matcher calls: " + std::to_string(matcher_calls) + "\n" + output;
-        cout << output;
+        cout << output; */
+
         return EXIT_SUCCESS;
     }
 

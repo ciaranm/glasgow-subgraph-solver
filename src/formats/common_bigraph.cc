@@ -141,11 +141,11 @@ auto Bigraph::toString() const -> string
     for(unsigned int i=0;i<closures.size();i++) {
         bool lazy_flag = false;
         out += "({}, {}, {";
-        for(unsigned int j=0;j<closures[i].adjacencies.second.size();j++) {
-            if(closures[i].adjacencies.second[j] > 0) {
+        for(unsigned int j=0;j<closures[i].adjacencies.size();j++) {
+            if(closures[i].adjacencies[j] > 0) {
                 if(lazy_flag)
                     out += ", ";
-                out += "(" + to_string(j) + ", " + to_string(closures[i].adjacencies.second[j]) + ")";
+                out += "(" + to_string(j) + ", " + to_string(closures[i].adjacencies[j]) + ")";
                 lazy_flag = true;
             }
         }
@@ -270,8 +270,8 @@ auto Bigraph::encode(bool target, bool special_lts_case) const -> InputGraph
     for(unsigned int i=0;i<closures.size();i++) {
         int ports_connected = 0;
         string port_id = ":CLX:" + to_string(i);
-        for(unsigned int j=0;j<closures[i].adjacencies.second.size();j++){
-            for(unsigned int k=0;k<closures[i].adjacencies.second[j];k++){
+        for(unsigned int j=0;j<closures[i].adjacencies.size();j++){
+            for(unsigned int k=0;k<closures[i].adjacencies[j];k++){
                 result.add_link_node();                
                 result.set_vertex_label(result.size()-1, "LINK");
                 if(target || special_lts_case)
@@ -501,16 +501,20 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph
         }
 
         string c = read_str(infile);
+        int ports = 0;
         he.second[stoi(e.substr(1, e.find(',') - 1))] = stoi(c.substr(0, c.find(')')));
         while (c.find('}') == string::npos) {
             e = read_str(infile);
             c = read_str(infile);
             he.second[stoi(e.substr(1, e.find(',') - 1)) ] = stoi(c.substr(0, c.find(')')));     
+            ports += stoi(c.substr(0, c.find(')')));
         }
 
         if(is_closed) {
             Closure c;
-            c.adjacencies = he;
+            c.name = he.first;
+            c.adjacencies = he.second;
+            c.port_count = ports;
             c.id = no_closures - 1;
             big.closures.push_back(c);
         }
@@ -579,9 +583,9 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
             }
         }
         for(int j=0;j<big.closures.size();j++) {
-            for(int k=0;k<big.closures[j].adjacencies.second[i];k++) {
+            for(int k=0;k<big.closures[j].adjacencies[i];k++) {
                 std::pair<string, std::vector<int>> he;
-                he.first = big.closures[j].adjacencies.first;
+                he.first = big.closures[j].name;
                 he.second.resize(big.entities.size());
                 he.second[i] = 1;
                 components[i].hyperedges.push_back(he);
@@ -599,14 +603,16 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
     return components;
 }
 
-auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
+auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional<Bigraph>
 {
     // Add closure only if all adjacent ports exist
     if(b.entities.size() == 0 && b.closures.size() == 1) {
+
+        // check all and add closure to the thingy, you know the drill
         std::vector<int> copy;
-        copy.resize(b.closures[0].adjacencies.second.size());
+        copy.resize(b.closures[0].adjacencies.size());
         for(int i=0; i<a.hyperedges.size();i++) {
-            if(a.hyperedges[i].first == b.closures[0].adjacencies.first) {
+            if(a.hyperedges[i].first == b.closures[0].name) {
                 for(int j=0;j<a.hyperedges[i].second.size();j++) {
                     copy[j] += a.hyperedges[i].second[j];
                 }
@@ -615,7 +621,31 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
             }
         }
 
-        if(copy == b.closures[0].adjacencies.second) {
+        if(copy == b.closures[0].adjacencies) {
+
+            std::vector<std::vector<int>> new_map_set;
+            for(auto m1: a.mappings) {
+                for(auto m2: b.mappings) {
+                    if(std::find(m1.begin(), m1.end(), m2[b.closures[0].id + c.entities.size()]) == m1.end())
+                        continue;
+                    auto mapped_he = c.closures[m2[b.closures[0].id + c.entities.size()] - c.entities.size()];
+                    bool matchable = true;
+                    for(int i=0;i<b.closures[0].adjacencies.size();i++) {
+                        if(b.closures[0].adjacencies[i] > 0 && (m1[i] == -1 || b.closures[0].adjacencies[i] != mapped_he.adjacencies[m1[i]])) {
+                            matchable = false;
+                            break;
+                        }
+                    }
+                    if(matchable) {
+                        std::vector<int> new_map = m1;
+                        new_map[b.closures[0].id + c.entities.size()] = m2[b.closures[0].id + c.entities.size()];
+                    }
+                }
+            }
+            if(new_map_set.size() == 0)
+                return std::nullopt;
+            a.mappings = new_map_set;
+
             a.closures.push_back(b.closures[0]);
             a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
             a.nogood_id = a.nogood_id | b.nogood_id;
@@ -656,6 +686,22 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
         if(! is_tensor_possible || (lts && !b.entities[0].is_leaf)) 
             return std::nullopt;
 
+        // check no overlapping mapping
+        std::vector<std::vector<int>> new_map_set;
+
+        for(auto m1 : a.mappings) {
+            for(auto m2 : b.mappings) {
+                if(std::find(m1.begin(), m1.end(), m2[b.entities[0].id]) == m1.end()) {
+                    std::vector<int> new_map = m1;
+                    new_map[b.entities[0].id] = m2[b.entities[0].id];
+                    new_map_set.push_back(new_map);
+                }
+            }
+        }
+        if(new_map_set.size() == 0)
+            return std::nullopt;
+        a.mappings = new_map_set;
+
         a.entities.push_back(b.entities[0].copy());
         a.regions.insert(a.entities[a.entities.size()-1].regions.begin(), a.entities[a.entities.size()-1].regions.end());
         a.sites.insert(a.entities[a.entities.size()-1].sites.begin(), a.entities[a.entities.size()-1].sites.end());
@@ -670,6 +716,24 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
     // Connect the compatible region/site pairs accordingly and return the new structure
     a.entities.push_back(b.entities[0].copy());
     if(below_index > -1){
+
+        // for each candidate mapping, check if the parent-child relation still exists
+        std::vector<std::vector<int>> new_map_set;
+        for(auto m1 : a.mappings) {
+            for(auto m2 : b.mappings) {
+                if(std::find(m1.begin(), m1.end(), m2[b.entities[0].id]) == m1.end() && 
+                    c.entities[m2[b.entities[0].id]].parent_index == m1[a.entities[below_index].id]) {
+                        std::vector<int> new_map = m1;
+                        new_map[b.entities[0].id] = m2[b.entities[0].id];
+                        new_map_set.push_back(new_map);
+                }
+            }
+        }
+
+        if(new_map_set.size() == 0)
+            return std::nullopt;
+        a.mappings = new_map_set;
+
         a.entities[below_index].child_indices.push_back(a.entities.size()-1);
         a.entities[a.entities.size()-1].parent_index = below_index;
 
@@ -681,6 +745,22 @@ auto element_compose(Bigraph a, Bigraph b, bool lts) -> std::optional<Bigraph>
         a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);        
     }
     if(above_index > -1){
+
+        // for each candidate mapping, check if the parent-child relation still exists
+        std::vector<std::vector<int>> new_map_set;
+        for(auto m1 : a.mappings) {
+            for(auto m2 : b.mappings) {
+                if(std::find(m1.begin(), m1.end(), m2[b.entities[0].id]) == m1.end() && 
+                    c.entities[m1[a.entities[above_index].id]].parent_index == m2[b.entities[0].id]) {
+                        std::vector<int> new_map = m1;
+                        new_map[b.entities[0].id] = m2[b.entities[0].id];
+                        new_map_set.push_back(new_map);
+                }
+            }
+        }
+        if(new_map_set.size() == 0)
+            return std::nullopt;
+
         a.entities[a.entities.size()-1].child_indices.push_back(above_index);
         a.entities[above_index].parent_index = a.entities.size()-1;
 
