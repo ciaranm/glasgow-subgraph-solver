@@ -122,22 +122,11 @@ auto main(int argc, char * argv[]) -> int
         if (! bigraph_2_infile)
             throw GraphFileError{ bigraph_2_filename, "unable to open target file", false };
 
-        Bigraph original_big1;
-        Bigraph original_big2;
-        Bigraph big1;
-        Bigraph big2;
+        Bigraph original_big1 = read_bigraph(move(bigraph_1_infile), bigraph_1_filename);
+        Bigraph big1 = split_regions(original_big1);
+        Bigraph big2 = read_bigraph(move(bigraph_2_infile), bigraph_2_filename);
 
-        original_big1 = read_bigraph(move(bigraph_1_infile), bigraph_1_filename);
-        original_big2 = read_bigraph(move(bigraph_2_infile), bigraph_2_filename);
-        if(!lts) {
-            big1 = free_hyperedges(free_sites(free_regions(original_big1)));
-            big2 = free_sites(free_regions(original_big2)); 
-        }
-        else {
-            big1 = free_hyperedges(original_big1);
-            big2 = original_big2;
-        }
-
+        
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{ options_vars["timeout"].as<int>() } : 0s);
 
@@ -154,88 +143,85 @@ auto main(int argc, char * argv[]) -> int
         int matcher_calls = 0;
 
         for(auto c : decomp){ 
-            if(! lts) {     
-                Bigraph comp = c;
-                Bigraph sol;
-                bool empty_flag = true;
-                if(c.entities.size() > 0) {
-                    for(unsigned int i=0;i<big2.entities.size();i++) {
-                        if (big2.entities[i].control == c.entities[0].control) {
-                            if(empty_flag) {
-                                empty_flag = false;
-                                sol = c;
-                            }
-                            vector<int> new_map(big1.entities.size() + big1.closures.size(), -1);
-                            new_map[c.entities[0].id] = i;
-                            sol.mappings.push_back(new_map);
-                            comp.mappings.push_back(new_map);
+            Bigraph comp = c;
+            Bigraph sol;
+            bool empty_flag = true;
+            if(c.closures.size() > 0) {
+                for(unsigned int i=0;i<big2.closures.size();i++) {
+                    if(c.closures[0].port_count != big2.closures[i].port_count)
+                        continue;
+
+                    bool matchable = true; // can this edge match to this one specific edge in G2?
+                    vector<bool> occupied(big2.closures[i].adjacencies.size(), false);
+                    for(unsigned int j=0;j<c.closures[0].adjacencies.size();j++) {
+                        bool matched = false; // can this adjacency match to an adjacency in G2?
+                        for(unsigned int k=0;k<big2.closures[i].adjacencies.size();k++) {
+                            if((!occupied[k]) && c.closures[0].adjacencies[j] == big2.closures[i].adjacencies[k] &&
+                                big1.entities[j].control == big2.entities[k].control) {
+                                    occupied[k] = true;
+                                    matched = true;
+                                    break;
+                                }
+                        }
+                        if(!matched) {
+                            matchable = false;
                             break;
                         }
                     }
-                }
-                else if(c.closures.size() > 0) {
-                    for(unsigned int i=0;i<big2.closures.size();i++) {
-                        if(c.closures[0].port_count != big2.closures[i].port_count)
-                            continue;
-
-                        bool matchable = true; // can this edge match to this one specific edge in G2?
-                        vector<bool> occupied(big2.closures[i].adjacencies.size(), false);
-                        for(unsigned int j=0;j<c.closures[0].adjacencies.size();j++) {
-                            bool matched = false; // can this adjacency match to an adjacency in G2?
-                            for(unsigned int k=0;k<big2.closures[i].adjacencies.size();k++) {
-                                if((!occupied[k]) && c.closures[0].adjacencies[j] == big2.closures[i].adjacencies[k] &&
-                                    big1.entities[j].control == big2.entities[k].control) {
-                                        occupied[k] = true;
-                                        matched = true;
-                                        break;
-                                    }
-                            }
-                            if(!matched) {
-                                matchable = false;
-                                break;
-                            }
+                    if(matchable) {
+                        if(empty_flag){
+                            empty_flag = false;
+                            sol = c;
                         }
-                        if(matchable) {
-                            if(empty_flag){
-                                empty_flag = false;
-                                sol = c;
-                            }
-                            vector<int> new_map(big1.entities.size() + big1.closures.size(), -1);
-                            new_map[big1.entities.size() + c.closures[0].id] = i+big2.entities.size();
-                            sol.mappings.push_back(new_map);
-                            comp.mappings.push_back(new_map);
-                            break;                            
-                        }
+                        vector<int> new_map(big1.entities.size() + big1.closures.size(), -1);
+                        new_map[big1.entities.size() + c.closures[0].id] = i+big2.entities.size();
+                        sol.mappings.push_back(make_pair(true, new_map));
+                        comp.mappings.push_back(make_pair(true, new_map));            
                     }
                 }
                 if(!empty_flag)
                     candidates.push_back(sol);    
-                components.push_back(comp);              
+                components.push_back(comp);  
+            }         
+            else{   
+                for(unsigned int i=0;i<big2.entities.size();i++) {
+                    if (big2.entities[i].control == c.entities[0].control) {
+
+                        if(lts && c.entities[0].child_indices.size() == 0 && c.sites.size() == 0 && 
+                            (big2.entities[i].child_indices.size() > 0 || big2.entities[i].sites.size() > 0))
+                                continue;
+
+                        if(empty_flag) {
+                            empty_flag = false;
+                            sol = c;
+                        }
+
+                        vector<int> new_map(big1.entities.size() + big1.closures.size(), -1);
+                        new_map[c.entities[0].id] = i;
+
+                        if(!lts) {
+                            full_solution_exists = true;
+                            comp.mappings.push_back(make_pair(true, new_map));                            
+                            sol.mappings.push_back(make_pair(true, new_map));
+                        }
+                        else {
+                            if(c.entities[0].is_leaf) {
+                                if(big2.entities[i].parent_index == -1)
+                                    full_solution_exists = true;
+                                sol.mappings.push_back(make_pair(big2.entities[i].parent_index == -1, new_map));
+                            }
+                            comp.mappings.push_back(make_pair(big2.entities[i].parent_index == -1, new_map));
+                        }
+                    }
+                }
+                if(!empty_flag && (!lts || sol.entities[0].is_leaf))
+                    candidates.push_back(sol);    
+                components.push_back(comp);  
+                }
             }
-            else {
-              //  if(c.entities.size() > 0 && c.entities[0].is_leaf) {
-              //      int mapper = -1;
-              //      HomomorphismResult r;
-              //      for(unsigned int i=0;i<big2.entities.size();i++) {
-              //          if (big2.entities[i].control == c.entities[0].control) {
-              //              mapper = i;
-              //              if(big2.entities[i].regions.size() == c.entities[0].regions.size()) {
-              //                  full_solution_exists = true;
-              //                  r.mapping.insert({0, i});
-              //                  break;        
-              //              }
-              //          }
-              //      }
-              //      if (mapper < 0)
-              //          continue;                          
-               //     candidates.push_back(MCB_solution{c, c.encode(false, true), r});           
-              //  }
-            }
-        }
-        
+   
         if (candidates.size() == 0) {
             cout << "Solutions found: 0\n";
-            cout << "Matcher calls: " << matcher_calls << "\n";
             return EXIT_SUCCESS;
         }
 
@@ -243,64 +229,49 @@ auto main(int argc, char * argv[]) -> int
             prev_solutions = candidates;
         }
 
-        vector<int> nogood_list;
-        for(auto c : candidates) 
-            if(c.mappings.size() == 0)
-                nogood_list.push_back(c.nogood_id);
+        std::set<int> nogood_list;
+        for(auto c : components) 
+            if(c.mappings.size() == 0) 
+                nogood_list.insert(c.nogood_id);
 
         bool finished_flag = false;        
         while(! finished_flag) {
             vector<Bigraph> new_candidates;
+            std::set<int> temp_lts_nogoods;
             full_solution_exists = false;
             for(unsigned int i=0;i<candidates.size();i++){
-                if(! lts) {
-                    for(unsigned int j=candidates[i].largest_component_index+1;j<components.size(); j++) {
-                        bool nogood_flag = false;
-                        int nogood = candidates[i].nogood_id | components[j].nogood_id;
-                        for (int n : nogood_list) {
-                            if ((nogood | n) == nogood) {
+                int start = 0;
+                if(!lts)
+                    start = candidates[i].largest_component_index+1;
+                for(unsigned int j=start;j<components.size(); j++) {
+                    bool nogood_flag = false;
+                    int nogood = candidates[i].nogood_id | components[j].nogood_id;
+                    for (int n : nogood_list) {
+                        if ((nogood | n) == nogood) {
+                            nogood_flag = true;
+                            break;
+                        }
+                    }
+                    if(lts) {
+                        for (int n : temp_lts_nogoods) {
+                            if (n == nogood) {
                                 nogood_flag = true;
                                 break;
                             }
                         }
-                        if (nogood_flag)
-                            continue;
-                        auto new_comp = element_compose(candidates[i], components[j], big2, lts);
-                        if(new_comp.has_value()) {
-                            new_candidates.push_back(new_comp.value());
-                            full_solution_exists = true;
-                        }
-                        else 
-                            nogood_list.push_back(nogood);
                     }
-                }
-                else{
-             //       for(unsigned int j=0;j<components.size(); j++) {
-             //           auto new_comp = element_compose(candidates[i].bigraph, components[j], lts);
-             //           if(new_comp.has_value()) {
-             //               bool nogood_flag = false;
-             //               for (int n : nogood_list) {
-             //                   if(new_comp.value().nogood_id == n) {
-             //                       nogood_flag = true;
-             //                       break;
-             //                   }
-             //               }
-             //               if(nogood_flag) continue;
-             //               nogood_list.push_back(new_comp.value().nogood_id);
-             //               InputGraph big1_encoding = free_regions(new_comp.value()).encode(false, false);
-              //              auto result = solve_homomorphism_problem(big1_encoding, big2_encoding, params);
-              //              matcher_calls++;
-              //              if(! result.mapping.empty()) {
-              //                  InputGraph big1_extra = new_comp.value().encode(false, true);
-              //                  auto new_result = solve_homomorphism_problem(big1_extra, big2_encoding, params);
-              //                  matcher_calls++;
-              //                  if(! new_result.mapping.empty()) {
-              //                      full_solution_exists = true;
-               //                 }
-               //                 new_candidates.push_back(MCB_solution{new_comp.value(), big1_extra, new_result}); 
-               //             }
-              //          }
-               //     }
+                    if (nogood_flag)
+                        continue;
+                    
+                    temp_lts_nogoods.insert(nogood);
+                    auto new_comp = element_compose(candidates[i], components[j], big2, lts);
+                    if(new_comp.first >= 0) {
+                        new_candidates.push_back(new_comp.second);
+                    }
+                    if(new_comp.first == 0)
+                        full_solution_exists = true;
+                    if(new_comp.first == -1)
+                        nogood_list.insert(nogood);
                 }
             }
             if(new_candidates.size() == 0)
@@ -309,63 +280,53 @@ auto main(int argc, char * argv[]) -> int
                 if(full_solution_exists)
                     prev_solutions = new_candidates;
                 candidates = new_candidates;
-                if(lts) nogood_list = {};
             }
         }
 
-        string output = "";
         int count = 0;
+        int max_size = 0;
         bool print_flag = false;
-
         for (auto z : prev_solutions) {
-            cout << z.toString() + '\n';
+            max_size = z.entities.size() + z.closures.size();
+            string big_string = z.toString();
+            
+            if(lts)
+                z.mappings.erase(std::unique(z.mappings.begin(), z.mappings.end()), z.mappings.end());
+
+            for(auto m : z.mappings) {
+                if(! m.first) {
+                    continue;
+                }
+                if(!options_vars.count("print-all-solutions") && count > 0) {
+                    count++;
+                    continue;
+                }
+
+                string map_string = "mapping = {";
+                for(int n=0;n<big1.entities.size();n++)
+                    if(m.second[n] != -1)
+                        map_string += '(' + std::to_string(n) + ',' + std::to_string(m.second[n]) + ')' + ',';
+
+                if(map_string.back() == ',')
+                    map_string.pop_back();
+
+                map_string += "} -- {";
+                for(int n=big1.entities.size();n<big1.entities.size()+big1.closures.size();n++)
+                    if(m.second[n] != -1)
+                        map_string += '(' + std::to_string(n) + ',' + std::to_string(m.second[n] - big1.entities.size()) + ')' + ',';
+
+                if(map_string.back() == ',')
+                    map_string.pop_back();
+
+                map_string += "}";
+
+                cout << map_string + '\n' + make_place_RPO(original_big1, big2, z, m.second).toString() + "---\n";
+                count++;
+            }
         }
 
-
-        //for (auto z : prev_solutions)
-        //    if(! z.mappings.size() > 0) {
-        //        count++;
-        //        if(!print_flag) {
-        //            vector<std::pair<int, int>> translated_mapping;
-        //            translated_mapping.resize(z.bigraph.entities.size() + z.bigraph.closures.size());
-        //            output += "mapping = {";
-        //            bool lazy_flag = false;
-        //            for (auto v : z.result.mapping) {
-        //                if(z.encoding.vertex_name(v.first).find("C_LINK") != string::npos) break;
-        //                if(z.encoding.vertex_label(v.first) == "LINK") continue;
-        //                if(z.encoding.vertex_name(v.first).find("ROOT") != string::npos) continue;
-        //                if(lazy_flag) output += ",";
-        //                lazy_flag = true;
-
-         /*                std::pair<int, int> map_pair;
-                        map_pair.first = z.bigraph.entities[std::stoi(z.encoding.vertex_name(v.first))].id;
-                        map_pair.second = std::stoi(big2_encoding.vertex_name(v.second));
-                        output += "(" + std::to_string(map_pair.first) + ", " + std::to_string(map_pair.second) + ")";
-                        translated_mapping[std::stoi(z.encoding.vertex_name(v.first))] = make_pair(map_pair.first, map_pair.second);
-                    }
-                    output += "} -- {";
-                    
-                    lazy_flag = false;
-                    for (auto v : z.result.mapping) { 
-                        if(z.encoding.vertex_name(v.first).find("C_LINK") == string::npos) continue;
-                        if(lazy_flag) cout << ",";
-                        lazy_flag = true;
-
-                        std::pair<int, int> map_pair;
-                        map_pair.first = z.bigraph.closures[std::stoi(z.encoding.vertex_name(v.first).substr(7))].id;
-                        map_pair.second = std::stoi(big2_encoding.vertex_name(v.second).substr(7));
-                        output += "(" + std::to_string(map_pair.first) + ", " + std::to_string(map_pair.second) + ")";
-                        translated_mapping[std::stoi(z.encoding.vertex_name(v.first).substr(7)) + z.bigraph.entities.size()] = make_pair(map_pair.first, map_pair.second);
-                    }              
-                    output += "}\n---\n";
-                    output += make_RPO(original_big1, original_big2, z.bigraph, translated_mapping).toString() + "---\n";
-                    if(!options_vars.count("print-all-solutions"))
-                        print_flag = true;
-                }
-            }
-        output = "Solutions found: " + std::to_string(count) + "\n" + "Matcher calls: " + std::to_string(matcher_calls) + "\n" + output;
-        cout << output; */
-
+        cout << "Max support size: " + std::to_string(max_size) + "\n";
+        cout << "Total Solutions found: " + std::to_string(count) + '\n';
         return EXIT_SUCCESS;
     }
 

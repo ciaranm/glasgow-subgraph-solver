@@ -56,7 +56,7 @@ class Bigraph {
         std::vector<std::vector<bool>> reachability;
         int largest_component_index;
 
-        std::vector<std::vector<int>> mappings;
+        std::vector<std::pair<bool, std::vector<int>>> mappings;
         
         Bigraph();
 
@@ -74,13 +74,11 @@ auto read_bigraph(istream && infile, const string &) -> Bigraph;
 
 auto full_decomp(Bigraph big) -> std::vector<Bigraph>;
 
-auto free_sites(Bigraph a) -> Bigraph;
-
-auto free_regions(Bigraph a) -> Bigraph;
+auto split_regions(Bigraph a) -> Bigraph;
 
 auto free_hyperedges(Bigraph a) -> Bigraph;
 
-auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pair<int,int>> mapping) -> Bigraph;
+auto make_place_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<int> mapping) -> Bigraph;
 
-auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional<Bigraph>;
+auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::pair<int, Bigraph>;
 

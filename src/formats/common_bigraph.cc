@@ -297,34 +297,14 @@ auto Bigraph::encode(bool target, bool special_lts_case) const -> InputGraph
     return result;
 }
 
-auto free_sites(Bigraph a) -> Bigraph
-{
-    if(a.sites.size() > 0) {
-        int max_site = *a.sites.rbegin();
-        for(int i=0;i<a.entities.size();i++) {
-            if(a.entities[i].sites.size() == 0) {
-                max_site++;
-                a.entities[i].sites.insert(max_site);
-                a.sites.insert(max_site);
-            }
-        }
-    }
-    return a;
-}
-
-auto free_regions(Bigraph a) -> Bigraph
+auto split_regions(Bigraph a) -> Bigraph
 {
     if(a.regions.size() > 0) {
         int max_region = *a.regions.rbegin();
         for(int i=0;i<a.entities.size();i++) {
-            if(a.entities[i].parent_index == -1 && a.entities[i].regions.size() == 0) {
-                max_region++;
-                a.entities[i].regions.insert(max_region);
-                a.regions.insert(max_region);
-            }
-            else if(a.entities[i].regions.size() > 0) {
-                for(int j=i;j<a.entities.size();j++) {
-                    if(*a.entities[i].regions.begin() == *a.entities[j].regions.begin()) {
+            if(a.entities[i].regions.size() > 0) {
+                for(int j=i+1;j<a.entities.size();j++) {
+                    if(a.entities[j].regions.size() > 0 && *(a.entities[i].regions.begin()) == *(a.entities[j].regions.begin())) {
                         max_region++;
                         a.entities[j].regions.clear();
                         a.entities[j].regions.insert(max_region);
@@ -355,10 +335,11 @@ auto free_hyperedges(Bigraph a) -> Bigraph
     return a;
 }
 
-auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pair<int,int>> mapping) -> Bigraph
+auto make_place_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<int> mapping) -> Bigraph
 {
+
+    // close all shared sites
     for(int i=0;i<solution.entities.size();i++) {
-        // remove redundant sites
         if(solution.entities[i].sites.size() > 1) {
             int start = *solution.entities[i].sites.begin();
             for(int s : solution.entities[i].sites){
@@ -368,74 +349,55 @@ auto make_RPO(Bigraph big1, Bigraph big2, Bigraph solution, std::vector<std::pai
             }
             solution.entities[i].sites.erase(++solution.entities[i].sites.begin(), solution.entities[i].sites.end());
         }
+    }
 
-        // close sites if we can          
-        if(big1.entities[mapping[i].first].sites.size() == 0 && big2.entities[mapping[i].second].sites.size() == 0 &&
-        solution.entities[i].child_indices.size() == big1.entities[mapping[i].first].child_indices.size() &&
-        solution.entities[i].child_indices.size() == big2.entities[mapping[i].second].child_indices.size()      
-        ) {
-            for(int s : solution.entities[i].sites){
-                solution.sites.erase(s); 
-            }
-            solution.entities[i].sites.clear();
-        }
-
-        // close regions if we can
-        if(big1.entities[mapping[i].first].regions.size() == 0 && big1.entities[mapping[i].first].parent_index == -1 &&
-            big2.entities[mapping[i].second].regions.size() == 0 && big2.entities[mapping[i].second].parent_index == -1) {
-            for(int s : solution.entities[i].regions){
-                solution.regions.erase(s); 
-            }              
-            solution.entities[i].regions.clear();      
+    // open all necessary regions
+    int max_region;
+    if(solution.regions.size() > 0)
+        max_region = *solution.regions.rbegin();
+    else max_region = 0;
+    for(int i=0;i<solution.entities.size();i++) {
+        if(solution.entities[i].regions.size() == 0 && solution.entities[i].parent_index == -1 &&
+        (big1.entities[solution.entities[i].id].regions.size() > 0 || big2.entities[mapping[solution.entities[i].id]].regions.size() > 0 ||
+        big1.entities[solution.entities[i].id].parent_index != -1 || big2.entities[mapping[solution.entities[i].id]].parent_index != -1)) {
+            max_region++;
+            solution.entities[i].regions.insert(max_region);
+            solution.regions.insert(max_region);
         }
     }
+
+    //open all necessary sites
+    int max_site = solution.sites.size();
+    if(solution.sites.size() > 0)
+        max_site = *solution.sites.rbegin();
+    else max_site = 0;
+    for(int i=0;i<solution.entities.size();i++) {
+        if(solution.entities[i].sites.size() == 0 &&
+        (big1.entities[solution.entities[i].id].sites.size() > 0 || big2.entities[mapping[solution.entities[i].id]].sites.size() > 0 ||
+        solution.entities[i].child_indices.size() != big1.entities[solution.entities[i].id].child_indices.size() ||
+        solution.entities[i].child_indices.size() != big2.entities[solution.entities[i].id].child_indices.size())) {
+            max_site++;
+            solution.entities[i].sites.insert(max_site);
+            solution.sites.insert(max_site);            
+        }
+    }    
 
     // close all shared roots
     for(int i=0;i<solution.entities.size();i++) {
         for(int j=i+1;j<solution.entities.size();j++) {
             if(solution.entities[i].regions.size() > 0 && solution.entities[j].regions.size() > 0 &&
                 *solution.entities[i].regions.begin() != *solution.entities[j].regions.begin() &&
-                big1.entities[mapping[i].first].regions.size() > 0 && big2.entities[mapping[i].second].regions.size() > 0 &&
-                big1.entities[mapping[j].first].regions.size() > 0 && big2.entities[mapping[j].second].regions.size() > 0 &&
-                *big1.entities[mapping[i].first].regions.begin() == *big1.entities[mapping[j].first].regions.begin() &&
-                *big2.entities[mapping[i].second].regions.begin() == *big2.entities[mapping[j].second].regions.begin()) {
+                big1.entities[solution.entities[i].id].regions.size() > 0 && big2.entities[mapping[solution.entities[i].id]].regions.size() > 0 &&
+                big1.entities[solution.entities[j].id].regions.size() > 0 && big2.entities[mapping[solution.entities[j].id]].regions.size() > 0 &&
+                *big1.entities[solution.entities[i].id].regions.begin() == *big1.entities[solution.entities[j].id].regions.begin() &&
+                *big2.entities[mapping[solution.entities[i].id]].regions.begin() == *big2.entities[mapping[solution.entities[j].id]].regions.begin()) {
                     solution.regions.erase(*solution.entities[j].regions.begin());
                     solution.entities[j].regions.clear();
                     solution.entities[j].regions.insert(*solution.entities[i].regions.begin());
             }
         }
     }
-
-    //join hyperedges back up
-
-    // add unmapped closures too!
-
-    //if(solution.hyperedges.size() > 1) {
-    //    std::vector<std::vector<int>> translated_hyperedges;
-    //    for(int i=0;i<big2.hyperedges.size();i++) {
-    //        std::vector<int> new_he;
-    //        new_he.resize(solution.hyperedges[0].second.size());
-    //        bool relevance_flag = false;
-            
-
-    //        for(auto r : result) {
-    //            if(target.hyperedges[i].second[r.second] > 0)
-    //                relevance_flag == true;
-    //            new_he[r.first] = target.hyperedges[i].second[r.second];
-    //        }
-    //        if(relevance_flag)
-    //            translated_hyperedges.push_back(new_he);
-    //    }
-
-    //    for(int i=0; i<sol.hyperedges.size();i++) {
-    //        for(int j=i+1;j<sol.hyperedges.size();j++) {
-    //            if(sol.hyperedges[i].first == sol.hyperedges[j].first) {
-                    // do things here
-       //         }
-    //        }
-    //    }
-   // }
- 
+      
     return solution;
 }
 
@@ -603,7 +565,8 @@ auto full_decomp(Bigraph big) -> std::vector<Bigraph>
     return components;
 }
 
-auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional<Bigraph>
+// Status codes: 0 is successful composition, -1 is domain wipeout, -2 is invalid composition, -3 is something that should never happen
+auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::pair<int, Bigraph>
 {
     // Add closure only if all adjacent ports exist
     if(b.entities.size() == 0 && b.closures.size() == 1) {
@@ -623,45 +586,46 @@ auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional
 
         if(copy == b.closures[0].adjacencies) {
 
-            std::vector<std::vector<int>> new_map_set;
+            std::vector<std::pair<bool, std::vector<int>>> new_map_set;
             for(auto m1: a.mappings) {
                 for(auto m2: b.mappings) {
-                    if(std::find(m1.begin(), m1.end(), m2[b.closures[0].id + c.entities.size()]) == m1.end())
+                    if(std::find(m1.second.begin(), m1.second.end(), m2.second[b.closures[0].id + c.entities.size()]) == m1.second.end())
                         continue;
-                    auto mapped_he = c.closures[m2[b.closures[0].id + c.entities.size()] - c.entities.size()];
+                    auto mapped_he = c.closures[m2.second[b.closures[0].id + c.entities.size()] - c.entities.size()];
                     bool matchable = true;
                     for(int i=0;i<b.closures[0].adjacencies.size();i++) {
-                        if(b.closures[0].adjacencies[i] > 0 && (m1[i] == -1 || b.closures[0].adjacencies[i] != mapped_he.adjacencies[m1[i]])) {
+                        if(b.closures[0].adjacencies[i] > 0 && (m1.second[i] == -1 || b.closures[0].adjacencies[i] != mapped_he.adjacencies[m1.second[i]])) {
                             matchable = false;
                             break;
                         }
                     }
                     if(matchable) {
-                        std::vector<int> new_map = m1;
-                        new_map[b.closures[0].id + c.entities.size()] = m2[b.closures[0].id + c.entities.size()];
+                        std::vector<int> new_map = m1.second;
+                        new_map[b.closures[0].id + c.entities.size()] = m2.second[b.closures[0].id + c.entities.size()];
                     }
                 }
             }
             if(new_map_set.size() == 0)
-                return std::nullopt;
+                return std::pair<int, Bigraph>(-1, a);
             a.mappings = new_map_set;
 
             a.closures.push_back(b.closures[0]);
             a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);
             a.nogood_id = a.nogood_id | b.nogood_id;
-            return a;
+            return std::pair<int, Bigraph>(0, a);
         }
-        return std::nullopt;
+        return std::pair<int, Bigraph>(-2, a);
     }
 
     if(b.entities.size() != 1)
-        return std::nullopt;
+        return std::pair<int, Bigraph>(-3, a);
 
     for(unsigned int i=0;i<a.entities.size();i++)
         if(a.entities[i].id == b.entities[0].id)
-            return std::nullopt;
+            return std::pair<int, Bigraph>(-3, a);
 
     bool is_tensor_possible = true;
+    bool has_true_solution = false;
     int below_index = -1;
     int above_index = -1;
 
@@ -683,23 +647,25 @@ auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional
 
     // If no compatible region/site pairs, check if tensor product is allowed, return null if not
     if(below_index == -1 && above_index == -1){
-        if(! is_tensor_possible || (lts && !b.entities[0].is_leaf)) 
-            return std::nullopt;
+        if(! is_tensor_possible || (lts && !b.entities[0].is_leaf))
+            return std::pair<int, Bigraph>(-2, a);
 
         // check no overlapping mapping
-        std::vector<std::vector<int>> new_map_set;
-
+        std::vector<std::pair<bool, std::vector<int>>> new_map_set;
         for(auto m1 : a.mappings) {
             for(auto m2 : b.mappings) {
-                if(std::find(m1.begin(), m1.end(), m2[b.entities[0].id]) == m1.end()) {
-                    std::vector<int> new_map = m1;
-                    new_map[b.entities[0].id] = m2[b.entities[0].id];
-                    new_map_set.push_back(new_map);
+                if(std::find(m1.second.begin(), m1.second.end(), m2.second[b.entities[0].id]) == m1.second.end()) {
+                    std::vector<int> new_map = m1.second;
+                    new_map[b.entities[0].id] = m2.second[b.entities[0].id];
+                    if(m1.first && m2.first)
+                        has_true_solution = true;
+                    new_map_set.push_back(make_pair(m1.first && m2.first, new_map));
                 }
             }
         }
         if(new_map_set.size() == 0)
-            return std::nullopt;
+            return std::pair<int, Bigraph>(-1, a);
+            
         a.mappings = new_map_set;
 
         a.entities.push_back(b.entities[0].copy());
@@ -710,30 +676,54 @@ auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional
 
         for(int i=0;i<b.hyperedges.size();i++)
             a.hyperedges.push_back(b.hyperedges[i]);
-        return a;
+        return std::pair<int, Bigraph>(1 - has_true_solution, a);
     }
 
-    // Connect the compatible region/site pairs accordingly and return the new structure
+    // for each candidate mapping, check if the parent-child relation still exists
     a.entities.push_back(b.entities[0].copy());
-    if(below_index > -1){
+    std::vector<std::pair<bool, std::vector<int>>> new_map_set;
+    for(auto m1 : a.mappings) {
+        for(auto m2 : b.mappings) {
+            if(std::find(m1.second.begin(), m1.second.end(), m2.second[b.entities[0].id]) != m1.second.end())
+                continue;
+            if(below_index > -1 && c.entities[m2.second[b.entities[0].id]].parent_index != m1.second[a.entities[below_index].id])
+                continue;
+            if(above_index > -1 && c.entities[m1.second[a.entities[above_index].id]].parent_index != m2.second[b.entities[0].id])
+                continue;
+            std::vector<int> new_map = m1.second;
+            new_map[b.entities[0].id] = m2.second[b.entities[0].id];
 
-        // for each candidate mapping, check if the parent-child relation still exists
-        std::vector<std::vector<int>> new_map_set;
-        for(auto m1 : a.mappings) {
-            for(auto m2 : b.mappings) {
-                if(std::find(m1.begin(), m1.end(), m2[b.entities[0].id]) == m1.end() && 
-                    c.entities[m2[b.entities[0].id]].parent_index == m1[a.entities[below_index].id]) {
-                        std::vector<int> new_map = m1;
-                        new_map[b.entities[0].id] = m2[b.entities[0].id];
-                        new_map_set.push_back(new_map);
-                }
+            if (!lts || above_index == -1) {
+                if(m1.first)
+                    has_true_solution = true;
+                new_map_set.push_back(make_pair(m1.first, new_map));
+            }
+            else {                
+                if(! m2.first)
+                    new_map_set.push_back(make_pair(false, new_map));
+                bool valid_flag = true;
+                for(unsigned int i=0;i<a.entities.size();i++) {
+                    if (i == above_index)
+                        continue;
+                    if (m1.second[a.entities[i].id] != -1 && a.entities[i].parent_index == -1 && c.entities[m1.second[a.entities[i].id]].parent_index != -1){
+                        valid_flag = false;
+                        break;
+                    }     
+                }    
+                if (valid_flag)
+                    has_true_solution = true;
+
+                new_map_set.push_back(make_pair(valid_flag, new_map));
             }
         }
+    }
 
-        if(new_map_set.size() == 0)
-            return std::nullopt;
-        a.mappings = new_map_set;
+    if(new_map_set.size() == 0)
+        return std::pair<int, Bigraph>(-1, a);
+    a.mappings = new_map_set;            
 
+    // Connect the compatible region/site pairs accordingly and return the new structure
+    if(below_index > -1){
         a.entities[below_index].child_indices.push_back(a.entities.size()-1);
         a.entities[a.entities.size()-1].parent_index = below_index;
 
@@ -745,22 +735,6 @@ auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional
         a.largest_component_index = std::max(a.largest_component_index, b.largest_component_index);        
     }
     if(above_index > -1){
-
-        // for each candidate mapping, check if the parent-child relation still exists
-        std::vector<std::vector<int>> new_map_set;
-        for(auto m1 : a.mappings) {
-            for(auto m2 : b.mappings) {
-                if(std::find(m1.begin(), m1.end(), m2[b.entities[0].id]) == m1.end() && 
-                    c.entities[m1[a.entities[above_index].id]].parent_index == m2[b.entities[0].id]) {
-                        std::vector<int> new_map = m1;
-                        new_map[b.entities[0].id] = m2[b.entities[0].id];
-                        new_map_set.push_back(new_map);
-                }
-            }
-        }
-        if(new_map_set.size() == 0)
-            return std::nullopt;
-
         a.entities[a.entities.size()-1].child_indices.push_back(above_index);
         a.entities[above_index].parent_index = a.entities.size()-1;
 
@@ -775,5 +749,6 @@ auto element_compose(Bigraph a, Bigraph b, Bigraph c, bool lts) -> std::optional
     for(int i=0;i<b.hyperedges.size();i++)
         a.hyperedges.push_back(b.hyperedges[i]);
     a.nogood_id = a.nogood_id | b.nogood_id;
-    return a;
+
+    return std::pair<int, Bigraph>(1 - has_true_solution, a);
 }
