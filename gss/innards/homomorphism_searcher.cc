@@ -4,6 +4,7 @@
 #include <optional>
 #include <tuple>
 #include <type_traits>
+#include <boost/range/adaptor/reversed.hpp>
 
 using namespace gss;
 using namespace gss::innards;
@@ -661,7 +662,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
             return false;
     }
 
-    for (auto & [a, b] : model.pattern_less_thans_in_convenient_order) {
+    for (auto & [a, b] : boost::adaptors::reverse(model.pattern_less_thans_in_convenient_order)) {
         if (find_domain[a] == -1 || find_domain[b] == -1)
             continue;
         auto & a_domain = new_domains[find_domain[a]];
