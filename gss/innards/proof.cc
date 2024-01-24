@@ -54,7 +54,6 @@ struct Proof::Imp
     unique_ptr<ostream> proof_stream;
     bool friendly_names;
     bool super_extra_verbose = false;
-    bool format2 = false;
     bool recover_encoding = false;
 
     map<pair<long, long>, string> variable_mappings;
@@ -66,6 +65,7 @@ struct Proof::Imp
     map<pair<long, long>, long> eliminations;
     map<pair<long, long>, long> non_edge_constraints;
     long objective_line = 0;
+    stringstream objective_sum;
 
     unordered_map<string, long> cached_proof_lines;
 
@@ -93,7 +93,6 @@ Proof::Proof(const ProofOptions & options) :
     _imp->log_filename = options.log_file;
     _imp->friendly_names = options.friendly_names;
     _imp->super_extra_verbose = options.super_extra_verbose;
-    _imp->format2 = options.version2;
     _imp->recover_encoding = options.recover_encoding;
 }
 
@@ -105,10 +104,7 @@ auto Proof::operator=(Proof &&) -> Proof & = default;
 
 auto Proof::implies_add(long line) -> string
 {
-    if (_imp->format2)
-        return "ia " + to_string(line) + " :";
-    else
-        return "j " + to_string(line);
+    return "ia " + to_string(line) + " :";
 }
 
 auto Proof::create_cp_variable(int pattern_vertex, int target_size,
@@ -218,10 +214,7 @@ auto Proof::finalise_model() -> void
 
     _imp->proof_stream = make_unique<ofstream>(_imp->log_filename);
 
-    if (_imp->format2)
-        *_imp->proof_stream << "pseudo-Boolean proof version 2.0\n";
-    else
-        *_imp->proof_stream << "pseudo-Boolean proof version 1.0\n";
+    *_imp->proof_stream << "pseudo-Boolean proof version 2.0\n";
 
     *_imp->proof_stream << "f " << _imp->nb_constraints << " 0\n";
     _imp->proof_line += _imp->nb_constraints;
@@ -235,36 +228,31 @@ auto Proof::finish_unsat_proof() -> void
     *_imp->proof_stream << "* asserting that we've proved unsat\n";
     *_imp->proof_stream << "u >= 1 ;\n";
     ++_imp->proof_line;
-    if (_imp->format2)
-        *_imp->proof_stream << "output NONE\n"
-                            << "conclusion UNSAT : -1\n"
-                            << "end pseudo-Boolean proof\n";
-    else
-        *_imp->proof_stream << "c " << _imp->proof_line << " 0\n";
+    *_imp->proof_stream << "output NONE\n"
+                        << "conclusion UNSAT : -1\n"
+                        << "end pseudo-Boolean proof\n";
 }
 
 auto Proof::finish_sat_proof() -> void
 {
-    if (_imp->format2)
-        *_imp->proof_stream << "output NONE\n"
-                            << "conclusion SAT\n"
-                            << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE\n"
+        << "conclusion SAT\n"
+        << "end pseudo-Boolean proof\n";
 }
 
 auto Proof::finish_unknown_proof() -> void
 {
-    if (_imp->format2)
-        *_imp->proof_stream << "output NONE\n"
-                            << "conclusion NONE\n"
-                            << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE\n"
+        << "conclusion NONE\n"
+        << "end pseudo-Boolean proof\n";
 }
 
 auto Proof::finish_optimisation_proof(int size) -> void
 {
-    if (_imp->format2)
-        *_imp->proof_stream << "output NONE\n"
-                            << "conclusion BOUNDS " << size << " " << size << '\n'
-                            << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "u" << _imp->objective_sum.str() << " >= " << size << ";\n";
+    *_imp->proof_stream << "output NONE\n"
+        << "conclusion BOUNDS " << size << " " << size << '\n'
+        << "end pseudo-Boolean proof\n";
 }
 
 auto Proof::failure_due_to_pattern_bigger_than_target() -> void
@@ -596,10 +584,7 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
         *_imp->proof_stream << " " << var.second << "=" << val.second;
     *_imp->proof_stream << '\n';
 
-    if (_imp->format2)
-        *_imp->proof_stream << "sol";
-    else
-        *_imp->proof_stream << "v";
+    *_imp->proof_stream << "sol";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " x" << _imp->variable_mappings[pair{var.first, val.first}];
     *_imp->proof_stream << '\n';
@@ -608,10 +593,7 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
 
 auto Proof::post_solution(const vector<int> & solution) -> void
 {
-    if (_imp->format2)
-        *_imp->proof_stream << "sol";
-    else
-        *_imp->proof_stream << "v";
+    *_imp->proof_stream << "sol";
     for (auto & v : solution)
         *_imp->proof_stream << " x" << _imp->binary_variable_mappings[v];
     *_imp->proof_stream << '\n';
@@ -620,10 +602,7 @@ auto Proof::post_solution(const vector<int> & solution) -> void
 
 auto Proof::new_incumbent(const vector<pair<int, bool>> & solution) -> void
 {
-    if (_imp->format2)
-        *_imp->proof_stream << "soli";
-    else
-        *_imp->proof_stream << "o";
+    *_imp->proof_stream << "soli";
     for (auto & [v, t] : solution)
         *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->binary_variable_mappings[v];
     for (auto & [v, w] : _imp->zero_in_proof_objectives)
@@ -958,6 +937,9 @@ auto Proof::create_objective(int n, optional<int> d) -> void
         for (int v = 0; v < n; ++v)
             _imp->model_prelude_stream << " 1 ~x" << _imp->binary_variable_mappings[v];
         _imp->model_prelude_stream << " ;\n";
+
+        for (int v = 0; v < n; ++v)
+            _imp->objective_sum << " 1 ~x" << _imp->binary_variable_mappings[v];
     }
 }
 
@@ -986,6 +968,9 @@ auto Proof::create_null_decision_bound(int p, int t, optional<int> d) -> void
         for (int v = 0; v < p; ++v)
             _imp->model_prelude_stream << " 1 x" << _imp->variable_mappings[pair{v, t}] << " ";
         _imp->model_prelude_stream << " ;\n";
+
+        for (int v = 0; v < p; ++v)
+            _imp->objective_sum << " 1 x" << _imp->variable_mappings[pair{v, t}] << " ";
     }
 }
 

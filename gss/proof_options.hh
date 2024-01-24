@@ -12,7 +12,6 @@ namespace gss
         bool friendly_names = true;
         bool recover_encoding = false;
         bool super_extra_verbose = false;
-        bool version2 = false;
     };
 }
 

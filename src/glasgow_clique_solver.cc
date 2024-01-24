@@ -75,7 +75,6 @@ auto main(int argc, char * argv[]) -> int
             ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .veripb)") //
             ("proof-names", "Use 'friendly' variable names in the proof, rather than x1, x2, ...")                 //
             ("verbose-proofs", "Write lots of comments to the proof, for tracing")                                 //
-            ("proof-format-2", "Use the under-development 2.0 format for proofs")                                  //
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
         display_options.add(proof_logging_options);
 
@@ -162,8 +161,7 @@ auto main(int argc, char * argv[]) -> int
                 .log_file = fn + ".veripb",
                 .friendly_names = options_vars.contains("proof-names"),
                 .recover_encoding = options_vars.contains("recover-proof-encoding"),
-                .super_extra_verbose = options_vars.contains("verbose-proofs"),
-                .version2 = options_vars.contains("proof-format-2")};
+                .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
             cout << "proof_model = " << fn << ".opb" << endl;
             cout << "proof_log = " << fn << ".veripb" << endl;
