@@ -112,6 +112,9 @@ namespace gss
         /// Occurs less target constraints
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
 
+        // Whether to do symmetry breaking dynamically
+        bool dynamic_pattern = false, dynamic_target = false;
+
         /// Optional lackey, for external side constraints
         std::unique_ptr<innards::Lackey> lackey;
 

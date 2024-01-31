@@ -83,7 +83,9 @@ auto main(int argc, char * argv[]) -> int
             ("pattern-symmetries-gap", "Eliminate pattern symmetries (requires Gap)")                                                  //
             ("target-symmetries-gap", "Eliminate target symmetries (requires Gap)")                                                    //
             ("pattern-symmetries-dejavu", "Eliminate pattern symmetries (requires Dejavu)")                                            //
+            ("pattern-symmetries-dejavu-dynamic", "Eliminate pattern symmetries dynamically (requires Dejavu)")                        //
             ("target-symmetries-dejavu", "Eliminate target symmetries (requires Dejavu)")                                              //
+            ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
             ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")                                    //
             ("target-orbits-dejavu", "Eliminate target symmetries dynamically (requires Dejavu)");
         display_options.add(search_options);
@@ -471,6 +473,13 @@ auto main(int argc, char * argv[]) -> int
             for (auto & [a, b] : params.target_occur_less_constraints)
                 cout << " " << a << "<" << b;
             cout << endl;
+        }
+        else if (options_vars.count("target-symmetries-dejavu-dynamic")) {
+            auto dejavu_start_time = steady_clock::now();
+            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target);
+            params.dynamic_target = true;
+            was_given_target_automorphism_group = true;
+            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
         }
         else if (options_vars.count("target-orbits-dejavu")) {
             params.use_target_orbits = true;

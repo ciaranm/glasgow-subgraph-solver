@@ -6,6 +6,7 @@
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/watches.hh>
+#include <gss/innards/automorphisms.hh>
 
 #include <functional>
 #include <random>
@@ -86,6 +87,9 @@ namespace gss::innards
 
         std::mt19937 global_rand;
 
+        std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
+        std::vector<int> target_base, pattern_base; 
+
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
         auto solution_in_proof_form(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<NamedVertex, NamedVertex>>;
@@ -100,6 +104,10 @@ namespace gss::innards
         auto propagate_less_thans(Domains & new_domains) -> bool;
 
         auto propagate_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
+
+        auto propagate_dynamic_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
+
+        auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints) -> bool;
 
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 

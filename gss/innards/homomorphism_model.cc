@@ -1336,6 +1336,16 @@ auto HomomorphismModel::has_occur_less_thans() const -> bool
     return _imp->has_occur_less_thans;
 }
 
+auto HomomorphismModel::do_dynamic_occur_less_thans() const -> bool 
+{
+    return _imp->params.dynamic_target;
+}
+
+auto HomomorphismModel::do_dynamic_less_thans() const -> bool 
+{
+    return _imp->params.dynamic_pattern;
+}
+
 auto HomomorphismModel::directed() const -> bool
 {
     return _imp->directed;

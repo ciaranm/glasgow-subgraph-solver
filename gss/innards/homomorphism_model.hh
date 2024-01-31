@@ -57,6 +57,8 @@ namespace gss::innards
 
         auto has_less_thans() const -> bool;
         auto has_occur_less_thans() const -> bool;
+        auto do_dynamic_occur_less_thans() const -> bool;
+        auto do_dynamic_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
         bool has_pattern_orbits = false;
