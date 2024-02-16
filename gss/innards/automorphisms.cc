@@ -189,45 +189,56 @@ auto gss::innards::automorphisms_as_order_constraints_with_generators(const Inpu
 }
 
 
-// auto gss::innards::dynamic_order_constraints(dejavu::static_graph g, vector<int> base, int size) -> std::vector<std::pair<unsigned int, unsigned int>> {
-//     dejavu::groups::random_schreier rschreier{size};        // Random Schreier structure with domain size nv
-//     // std::vector<int> base;
+auto gss::innards::dynamic_order_constraints(std::vector<innards::SVOBitset> m, vector<int> base) -> std::vector<std::pair<unsigned int, unsigned int>> {
+    
+    dejavu::static_graph g;     // Declare static graph
+    unsigned long n_simple_edges = 0;       // Number of undirected edges
+    for (int i = 0, i_end = m.size(); i != i_end; ++i) {
+        for (int j = i + 1; j != i_end; ++j) {
+            if (m[i].test(j)) ++n_simple_edges;
+        }
+    }
+    g.initialize_graph(m.size(), n_simple_edges);       // Initialise g with nv, ne
+    vector<int> vertices;       // List of vertices
+    for (int v = 0, v_end = m.size(); v != v_end; ++v) {        // For each vertex
+        vertices.push_back(g.add_vertex(m[v].test(v), m[v].count() - m[v].test(v)));   // Add colour and non-looping degree
+    }
+    for (int i = 0, i_end = m.size(); i != i_end; ++i) {
+        for (int j = i + 1; j != i_end; ++j) {
+            if (m[i].test(j)) g.add_edge(vertices[i], vertices[j]);
+        }
+    }
 
-//     rschreier.set_base(base);       // Empty base to begin with
+    int nv = static_cast<int>(m.size());        // Integer cast to suppress narrowing conversion warning
+    
+    dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
 
-//     dejavu::hooks::schreier_hook hook(rschreier);
-//     dejavu::solver s;
-//     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
+    vector<int> empty_base;
 
-//     std::vector<std::pair<unsigned int, unsigned int>> result;        // List of constraint pairs
+    rschreier.set_base(empty_base);       // Let dejavu start with an empty base
 
-//     bool stab_trivial = false;
-//     dejavu::groups::orbit o{size};      // Orbit structure of size nv
-//     while (! stab_trivial) {        // While stabiliser is non-trivial
-//         rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
-//         stab_trivial = true;
-//         for (int v = 0, v_end = size; v != v_end; ++v) {        // For each vertex
-//             if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
-//                 stab_trivial = false;
-//                 base.push_back(v);          // Add v to base
-//             }
-//         }
+    dejavu::hooks::schreier_hook hook(rschreier);
+    dejavu::solver s;
+    s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
 
-//         if (! stab_trivial)
-//             rschreier.set_base(base);       // Update base
-//     }
+    std::vector<std::pair<unsigned int, unsigned int>> result;        // List of constraint pairs
 
-//     std::cout << "Base:\n";
-//     for (unsigned x = 0; x < base.size(); ++x) {        // For each base element
-//         auto v = base.at(x);
-//         std::cout << v << " : ";
-//         for (auto & o : rschreier.get_fixed_orbit(x)) {     // For each orbit point of v
-//             std::cout << o << " ";
-//             if (o != v)     // If v is mapped to somewhere else
-//                 result.push_back(std::make_pair(v, o));        // Enforce v<o
-//         }
-//         std::cout << "\n";
-//     }
+    rschreier.set_base(base);           // Recompute the stabiliser chain with the provided (partial) base
 
-//     return result;
-// }
+    dejavu::groups::orbit o{nv};      // Orbit structure of size nv
+    std::cout << "Base:\n";
+    for (int x = 0, x_end = base.size(); x != x_end; ++x) {
+        rschreier.get_stabilizer_orbit(x, o);
+        int y = base.at(x);
+        std::cout << y << " : ";
+        for (int z = 0, z_end = m.size(); z != z_end; ++z) {
+            if (o.are_in_same_orbit(y,z) && y != z) {
+                std::cout << z << " ";
+                result.push_back(std::make_pair(y,z));
+            }
+        }
+        std::cout << "\n";
+    }
+
+    return result;
+}

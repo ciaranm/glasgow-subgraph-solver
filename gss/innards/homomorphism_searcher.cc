@@ -920,24 +920,31 @@ auto HomomorphismSearcher::make_useful_target_constraints(
     if(!current_assignment) return false;
     unsigned int t = current_assignment->target_vertex;
 
+    // Constructing an adjacency matrix here for the time being
+    std::vector<innards::SVOBitset> adjacency_matrix;
+    for (size_t i = 0; i < model.target_size; i++)
+    {
+        auto row = model.target_graph_row(0,i);
+        adjacency_matrix.emplace_back(row);
+    }
+
+
     if (std::find(target_base.begin(), target_base.end(), t) == target_base.end()) {
         target_base.push_back(t);
 
-        // useful_constraints = innards::dynamic_order_constraints(model.static_target, target_base, model.target_size);
+        int size_before = useful_constraints.size();
 
-        //std::list<std::string,std::string> new_list = innards::automorphisms_as_order_constraints(target, target_base);
-        //TODO decode list
-        //TODO push constraints to useful_constraints
+        // std::vector<std::pair<unsigned int, unsigned int>> res = innards::dynamic_order_constraints(adjacency_matrix, target_base);
+        // useful_constraints.insert(useful_constraints.end(), res.begin(), res.end());
 
-        useful_constraints = model.target_occur_less_thans_in_convenient_order;
+        useful_constraints = innards::dynamic_order_constraints(adjacency_matrix, target_base);
+
+        // return (useful_constraints.size() - size_before) > 0;
+        return true;
+
     }
 
-    for (auto b : target_base) {
-        std::cout << b << " ";
-    }
-    std::cout << "\n";
-
-    return true;
+    return false;
 }
 
 auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
