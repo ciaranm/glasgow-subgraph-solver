@@ -629,14 +629,18 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
     return true;
 }
 
-auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
+auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool {
+    return propagate_less_thans(new_domains, model.pattern_less_thans_in_convenient_order);
+}
+
+auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool
 {
     vector<int> find_domain(model.pattern_size, -1);
 
     for (unsigned i = 0, i_end = new_domains.size(); i != i_end; ++i)
         find_domain[new_domains[i].v] = i;
 
-    for (auto & [a, b] : model.pattern_less_thans_in_convenient_order) {
+    for (auto & [a, b] : constraints) {
         if (find_domain[a] == -1 || find_domain[b] == -1)
             continue;
         auto & a_domain = new_domains[find_domain[a]];
@@ -663,7 +667,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
             return false;
     }
 
-    for (auto & [a, b] : boost::adaptors::reverse(model.pattern_less_thans_in_convenient_order)) {
+    for (auto & [a, b] : boost::adaptors::reverse(constraints)) {
         if (find_domain[a] == -1 || find_domain[b] == -1)
             continue;
         auto & a_domain = new_domains[find_domain[a]];
@@ -939,8 +943,41 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 
         useful_constraints = innards::dynamic_order_constraints(adjacency_matrix, target_base);
 
-        // return (useful_constraints.size() - size_before) > 0;
-        return true;
+        return (useful_constraints.size() - size_before) > 0;
+
+    }
+
+    return false;
+}
+
+auto HomomorphismSearcher::make_useful_pattern_constraints(
+    const std::optional<HomomorphismAssignment> & current_assignment,
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints
+) -> bool
+{
+    if(!current_assignment) return false;
+    unsigned int p = current_assignment->pattern_vertex;
+
+    // Constructing an adjacency matrix here for the time being
+    std::vector<innards::SVOBitset> adjacency_matrix;
+    for (size_t i = 0; i < model.pattern_size; i++)
+    {
+        auto row = model.pattern_graph_row(0,i);
+        adjacency_matrix.emplace_back(row);
+    }
+
+
+    if (std::find(pattern_base.begin(), pattern_base.end(), p) == pattern_base.end()) {
+        pattern_base.push_back(p);
+
+        int size_before = useful_constraints.size();
+
+        // std::vector<std::pair<unsigned int, unsigned int>> res = innards::dynamic_order_constraints(adjacency_matrix, target_base);
+        // useful_constraints.insert(useful_constraints.end(), res.begin(), res.end());
+
+        useful_constraints = innards::dynamic_order_constraints(adjacency_matrix, pattern_base);
+
+        return (useful_constraints.size() - size_before) > 0;
 
     }
 
@@ -1034,11 +1071,25 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         }
 
         // propagate less thans
-        if (model.has_less_thans() && ! propagate_less_thans(new_domains))
-            return false;
+        if (model.has_less_thans()) {
+            if (model.do_dynamic_less_thans()) {
+                if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints)) {
+                    std::cout << "Pattern constraints: ";
+                    for (auto & [a,b] : useful_pattern_constraints) {
+                        std::cout << a << "<" << b << " ";
+                    }
+                    std::cout << "\n";
+                }
+                if (!propagate_less_thans(new_domains, useful_pattern_constraints)) return false;
+            }
+            else if (!propagate_less_thans(new_domains)) {
+                return false;
+            }
+        }
         if (model.has_occur_less_thans()) {
             if (model.do_dynamic_occur_less_thans()) {
-                if (current_assignment && make_useful_target_constraints(current_assignment, useful_target_constraints)) {
+                if (make_useful_target_constraints(current_assignment, useful_target_constraints)) {
+                    std::cout << "Target constraints: ";
                     for (auto & [a,b] : useful_target_constraints) {
                         std::cout << a << "<" << b << " ";
                     }
