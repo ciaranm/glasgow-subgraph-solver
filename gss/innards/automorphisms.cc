@@ -219,6 +219,7 @@ auto gss::innards::dynamic_order_constraints(std::vector<innards::SVOBitset> m, 
 
     dejavu::hooks::schreier_hook hook(rschreier);
     dejavu::solver s;
+    s.set_print(false);
     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
 
     std::vector<std::pair<unsigned int, unsigned int>> result;        // List of constraint pairs
@@ -226,18 +227,18 @@ auto gss::innards::dynamic_order_constraints(std::vector<innards::SVOBitset> m, 
     rschreier.set_base(base);           // Recompute the stabiliser chain with the provided (partial) base
 
     dejavu::groups::orbit o{nv};      // Orbit structure of size nv
-    std::cout << "Base:\n";
+    // std::cout << "Base:\n";
     for (int x = 0, x_end = base.size(); x != x_end; ++x) {
         rschreier.get_stabilizer_orbit(x, o);
         int y = base.at(x);
-        std::cout << y << " : ";
+        // std::cout << y << " : ";
         for (int z = 0, z_end = m.size(); z != z_end; ++z) {
             if (o.are_in_same_orbit(y,z) && y != z) {
-                std::cout << z << " ";
+                // std::cout << z << " ";
                 result.push_back(std::make_pair(y,z));
             }
         }
-        std::cout << "\n";
+        // std::cout << "\n";
     }
 
     return result;

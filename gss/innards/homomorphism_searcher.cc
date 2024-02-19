@@ -36,6 +36,12 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.target_size = model.target_size;
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
+    if (model.has_less_thans()) {
+        for (int i = 0; i < model.target_size; i++) {
+            symmetric_value_order.push_back(i);
+        }
+        symmetric_value_displacement.resize(model.target_size);
+    }
 }
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
@@ -943,6 +949,28 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 
         useful_constraints = innards::dynamic_order_constraints(adjacency_matrix, target_base);
 
+        // TODO make this more efficient, just proof of concept here
+        if (model.do_dynamic_less_thans() && model.do_dynamic_occur_less_thans()) {
+            for (auto con : useful_constraints) {       // for each a<b
+                if ((con.first + symmetric_value_displacement[con.first]) > (con.second + symmetric_value_displacement[con.second])) {    // if b should be before a in the value ordering
+                    int count = 0;
+                    for (int i = con.second; i < con.first; i++) {
+                        symmetric_value_displacement[i]++;
+                        count++;
+                    }
+                    symmetric_value_displacement[con.first] -= count;
+                }
+            }
+            for (int i = 0; i < model.target_size; i++) {
+                symmetric_value_order[i + symmetric_value_displacement[i]] = i;
+            }
+            std::cout << "symmetric value ordering: [";
+            for (auto num: symmetric_value_order) {
+                std::cout << num << " ";
+            }
+            std::cout << "]\n";
+        }
+
         return (useful_constraints.size() - size_before) > 0;
 
     }
@@ -1074,7 +1102,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         if (model.has_less_thans()) {
             if (model.do_dynamic_less_thans()) {
                 if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints)) {
-                    std::cout << "Pattern constraints: ";
+                    std::cout << "pattern constraints = ";
                     for (auto & [a,b] : useful_pattern_constraints) {
                         std::cout << a << "<" << b << " ";
                     }
@@ -1089,7 +1117,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         if (model.has_occur_less_thans()) {
             if (model.do_dynamic_occur_less_thans()) {
                 if (make_useful_target_constraints(current_assignment, useful_target_constraints)) {
-                    std::cout << "Target constraints: ";
+                    std::cout << "target constraints = ";
                     for (auto & [a,b] : useful_target_constraints) {
                         std::cout << a << "<" << b << " ";
                     }

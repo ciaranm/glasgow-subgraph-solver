@@ -87,8 +87,10 @@ namespace gss::innards
 
         std::mt19937 global_rand;
 
+        // Maybe should be moved into Model?
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
         std::vector<int> target_base, pattern_base; 
+        std::vector<int> symmetric_value_order, symmetric_value_displacement;
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
