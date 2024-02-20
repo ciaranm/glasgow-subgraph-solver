@@ -37,9 +37,6 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
     if (model.has_less_thans()) {
-        for (int i = 0; i < model.target_size; i++) {
-            symmetric_value_order.push_back(i);
-        }
         symmetric_value_displacement.resize(model.target_size);
     }
 }
@@ -656,15 +653,35 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto first_a = a_domain.values.find_first();
         if (first_a == decltype(a_domain.values)::npos)
             return false;
-        auto first_allowed_b = first_a + 1;
+        if (model.do_dynamic_occur_less_thans()) {
+            for (auto i = 0; i < model.target_size; i++) {
+                if (a_domain.values.test(i) && (symmetric_value_displacement[i] + i < symmetric_value_displacement[first_a] + first_a)) {
+                    first_a = i;
+                }
+            }
+        }
+        
+        auto first_allowed_b = symmetric_value_displacement[first_a] + first_a + 1;
 
         if (first_allowed_b >= model.target_size)
             return false;
 
-        for (auto v = b_domain.values.find_first(); v != decltype(b_domain.values)::npos; v = b_domain.values.find_first()) {
-            if (v >= first_allowed_b)
-                break;
-            b_domain.values.reset(v);
+        if (model.do_dynamic_occur_less_thans()) {
+            for (auto v = 0; v < model.target_size; v++) {      // TODO only need to check b_domain
+                if (b_domain.values.test(v) && (symmetric_value_displacement[v] + v) < first_allowed_b) {
+                    std::cout << "first_a=" << first_a << "\n";
+                    std::cout << "first_allowed_b=" << first_allowed_b << "\n";
+                    std::cout << b << "!=" << v << "\n";
+                    b_domain.values.reset(v);
+                }
+            }
+        }
+        else {
+            for (auto v = b_domain.values.find_first(); v != decltype(b_domain.values)::npos; v = b_domain.values.find_first()) {
+                if (v >= first_allowed_b)
+                    break;
+                b_domain.values.reset(v);
+            }
         }
 
         // b might have shrunk (and detect empty before the next bit to make life easier)
@@ -680,22 +697,44 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto & b_domain = new_domains[find_domain[b]];
 
         // last value of a must be at least one before the last possible value of b
-        auto b_values_copy = b_domain.values;
-        auto last_b = b_domain.values.find_first();
-        for (auto v = last_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
-            b_values_copy.reset(v);
-            last_b = v;
+        if (model.do_dynamic_occur_less_thans()) {
+            auto b_values_copy = b_domain.values;
+            auto last_b = b_domain.values.find_first();
+            for (auto v = last_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
+                b_values_copy.reset(v);
+                if ((symmetric_value_displacement[last_b] + last_b) < (symmetric_value_displacement[v] + v))
+                    last_b = v;
+            }
+
+            if (last_b + symmetric_value_displacement[last_b] == 0) // last_b is the first value in the ordering
+                return false;
+            auto last_allowed_a = symmetric_value_displacement[last_b] + last_b - 1;   // last a must be at least one before last b in the ordering
+
+            auto a_values_copy = a_domain.values;
+            for (auto v = a_values_copy.find_first(); v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
+                a_values_copy.reset(v);
+                if (v + symmetric_value_displacement[v] > last_allowed_a)
+                    a_domain.values.reset(v);
+            }
         }
+        else {
+            auto b_values_copy = b_domain.values;
+            auto last_b = b_domain.values.find_first();
+            for (auto v = last_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
+                b_values_copy.reset(v);
+                last_b = v;
+            }
 
-        if (last_b == 0)
-            return false;
-        auto last_allowed_a = last_b - 1;
+            if (last_b == 0)
+                return false;
+            auto last_allowed_a = last_b - 1;
 
-        auto a_values_copy = a_domain.values;
-        for (auto v = a_values_copy.find_first(); v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
-            a_values_copy.reset(v);
-            if (v > last_allowed_a)
-                a_domain.values.reset(v);
+            auto a_values_copy = a_domain.values;
+            for (auto v = a_values_copy.find_first(); v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
+                a_values_copy.reset(v);
+                if (v > last_allowed_a)
+                    a_domain.values.reset(v);
+            }
         }
 
         // a might have shrunk
@@ -954,21 +993,16 @@ auto HomomorphismSearcher::make_useful_target_constraints(
             for (auto con : useful_constraints) {       // for each a<b
                 if ((con.first + symmetric_value_displacement[con.first]) > (con.second + symmetric_value_displacement[con.second])) {    // if b should be before a in the value ordering
                     int count = 0;
-                    for (int i = con.second; i < con.first; i++) {
-                        symmetric_value_displacement[i]++;
-                        count++;
+                    for (int i = 0; i < model.target_size; i++) { // this bit is particularly clunky
+                        if ((i + symmetric_value_displacement[i]) >= (con.second + symmetric_value_displacement[con.second]) &&
+                            (i + symmetric_value_displacement[i]) < (con.first + symmetric_value_displacement[con.first])) {
+                            symmetric_value_displacement[i]++;
+                            count++;
+                        }
                     }
                     symmetric_value_displacement[con.first] -= count;
                 }
             }
-            for (int i = 0; i < model.target_size; i++) {
-                symmetric_value_order[i + symmetric_value_displacement[i]] = i;
-            }
-            std::cout << "symmetric value ordering: [";
-            for (auto num: symmetric_value_order) {
-                std::cout << num << " ";
-            }
-            std::cout << "]\n";
         }
 
         return (useful_constraints.size() - size_before) > 0;
@@ -1099,18 +1133,8 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         }
 
         // propagate less thans
-        if (model.has_less_thans()) {
-            if (model.do_dynamic_less_thans()) {
-                if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints)) {
-                    std::cout << "pattern constraints = ";
-                    for (auto & [a,b] : useful_pattern_constraints) {
-                        std::cout << a << "<" << b << " ";
-                    }
-                    std::cout << "\n";
-                }
-                if (!propagate_less_thans(new_domains, useful_pattern_constraints)) return false;
-            }
-            else if (!propagate_less_thans(new_domains)) {
+        if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
+            if (!propagate_less_thans(new_domains)) {
                 return false;
             }
         }
@@ -1129,6 +1153,18 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             else if (! propagate_occur_less_thans(current_assignment, assignments, new_domains)) 
                 return false;
         }
+
+        if (model.has_less_thans() && model.do_dynamic_less_thans()) {
+                if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints)) {
+                    std::cout << "pattern constraints = ";
+                    for (auto & [a,b] : useful_pattern_constraints) {
+                        std::cout << a << "<" << b << " ";
+                    }
+                    std::cout << "\n";
+                }
+                std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
+                if (!propagate_less_thans(new_domains, useful_pattern_constraints)) return false;
+            }
 
         // propagate all different
         if (params.injectivity == Injectivity::Injective)
