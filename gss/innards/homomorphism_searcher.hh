@@ -11,6 +11,8 @@
 #include <functional>
 #include <random>
 
+#include "dejavu.h"
+
 namespace gss::innards
 {
     enum class SearchResult
@@ -91,6 +93,7 @@ namespace gss::innards
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
         std::vector<int> target_base, pattern_base; 
         std::vector<int> symmetric_value_displacement;
+        dejavu::groups::random_schreier t_rschreier{model.target_size}, p_rschreier{model.pattern_size};
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 

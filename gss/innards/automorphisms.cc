@@ -1,8 +1,9 @@
 #include <gss/innards/automorphisms.hh>
 
-#include <dejavu.h>
+// #include <dejavu.h>
 
 #include <vector>
+#include "automorphisms.hh"
 
 using std::string_view;
 using std::vector;
@@ -188,9 +189,7 @@ auto gss::innards::automorphisms_as_order_constraints_with_generators(const Inpu
     return result;
 }
 
-
-auto gss::innards::dynamic_order_constraints(std::vector<innards::SVOBitset> m, vector<int> base) -> std::vector<std::pair<unsigned int, unsigned int>> {
-    
+auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier &r, std::vector<innards::SVOBitset> m) -> void {
     dejavu::static_graph g;     // Declare static graph
     unsigned long n_simple_edges = 0;       // Number of undirected edges
     for (int i = 0, i_end = m.size(); i != i_end; ++i) {
@@ -209,37 +208,35 @@ auto gss::innards::dynamic_order_constraints(std::vector<innards::SVOBitset> m, 
         }
     }
 
-    int nv = static_cast<int>(m.size());        // Integer cast to suppress narrowing conversion warning
-    
-    dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
-
     vector<int> empty_base;
 
-    rschreier.set_base(empty_base);       // Let dejavu start with an empty base
+    r.set_base(empty_base);       // Let dejavu start with an empty base
 
-    dejavu::hooks::schreier_hook hook(rschreier);
+    dejavu::hooks::schreier_hook hook(r);
     dejavu::solver s;
     s.set_print(false);
     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
 
-    std::vector<std::pair<unsigned int, unsigned int>> result;        // List of constraint pairs
+    // std::cout << "Initialised rschreier!\n";
+}
 
+
+auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::groups::random_schreier &rschreier, std::vector<std::pair<unsigned int, unsigned int>> &constraints) -> void {
+
+    //TODO we only actually care about adding one extra layer of the chain here, maybe there is a way to limit depth of layer computation in Dejavu?
     rschreier.set_base(base);           // Recompute the stabiliser chain with the provided (partial) base
 
-    dejavu::groups::orbit o{nv};      // Orbit structure of size nv
+    dejavu::groups::orbit o{sz};      // Orbit structure of size nv
     // std::cout << "Base:\n";
-    for (int x = 0, x_end = base.size(); x != x_end; ++x) {
-        rschreier.get_stabilizer_orbit(x, o);
-        int y = base.at(x);
-        // std::cout << y << " : ";
-        for (int z = 0, z_end = m.size(); z != z_end; ++z) {
-            if (o.are_in_same_orbit(y,z) && y != z) {
-                // std::cout << z << " ";
-                result.push_back(std::make_pair(y,z));
-            }
+    int x = base.size() - 1;            // Only interested in the most recently added base point
+    rschreier.get_stabilizer_orbit(x, o);       // Retrieve stabiliser orbit at this point
+    int y = base.at(x);
+    // std::cout << y << " : ";
+    for (int z = 0; z != sz; ++z) {     // For each vertex z in the graph
+        if (o.are_in_same_orbit(y,z) && y != z) {       // If y,z are symmetric (but not equal) at this stabiliser chain layer 
+            // std::cout << z << " ";
+            constraints.push_back(std::make_pair(y,z));     // Add constraint y<z
         }
-        // std::cout << "\n";
     }
-
-    return result;
+    // std::cout << "\n";
 }

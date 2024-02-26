@@ -3,11 +3,13 @@
 
 #include <gss/formats/input_graph.hh>
 #include <gss/loooong.hh>
-#include<gss/innards/svo_bitset.hh>
+#include <gss/innards/svo_bitset.hh>
 
 #include <list>
 #include <string>
 #include <utility>
+
+#include "build/_deps/dejavu-src/dejavu.h"
 
 namespace gss::innards
 {
@@ -16,7 +18,8 @@ namespace gss::innards
     auto automorphisms_as_order_constraints(const InputGraph &, const bool with_generators) -> OrderConstraints;
     auto automorphisms_as_order_constraints(const InputGraph &, std::vector<int> base) -> OrderConstraints;
     auto automorphisms_as_order_constraints_with_generators(const InputGraph &, std::vector<int> base) -> OrderConstraints;
-    auto dynamic_order_constraints(std::vector<gss::innards::SVOBitset> m, std::vector<int> base) -> std::vector<std::pair<unsigned int, unsigned int>>;
+    auto initialise_dynamic_structure(dejavu::groups::random_schreier &, std::vector<innards::SVOBitset> m) -> void;
+    auto dynamic_order_constraints(int sz, std::vector<int> base, dejavu::groups::random_schreier &, std::vector<std::pair<unsigned int, unsigned int>> &) -> void;
 }
 
 #endif

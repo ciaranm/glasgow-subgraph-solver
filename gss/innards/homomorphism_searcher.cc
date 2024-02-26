@@ -39,6 +39,20 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
     if (model.has_less_thans()) {
         symmetric_value_displacement.resize(model.target_size);
     }
+    if (model.do_dynamic_occur_less_thans()) {
+        std::vector<innards::SVOBitset> adjacency_matrix;
+        for (size_t i = 0; i < model.target_size; i++) {
+            adjacency_matrix.emplace_back(model.target_graph_row(0,i));
+        }
+        initialise_dynamic_structure(t_rschreier, adjacency_matrix);
+    }
+    if (model.do_dynamic_less_thans()) {
+        std::vector<innards::SVOBitset> adjacency_matrix;
+        for (size_t i = 0; i < model.pattern_size; i++) {
+            adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
+        }
+        initialise_dynamic_structure(p_rschreier, adjacency_matrix);
+    }
 }
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
@@ -654,7 +668,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         if (first_a == decltype(a_domain.values)::npos)
             return false;
         if (model.do_dynamic_occur_less_thans()) {
-            for (auto i = 0; i < model.target_size; i++) {
+            for (unsigned int i = 0; i < model.target_size; i++) {
                 if (a_domain.values.test(i) && (symmetric_value_displacement[i] + i < symmetric_value_displacement[first_a] + first_a)) {
                     first_a = i;
                 }
@@ -667,14 +681,18 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
             return false;
 
         if (model.do_dynamic_occur_less_thans()) {
-            for (auto v = 0; v < model.target_size; v++) {      // TODO only need to check b_domain
+            auto b_domain_values_copy = b_domain.values;
+            for (auto v = b_domain_values_copy.find_first(); v != decltype(b_domain_values_copy)::npos; v = b_domain_values_copy.find_first()) {
                 if (b_domain.values.test(v) && (symmetric_value_displacement[v] + v) < first_allowed_b) {
-                    std::cout << "first_a=" << first_a << "\n";
-                    std::cout << "first_allowed_b=" << first_allowed_b << "\n";
-                    std::cout << b << "!=" << v << "\n";
                     b_domain.values.reset(v);
                 }
+                b_domain_values_copy.reset(v);
             }
+            // for (unsigned int v = 0; v < model.target_size; v++) {      // This version is probably slightly less efficient
+            //     if (b_domain.values.test(v) && (symmetric_value_displacement[v] + v) < first_allowed_b) {
+            //         b_domain.values.reset(v);
+            //     }
+            // }
         }
         else {
             for (auto v = b_domain.values.find_first(); v != decltype(b_domain.values)::npos; v = b_domain.values.find_first()) {
@@ -969,43 +987,31 @@ auto HomomorphismSearcher::make_useful_target_constraints(
     if(!current_assignment) return false;
     unsigned int t = current_assignment->target_vertex;
 
-    // Constructing an adjacency matrix here for the time being
-    std::vector<innards::SVOBitset> adjacency_matrix;
-    for (size_t i = 0; i < model.target_size; i++)
-    {
-        auto row = model.target_graph_row(0,i);
-        adjacency_matrix.emplace_back(row);
-    }
-
-
     if (std::find(target_base.begin(), target_base.end(), t) == target_base.end()) {
-        target_base.push_back(t);
+        target_base.push_back(t);       // Add this vertex as a new base point
 
-        int size_before = useful_constraints.size();
+        unsigned int size_before = useful_constraints.size();
 
-        // std::vector<std::pair<unsigned int, unsigned int>> res = innards::dynamic_order_constraints(adjacency_matrix, target_base);
-        // useful_constraints.insert(useful_constraints.end(), res.begin(), res.end());
+        innards::dynamic_order_constraints(model.target_size, target_base, t_rschreier, useful_constraints);    // Compute constraints at the new base point
 
-        useful_constraints = innards::dynamic_order_constraints(adjacency_matrix, target_base);
-
-        // TODO make this more efficient, just proof of concept here
-        if (model.do_dynamic_less_thans() && model.do_dynamic_occur_less_thans()) {
-            for (auto con : useful_constraints) {       // for each a<b
-                if ((con.first + symmetric_value_displacement[con.first]) > (con.second + symmetric_value_displacement[con.second])) {    // if b should be before a in the value ordering
+        if (model.has_less_thans() && model.do_dynamic_occur_less_thans()) {        // We need to record value order if we're also doing pattern symmetry
+            for (unsigned int i = size_before; i < useful_constraints.size(); i++) {       // for each a<b just added
+                std::pair<unsigned int, unsigned int> con = useful_constraints[i];
+                if ((con.first + symmetric_value_displacement[con.first]) > (con.second + symmetric_value_displacement[con.second])) {    // if b is currently before a in the value ordering
                     int count = 0;
-                    for (int i = 0; i < model.target_size; i++) { // this bit is particularly clunky
+                    for (unsigned int i = 0; i < model.target_size; i++) {   // we have to check every vertex since we only know offset, not explicit order
                         if ((i + symmetric_value_displacement[i]) >= (con.second + symmetric_value_displacement[con.second]) &&
-                            (i + symmetric_value_displacement[i]) < (con.first + symmetric_value_displacement[con.first])) {
-                            symmetric_value_displacement[i]++;
+                            (i + symmetric_value_displacement[i]) < (con.first + symmetric_value_displacement[con.first])) {    // if b <= i < a in the current ordering
+                            symmetric_value_displacement[i]++;      // Shift i up one index
                             count++;
                         }
                     }
-                    symmetric_value_displacement[con.first] -= count;
+                    symmetric_value_displacement[con.first] -= count;       // Shift a left by `count` indices
                 }
             }
         }
 
-        return (useful_constraints.size() - size_before) > 0;
+        return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
 
     }
 
@@ -1020,26 +1026,14 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
     if(!current_assignment) return false;
     unsigned int p = current_assignment->pattern_vertex;
 
-    // Constructing an adjacency matrix here for the time being
-    std::vector<innards::SVOBitset> adjacency_matrix;
-    for (size_t i = 0; i < model.pattern_size; i++)
-    {
-        auto row = model.pattern_graph_row(0,i);
-        adjacency_matrix.emplace_back(row);
-    }
-
-
     if (std::find(pattern_base.begin(), pattern_base.end(), p) == pattern_base.end()) {
-        pattern_base.push_back(p);
+        pattern_base.push_back(p);      // Add this vertex as a new base point
 
         int size_before = useful_constraints.size();
 
-        // std::vector<std::pair<unsigned int, unsigned int>> res = innards::dynamic_order_constraints(adjacency_matrix, target_base);
-        // useful_constraints.insert(useful_constraints.end(), res.begin(), res.end());
+        innards::dynamic_order_constraints(model.pattern_size, pattern_base, p_rschreier, useful_constraints);      // Compute new constraints at new base point
 
-        useful_constraints = innards::dynamic_order_constraints(adjacency_matrix, pattern_base);
-
-        return (useful_constraints.size() - size_before) > 0;
+        return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
 
     }
 
@@ -1153,7 +1147,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             else if (! propagate_occur_less_thans(current_assignment, assignments, new_domains)) 
                 return false;
         }
-
         if (model.has_less_thans() && model.do_dynamic_less_thans()) {
                 if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints)) {
                     std::cout << "pattern constraints = ";
@@ -1162,7 +1155,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                     }
                     std::cout << "\n";
                 }
-                std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
                 if (!propagate_less_thans(new_domains, useful_pattern_constraints)) return false;
             }
 
