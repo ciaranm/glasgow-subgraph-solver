@@ -160,6 +160,9 @@ namespace gss::innards
 
         auto set_seed(int n) -> void;
 
+        auto print_pattern_constraints() -> void;
+        auto print_target_constraints() -> void;
+
         Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;
     };
 }

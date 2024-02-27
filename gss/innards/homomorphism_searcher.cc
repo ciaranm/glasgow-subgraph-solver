@@ -1134,13 +1134,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         }
         if (model.has_occur_less_thans()) {
             if (model.do_dynamic_occur_less_thans()) {
-                if (make_useful_target_constraints(current_assignment, useful_target_constraints)) {
-                    std::cout << "target constraints = ";
-                    for (auto & [a,b] : useful_target_constraints) {
-                        std::cout << a << "<" << b << " ";
-                    }
-                    std::cout << "\n";
-                }
+                make_useful_target_constraints(current_assignment, useful_target_constraints);
                 if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, new_domains))
                     return false;
             }
@@ -1148,13 +1142,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 return false;
         }
         if (model.has_less_thans() && model.do_dynamic_less_thans()) {
-                if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints)) {
-                    std::cout << "pattern constraints = ";
-                    for (auto & [a,b] : useful_pattern_constraints) {
-                        std::cout << a << "<" << b << " ";
-                    }
-                    std::cout << "\n";
-                }
+                make_useful_pattern_constraints(current_assignment, useful_pattern_constraints);
                 if (!propagate_less_thans(new_domains, useful_pattern_constraints)) return false;
             }
 
@@ -1206,4 +1194,20 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 auto HomomorphismSearcher::set_seed(int t) -> void
 {
     global_rand.seed(t);
+}
+
+auto HomomorphismSearcher::print_pattern_constraints() -> void {
+    std::cout << "pattern constraints = ";
+    for (auto & [a,b] : useful_pattern_constraints) {
+        std::cout << a << "<" << b << " ";
+    }
+    std::cout << "\n";
+}
+
+auto HomomorphismSearcher::print_target_constraints() -> void {
+    std::cout << "target constraints = ";
+    for (auto & [a,b] : useful_target_constraints) {
+        std::cout << a << "<" << b << " ";
+    }
+    std::cout << "\n";
 }

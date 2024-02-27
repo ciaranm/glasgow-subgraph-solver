@@ -169,6 +169,11 @@ namespace
                 params.restarts_schedule->did_a_restart();
             }
 
+            if (model.do_dynamic_less_thans())
+                searcher.print_pattern_constraints();
+            if (model.do_dynamic_occur_less_thans())
+                searcher.print_target_constraints();
+
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
