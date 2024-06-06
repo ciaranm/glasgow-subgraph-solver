@@ -122,9 +122,9 @@ auto main(int argc, char * argv[]) -> int
         display_options.add(lackey_options);
 
         po::options_description proof_logging_options{"Proof logging options"};
-        proof_logging_options.add_options()                                                                        //
-            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .veripb)") //
-            ("verbose-proofs", "Write lots of comments to the proof, for tracing")                                 //
+        proof_logging_options.add_options()                                                                     //
+            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .pbp)") //
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing")                              //
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
         display_options.add(proof_logging_options);
 
@@ -389,12 +389,12 @@ auto main(int argc, char * argv[]) -> int
             string fn = options_vars["prove"].as<string>();
             ProofOptions proof_options{
                 .opb_file = fn + ".opb",
-                .log_file = fn + ".veripb",
+                .log_file = fn + ".pbp",
                 .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
             cout << "proof_model = " << fn << ".opb" << endl;
-            cout << "proof_log = " << fn << ".veripb" << endl;
+            cout << "proof_log = " << fn << ".pbp" << endl;
         }
 
         auto describe = [&] (const InputGraph & g) {
