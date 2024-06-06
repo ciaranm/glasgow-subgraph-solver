@@ -419,7 +419,7 @@ auto gss::solve_homomorphism_problem(
         if (1 != params.n_threads)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with threads"};
         if (params.clique_detection)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection"};
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
         if (params.lackey)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with a lackey"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
