@@ -36,7 +36,6 @@ namespace gss::innards
         struct Imp;
         std::unique_ptr<Imp> _imp;
 
-        auto implies_add(long) -> std::string;
         auto recover_adjacency_lines(int g, int p, int n, int t) -> void;
         auto recover_injectivity_constraint(int p) -> void;
         auto recover_at_least_one_constraint(int p) -> void;

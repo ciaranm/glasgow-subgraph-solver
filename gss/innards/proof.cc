@@ -100,11 +100,6 @@ Proof::~Proof() = default;
 
 auto Proof::operator=(Proof &&) -> Proof & = default;
 
-auto Proof::implies_add(long line) -> string
-{
-    return "ia " + to_string(line) + " :";
-}
-
 auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     const function<auto(int)->string> & pattern_name,
     const function<auto(int)->string> & target_name) -> void
@@ -369,7 +364,7 @@ auto Proof::incompatible_by_degrees(
     *_imp->proof_stream << " s 0\n";
     ++_imp->proof_line;
 
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
     _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
 
@@ -438,7 +433,7 @@ auto Proof::incompatible_by_nds(
     *_imp->proof_stream << " s 0\n";
     ++_imp->proof_line;
 
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
     *_imp->proof_stream << "d " << _imp->proof_line - 1 << " 0\n";
@@ -579,7 +574,7 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
         *_imp->proof_stream << " " << var.second << "=" << val.second;
     *_imp->proof_stream << '\n';
 
-    *_imp->proof_stream << "sol";
+    *_imp->proof_stream << "solx";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " x" << _imp->variable_mappings[pair{var.first, val.first}];
     *_imp->proof_stream << '\n';
@@ -588,7 +583,7 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
 
 auto Proof::post_solution(const vector<int> & solution) -> void
 {
-    *_imp->proof_stream << "sol";
+    *_imp->proof_stream << "solx";
     for (auto & v : solution)
         *_imp->proof_stream << " x" << _imp->binary_variable_mappings[v];
     *_imp->proof_stream << '\n';
@@ -692,10 +687,10 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : two_away_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
+    *_imp->proof_stream << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
     // if p maps to t then q does not map to t
@@ -703,11 +698,11 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // and cancel out stray extras from injectivity
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : two_away_from_t)
         if (u.first != t)
             *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
+    *_imp->proof_stream << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
     vector<long> things_to_add_up;
@@ -736,8 +731,9 @@ auto Proof::create_exact_path_graphs(
         ++_imp->proof_line;
 
         // want: ~x_p_t + ~x_q_u >= 1
-        *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}]
-                            << " 1 ~x" << _imp->variable_mappings[pair{q.first, u.first.first}] << " >= 1 ;\n";
+        *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}]
+                            << " 1 ~x" << _imp->variable_mappings[pair{q.first, u.first.first}] << " >= 1 ; "
+                            << _imp->proof_line << '\n';
         things_to_add_up.push_back(++_imp->proof_line);
     }
 
@@ -756,7 +752,7 @@ auto Proof::create_exact_path_graphs(
     }
 
     *_imp->proof_stream << "# 0\n";
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " " << tidied_up.str() << '\n';
+    *_imp->proof_stream << "ia " << tidied_up.str() << " " << _imp->proof_line << '\n';
     ++_imp->proof_line;
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, tuple{_imp->proof_line, _imp->proof_line, ""});
     _imp->cached_proof_lines.emplace(tidied_up.str(), _imp->proof_line);
@@ -792,11 +788,10 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     if (_imp->recover_encoding)
         recover_adjacency_lines(0, p.first, q.first, t.first);
 
-    *_imp->proof_stream << implies_add(get<1>(_imp->adjacency_lines[tuple{0, p.first, q.first, t.first}]))
-                        << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
+    *_imp->proof_stream << " >= 1 ; " << get<1>(_imp->adjacency_lines[tuple{0, p.first, q.first, t.first}]) << '\n';
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, tuple{_imp->proof_line, _imp->proof_line, ""});
@@ -834,18 +829,18 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     ++_imp->proof_line;
 
     // tidy up
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
+    *_imp->proof_stream << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
     *_imp->proof_stream << "# 0\n";
 
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
+    *_imp->proof_stream << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, tuple{_imp->proof_line, _imp->proof_line, ""});
@@ -886,10 +881,10 @@ auto Proof::create_distance3_graphs(
     ++_imp->proof_line;
 
     // tidy up
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{path_from_p_to_q_2.first, u.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
+    *_imp->proof_stream << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
     *_imp->proof_stream << "p " << _imp->proof_line;
@@ -900,10 +895,10 @@ auto Proof::create_distance3_graphs(
 
     *_imp->proof_stream << "# 0\n";
 
-    *_imp->proof_stream << implies_add(_imp->proof_line) << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
+    *_imp->proof_stream << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, tuple{_imp->proof_line, _imp->proof_line, ""});
