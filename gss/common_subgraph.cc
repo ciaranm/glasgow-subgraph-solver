@@ -342,7 +342,7 @@ namespace
             if (proof && params.decide && result.complete && result.mapping.empty())
                 proof->finish_unsat_proof();
             else if (proof && ! params.decide && result.complete)
-                proof->finish_unsat_proof();
+                proof->finish_optimisation_proof(first.size() - result.mapping.size());
 
             return result;
         }
