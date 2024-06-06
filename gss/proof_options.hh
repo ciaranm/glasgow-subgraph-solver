@@ -9,7 +9,6 @@ namespace gss
     {
         std::string opb_file;
         std::string log_file;
-        bool friendly_names = true;
         bool recover_encoding = false;
         bool super_extra_verbose = false;
     };

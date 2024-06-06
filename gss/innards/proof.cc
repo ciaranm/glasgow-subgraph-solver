@@ -52,7 +52,6 @@ struct Proof::Imp
     string opb_filename, log_filename;
     stringstream model_stream, model_prelude_stream;
     unique_ptr<ostream> proof_stream;
-    bool friendly_names;
     bool super_extra_verbose = false;
     bool recover_encoding = false;
 
@@ -91,7 +90,6 @@ Proof::Proof(const ProofOptions & options) :
 {
     _imp->opb_filename = options.opb_file;
     _imp->log_filename = options.log_file;
-    _imp->friendly_names = options.friendly_names;
     _imp->super_extra_verbose = options.super_extra_verbose;
     _imp->recover_encoding = options.recover_encoding;
 }
@@ -112,10 +110,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     const function<auto(int)->string> & target_name) -> void
 {
     for (int i = 0; i < target_size; ++i)
-        if (_imp->friendly_names)
-            _imp->variable_mappings.emplace(pair{pattern_vertex, i}, pattern_name(pattern_vertex) + "_" + target_name(i));
-        else
-            _imp->variable_mappings.emplace(pair{pattern_vertex, i}, to_string(_imp->variable_mappings.size() + 1));
+        _imp->variable_mappings.emplace(pair{pattern_vertex, i}, pattern_name(pattern_vertex) + "_" + target_name(i));
 
     _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
     stringstream al1_constraint;
@@ -917,10 +912,7 @@ auto Proof::create_distance3_graphs(
 auto Proof::create_binary_variable(int vertex,
     const function<auto(int)->string> & name) -> void
 {
-    if (_imp->friendly_names)
-        _imp->binary_variable_mappings.emplace(vertex, name(vertex));
-    else
-        _imp->binary_variable_mappings.emplace(vertex, to_string(_imp->binary_variable_mappings.size() + 1));
+    _imp->binary_variable_mappings.emplace(vertex, name(vertex));
 }
 
 auto Proof::create_objective(int n, optional<int> d) -> void
@@ -1253,7 +1245,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
 
     for (int v = 0; v < p; ++v)
         for (int w = 0; w < v; ++w) {
-            string n = _imp->friendly_names ? ("conn1_" + to_string(v) + "_" + to_string(w)) : to_string(++cnum);
+            string n = "conn1_" + to_string(v) + "_" + to_string(w);
             _imp->connected_variable_mappings.emplace(tuple{1, v, w}, n);
             if (! adj(v, w)) {
                 // v not adjacent to w, so the walk does not exist
@@ -1278,13 +1270,13 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
         _imp->model_stream << "* selected vertices must be connected, walk " << k << '\n';
         for (int v = 0; v < p; ++v)
             for (int w = 0; w < v; ++w) {
-                string n = _imp->friendly_names ? ("conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w)) : to_string(++cnum);
+                string n = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w);
                 _imp->connected_variable_mappings.emplace(tuple{k, v, w}, n);
 
                 vector<string> ors;
                 for (int u = 0; u < p; ++u) {
                     if (v != w && v != u && u != w) {
-                        string m = _imp->friendly_names ? ("conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u)) : to_string(++cnum);
+                        string m = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w) + "_via_" + to_string(u);
                         ors.push_back(m);
                         _imp->connected_variable_mappings_aux.emplace(tuple{k, v, w, u}, m);
                         // either the first half walk exists, or the via term is false

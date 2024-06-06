@@ -73,7 +73,6 @@ auto main(int argc, char * argv[]) -> int
         po::options_description proof_logging_options{"Proof logging options"};
         proof_logging_options.add_options()                                                                        //
             ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .veripb)") //
-            ("proof-names", "Use 'friendly' variable names in the proof, rather than x1, x2, ...")                 //
             ("verbose-proofs", "Write lots of comments to the proof, for tracing")                                 //
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
         display_options.add(proof_logging_options);
@@ -159,7 +158,6 @@ auto main(int argc, char * argv[]) -> int
             ProofOptions proof_options{
                 .opb_file = fn + ".opb",
                 .log_file = fn + ".veripb",
-                .friendly_names = options_vars.contains("proof-names"),
                 .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
