@@ -93,7 +93,7 @@ namespace gss::innards
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
         std::vector<int> target_base, pattern_base; 
         std::vector<int> symmetric_value_displacement;
-        dejavu::groups::random_schreier t_rschreier{model.target_size}, p_rschreier{model.pattern_size};
+        dejavu::groups::random_schreier t_rschreier{model.target_size * 3}, p_rschreier{model.pattern_size * 3};    // TODO the * 3 is a clunky upper bound in directed cases, needs refining
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
@@ -114,9 +114,9 @@ namespace gss::innards
 
         auto propagate_dynamic_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
 
-        auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints) -> bool;
+        auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         
-        auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints) -> bool;
+        auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 
@@ -162,6 +162,8 @@ namespace gss::innards
 
         auto print_pattern_constraints() -> void;
         auto print_target_constraints() -> void;
+
+        int sym_time;
 
         Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;
     };

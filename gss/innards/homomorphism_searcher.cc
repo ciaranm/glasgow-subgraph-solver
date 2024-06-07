@@ -25,6 +25,13 @@ using std::tuple;
 using std::uniform_int_distribution;
 using std::vector;
 
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using std::chrono::operator""s;
+using std::chrono::seconds;
+using std::chrono::steady_clock;
+using std::chrono::system_clock;
+
 HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
     const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f) :
     model(m),
@@ -44,15 +51,18 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         for (size_t i = 0; i < model.target_size; i++) {
             adjacency_matrix.emplace_back(model.target_graph_row(0,i));
         }
-        initialise_dynamic_structure(t_rschreier, adjacency_matrix);
+        // std::cout << "target_";
+        initialise_dynamic_structure(t_rschreier, adjacency_matrix, model.directed());
     }
     if (model.do_dynamic_less_thans()) {
         std::vector<innards::SVOBitset> adjacency_matrix;
         for (size_t i = 0; i < model.pattern_size; i++) {
             adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
         }
-        initialise_dynamic_structure(p_rschreier, adjacency_matrix);
+        // std::cout << "pattern_";
+        initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed());
     }
+    sym_time = 0;
 }
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
@@ -148,6 +158,8 @@ auto HomomorphismSearcher::restarting_search(
                 if (params.enumerate_callback) {
                     VertexToVertexMapping mapping;
                     expand_to_full_result(assignments, mapping);
+                    // print_pattern_constraints();
+                    // print_target_constraints();
                     if (! params.enumerate_callback(mapping))
                         return SearchResult::Satisfiable;
                 }
@@ -639,7 +651,7 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
 
         // we might have removed values
         d.count = d.values.count();
-        if (0 == d.count)
+        if (0 == d.count) 
             return false;
     }
 
@@ -903,7 +915,7 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
     // std::cout << "[";
     // for (auto d: new_domains) {
     //     std::cout << "[";
-    //     for (int i = 0; i < 4; i++) {
+    //     for (int i = 0; i < model.target_size; i++) {
     //         std::cout << d.values.test(i) << ",";
     //     }
     //     std::cout << "]\n";
@@ -978,21 +990,69 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
     return true;
 }
 
+// // Returns true if new useful constraints were added, false otherwise;
+// auto HomomorphismSearcher::make_useful_target_constraints(
+//     const std::optional<HomomorphismAssignment> & current_assignment,
+//     std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints
+// ) -> bool
+// {
+//     if(!current_assignment) return false;
+//     unsigned int t = current_assignment->target_vertex;
+
+//     if (std::find(target_base.begin(), target_base.end(), t) == target_base.end()) {
+//         target_base.push_back(t);       // Add this vertex as a new base point
+
+//         unsigned int size_before = useful_constraints.size();
+
+//         innards::dynamic_order_constraints(model.target_size, target_base, t_rschreier, useful_constraints);    // Compute constraints at the new base point
+
+//         if (model.has_less_thans() && model.do_dynamic_occur_less_thans()) {        // We need to record value order if we're also doing pattern symmetry
+//             for (unsigned int i = size_before; i < useful_constraints.size(); i++) {       // for each a<b just added
+//                 std::pair<unsigned int, unsigned int> con = useful_constraints[i];
+//                 if ((con.first + symmetric_value_displacement[con.first]) > (con.second + symmetric_value_displacement[con.second])) {    // if b is currently before a in the value ordering
+//                     int count = 0;
+//                     for (unsigned int i = 0; i < model.target_size; i++) {   // we have to check every vertex since we only know offset, not explicit order
+//                         if ((i + symmetric_value_displacement[i]) >= (con.second + symmetric_value_displacement[con.second]) &&
+//                             (i + symmetric_value_displacement[i]) < (con.first + symmetric_value_displacement[con.first])) {    // if b <= i < a in the current ordering
+//                             symmetric_value_displacement[i]++;      // Shift i up one index
+//                             count++;
+//                         }
+//                     }
+//                     symmetric_value_displacement[con.first] -= count;       // Shift a left by `count` indices
+
+//                     // for (int i = 0; i < model.target_size; i++) {
+//                     //     std::cout << symmetric_value_displacement[i] << ",";
+//                     // }
+//                     // std::cout << "\n";
+//                 }
+//             }
+//         }
+
+//         return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
+
+//     }
+
+//     return false;
+// }
+
 // Returns true if new useful constraints were added, false otherwise;
 auto HomomorphismSearcher::make_useful_target_constraints(
     const std::optional<HomomorphismAssignment> & current_assignment,
-    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+    std::vector<int> & base
 ) -> bool
 {
     if(!current_assignment) return false;
     unsigned int t = current_assignment->target_vertex;
 
-    if (std::find(target_base.begin(), target_base.end(), t) == target_base.end()) {
-        target_base.push_back(t);       // Add this vertex as a new base point
+    if (std::find(base.begin(), base.end(), t) == base.end()) {
+        base.push_back(t);       // Add this vertex as a new base point
 
         unsigned int size_before = useful_constraints.size();
 
-        innards::dynamic_order_constraints(model.target_size, target_base, t_rschreier, useful_constraints);    // Compute constraints at the new base point
+        int size = model.target_size * (model.directed() ? 3 : 1);
+
+        innards::dynamic_order_constraints(size, base, t_rschreier, useful_constraints);    // Compute constraints at the new base point
 
         if (model.has_less_thans() && model.do_dynamic_occur_less_thans()) {        // We need to record value order if we're also doing pattern symmetry
             for (unsigned int i = size_before; i < useful_constraints.size(); i++) {       // for each a<b just added
@@ -1007,6 +1067,11 @@ auto HomomorphismSearcher::make_useful_target_constraints(
                         }
                     }
                     symmetric_value_displacement[con.first] -= count;       // Shift a left by `count` indices
+
+                    // for (int i = 0; i < model.target_size; i++) {
+                    //     std::cout << symmetric_value_displacement[i] << ",";
+                    // }
+                    // std::cout << "\n";
                 }
             }
         }
@@ -1020,7 +1085,8 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 
 auto HomomorphismSearcher::make_useful_pattern_constraints(
     const std::optional<HomomorphismAssignment> & current_assignment,
-    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+    std::vector<int> & base
 ) -> bool
 {
     if(!current_assignment) return false;
@@ -1031,7 +1097,9 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
         int size_before = useful_constraints.size();
 
-        innards::dynamic_order_constraints(model.pattern_size, pattern_base, p_rschreier, useful_constraints);      // Compute new constraints at new base point
+        int size = model.pattern_size * (model.directed() ? 3 : 1);
+
+        innards::dynamic_order_constraints(size, base, p_rschreier, useful_constraints);      // Compute new constraints at new base point
 
         return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
 
@@ -1042,6 +1110,20 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
 auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
 {
+    // print_pattern_constraints();
+    // for (auto b : pattern_base) {
+    //     std::cout << b << ",";
+    // }
+    // std::cout <<"\n";
+    // for (auto d : new_domains) {
+    //     std::cout << d.v << ":";
+    //     for (int v = 0; v < model.target_size; v++) {
+    //         std::cout << d.values.test(v) << ",";
+    //     }
+    //     std::cout << "\n";
+    // }
+    // std::cout << "\n";
+    
     // nogoods might be watching things in initial assignments. this is possibly not the
     // best place to put this...
     if (initial && might_have_watches(params)) {
@@ -1090,6 +1172,20 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             branch_domain->fixed = true;
             assignments.values.push_back({*current_assignment, false, -1, -1});
 
+            // std::vector<int> tmpt, tmpp;
+            // for (auto v : assignments.values) {
+            //     std::cout << v.assignment.pattern_vertex << "->" << v.assignment.target_vertex<<"\n";
+            //     tmpt.push_back(v.assignment.target_vertex);
+            //     tmpp.push_back(v.assignment.pattern_vertex);
+            // }
+            // std::cout << "\n";
+            // target_base = tmpt;
+            // pattern_base = tmpp;
+            // // for (auto t : pattern_base) {
+            // //     std::cout << t << " ";
+            // // }
+            // // std::cout <<"\n";
+
             if (proof)
                 proof->unit_propagating(
                     model.pattern_vertex_for_proof(current_assignment->pattern_vertex),
@@ -1125,31 +1221,43 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             if (! propagate_simple_constraints(new_domains, *current_assignment))
                 return false;
         }
+        auto sym_start_time = steady_clock::now();
 
         // propagate less thans
         if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
             if (!propagate_less_thans(new_domains)) {
+                sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
                 return false;
             }
         }
+        
         if (model.has_occur_less_thans()) {
             if (model.do_dynamic_occur_less_thans()) {
-                make_useful_target_constraints(current_assignment, useful_target_constraints);
-                if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, new_domains))
+                make_useful_target_constraints(current_assignment, useful_target_constraints, target_base);
+                if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, new_domains)) {
+                    sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
                     return false;
+                }
             }
-            else if (! propagate_occur_less_thans(current_assignment, assignments, new_domains)) 
+            else if (! propagate_occur_less_thans(current_assignment, assignments, new_domains)) {
+                sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
                 return false;
+            }
         }
         if (model.has_less_thans() && model.do_dynamic_less_thans()) {
-                make_useful_pattern_constraints(current_assignment, useful_pattern_constraints);
-                if (!propagate_less_thans(new_domains, useful_pattern_constraints)) return false;
+                make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base);
+                if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                    sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
+                    return false;
+                }
             }
+        sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
 
         // propagate all different
         if (params.injectivity == Injectivity::Injective)
-            if (! cheap_all_different(model.target_size, new_domains, proof, &model))
+            if (! cheap_all_different(model.target_size, new_domains, proof, &model)) {
                 return false;
+            }
         done_globals_at_least_once = true;
     }
 
@@ -1210,4 +1318,8 @@ auto HomomorphismSearcher::print_target_constraints() -> void {
         std::cout << a << "<" << b << " ";
     }
     std::cout << "\n";
+    // for (auto t : target_base) {
+    //     std::cout << t << " ";
+    // }
+    // std::cout <<"\n";
 }

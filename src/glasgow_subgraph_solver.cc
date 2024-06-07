@@ -452,6 +452,7 @@ auto main(int argc, char * argv[]) -> int
                 cerr << "Unrecognised target symmetry method " << orb_or_gens << ", use (orb / gens).\n";
                 return EXIT_FAILURE;
             }
+            cout << "pattern_";
             auto dejavu_start_time = steady_clock::now();
             params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, with_gens);
             was_given_pattern_automorphism_group = true;
@@ -498,6 +499,7 @@ auto main(int argc, char * argv[]) -> int
                 cerr << "Unrecognised target symmetry method " << orb_or_gens << ", use (orb / gens).\n";
                 return EXIT_FAILURE;
             }
+            cout << "target_";
             auto dejavu_start_time = steady_clock::now();
             params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, with_gens);
             was_given_target_automorphism_group = true;
