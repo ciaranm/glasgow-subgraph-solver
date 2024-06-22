@@ -204,9 +204,9 @@ auto Proof::finalise_model() -> void
 
     _imp->proof_stream = make_unique<ofstream>(_imp->log_filename);
 
-    *_imp->proof_stream << "pseudo-Boolean proof version 2.0\n";
+    *_imp->proof_stream << "pseudo-Boolean proof version 2.\n";
 
-    *_imp->proof_stream << "f " << _imp->nb_constraints << " 0\n";
+    *_imp->proof_stream << "f " << _imp->nb_constraints << " \n";
     _imp->proof_line += _imp->nb_constraints;
 
     if (! *_imp->proof_stream)
@@ -269,7 +269,7 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
 
     for (auto & [_, data] : _imp->injectivity_constraints)
         *_imp->proof_stream << " " << get<1>(data) << " +";
-    *_imp->proof_stream << " 0\n";
+    *_imp->proof_stream << " \n";
     ++_imp->proof_line;
 }
 
@@ -361,14 +361,14 @@ auto Proof::incompatible_by_degrees(
     for (auto & n : n_t)
         *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[n]) << " +";
 
-    *_imp->proof_stream << " s 0\n";
+    *_imp->proof_stream << " s \n";
     ++_imp->proof_line;
 
     *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
     _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
 
-    *_imp->proof_stream << "d " << _imp->proof_line - 1 << " 0\n";
+    *_imp->proof_stream << "d " << _imp->proof_line - 1 << " \n";
 }
 
 auto Proof::incompatible_by_nds(
@@ -430,13 +430,13 @@ auto Proof::incompatible_by_nds(
         *_imp->proof_stream << " " << _imp->eliminations[pair{n, t_subsequence.back()}] << " +";
     }
 
-    *_imp->proof_stream << " s 0\n";
+    *_imp->proof_stream << " s \n";
     ++_imp->proof_line;
 
     *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ; " << _imp->proof_line << '\n';
     ++_imp->proof_line;
 
-    *_imp->proof_stream << "d " << _imp->proof_line - 1 << " 0\n";
+    *_imp->proof_stream << "d " << _imp->proof_line - 1 << " \n";
 }
 
 auto Proof::incompatible_by_loops(
@@ -484,7 +484,7 @@ auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vec
     }
     for (auto & r : rhs)
         *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[r.first]) << " +";
-    *_imp->proof_stream << " 0\n";
+    *_imp->proof_stream << " \n";
     ++_imp->proof_line;
 }
 
@@ -683,7 +683,7 @@ auto Proof::create_exact_path_graphs(
         }
     }
 
-    *_imp->proof_stream << " s 0\n";
+    *_imp->proof_stream << " s \n";
     ++_imp->proof_line;
 
     // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
@@ -694,7 +694,7 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // if p maps to t then q does not map to t
-    *_imp->proof_stream << "p " << _imp->proof_line << " " << get<1>(_imp->injectivity_constraints[t.first]) << " + s 0\n";
+    *_imp->proof_stream << "p " << _imp->proof_line << " " << get<1>(_imp->injectivity_constraints[t.first]) << " + s \n";
     ++_imp->proof_line;
 
     // and cancel out stray extras from injectivity
@@ -727,7 +727,7 @@ auto Proof::create_exact_path_graphs(
         for (auto & z : u.second)
             *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[z.first]) << " +";
 
-        *_imp->proof_stream << " s 0\n";
+        *_imp->proof_stream << " s \n";
         ++_imp->proof_line;
 
         // want: ~x_p_t + ~x_q_u >= 1
@@ -747,7 +747,7 @@ auto Proof::create_exact_path_graphs(
                 *_imp->proof_stream << " +";
             first = false;
         }
-        *_imp->proof_stream << " s 0\n";
+        *_imp->proof_stream << " s \n";
         ++_imp->proof_line;
     }
 
@@ -825,7 +825,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     for (auto & u : d1_from_t)
         *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{0, path_from_p_to_q.first, q.first, u.first}]) << " +";
 
-    *_imp->proof_stream << " 0\n";
+    *_imp->proof_stream << " \n";
     ++_imp->proof_line;
 
     // tidy up
@@ -877,7 +877,7 @@ auto Proof::create_distance3_graphs(
     for (auto & u : d1_from_t)
         *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{0, path_from_p_to_q_1.first, path_from_p_to_q_2.first, u.first}]) << " +";
 
-    *_imp->proof_stream << " 0\n";
+    *_imp->proof_stream << " \n";
     ++_imp->proof_line;
 
     // tidy up
@@ -890,7 +890,7 @@ auto Proof::create_distance3_graphs(
     *_imp->proof_stream << "p " << _imp->proof_line;
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{0, path_from_p_to_q_2.first, q.first, u.first}]) << " s +";
-    *_imp->proof_stream << " 0\n";
+    *_imp->proof_stream << " \n";
     ++_imp->proof_line;
 
     *_imp->proof_stream << "# 0\n";
