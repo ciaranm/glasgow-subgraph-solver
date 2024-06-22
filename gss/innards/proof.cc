@@ -335,6 +335,7 @@ auto Proof::incompatible_by_degrees(
     const vector<int> & n_t) -> void
 {
     *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << '\n';
+    *_imp->proof_stream << "*trim degre" << p.second << " " << t.second << "\n";
 
     if (_imp->recover_encoding) {
         for (auto & n : n_p)
@@ -380,6 +381,7 @@ auto Proof::incompatible_by_nds(
     const vector<int> & t_remaining) -> void
 {
     *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << '\n';
+    *_imp->proof_stream << "*trim nds" << p.second << " " << t.second << "\n";
 
     if (_imp->recover_encoding) {
         for (auto & n : p_subsequence)
@@ -445,6 +447,7 @@ auto Proof::incompatible_by_loops(
 {
     if (_imp->recover_encoding) {
         *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to loop\n";
+        *_imp->proof_stream << "*trim loops" << p.second << " " << t.second << "\n";
         *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
         ++_imp->proof_line;
     }
@@ -471,7 +474,20 @@ auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vec
         for (auto & l : lhs)
             recover_at_least_one_constraint(l.first);
     }
+    *_imp->proof_stream << "*trim hall \n";
+    for (auto & l : lhs)
+        *_imp->proof_stream << " " << l.second;
+    *_imp->proof_stream << "  / ";
+    for (auto & r : rhs)
+        *_imp->proof_stream << " " << r.second;
+    *_imp->proof_stream << " \n";
 
+    if (_imp->recover_encoding) {
+        for (auto & r : rhs)
+            recover_injectivity_constraint(r.first);
+        for (auto & l : lhs)
+            recover_at_least_one_constraint(l.first);
+    }
     *_imp->proof_stream << "p";
     bool first = true;
     for (auto & l : lhs) {
@@ -501,6 +517,8 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
 auto Proof::propagation_failure(const vector<pair<int, int>> & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
     *_imp->proof_stream << "* [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << '\n';
+    *_imp->proof_stream << "*trim fail "<< branch_v.second << " " <<  val.second<<"\n";
+
     *_imp->proof_stream << "u ";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
@@ -515,6 +533,7 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
     else
         *_imp->proof_stream << "* [" << decisions.size() << "] backtracking\n";
 
+    *_imp->proof_stream << "*trim backtrack\n";
     *_imp->proof_stream << "u";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
@@ -560,6 +579,7 @@ auto Proof::back_up_to_top() -> void
 auto Proof::post_restart_nogood(const vector<pair<int, int>> & decisions) -> void
 {
     *_imp->proof_stream << "* [" << decisions.size() << "] restart nogood\n";
+    *_imp->proof_stream << "*trim nogood\n";
     *_imp->proof_stream << "u";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
@@ -622,6 +642,8 @@ auto Proof::create_exact_path_graphs(
     const vector<NamedVertex> & d_n_t) -> void
 {
     // tidy up to get what we wanted. do this first so we can check for duplicates
+    *_imp->proof_stream << "*trim adjacency0 " << p.second << " " << t.second << "\n";
+
     stringstream tidied_up;
     tidied_up << "1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d_n_t)
@@ -662,6 +684,7 @@ auto Proof::create_exact_path_graphs(
     }
 
     *_imp->proof_stream << "# 1\n";
+    *_imp->proof_stream << "*trim adjacency1 " << p.second << " " << t.second << "\n";
     *_imp->proof_stream << "p";
 
     // if p maps to t then things in between_p_and_q have to go to one of these...
@@ -694,6 +717,7 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // if p maps to t then q does not map to t
+    *_imp->proof_stream << "*trim adjacency2 " << p.second << " " << t.second << "\n";
     *_imp->proof_stream << "p " << _imp->proof_line << " " << get<1>(_imp->injectivity_constraints[t.first]) << " + s \n";
     ++_imp->proof_line;
 
@@ -709,10 +733,12 @@ auto Proof::create_exact_path_graphs(
     things_to_add_up.push_back(_imp->proof_line);
 
     // cancel out anything that is two away from t, but by insufficiently many paths
+    char c = 3;
     for (auto & u : two_away_from_t) {
         if ((u.first == t) || (d_n_t.end() != find(d_n_t.begin(), d_n_t.end(), u.first)))
             continue;
 
+        *_imp->proof_stream << "*trim adjacency" << c++ << " " << p.second << " " << t.second << "\n";
         *_imp->proof_stream << "p";
         bool first = true;
         for (auto & b : between_p_and_q) {
@@ -740,6 +766,7 @@ auto Proof::create_exact_path_graphs(
     // do the getting rid of
     if (things_to_add_up.size() > 1) {
         bool first = true;
+        *_imp->proof_stream << "*trim adjacency" << c++ << " " << p.second << " " << t.second << "\n";
         *_imp->proof_stream << "p";
         for (auto & t : things_to_add_up) {
             *_imp->proof_stream << " " << t;
@@ -767,6 +794,8 @@ auto Proof::hack_in_shape_graph(
     const std::vector<NamedVertex> & n_t) -> void
 {
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " in shape graph " << g << " so " << q.second << " maps to one of...\n";
+    *_imp->proof_stream << "*trim adjacencyhack" << p.second << " " << t.second << "\n";
+
     *_imp->proof_stream << "a 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : n_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
@@ -784,6 +813,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     const vector<NamedVertex> & d3_from_t) -> void
 {
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " in G^3 so by adjacency, " << q.second << " maps to one of...\n";
+    *_imp->proof_stream << "*trim adjacencydist1" << p.second << " " << t.second << "\n";
 
     if (_imp->recover_encoding)
         recover_adjacency_lines(0, p.first, q.first, t.first);
@@ -816,7 +846,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     }
 
     *_imp->proof_stream << "# 1\n";
-
+    *_imp->proof_stream << "*trim adjacencydist2" << p.second << " " << t.second << "\n";
     *_imp->proof_stream << "p";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
@@ -868,7 +898,7 @@ auto Proof::create_distance3_graphs(
     }
 
     *_imp->proof_stream << "# 1\n";
-
+    *_imp->proof_stream << "*trim adjacencydist3" << p.second << " " << t.second << "\n";
     *_imp->proof_stream << "p";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
@@ -964,6 +994,7 @@ auto Proof::create_null_decision_bound(int p, int t, optional<int> d) -> void
 auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
 {
     if (! _imp->doing_hom_colour_proof) {
+        *_imp->proof_stream << "*trim backtrackbincolor\n";
         *_imp->proof_stream << "u";
         for (auto & w : v)
             *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
@@ -972,6 +1003,7 @@ auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
     }
     else {
         *_imp->proof_stream << "* backtrack shenanigans, depth " << v.size() << '\n';
+        *_imp->proof_stream << "*trim backtrackbin\n";
         function<auto(unsigned, const vector<pair<int, int>> &)->void> f;
         f = [&](unsigned d, const vector<pair<int, int>> & trail) -> void {
             if (d == v.size()) {
@@ -995,6 +1027,7 @@ auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
 
 auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
 {
+    *_imp->proof_stream << "*trim colorbound\n";
     *_imp->proof_stream << "* bound, ccs";
     for (auto & cc : ccs) {
         *_imp->proof_stream << " [";
@@ -1324,6 +1357,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
 
 auto Proof::not_connected_in_underlying_graph(const std::vector<int> & x, int y) -> void
 {
+    *_imp->proof_stream << "*trim disconnected\n";
     *_imp->proof_stream << "u 1 ~x" << _imp->binary_variable_mappings[y];
     for (auto & v : x)
         *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[v];
