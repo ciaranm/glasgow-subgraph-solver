@@ -204,7 +204,7 @@ auto Proof::finalise_model() -> void
 
     _imp->proof_stream = make_unique<ofstream>(_imp->log_filename);
 
-    *_imp->proof_stream << "pseudo-Boolean proof version 2.\n";
+    *_imp->proof_stream << "pseudo-Boolean proof version 2.0\n";
 
     *_imp->proof_stream << "f " << _imp->nb_constraints << " \n";
     _imp->proof_line += _imp->nb_constraints;
@@ -335,7 +335,7 @@ auto Proof::incompatible_by_degrees(
     const vector<int> & n_t) -> void
 {
     *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << '\n';
-    *_imp->proof_stream << "*trim degre" << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim degre " << p.second << " " << t.second << "\n";
 
     if (_imp->recover_encoding) {
         for (auto & n : n_p)
@@ -381,7 +381,7 @@ auto Proof::incompatible_by_nds(
     const vector<int> & t_remaining) -> void
 {
     *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << '\n';
-    *_imp->proof_stream << "*trim nds" << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim nds " << p.second << " " << t.second << "\n";
 
     if (_imp->recover_encoding) {
         for (auto & n : p_subsequence)
@@ -447,7 +447,7 @@ auto Proof::incompatible_by_loops(
 {
     if (_imp->recover_encoding) {
         *_imp->proof_stream << "* cannot map " << p.second << " to " << t.second << " due to loop\n";
-        *_imp->proof_stream << "*trim loops" << p.second << " " << t.second << "\n";
+        *_imp->proof_stream << "*trim loops " << p.second << " " << t.second << "\n";
         *_imp->proof_stream << "u 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
         ++_imp->proof_line;
     }
@@ -474,7 +474,7 @@ auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vec
         for (auto & l : lhs)
             recover_at_least_one_constraint(l.first);
     }
-    *_imp->proof_stream << "*trim hall \n";
+    *_imp->proof_stream << "*trim hall";
     for (auto & l : lhs)
         *_imp->proof_stream << " " << l.second;
     *_imp->proof_stream << "  / ";
@@ -482,12 +482,6 @@ auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vec
         *_imp->proof_stream << " " << r.second;
     *_imp->proof_stream << " \n";
 
-    if (_imp->recover_encoding) {
-        for (auto & r : rhs)
-            recover_injectivity_constraint(r.first);
-        for (auto & l : lhs)
-            recover_at_least_one_constraint(l.first);
-    }
     *_imp->proof_stream << "p";
     bool first = true;
     for (auto & l : lhs) {
@@ -794,7 +788,7 @@ auto Proof::hack_in_shape_graph(
     const std::vector<NamedVertex> & n_t) -> void
 {
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " in shape graph " << g << " so " << q.second << " maps to one of...\n";
-    *_imp->proof_stream << "*trim adjacencyhack" << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim adjacencyhack " << p.second << " " << t.second << "\n";
 
     *_imp->proof_stream << "a 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : n_t)
@@ -813,7 +807,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     const vector<NamedVertex> & d3_from_t) -> void
 {
     *_imp->proof_stream << "* adjacency " << p.second << " maps to " << t.second << " in G^3 so by adjacency, " << q.second << " maps to one of...\n";
-    *_imp->proof_stream << "*trim adjacencydist1" << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim adjacencydist1 " << p.second << " " << t.second << "\n";
 
     if (_imp->recover_encoding)
         recover_adjacency_lines(0, p.first, q.first, t.first);
@@ -846,7 +840,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     }
 
     *_imp->proof_stream << "# 1\n";
-    *_imp->proof_stream << "*trim adjacencydist2" << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim adjacencydist2 " << p.second << " " << t.second << "\n";
     *_imp->proof_stream << "p";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
@@ -898,7 +892,7 @@ auto Proof::create_distance3_graphs(
     }
 
     *_imp->proof_stream << "# 1\n";
-    *_imp->proof_stream << "*trim adjacencydist3" << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim adjacencydist3 " << p.second << " " << t.second << "\n";
     *_imp->proof_stream << "p";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
