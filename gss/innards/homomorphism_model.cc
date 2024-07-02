@@ -137,6 +137,8 @@ struct HomomorphismModel::Imp
     mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
     mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
 
+    mutable list<string> supplemental_graph_names;
+
     Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r) :
         params(p),
         proof(r)
@@ -730,6 +732,8 @@ auto HomomorphismModel::prepare() -> bool
     if (is_nonshrinking(_imp->params) && (pattern_size > target_size))
         return false;
 
+    _imp->supplemental_graph_names.push_back("original");
+
     // pattern and target degrees, for the main graph
     _imp->patterns_degrees.at(0).resize(pattern_size);
     _imp->targets_degrees.at(0).resize(target_size);
@@ -789,8 +793,8 @@ auto HomomorphismModel::prepare() -> bool
     unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
     // build exact path graphs
     if (supports_exact_path_graphs(_imp->params)) {
-        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
-        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false);
+        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false, true);
+        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false, false);
 
         if (_imp->proof) {
             for (int g = 1; g <= _imp->params.number_of_exact_path_graphs; ++g) {
@@ -852,13 +856,13 @@ auto HomomorphismModel::prepare() -> bool
     }
 
     if (supports_distance2_graphs(_imp->params)) {
-        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, 1, _imp->directed, true);
-        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, 1, _imp->directed, true);
+        _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, 1, _imp->directed, true, true);
+        _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, 1, _imp->directed, true, false);
     }
 
     if (supports_distance3_graphs(_imp->params)) {
-        _build_distance3_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental);
-        _build_distance3_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
+        _build_distance3_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
+        _build_distance3_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, false);
 
         if (_imp->proof) {
             for (unsigned p = 0; p < pattern_size; ++p) {
@@ -956,13 +960,13 @@ auto HomomorphismModel::prepare() -> bool
     }
 
     if (supports_k4_graphs(_imp->params)) {
-        _build_k4_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental);
-        _build_k4_graphs(_imp->target_graph_rows, target_size, next_target_supplemental);
+        _build_k4_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
+        _build_k4_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, false);
     }
 
     for (auto & [shape, injective, count] : _imp->params.extra_shapes) {
-        _build_extra_shape(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape, injective, count);
-        _build_extra_shape(_imp->target_graph_rows, target_size, next_target_supplemental, *shape, injective, count);
+        _build_extra_shape(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape, injective, count, true);
+        _build_extra_shape(_imp->target_graph_rows, target_size, next_target_supplemental, *shape, injective, count, false);
 
         if (_imp->proof) {
             for (unsigned p = 0; p < pattern_size; ++p) {
@@ -989,8 +993,10 @@ auto HomomorphismModel::prepare() -> bool
         }
     }
 
-    if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs)
-        throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs)};
+    if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs ||
+            next_pattern_supplemental != _imp->supplemental_graph_names.size())
+        throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) + " "
+        + to_string(_imp->supplemental_graph_names.size())};
 
     // pattern and target degrees, for supplemental graphs
     for (unsigned g = 1; g < max_graphs; ++g) {
@@ -1030,7 +1036,7 @@ auto HomomorphismModel::prepare() -> bool
 }
 
 auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-    unsigned number_of_exact_path_graphs, bool directed, bool at_most) -> void
+    unsigned number_of_exact_path_graphs, bool directed, bool at_most, bool pattern) -> void
 {
     vector<vector<unsigned>> path_counts(size, vector<unsigned>(size, 0));
 
@@ -1069,10 +1075,15 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
         }
     }
 
+    if (pattern)
+        for (unsigned p = 1; p <= number_of_exact_path_graphs; ++p)
+            _imp->supplemental_graph_names.push_back("exact_path_" + to_string(p));
+
     idx += number_of_exact_path_graphs;
 }
 
-auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
+auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
+        bool pattern) -> void
 {
     for (unsigned v = 0; v < size; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];
@@ -1089,10 +1100,12 @@ auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, 
         }
     }
 
+    if (pattern)
+        _imp->supplemental_graph_names.push_back("distance3");
     ++idx;
 }
 
-auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx) -> void
+auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, bool pattern) -> void
 {
     for (unsigned v = 0; v < size; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];
@@ -1124,11 +1137,13 @@ auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigne
         }
     }
 
+    if (pattern)
+        _imp->supplemental_graph_names.push_back("k4");
     ++idx;
 }
 
 auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, InputGraph & shape,
-    bool injective, int count) -> void
+    bool injective, int count, bool pattern) -> void
 {
     InputGraph master_graph(size, true, false);
 
@@ -1171,6 +1186,8 @@ auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsig
         }
     }
 
+    if (pattern)
+        _imp->supplemental_graph_names.push_back("extra_shape");
     ++idx;
 }
 
@@ -1271,15 +1288,15 @@ auto HomomorphismModel::directed() const -> bool
 
 auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
 {
-    if (! _imp->pattern_cliques_sizes.empty()) {
-        auto join = [](string_view t, auto & l) -> string {
-            stringstream s;
-            s << t;
-            for (auto & i : l)
-                s << " " << i;
-            return s.str();
-        };
+    auto join = [](string_view t, auto & l) -> string {
+        stringstream s;
+        s << t;
+        for (auto & i : l)
+            s << " " << i;
+        return s.str();
+    };
 
+    if (! _imp->pattern_cliques_sizes.empty()) {
         x.emplace_back(join("pattern_cliques_build_times =", _imp->pattern_cliques_build_times));
         x.emplace_back(join("pattern_cliques_solve_times =", _imp->pattern_cliques_solve_times));
         x.emplace_back(join("pattern_cliques_solve_find_nodes =", _imp->pattern_cliques_solve_find_nodes));
@@ -1290,4 +1307,6 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
         x.emplace_back(join("target_cliques_solve_find_nodes =", _imp->target_cliques_solve_find_nodes));
         x.emplace_back(join("target_cliques_solve_prove_nodes =", _imp->target_cliques_solve_prove_nodes));
     }
+
+    x.emplace_back(join("supplemental_graph_names =", _imp->supplemental_graph_names));
 }
