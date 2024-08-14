@@ -229,6 +229,9 @@ auto gss::innards::automorphisms_as_order_constraints_with_generators(const Inpu
     return result;
 }
 
+/**
+ * Build a schreier structure for symmetry calculations during search
+ */
 auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier &r, std::vector<innards::SVOBitset> m, const bool directed) -> void {
     dejavu::static_graph g;     // Declare static graph
 
@@ -314,7 +317,9 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
     // std::cout << "Initialised rschreier!\n";
 }
 
-
+/**
+ * Calculate any non-trivial orbits with the new (partial) base given, and make constraints from them
+ */
 auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::groups::random_schreier &rschreier, std::vector<std::pair<unsigned int, unsigned int>> &constraints) -> void {
 
     //TODO we only actually care about adding one extra layer of the chain here, maybe there is a way to limit depth of layer computation in Dejavu?
@@ -335,7 +340,139 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::g
             }
         }
         // std::cout << "\n";
+
+        // // std::cout << y << " : ";
+        // std::vector<int> orb;
+        // int min = y;
+        // orb.push_back(y);
+        // for (int z = 0; z != sz; ++z) {     // For each vertex z in the graph
+        //     if (o.are_in_same_orbit(y,z) && y != z) {       // If y,z are symmetric (but not equal) at this stabiliser chain layer 
+        //         // std::cout << z << " ";
+        //         orb.push_back(z);     // Add constraint y<z
+        //         if (z < min) min = z;
+        //     }
+        // }
+        // for (auto i : orb) {
+        //     if (i != min) {
+        //         cons.push_back(std::make_pair(min, i));
+        //     }
+        // }
+        // // std::cout << "\n";
     }
 
     constraints = cons;
+}
+
+/**
+ * Calculate the generating set for the automorphism group of an input graph (picking a random base)
+ */
+auto::gss::innards::generating_set(const InputGraph &i) -> std::set<std::map<int,int>> {
+    std::vector<int> base;
+    return generating_set(i, base);
+}
+
+/**
+ * Calulcate the generating set for the automorphism group of an input graph (given a [partial] base)
+ */
+auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) -> std::set<std::map<int,int>> {
+    dejavu::static_graph g;     // Declare static graph
+    unsigned long n_simple_edges = 0;       // Number of undirected edges
+    i.for_each_edge([&](int f, int t, string_view) {
+        if (f < t)
+            ++n_simple_edges;
+    });
+    g.initialize_graph(i.size(), n_simple_edges);       // Initialise g with nv, ne
+    vector<int> vertices;       // List of vertices
+    for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
+        bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
+        vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? i.degree(v) - 1 : i.degree(v)));   // Add colour and non-looping degree
+    }
+    i.for_each_edge([&](int f, int t, string_view) {
+        if (f < t)
+            g.add_edge(vertices[f], vertices[t]);       // Add edges (undirected)
+    });
+
+    dejavu::groups::random_schreier rschreier{i.size()};        // Random Schreier structure with domain size nv
+    // std::vector<int> base;
+
+    rschreier.set_base(base);       // Empty base to begin with
+
+    dejavu::hooks::schreier_hook hook(rschreier);
+    dejavu::solver s;
+    s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
+
+    OrderConstraints result;        // List of constraint pairs
+    std::set<std::pair<int,int>> unique_list;
+
+    bool stab_trivial = false;
+    dejavu::groups::orbit o{i.size()};      // Orbit structure of size nv
+    while (! stab_trivial) {        // While stabiliser is non-trivial
+        rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
+        stab_trivial = true;
+        for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
+            if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
+                stab_trivial = false;
+                base.push_back(v);          // Add v to base
+            }
+        }
+
+        if (! stab_trivial)
+            rschreier.set_base(base);       // Update base
+    }
+
+    std::cout << "aut_group_sz = " << s.get_automorphism_group_size() << "\n";
+
+    // std::cout << "Generators:\n";
+    dejavu::groups::automorphism_workspace a(i.size());
+    std::set<std::set<std::vector<int>>> gens;      // Generators are sets of lists (cycles)
+    std::set<std::map<int,int>> mappings;            // Store generators (and identity) in a sensible notation
+    std::map<int,int> identity;
+    for (int x = 0; x < i.size(); x++) {
+        identity[x] = x;
+    }
+    mappings.emplace(identity);
+    for (int x = 0; x < rschreier.get_number_of_generators(); x++) {
+        rschreier.get_generator(x, a);
+        // //  For cycle notation
+        // std::set<vector<int>> cycle_notation;
+        // std::set<int> counted;
+        // for (int y = 0; y < i.size(); y++) {
+        //     if (counted.find(y) == counted.end()) {
+        //         int goes_to = a.p()[y];
+        //         std::vector<int> cycle;
+        //         cycle.push_back(y);
+        //         counted.emplace(y);
+        //         while (goes_to != y) {
+        //             cycle.push_back(goes_to);
+        //             counted.emplace(goes_to);
+        //             goes_to = a.p()[goes_to];
+        //         }
+        //         if (cycle.size() > 1) {
+        //             cycle_notation.emplace(cycle);
+        //         }
+        //     }
+        // }
+        // if (cycle_notation.size() > 0) {
+        //     gens.emplace(cycle_notation);
+        // }
+        // For mapping notation
+        std::map<int,int> mapping;
+        for (int y = 0; y < i.size(); y++) {
+            mapping[y] = a.p()[y];
+        }
+        mappings.emplace(mapping);
+    }
+
+    // for (auto gen : gens) {
+    //     for (auto cycle : gen) {
+    //         std::cout << "( ";
+    //         for (unsigned int v_index = 0; v_index < cycle.size(); v_index++) {
+    //                 std::cout << cycle[v_index] << " ";
+    //         }
+    //         std::cout << ")";
+    //     }
+    //     std::cout << "\n";
+    // }
+
+    return mappings;
 }

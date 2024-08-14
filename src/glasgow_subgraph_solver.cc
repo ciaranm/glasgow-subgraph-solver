@@ -88,6 +88,7 @@ auto main(int argc, char * argv[]) -> int
             ("target-symmetries-dejavu", po::value<string>(),                                                                          //
                 "Eliminate target symmetries using orbits or generators (orb / gens) (requires Dejavu)")                               //
             ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
+            ("dejavu-naive-symmetries", "Eliminate pattern and target symmetries naively (requires Dejavu)")                           //
             ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")                                    //
             ("target-orbits-dejavu", "Eliminate target symmetries dynamically (requires Dejavu)");
         display_options.add(search_options);
@@ -518,6 +519,11 @@ auto main(int argc, char * argv[]) -> int
         }
         else if (options_vars.count("target-orbits-dejavu")) {
             params.use_target_orbits = true;
+        }
+        else if (options_vars.count("dejavu-naive-symmetries")) {
+            params.target_aut_gens = innards::generating_set(target);
+            params.pattern_aut_gens = innards::generating_set(pattern);
+            //TODO do something interesting
         }
 
         if (was_given_target_automorphism_group)

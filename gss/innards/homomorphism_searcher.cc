@@ -658,6 +658,25 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
     return true;
 }
 
+auto HomomorphismSearcher::propagate_less_thans(HomomorphismAssignments assignments, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool {
+    bool valid = true;
+
+    for (auto & [a, b] : constraints) {
+        for (auto & d: assignments.values) {
+            if (d.assignment.pattern_vertex == a) {
+                for (auto & e : assignments.values) {
+                    if (e.assignment.pattern_vertex == b) {
+                        valid = (d.assignment.target_vertex + symmetric_value_displacement[d.assignment.target_vertex] < e.assignment.target_vertex + symmetric_value_displacement[e.assignment.target_vertex]);
+                    }
+                }
+                if (! valid) return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool {
     return propagate_less_thans(new_domains, model.pattern_less_thans_in_convenient_order);
 }
@@ -988,6 +1007,24 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
     }
 
     return true;
+
+    // for (auto & [a,b] : useful_target_constraints) {    // For each constraint a < b
+    //     for (auto & d : assignments.values) {   // For each assignment p -> t
+    //         if (d.assignment.target_vertex == b) {  // If t == b
+    //             bool valid = true;
+    //             for (auto & e : assignments.values) {       // For each assignment p2 -> t2
+    //                 if (e.assignment.target_vertex == a && e.assignment.pattern_vertex > d.assignment.pattern_vertex) { // If t2 == a and p2 > p
+    //                     valid = false;
+    //                 }
+    //             }
+    //             if (!valid) {
+    //                 return false;
+    //             }
+    //         }
+    //     }
+    // }
+
+    // return true;
 }
 
 // // Returns true if new useful constraints were added, false otherwise;
@@ -1059,10 +1096,10 @@ auto HomomorphismSearcher::make_useful_target_constraints(
                 std::pair<unsigned int, unsigned int> con = useful_constraints[i];
                 if ((con.first + symmetric_value_displacement[con.first]) > (con.second + symmetric_value_displacement[con.second])) {    // if b is currently before a in the value ordering
                     int count = 0;
-                    for (unsigned int i = 0; i < model.target_size; i++) {   // we have to check every vertex since we only know offset, not explicit order
-                        if ((i + symmetric_value_displacement[i]) >= (con.second + symmetric_value_displacement[con.second]) &&
-                            (i + symmetric_value_displacement[i]) < (con.first + symmetric_value_displacement[con.first])) {    // if b <= i < a in the current ordering
-                            symmetric_value_displacement[i]++;      // Shift i up one index
+                    for (unsigned int j = 0; j < model.target_size; j++) {   // we have to check every vertex since we only know offset, not explicit order
+                        if ((j + symmetric_value_displacement[j]) >= (con.second + symmetric_value_displacement[con.second]) &&
+                            (j + symmetric_value_displacement[j]) < (con.first + symmetric_value_displacement[con.first])) {    // if b <= j < a in the current ordering
+                            symmetric_value_displacement[j]++;      // Shift j up one index
                             count++;
                         }
                     }
@@ -1223,6 +1260,17 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         }
         auto sym_start_time = steady_clock::now();
 
+        if (model.do_dynamic_less_thans()) {
+            if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base)) {
+                std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
+            }
+        }
+        if (model.do_dynamic_occur_less_thans()) {
+            if (make_useful_target_constraints(current_assignment, useful_target_constraints, target_base)) {
+                std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
+            }
+        }
+
         // propagate less thans
         if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
             if (!propagate_less_thans(new_domains)) {
@@ -1233,7 +1281,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         
         if (model.has_occur_less_thans()) {
             if (model.do_dynamic_occur_less_thans()) {
-                make_useful_target_constraints(current_assignment, useful_target_constraints, target_base);
                 if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, new_domains)) {
                     sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
                     return false;
@@ -1245,8 +1292,8 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             }
         }
         if (model.has_less_thans() && model.do_dynamic_less_thans()) {
-                make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base);
                 if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                // if (!propagate_less_thans(assignments, useful_pattern_constraints)) {
                     sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
                     return false;
                 }
@@ -1295,6 +1342,78 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 return false;
         }
     }
+
+    if (model.break_both_symmetries()) {
+        bool complete_assignment = true;
+        for (int i = 0; i < model.pattern_size; i++) {
+            bool assigned = false;
+            for (auto & d : assignments.values) {
+                if (d.assignment.pattern_vertex == i) assigned = true;
+            }
+            if (!assigned) {
+                complete_assignment = false;
+                break;
+            }
+        }
+        if (complete_assignment) {
+            VertexToVertexMapping mapping;
+            expand_to_full_result(assignments, mapping);
+            for (auto p_aut: params.pattern_aut_gens) {
+                for (auto t_aut: params.target_aut_gens) {
+                    VertexToVertexMapping permuted;
+                    for (auto & [var, val] : mapping) {
+                        permuted[p_aut[var]] = t_aut[mapping[var]];
+                    }
+                    for (auto & [p,t] : mapping) {
+                        auto it = permuted.find(p);
+                        if (it != permuted.end()) {
+                            if (it->second < t) {       // The permuted mapping is 'less than' the original
+                                return false;
+                            }
+                            else if (it->second == t) {     // The mapping is the same so far
+                                continue;
+                            }
+                            else if (it->second > t) {      // The original mapping is 'less than' the permutation
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // bool all_done = true;
+    // for (int i = 0; i < model.pattern_size; i++) {
+    //     bool assigned = false;
+    //     for (auto & d : assignments.values) {
+    //         if (d.assignment.pattern_vertex == i) assigned = true;
+    //     }
+    //     if (!assigned) {
+    //         all_done = false;
+    //         break;
+    //     }
+    // }
+    // if (all_done) {
+    // for (auto & d : assignments.values) {   // For each assignment
+    //     for (auto & [a,b] : useful_target_constraints) {    // For each target constraint a < b
+    //         if (d.assignment.target_vertex == b) {          // If b is assigned
+    //             bool sat = false;
+    //             for (auto & e : assignments.values) {       // For each assignment
+    //                 if (e.assignment.target_vertex == a) sat = true;    // Check a is assigned
+    //             }
+    //             if (!sat) {
+    //                 // std::cout << a << " < " << b << "\n";
+    //                 // for (auto & f : assignments.values) {
+    //                     // std::cout << "(" << f.assignment.pattern_vertex << " -> " << f.assignment.target_vertex << "),";
+    //                 // }
+    //                 // std::cout << "\n";
+    //                 return false;
+    //             }
+    //         }
+    //     }
+    // }
+    // }
 
     return true;
 }
