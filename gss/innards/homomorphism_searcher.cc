@@ -1344,18 +1344,18 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
     }
 
     if (model.break_both_symmetries()) {
-        bool complete_assignment = true;
-        for (int i = 0; i < model.pattern_size; i++) {
-            bool assigned = false;
-            for (auto & d : assignments.values) {
-                if (d.assignment.pattern_vertex == i) assigned = true;
-            }
-            if (!assigned) {
-                complete_assignment = false;
-                break;
-            }
-        }
-        if (complete_assignment) {
+        // bool complete_assignment = true;
+        // for (int i = 0; i < model.pattern_size; i++) {
+        //     bool assigned = false;
+        //     for (auto & d : assignments.values) {
+        //         if (d.assignment.pattern_vertex == i) assigned = true;
+        //     }
+        //     if (!assigned) {
+        //         complete_assignment = false;
+        //         break;
+        //     }
+        // }
+        // if (complete_assignment) {
             VertexToVertexMapping mapping;
             expand_to_full_result(assignments, mapping);
             for (auto p_aut: params.pattern_aut_gens) {
@@ -1364,23 +1364,25 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                     for (auto & [var, val] : mapping) {
                         permuted[p_aut[var]] = t_aut[mapping[var]];
                     }
-                    for (auto & [p,t] : mapping) {
-                        auto it = permuted.find(p);
-                        if (it != permuted.end()) {
-                            if (it->second < t) {       // The permuted mapping is 'less than' the original
+                    for (int i = 0; i < model.pattern_size; i++) {
+                        if (mapping.count(i) && permuted.count(i)) {    // This is probably a logarithmic check?
+                            if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
                                 return false;
                             }
-                            else if (it->second == t) {     // The mapping is the same so far
+                            else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
                                 continue;
                             }
-                            else if (it->second > t) {      // The original mapping is 'less than' the permutation
-                                break;
+                            else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+                                break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
                             }
+                        }
+                        else {
+                            break;
                         }
                     }
                 }
             }
-        }
+        // }
     }
 
     // bool all_done = true;
