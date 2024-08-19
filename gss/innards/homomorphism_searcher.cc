@@ -5,6 +5,7 @@
 #include <tuple>
 #include <type_traits>
 #include <boost/range/adaptor/reversed.hpp>
+#include "homomorphism_searcher.hh"
 
 using namespace gss;
 using namespace gss::innards;
@@ -1145,6 +1146,39 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
     return false;
 }
 
+auto HomomorphismSearcher::break_both_aut_symmetries(
+    const HomomorphismAssignments & assignments,
+    Domains & new_domains) -> bool {
+    VertexToVertexMapping mapping;
+    expand_to_full_result(assignments, mapping);
+    for (auto p_aut: params.pattern_aut_gens) {
+        for (auto t_aut: params.target_aut_gens) {
+            VertexToVertexMapping permuted;
+            for (auto & [var, val] : mapping) {
+                permuted[p_aut[var]] = t_aut[mapping[var]];
+            }
+            for (int i = 0; i < model.pattern_size; i++) {
+                if (mapping.count(i) && permuted.count(i)) {    // This is probably a logarithmic check?
+                    if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                        return false;
+                    }
+                    else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
+                        continue;
+                    }
+                    else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+                        break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
+                    }
+                }
+                else {
+                    break;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
 {
     // print_pattern_constraints();
@@ -1343,46 +1377,8 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         }
     }
 
-    if (model.break_both_symmetries()) {
-        // bool complete_assignment = true;
-        // for (int i = 0; i < model.pattern_size; i++) {
-        //     bool assigned = false;
-        //     for (auto & d : assignments.values) {
-        //         if (d.assignment.pattern_vertex == i) assigned = true;
-        //     }
-        //     if (!assigned) {
-        //         complete_assignment = false;
-        //         break;
-        //     }
-        // }
-        // if (complete_assignment) {
-            VertexToVertexMapping mapping;
-            expand_to_full_result(assignments, mapping);
-            for (auto p_aut: params.pattern_aut_gens) {
-                for (auto t_aut: params.target_aut_gens) {
-                    VertexToVertexMapping permuted;
-                    for (auto & [var, val] : mapping) {
-                        permuted[p_aut[var]] = t_aut[mapping[var]];
-                    }
-                    for (int i = 0; i < model.pattern_size; i++) {
-                        if (mapping.count(i) && permuted.count(i)) {    // This is probably a logarithmic check?
-                            if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
-                                return false;
-                            }
-                            else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
-                                continue;
-                            }
-                            else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
-                                break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
-                            }
-                        }
-                        else {
-                            break;
-                        }
-                    }
-                }
-            }
-        // }
+    if (model.break_both_symmetries() && !break_both_aut_symmetries(assignments, new_domains)) {
+        return false;
     }
 
     // bool all_done = true;

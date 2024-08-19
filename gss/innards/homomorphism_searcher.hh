@@ -120,6 +120,8 @@ namespace gss::innards
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
+        auto break_both_aut_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
+
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 
         auto copy_nonfixed_domains_and_make_assignment(
