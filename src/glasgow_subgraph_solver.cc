@@ -88,7 +88,8 @@ auto main(int argc, char * argv[]) -> int
             ("target-symmetries-dejavu", po::value<string>(),                                                                          //
                 "Eliminate target symmetries using orbits or generators (orb / gens) (requires Dejavu)")                               //
             ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
-            ("dejavu-naive-symmetries", "Eliminate pattern and target symmetries naively (requires Dejavu)")                           //
+            ("partial-assignments-symmetries", "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")            //
+            ("domain-filter-symmetries", "Eliminate pattern and target symmetries on domain matrices (requires Dejavu)")                //
             ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")                                    //
             ("target-orbits-dejavu", "Eliminate target symmetries dynamically (requires Dejavu)");
         display_options.add(search_options);
@@ -520,10 +521,15 @@ auto main(int argc, char * argv[]) -> int
         else if (options_vars.count("target-orbits-dejavu")) {
             params.use_target_orbits = true;
         }
-        else if (options_vars.count("dejavu-naive-symmetries")) {
+        else if (options_vars.count("partial-assignments-symmetries")) {
             params.target_aut_gens = innards::generating_set(target);
             params.pattern_aut_gens = innards::generating_set(pattern);
-            //TODO do something interesting
+            params.partial_assignments_sym = true;
+        }
+        else if (options_vars.count("domain-filter-symmetries")) {
+            params.target_aut_gens = innards::generating_set(target);
+            params.pattern_aut_gens = innards::generating_set(pattern);
+            params.domain_filter_sym = true;
         }
 
         if (was_given_target_automorphism_group)

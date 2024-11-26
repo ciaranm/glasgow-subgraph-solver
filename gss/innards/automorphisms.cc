@@ -427,9 +427,9 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
     std::set<std::set<std::vector<int>>> gens;      // Generators are sets of lists (cycles)
     std::set<std::map<int,int>> mappings;            // Store generators (and identity) in a sensible notation
     std::map<int,int> identity;
-    for (int x = 0; x < i.size(); x++) {
-        identity[x] = x;
-    }
+    // for (int x = 0; x < i.size(); x++) {
+    //     identity[x] = x;
+    // }
     mappings.emplace(identity);
     for (int x = 0; x < rschreier.get_number_of_generators(); x++) {
         rschreier.get_generator(x, a);
@@ -458,10 +458,20 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
         // For mapping notation
         std::map<int,int> mapping;
         for (int y = 0; y < i.size(); y++) {
-            mapping[y] = a.p()[y];
+            if (mapping[y] != a.p()[y]) {
+                mapping[y] = a.p()[y];
+            }
         }
         mappings.emplace(mapping);
     }
+
+    // for (auto map : mappings) {
+    //     std::cout << "(";
+    //     for (auto m : map) {
+    //         if (m.first != m.second) std::cout << m.first << "->" << m.second << ",";
+    //     }
+    //     std::cout << ")\n";
+    // }
 
     // for (auto gen : gens) {
     //     for (auto cycle : gen) {

@@ -124,7 +124,7 @@ struct HomomorphismModel::Imp
 
     vector<vector<int>> patterns_degrees, targets_degrees;
     int largest_target_degree = 0;
-    bool has_less_thans = false, has_occur_less_thans = false, directed = false, break_both_symmetries = false;
+    bool has_less_thans = false, has_occur_less_thans = false, directed = false;
 
     vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
     vector<int> pattern_loops, target_loops;
@@ -173,9 +173,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     if (pattern.directed())
         _imp->directed = true;
-
-    if (params.pattern_aut_gens.size() > 0 || params.target_aut_gens.size() > 0)
-        _imp->break_both_symmetries = true;
 
     // recode pattern to a bit graph, and strip out loops
     _imp->pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
@@ -1337,11 +1334,6 @@ auto HomomorphismModel::has_less_thans() const -> bool
 auto HomomorphismModel::has_occur_less_thans() const -> bool
 {
     return _imp->has_occur_less_thans;
-}
-
-auto HomomorphismModel::break_both_symmetries() const -> bool 
-{
-    return _imp->break_both_symmetries;
 }
 
 auto HomomorphismModel::do_dynamic_occur_less_thans() const -> bool 

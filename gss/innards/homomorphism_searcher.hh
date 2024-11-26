@@ -91,6 +91,8 @@ namespace gss::innards
 
         // Maybe should be moved into Model?
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
+        std::vector<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
+        // std::set<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
         std::vector<int> target_base, pattern_base; 
         std::vector<int> symmetric_value_displacement;
         dejavu::groups::random_schreier t_rschreier{model.target_size * 3}, p_rschreier{model.pattern_size * 3};    // TODO the * 3 is a clunky upper bound in directed cases, needs refining
@@ -121,6 +123,8 @@ namespace gss::innards
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
         auto break_both_aut_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
+
+        auto have_seen(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 

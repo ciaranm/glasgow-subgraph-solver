@@ -1148,16 +1148,32 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
 auto HomomorphismSearcher::break_both_aut_symmetries(
     const HomomorphismAssignments & assignments,
-    Domains & new_domains) -> bool {
+    Domains & new_domains
+) -> bool 
+{
     VertexToVertexMapping mapping;
     expand_to_full_result(assignments, mapping);
     for (auto p_aut: params.pattern_aut_gens) {
         for (auto t_aut: params.target_aut_gens) {
+            if (p_aut.empty() && t_aut.empty()) continue;
             VertexToVertexMapping permuted;
             for (auto & [var, val] : mapping) {
-                permuted[p_aut[var]] = t_aut[mapping[var]];
+                int i,j;
+                if (p_aut.count(var)) {
+                    i = p_aut[var];
+                }
+                else {
+                    i = var;
+                }
+                if (t_aut.count(mapping[var])) {
+                    j = t_aut[mapping[var]];
+                }
+                else {
+                    j = mapping[var];
+                }
+                permuted[i] = j;
             }
-            for (int i = 0; i < model.pattern_size; i++) {
+            for (unsigned int i = 0; i < model.pattern_size; i++) {
                 if (mapping.count(i) && permuted.count(i)) {    // This is probably a logarithmic check?
                     if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
                         return false;
@@ -1174,9 +1190,167 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
                 }
             }
         }
+        // if (p_aut.empty()) continue;
+        // VertexToVertexMapping permuted;
+        // for (auto & [var, val] : mapping) {
+        //     int i;
+        //     if (p_aut.count(var)) {
+        //         i = p_aut[var];
+        //     }
+        //     else {
+        //         i = var;
+        //     }
+        //     permuted[i] = mapping[var];
+        // }
+        // for (int i = 0; i < model.pattern_size; i++) {
+        //     if (mapping.count(i) && permuted.count(i)) {
+        //         if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+        //             return false;
+        //         }
+        //         else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
+        //             continue;
+        //         }
+        //         else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+        //             break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
+        //         }
+        //     }
+        //     else {
+        //         break;
+        //     }
+        // }
     }
 
     return true;
+}
+
+auto HomomorphismSearcher::have_seen(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool {
+    std::vector<innards::SVOBitset> domain_matrix;
+
+    // for (auto v : assignments.values) {
+    //     std::cout << v.assignment.pattern_vertex << "->" << v.assignment.target_vertex<<" ";
+    // }
+    // std::cout << "\n";
+
+    // for (auto d : new_domains) {
+    //     std::cout << d.v << ":";
+    //     for (int i = 0; i < model.target_size; i++) {
+    //         if (d.values.test(i)) std::cout << i << " ";
+    //     }
+    //     std::cout << "\n";
+    // }
+    
+    for (unsigned int i = 0; i < model.pattern_size; i++) {
+        //TODO need an is_assigned(variable) function
+        HomomorphismAssignment ha;
+        if (std::none_of(assignments.values.begin(), assignments.values.end(), [&ha, i](auto v) -> bool {
+            ha = v.assignment;
+            return v.assignment.pattern_vertex == i;
+        })) {
+            for (auto d: new_domains) {
+                if (d.v == i) {
+                    // //TODO this could be inbuilt (more efficiently) into SVOBitset
+                    // unsigned int representation = 0;
+                    // for (unsigned int j = 0; j < model.target_size; j++) {
+                    //     representation += 1 << (model.target_size - 1 - j);
+                    // }
+                    // domain_matrix.emplace_back(representation);
+                    domain_matrix.emplace_back(d.values);
+                }
+            }
+        }
+        else {
+            // domain_matrix.emplace_back(1 << (model.target_size - 1 - ha.target_vertex));
+            innards::SVOBitset singleton(model.target_size, 0);
+            singleton.set(i);
+            domain_matrix.emplace_back(singleton);
+        }
+    }
+    // if (seen_before.find(domain_matrix) != seen_before.end()) {
+    //     return true;
+    // }
+    std::vector<std::vector<innards::SVOBitset>> tmp;
+    // std::set<std::vector<innards::SVOBitset>> tmp;
+    for (auto p_aut: params.pattern_aut_gens) {
+        for (auto t_aut: params.target_aut_gens) {
+            std::vector<SVOBitset> permuted = domain_matrix;
+            int var;
+            innards::SVOBitset dom;
+            for (unsigned int i = 0; i < model.pattern_size; i++) {
+                if (p_aut.count(i)) {
+                    var = p_aut[i];
+                }
+                else {
+                    var = i;
+                }
+                dom = domain_matrix[i];
+                for (unsigned int j = 0; j < model.target_size; j++) {
+                    if (t_aut.count(j)) {
+                        // if value j maps to some other value k
+                        // set dom[j] to domain_matrix[i][k]
+                        if (domain_matrix[i].test(t_aut[j])) {
+                            dom.set(j);
+                        }
+                        else {
+                            dom.reset(j);
+                        }
+                    }
+                }
+                permuted[var] = dom;
+            }
+            //*** */
+            //TODO SVOBitset needs a compare method
+            //*** */
+            bool found = false;
+            for (auto previous : seen_before) {
+                bool rows_equal = true;
+                for (unsigned int i = 0; i < model.pattern_size; i++) {
+                    for (unsigned int j = 0; j < model.target_size; j++) {
+                        if (previous[i].test(j) != permuted[i].test(j)) {
+                            rows_equal = false;
+                            break;
+                        }
+                    }
+                    if (!rows_equal) break;
+                }
+                found |= rows_equal;
+                if (found) break;
+            }
+            // if (seen_before.find(permuted) != seen_before.end()) {
+            if (found) {
+                // std::cout << "Found: ";
+                // for (auto d: permuted) {
+                //     std::cout << "[";
+                //     for (unsigned int counter = 0; counter < model.target_size; counter++) {
+                //         std::cout << d.test(counter) << " ";
+                //     }
+                //     std::cout << "]\n";
+                // }
+                // std::cout << "\n";
+                return true;
+            }
+            else {
+                tmp.emplace_back(permuted);
+                // tmp.emplace(permuted);
+            }
+        }
+    }
+    for (auto t: tmp) {
+        // seen_before.emplace(t);
+        // if(seen_before.emplace(t).second) {
+        seen_before.emplace_back(t);
+        // std::cout << "Added: ";
+        // for (auto d: t) {
+        //     std::cout << "[";
+        //         for (unsigned int counter = 0; counter < model.target_size; counter++) {
+        //             std::cout << d.test(counter) << " ";
+        //         }
+        //         std::cout << "]\n";
+        // }
+        // std::cout << "\n";
+        // }    
+    }
+    // seen_before.emplace(domain_matrix);
+    return false;
 }
 
 auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
@@ -1243,19 +1417,10 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             branch_domain->fixed = true;
             assignments.values.push_back({*current_assignment, false, -1, -1});
 
-            // std::vector<int> tmpt, tmpp;
             // for (auto v : assignments.values) {
-            //     std::cout << v.assignment.pattern_vertex << "->" << v.assignment.target_vertex<<"\n";
-            //     tmpt.push_back(v.assignment.target_vertex);
-            //     tmpp.push_back(v.assignment.pattern_vertex);
+            //     std::cout << v.assignment.pattern_vertex << "->" << v.assignment.target_vertex<<" ";
             // }
             // std::cout << "\n";
-            // target_base = tmpt;
-            // pattern_base = tmpp;
-            // // for (auto t : pattern_base) {
-            // //     std::cout << t << " ";
-            // // }
-            // // std::cout <<"\n";
 
             if (proof)
                 proof->unit_propagating(
@@ -1332,6 +1497,11 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                     return false;
                 }
             }
+        
+        if (params.partial_assignments_sym && !break_both_aut_symmetries(assignments, new_domains)) {
+            return false;
+        }
+        
         sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
 
         // propagate all different
@@ -1340,6 +1510,10 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 return false;
             }
         done_globals_at_least_once = true;
+    }
+    
+    if (params.domain_filter_sym && have_seen(assignments, new_domains)) {
+        return false;
     }
 
     int dcount = 0;
@@ -1375,10 +1549,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             if (! params.lackey->check_solution(mapping, true, false, deletion) || wipeout)
                 return false;
         }
-    }
-
-    if (model.break_both_symmetries() && !break_both_aut_symmetries(assignments, new_domains)) {
-        return false;
     }
 
     // bool all_done = true;

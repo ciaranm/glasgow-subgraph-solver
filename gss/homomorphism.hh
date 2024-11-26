@@ -121,6 +121,9 @@ namespace gss
         // Whether to do symmetry breaking dynamically
         bool dynamic_pattern = false, dynamic_target = false;
 
+        // If breaking variable and value symmetries, which strategy to use
+        bool domain_filter_sym = false, partial_assignments_sym = false;
+
         /// Optional lackey, for external side constraints
         std::unique_ptr<innards::Lackey> lackey;
 
