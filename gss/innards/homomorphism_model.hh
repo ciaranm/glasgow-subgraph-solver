@@ -57,8 +57,6 @@ namespace gss::innards
 
         auto has_less_thans() const -> bool;
         auto has_occur_less_thans() const -> bool;
-        auto domain_filter_symmetries() const -> bool;
-        auto partial_assignments_symmetries() const -> bool;
         auto do_dynamic_occur_less_thans() const -> bool;
         auto do_dynamic_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;

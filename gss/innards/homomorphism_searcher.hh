@@ -92,10 +92,11 @@ namespace gss::innards
         // Maybe should be moved into Model?
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
         std::vector<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
-        // std::set<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
         std::vector<int> target_base, pattern_base; 
         std::vector<int> symmetric_value_displacement;
         dejavu::groups::random_schreier t_rschreier{model.target_size * 3}, p_rschreier{model.pattern_size * 3};    // TODO the * 3 is a clunky upper bound in directed cases, needs refining
+        std::vector<int> mapping, permuted;
+
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 

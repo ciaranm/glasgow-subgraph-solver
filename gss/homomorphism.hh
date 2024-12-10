@@ -113,10 +113,10 @@ namespace gss
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
 
         /// Pattern automorphism group generators
-        std::set<std::map<int,int>> pattern_aut_gens;
+        std::set<std::vector<int>> pattern_aut_gens;
 
         /// Target automorphism group generators
-        std::set<std::map<int,int>> target_aut_gens;
+        std::set<std::vector<int>> target_aut_gens;
 
         // Whether to do symmetry breaking dynamically
         bool dynamic_pattern = false, dynamic_target = false;

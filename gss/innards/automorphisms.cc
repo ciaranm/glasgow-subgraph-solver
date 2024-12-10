@@ -366,7 +366,7 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::g
 /**
  * Calculate the generating set for the automorphism group of an input graph (picking a random base)
  */
-auto::gss::innards::generating_set(const InputGraph &i) -> std::set<std::map<int,int>> {
+auto::gss::innards::generating_set(const InputGraph &i) -> std::set<std::vector<int>> {
     std::vector<int> base;
     return generating_set(i, base);
 }
@@ -374,7 +374,7 @@ auto::gss::innards::generating_set(const InputGraph &i) -> std::set<std::map<int
 /**
  * Calulcate the generating set for the automorphism group of an input graph (given a [partial] base)
  */
-auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) -> std::set<std::map<int,int>> {
+auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) -> std::set<std::vector<int>> {
     dejavu::static_graph g;     // Declare static graph
     unsigned long n_simple_edges = 0;       // Number of undirected edges
     i.for_each_edge([&](int f, int t, string_view) {
@@ -393,7 +393,6 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
     });
 
     dejavu::groups::random_schreier rschreier{i.size()};        // Random Schreier structure with domain size nv
-    // std::vector<int> base;
 
     rschreier.set_base(base);       // Empty base to begin with
 
@@ -422,67 +421,21 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
 
     std::cout << "aut_group_sz = " << s.get_automorphism_group_size() << "\n";
 
-    // std::cout << "Generators:\n";
     dejavu::groups::automorphism_workspace a(i.size());
-    std::set<std::set<std::vector<int>>> gens;      // Generators are sets of lists (cycles)
-    std::set<std::map<int,int>> mappings;            // Store generators (and identity) in a sensible notation
-    std::map<int,int> identity;
-    // for (int x = 0; x < i.size(); x++) {
-    //     identity[x] = x;
-    // }
+    std::set<std::vector<int>> mappings;            // Store generators (and identity) in a sensible notation
+    std::vector<int> identity;                      // We need an identity since we're composing elements from two sets
+    for (int y = 0; y < i.size(); y++) {
+        identity.push_back(y);                      // Every element maps to itself
+    }
     mappings.emplace(identity);
     for (int x = 0; x < rschreier.get_number_of_generators(); x++) {
-        rschreier.get_generator(x, a);
-        // //  For cycle notation
-        // std::set<vector<int>> cycle_notation;
-        // std::set<int> counted;
-        // for (int y = 0; y < i.size(); y++) {
-        //     if (counted.find(y) == counted.end()) {
-        //         int goes_to = a.p()[y];
-        //         std::vector<int> cycle;
-        //         cycle.push_back(y);
-        //         counted.emplace(y);
-        //         while (goes_to != y) {
-        //             cycle.push_back(goes_to);
-        //             counted.emplace(goes_to);
-        //             goes_to = a.p()[goes_to];
-        //         }
-        //         if (cycle.size() > 1) {
-        //             cycle_notation.emplace(cycle);
-        //         }
-        //     }
-        // }
-        // if (cycle_notation.size() > 0) {
-        //     gens.emplace(cycle_notation);
-        // }
-        // For mapping notation
-        std::map<int,int> mapping;
+        rschreier.get_generator(x, a);              // Get the xth generator of Aut(G), p
+        std::vector<int> mapping;
         for (int y = 0; y < i.size(); y++) {
-            if (mapping[y] != a.p()[y]) {
-                mapping[y] = a.p()[y];
-            }
+            mapping.push_back(a.p()[y]);            // mapping[i] maps to p*i
         }
         mappings.emplace(mapping);
     }
-
-    // for (auto map : mappings) {
-    //     std::cout << "(";
-    //     for (auto m : map) {
-    //         if (m.first != m.second) std::cout << m.first << "->" << m.second << ",";
-    //     }
-    //     std::cout << ")\n";
-    // }
-
-    // for (auto gen : gens) {
-    //     for (auto cycle : gen) {
-    //         std::cout << "( ";
-    //         for (unsigned int v_index = 0; v_index < cycle.size(); v_index++) {
-    //                 std::cout << cycle[v_index] << " ";
-    //         }
-    //         std::cout << ")";
-    //     }
-    //     std::cout << "\n";
-    // }
 
     return mappings;
 }
