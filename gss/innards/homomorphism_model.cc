@@ -3,6 +3,7 @@
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_traits.hh>
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <list>
@@ -16,6 +17,7 @@
 using namespace gss;
 using namespace gss::innards;
 
+using std::find;
 using std::greater;
 using std::list;
 using std::make_optional;
@@ -126,6 +128,8 @@ struct HomomorphismModel::Imp
 
     vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
     vector<int> pattern_loops, target_loops;
+
+    vector<unsigned> pattern_vertex_order;
 
     vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
@@ -296,6 +300,18 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             if (loop_detect)
                 throw UnsupportedConfiguration{"Pattern less than constraints form a loop"};
         }
+
+        vector<unsigned> inv_pattern_vertex_order;
+        for (auto & [a, _] : pattern_less_thans_in_convenient_order)
+            inv_pattern_vertex_order.push_back(a);
+        for (int v = 0; v < pattern.size(); ++v) {
+            if (inv_pattern_vertex_order.end() == find(inv_pattern_vertex_order.begin(), inv_pattern_vertex_order.end(), v))
+                inv_pattern_vertex_order.push_back(v);
+        }
+
+        _imp->pattern_vertex_order.resize(inv_pattern_vertex_order.size());
+        for (int v = 0; v < pattern.size(); ++v)
+            _imp->pattern_vertex_order[inv_pattern_vertex_order[v]] = v;
     }
 
     // target less than constraints
@@ -1309,4 +1325,9 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
     }
 
     x.emplace_back(join("supplemental_graph_names =", _imp->supplemental_graph_names));
+}
+
+auto HomomorphismModel::less_than_in_pattern_vertex_order(unsigned v, unsigned w) const -> bool
+{
+    return _imp->pattern_vertex_order.at(v) < _imp->pattern_vertex_order.at(w);
 }

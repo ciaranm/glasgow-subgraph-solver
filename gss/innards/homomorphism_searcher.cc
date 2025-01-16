@@ -676,7 +676,7 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
         else {
             // value a first occurs in variable x, value b cannot be used in a variable lower than x
             for (auto & d : new_domains) {
-                if (d.v < first_a && d.values.test(b)) {
+                if (model.less_than_in_pattern_vertex_order(d.v, first_a) && d.values.test(b)) {
                     occurs[b]->reset(d.v);
                     d.values.reset(b);
                     if (0 == --d.count)
@@ -695,12 +695,12 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
 
             bool saw_an_a = false;
             for (auto & d : new_domains) {
-                if (d.v < current_assignment->pattern_vertex) {
+                if (model.less_than_in_pattern_vertex_order(d.v, current_assignment->pattern_vertex)) {
                     // it's before
                     if (d.values.test(a))
                         saw_an_a = true;
                 }
-                else if (d.v > current_assignment->pattern_vertex) {
+                else if (model.less_than_in_pattern_vertex_order(current_assignment->pattern_vertex, d.v)) {
                     // comes after, can't use a
                     if (d.values.test(a)) {
                         occurs[a]->reset(d.v);
@@ -712,7 +712,7 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
             }
 
             for (auto & d : assignments.values)
-                if (d.assignment.pattern_vertex < current_assignment->pattern_vertex && a == d.assignment.target_vertex)
+                if (model.less_than_in_pattern_vertex_order(d.assignment.pattern_vertex, current_assignment->pattern_vertex) && a == d.assignment.target_vertex)
                     saw_an_a = true;
 
             if (! saw_an_a)

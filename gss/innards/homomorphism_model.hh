@@ -56,6 +56,7 @@ namespace gss::innards
         auto has_less_thans() const -> bool;
         auto has_occur_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
+        auto less_than_in_pattern_vertex_order(unsigned v, unsigned w) const -> bool;
 
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
             const std::shared_ptr<Proof> & proof);
