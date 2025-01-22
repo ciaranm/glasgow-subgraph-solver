@@ -1161,19 +1161,35 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
     Domains & new_domains
 ) -> bool 
 {
-    std::memset(&mapping[0], -1, sizeof(mapping[0]) * mapping.size());      // TODO Probably don't need to do this every time
-    for (auto a: assignments.values) {
+    // std::memset(&mapping[0], -1, sizeof(mapping[0]) * mapping.size());      // TODO Probably don't need to do this every time
+    std::fill(mapping.begin(), mapping.end(), -1);
+    for (const auto &a: assignments.values) {
         mapping[a.assignment.pattern_vertex] = a.assignment.target_vertex;      // Construct the current mapping as a vector
     }
-    for (auto p_aut: params.pattern_aut_gens) {
-        for (auto t_aut: params.target_aut_gens) {
-            std::memset(&permuted[0], -1, sizeof(permuted[0] * permuted.size()));       // Reset the permuted mapping
-            for (auto a: assignments.values) {
+    for (const auto &p_aut: params.pattern_aut_gens) {
+        for (const auto &t_aut: params.target_aut_gens) {
+            // std::memset(&permuted[0], -1, sizeof(permuted[0] * permuted.size()));       // Reset the permuted mapping
+            std::fill(permuted.begin(), permuted.end(), -1);
+            for (const auto &a: assignments.values) {
+                // permuted[p_aut[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
                 permuted[p_aut[a.assignment.pattern_vertex]] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
             }
             for (unsigned int i = 0; i < model.pattern_size; i++) {
                 if (mapping[i] != -1 && permuted[i] != -1) {
                     if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                        // std::cout << "Failed: \n";
+                        // for(auto cell : mapping) {
+                        //     std::cout << cell <<" ";
+                        // }
+                        // std::cout << "\n";
+                        // for(auto cell : permuted) {
+                        //     std::cout << cell <<" ";
+                        // }
+                        // std::cout << "\n";
+                        // for(auto cell : p_aut) {
+                        //     std::cout << cell <<" ";
+                        // }
+                        // std::cout << "\n";
                         return false;
                     }
                     else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
@@ -1184,6 +1200,40 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
                     }
                 }
                 else {
+                    break;
+                }
+            }
+            for (unsigned int i = 0; i < model.pattern_size; i++) {
+                if (mapping[i] == -1 || (permuted[i] > mapping[i])) {
+                    break;
+                }
+                else if (permuted[i] == -1) {       // TODO probably want to store the inverses of automorphisms somewhere instead of calculating
+                    auto it = std::find(p_aut.begin(), p_aut.end(), i);
+                    unsigned int var = it - p_aut.begin();       // This is the variable we can infer things about
+                    for (auto &d : new_domains) {
+                        if (d.v == var) {               // Find the variable's domain
+                            for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
+                                // int val = x;
+                                int val = std::find(t_aut.begin(), t_aut.end(), x) - t_aut.begin();
+                                if (val < mapping[i]) {
+                                    d.values.reset(val);
+                                    // for(auto cell : mapping) {
+                                    //     std::cout << cell <<" ";
+                                    // }
+                                    // std::cout << "\n";
+                                    // for(auto cell : permuted) {
+                                    //     std::cout << cell <<" ";
+                                    // }
+                                    // std::cout << "\n";
+                                    // for(auto cell : p_aut) {
+                                    //     std::cout << cell <<" ";
+                                    // }
+                                    // std::cout << "\n";
+                                    // std::cout << var << ":" << val << "\n";
+                                }
+                            }
+                        }
+                    }
                     break;
                 }
             }
@@ -1243,7 +1293,6 @@ auto HomomorphismSearcher::have_seen(const HomomorphismAssignments & assignments
     for (auto p_aut: params.pattern_aut_gens) {
         for (auto t_aut: params.target_aut_gens) {
             std::vector<SVOBitset> permuted = domain_matrix;
-            int var;
             innards::SVOBitset dom;
             for (unsigned int i = 0; i < model.pattern_size; i++) {
                 dom = domain_matrix[i];
@@ -1454,6 +1503,10 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
     }
 
     // propagate symmetries
+    // for (auto a : assignments.values) {
+    //     std::cout << a.assignment.pattern_vertex << "->" << a.assignment.target_vertex << " ";
+    // }
+    // std::cout << "\n";
     if (params.partial_assignments_sym && !break_both_aut_symmetries(assignments, new_domains)) {
         return false;
     }
