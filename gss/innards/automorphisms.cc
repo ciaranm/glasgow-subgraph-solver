@@ -366,7 +366,7 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::g
 /**
  * Calculate the generating set for the automorphism group of an input graph (picking a random base)
  */
-auto::gss::innards::generating_set(const InputGraph &i) -> std::set<std::vector<int>> {
+auto::gss::innards::generating_set(const InputGraph &i) -> std::vector<std::vector<int>> {
     std::vector<int> base;
     return generating_set(i, base);
 }
@@ -374,7 +374,7 @@ auto::gss::innards::generating_set(const InputGraph &i) -> std::set<std::vector<
 /**
  * Calulcate the generating set for the automorphism group of an input graph (given a [partial] base)
  */
-auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) -> std::set<std::vector<int>> {
+auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) -> std::vector<std::vector<int>> {
     dejavu::static_graph g;     // Declare static graph
     unsigned long n_simple_edges = 0;       // Number of undirected edges
     i.for_each_edge([&](int f, int t, string_view) {
@@ -422,20 +422,37 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
     std::cout << "aut_group_sz = " << s.get_automorphism_group_size() << "\n";
 
     dejavu::groups::automorphism_workspace a(i.size());
-    std::set<std::vector<int>> mappings;            // Store generators (and identity) in a sensible notation
+    std::vector<std::vector<int>> mappings;            // Store generators (and identity) in a sensible notation
     std::vector<int> identity;                      // We need an identity since we're composing elements from two sets
     for (int y = 0; y < i.size(); y++) {
         identity.push_back(y);                      // Every element maps to itself
     }
-    mappings.emplace(identity);
+    mappings.push_back(identity);
     for (int x = 0; x < rschreier.get_number_of_generators(); x++) {
         rschreier.get_generator(x, a);              // Get the xth generator of Aut(G), p
         std::vector<int> mapping;
         for (int y = 0; y < i.size(); y++) {
             mapping.push_back(a.p()[y]);            // mapping[i] maps to p*i
         }
-        mappings.emplace(mapping);
+        mappings.push_back(mapping);
     }
 
     return mappings;
+}
+
+auto gss::innards::invert_automorphism(std::vector<int> aut) -> std::vector<int> {
+    std::vector<int> res(aut.size());
+    for (unsigned int i = 0; i < aut.size(); i++) {
+        res[aut[i]] = i; 
+    }
+    return res;
+}
+
+auto gss::innards::invert_list(std::vector<std::vector<int>> ls) -> std::vector<std::vector<int>> {
+    std::vector<std::vector<int>> res;
+    for (unsigned int i = 0; i < ls.size(); i++) {
+        res.push_back(invert_automorphism(ls[i]));
+    }
+    return res;
+    
 }

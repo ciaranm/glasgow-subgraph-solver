@@ -523,7 +523,9 @@ auto main(int argc, char * argv[]) -> int
         }
         else if (options_vars.count("partial-assignments-symmetries")) {
             params.target_aut_gens = innards::generating_set(target);
+            params.target_aut_inverses = innards::invert_list(params.target_aut_gens);
             params.pattern_aut_gens = innards::generating_set(pattern);
+            params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_gens);
             params.partial_assignments_sym = true;
         }
         else if (options_vars.count("domain-filter-symmetries")) {
