@@ -126,6 +126,9 @@ namespace gss
         // If breaking variable and value symmetries, which strategy to use
         bool domain_filter_sym = false, partial_assignments_sym = false;
 
+        // If breaking symmetries with generators, which type to use
+        bool pattern_gen_syms = false, target_gen_syms = false, both_gen_syms = false, separate_gen_syms = false; 
+
         /// Optional lackey, for external side constraints
         std::unique_ptr<innards::Lackey> lackey;
 

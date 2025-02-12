@@ -88,8 +88,9 @@ auto main(int argc, char * argv[]) -> int
             ("target-symmetries-dejavu", po::value<string>(),                                                                          //
                 "Eliminate target symmetries using orbits or generators (orb / gens) (requires Dejavu)")                               //
             ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
-            ("partial-assignments-symmetries", "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")            //
-            ("domain-filter-symmetries", "Eliminate pattern and target symmetries on domain matrices (requires Dejavu)")                //
+            ("partial-assignments-symmetries", po::value<string>(),                                                                    //
+                "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")                                    //
+            ("domain-filter-symmetries", "Eliminate pattern and target symmetries on domain matrices (requires Dejavu)")               //
             ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")                                    //
             ("target-orbits-dejavu", "Eliminate target symmetries dynamically (requires Dejavu)");
         display_options.add(search_options);
@@ -522,10 +523,31 @@ auto main(int argc, char * argv[]) -> int
             params.use_target_orbits = true;
         }
         else if (options_vars.count("partial-assignments-symmetries")) {
-            params.target_aut_gens = innards::generating_set(target);
-            params.target_aut_inverses = innards::invert_list(params.target_aut_gens);
-            params.pattern_aut_gens = innards::generating_set(pattern);
-            params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_gens);
+            string method = options_vars["partial-assignments-symmetries"].as<string>();
+            if (method == "pattern") {
+                params.pattern_gen_syms = true;
+            }
+            else if (method == "target") {
+                params.target_gen_syms = true;
+            }
+            else if (method == "both") {
+                params.both_gen_syms = true;
+            }
+            else if (method == "separate") {
+                params.separate_gen_syms = true;
+            }
+            else {
+                cout << "Unrecognised partial assignment symmetry policy " << method << ", use (pattern / target / both / separate).\n";
+                return EXIT_FAILURE;
+            }
+            if (!params.pattern_gen_syms) {
+                params.target_aut_gens = innards::generating_set(target);
+                params.target_aut_inverses = innards::invert_list(params.target_aut_gens);
+            }
+            if (!params.target_gen_syms) {
+                params.pattern_aut_gens = innards::generating_set(pattern);
+                params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_gens);
+            }
             params.partial_assignments_sym = true;
         }
         else if (options_vars.count("domain-filter-symmetries")) {

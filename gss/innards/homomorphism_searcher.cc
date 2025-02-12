@@ -1166,125 +1166,131 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
     for (const auto &a: assignments.values) {
         mapping[a.assignment.pattern_vertex] = a.assignment.target_vertex;      // Construct the current mapping as a vector
     }
-    // // ** PATTERN AND TARGET **
-    // for (unsigned int p = 0; p < params.pattern_aut_gens.size(); p++) {
-    //     for (unsigned int t = 0; t < params.target_aut_gens.size(); t++) {
-    //         const std::vector<int> &p_aut = params.pattern_aut_gens[p];
-    //         const std::vector<int> &t_aut = params.target_aut_gens[t];
-    //         const std::vector<int> &p_inv = params.pattern_aut_inverses[p];
-    //         const std::vector<int> &t_inv = params.target_aut_inverses[t];
-    //         std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
-    //         for (const auto &a: assignments.values) {
-    //             permuted[p_aut[a.assignment.pattern_vertex]] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
-    //         }
-    //         for (unsigned int i = 0; i < model.pattern_size; i++) {
-    //             if (mapping[i] != -1 && permuted[i] != -1) {
-    //                 if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
-    //                     return false;
-    //                 }
-    //                 else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
-    //                     continue;
-    //                 }
-    //                 else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
-    //                     break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
-    //                 }
-    //             }
-    //             else if (mapping[i] != -1) {
-    //                 // perm_var = std::find(p_aut.begin(), p_aut.end(), i) - p_aut.begin();       // This is the variable we can infer things about
-    //                 for (auto &d : new_domains) {
-    //                     // if (d.v == perm_var) {               // Find the variable's domain
-    //                     if (d.v == p_inv[i]) {               // Find the variable's domain
-    //                         for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-    //                             // perm_val = std::find(t_aut.begin(), t_aut.end(), x) - t_aut.begin();
-    //                             if (t_inv[x] < mapping[i]) {
-    //                                 // d.values.reset(perm_val);
-    //                                 d.values.reset(t_inv[x]);
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //                 break;
-    //             }
-    //             else {
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
-    // ** PATTERN ONLY **
-    for (unsigned int p = 0; p < params.pattern_aut_gens.size(); p++) {
-        const std::vector<int> &p_inv = params.pattern_aut_inverses[p];
-        const std::vector<int> &p_aut = params.pattern_aut_gens[p];
-        std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
-        for (const auto &a: assignments.values) {
-            permuted[p_aut[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
-        }
-        for (unsigned int i = 0; i < model.pattern_size; i++) {
-            if (mapping[i] != -1 && permuted[i] != -1) {
-                if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
-                    return false;
+    // ** PATTERN AND TARGET **
+    if (params.both_gen_syms) {
+        for (unsigned int p = 0; p < params.pattern_aut_gens.size(); p++) {
+            for (unsigned int t = 0; t < params.target_aut_gens.size(); t++) {
+                const std::vector<int> &p_aut = params.pattern_aut_gens[p];
+                const std::vector<int> &t_aut = params.target_aut_gens[t];
+                const std::vector<int> &p_inv = params.pattern_aut_inverses[p];
+                const std::vector<int> &t_inv = params.target_aut_inverses[t];
+                std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
+                for (const auto &a: assignments.values) {
+                    permuted[p_aut[a.assignment.pattern_vertex]] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
                 }
-                else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
-                    continue;
-                }
-                else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
-                    break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
-                }
-            }
-            else if (mapping[i] != -1) {
-                for (auto &d : new_domains) {
-                    if (d.v == p_inv[i]) {               // Find the variable's domain
-                        for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                            if (x < mapping[i]) {
-                                d.values.reset(x);
-                            }
+                for (unsigned int i = 0; i < model.pattern_size; i++) {
+                    if (mapping[i] != -1 && permuted[i] != -1) {
+                        if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                            return false;
+                        }
+                        else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
+                            continue;
+                        }
+                        else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+                            break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
                         }
                     }
+                    else if (mapping[i] != -1) {
+                        // perm_var = std::find(p_aut.begin(), p_aut.end(), i) - p_aut.begin();       // This is the variable we can infer things about
+                        for (auto &d : new_domains) {
+                            // if (d.v == perm_var) {               // Find the variable's domain
+                            if (d.v == p_inv[i]) {               // Find the variable's domain
+                                for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
+                                    // perm_val = std::find(t_aut.begin(), t_aut.end(), x) - t_aut.begin();
+                                    if (t_inv[x] < mapping[i]) {
+                                        // d.values.reset(perm_val);
+                                        d.values.reset(t_inv[x]);
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    else {
+                        break;
+                    }
                 }
-                break;
-            }
-            else {
-                break;
             }
         }
     }
-    // // ** TARGET ONLY **
-    // for (unsigned int t = 0; t < params.target_aut_gens.size(); t++) {
-    //     const std::vector<int> &t_aut = params.target_aut_gens[t];
-    //     const std::vector<int> &t_inv = params.target_aut_inverses[t];
-    //     std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
-    //     for (const auto &a: assignments.values) {
-    //         permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
-    //     }
-    //     for (unsigned int i = 0; i < model.pattern_size; i++) {
-    //         if (mapping[i] != -1 && permuted[i] != -1) {
-    //             if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
-    //                 return false;
-    //             }
-    //             else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
-    //                 continue;
-    //             }
-    //             else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
-    //                 break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
-    //             }
-    //         }
-    //         else if (mapping[i] != -1) {
-    //             for (auto &d : new_domains) {
-    //                 if (d.v == i) {               // Find the variable's domain
-    //                     for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-    //                         if (t_inv[x] < mapping[i]) {
-    //                             d.values.reset(t_inv[x]);
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //             break;
-    //         }
-    //         else {
-    //             break;
-    //         }
-    //     }
-    // }
+    // ** PATTERN ONLY **
+    if (params.pattern_gen_syms || params.separate_gen_syms) {
+        for (unsigned int p = 0; p < params.pattern_aut_gens.size(); p++) {
+            const std::vector<int> &p_inv = params.pattern_aut_inverses[p];
+            const std::vector<int> &p_aut = params.pattern_aut_gens[p];
+            std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
+            for (const auto &a: assignments.values) {
+                permuted[p_aut[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
+            }
+            for (unsigned int i = 0; i < model.pattern_size; i++) {
+                if (mapping[i] != -1 && permuted[i] != -1) {
+                    if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                        return false;
+                    }
+                    else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
+                        continue;
+                    }
+                    else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+                        break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
+                    }
+                }
+                else if (mapping[i] != -1) {
+                    for (auto &d : new_domains) {
+                        if (d.v == p_inv[i]) {               // Find the variable's domain
+                            for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
+                                if (x < mapping[i]) {
+                                    d.values.reset(x);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                else {
+                    break;
+                }
+            }
+        }
+    }
+    // ** TARGET ONLY **
+    if (params.target_gen_syms || params.separate_gen_syms) {
+        for (unsigned int t = 0; t < params.target_aut_gens.size(); t++) {
+            const std::vector<int> &t_aut = params.target_aut_gens[t];
+            const std::vector<int> &t_inv = params.target_aut_inverses[t];
+            std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
+            for (const auto &a: assignments.values) {
+                permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
+            }
+            for (unsigned int i = 0; i < model.pattern_size; i++) {
+                if (mapping[i] != -1 && permuted[i] != -1) {
+                    if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                        return false;
+                    }
+                    else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
+                        continue;
+                    }
+                    else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+                        break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
+                    }
+                }
+                else if (mapping[i] != -1) {
+                    for (auto &d : new_domains) {
+                        if (d.v == i) {               // Find the variable's domain
+                            for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
+                                if (t_inv[x] < mapping[i]) {
+                                    d.values.reset(t_inv[x]);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                else {
+                    break;
+                }
+            }
+        }
+    }
 
     return true;
 }
