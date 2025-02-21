@@ -153,7 +153,9 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     _imp(new Imp(params, proof)),
     max_graphs(calculate_n_shape_graphs(params)),
     pattern_size(pattern.size()),
-    target_size(target.size())
+    target_size(target.size()),
+    pattern_edge_num(pattern.number_of_directed_edges()),
+    target_edge_num(target.number_of_directed_edges())
 {
     if (_imp->params.clique_size_constraints)
         _imp->max_graphs_for_clique_size_constraints = (_imp->params.clique_size_constraints_on_supplementals ? max_graphs : 1);

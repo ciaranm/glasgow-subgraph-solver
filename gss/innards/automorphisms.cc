@@ -29,52 +29,66 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
             if (f < t)
                 ++n_simple_edges;
         });
-    }
-    else {
-        for (int v = 0, v_end = i.size(); v != v_end; ++v) {
-            for (int u = v+1, u_end = i.size(); u != u_end; ++u) {
-                if (i.adjacent(v,u) && i.adjacent(u,v)) {
-                    ++n_simple_edges;
-                }
-                else if (i.adjacent(u, v) || i.adjacent(v,u)) {
-                    n_simple_edges += 3;
-                    nv += 2;
-                }
-            }
+        g.initialize_graph(nv, n_simple_edges);       // Initialise g with nv, ne
+        vector<int> vertices;       // List of vertices
+        for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
+            bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
+            int deg = i.degree(v);
+            vertices.push_back(g.add_vertex(loop, deg - loop));   // Add colour and non-looping degree
         }
-    }
-    
-    g.initialize_graph(nv, n_simple_edges);       // Initialise g with nv, ne
-    vector<int> vertices;       // List of vertices
-    for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
-        bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
-        int deg = i.degree(v);
-        if (i.directed()) {
-            for (int u = 0, u_end = i.size(); u != u_end; u++) {
-                if (u == v) continue;
-                deg += i.adjacent(u, v);
-            }
-        }
-        vertices.push_back(g.add_vertex(loop, deg - loop));   // Add colour and non-looping degree
-    }
-    i.for_each_edge([&](int f, int t, string_view) {
-        if (!i.directed()) {
+        i.for_each_edge([&](int f, int t, string_view) {
             if (f < t) 
                 g.add_edge(vertices[f], vertices[t]);       // Add edges (undirected)
+        });
+    }
+    else {
+        vector<int> degrees;
+        for (int v = 0; v < i.size(); v++) {
+            degrees.push_back(i.degree(v));
         }
-        else {
-            if (i.adjacent(t,f) && f < t) {
-                g.add_edge(vertices[f], vertices[t]);
+        i.for_each_edge([&](int f, int t, string_view) {
+            if (i.adjacent(t, f)) {
+                if (f < t) {
+                    ++n_simple_edges;           // Bidirectional edges are undirected already
+                }
             }
             else {
-                vertices.push_back(g.add_vertex(2, 2));
-                vertices.push_back(g.add_vertex(3, 2));
-                g.add_edge(vertices[f], vertices[vertices.size() - 2]);
-                g.add_edge(vertices[vertices.size() - 2], vertices[vertices.size() - 1]);
-                g.add_edge(vertices[t], vertices[vertices.size() - 1]);
+                nv += 2;     // Add extra vertices to indicate direction
+                n_simple_edges += 3;
+                ++degrees[t];
             }
+        });
+        g.initialize_graph(nv, n_simple_edges);
+        vector<int> vertices;       // List of vertices
+        for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex in the orignal graph
+            bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
+            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? degrees[v] - 1 : degrees[v]));   // Add colour and non-looping degree
         }
-    });
+        vector<int> direction_vertices;
+        for (int v = i.size(), v_end = nv; v != v_end; v += 2) { // For each additional vertex (direction indicators)
+            direction_vertices.push_back(g.add_vertex(2, 2));   // From
+            direction_vertices.push_back(g.add_vertex(3, 2));   // To
+        }
+        // std::cout << vertices.size() << " orginals + " << direction_vertices.size() << " new ones.\n";
+        i.for_each_edge([&](int f, int t, string_view) {
+            if (i.adjacent(t, f)) {
+                if (f < t) {
+                    // std::cout << f << "-" << t << "\n";
+                    g.add_edge(vertices[f], vertices[t]);
+                }
+            }
+            else {
+                // std::cout << f << "-" << direction_vertices[0] << "-" << direction_vertices[1] << "-" << t << "\n";
+                int lower = f < t ? f : t;
+                int higher = f < t ? t : f;
+                g.add_edge(vertices[lower], direction_vertices[0]);
+                g.add_edge(direction_vertices[0], direction_vertices[1]);
+                g.add_edge(vertices[higher], direction_vertices[1]);
+                direction_vertices.erase(direction_vertices.begin());
+                direction_vertices.erase(direction_vertices.begin());
+            }
+        });
+    }
 
     dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
     // std::vector<int> base;
@@ -265,8 +279,6 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
                     n_simple_edges += 3;    // Undirect that edge!
                     n_vertices += 2;        // Colours to represent direction
                 }
-                // if (m[i].test(j)) n_simple_edges += 3;
-                // if (m[j].test(i)) n_simple_edges += 3;
             }
         }
         g.initialize_graph(n_vertices, n_simple_edges);       // Initialise g
@@ -311,6 +323,9 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
     s.set_print(false);
 
     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
+
+    std::cout << "!\n";
+
 
     // std::cout << "aut_group_sz = " << s.get_automorphism_group_size() << "\n";
 
@@ -377,22 +392,73 @@ auto::gss::innards::generating_set(const InputGraph &i) -> std::vector<std::vect
 auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) -> std::vector<std::vector<int>> {
     dejavu::static_graph g;     // Declare static graph
     unsigned long n_simple_edges = 0;       // Number of undirected edges
-    i.for_each_edge([&](int f, int t, string_view) {
-        if (f < t)
-            ++n_simple_edges;
-    });
-    g.initialize_graph(i.size(), n_simple_edges);       // Initialise g with nv, ne
-    vector<int> vertices;       // List of vertices
-    for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
-        bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
-        vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? i.degree(v) - 1 : i.degree(v)));   // Add colour and non-looping degree
+    unsigned long n_undirected_vertices = i.size();
+    if (i.directed()) {
+        vector<int> degrees;
+        for (int v = 0; v < i.size(); v++) {
+            degrees.push_back(i.degree(v));
+        }
+        i.for_each_edge([&](int f, int t, string_view) {
+            if (i.adjacent(t, f)) {
+                if (f < t) {
+                    ++n_simple_edges;           // Bidirectional edges are undirected already
+                }
+            }
+            else {
+                n_undirected_vertices += 2;     // Add extra vertices to indicate direction
+                n_simple_edges += 3;
+                ++degrees[t];
+            }
+        });
+        g.initialize_graph(n_undirected_vertices, n_simple_edges);
+        vector<int> vertices;       // List of vertices
+        for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex in the orignal graph
+            bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
+            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? degrees[v] - 1 : degrees[v]));   // Add colour and non-looping degree
+        }
+        vector<int> direction_vertices;
+        for (int v = i.size(), v_end = n_undirected_vertices; v != v_end; v += 2) { // For each additional vertex (direction indicators)
+            direction_vertices.push_back(g.add_vertex(2, 2));   // From
+            direction_vertices.push_back(g.add_vertex(3, 2));   // To
+        }
+        // std::cout << vertices.size() << " orginals + " << direction_vertices.size() << " new ones.\n";
+        i.for_each_edge([&](int f, int t, string_view) {
+            if (i.adjacent(t, f)) {
+                if (f < t) {
+                    // std::cout << f << "-" << t << "\n";
+                    g.add_edge(vertices[f], vertices[t]);
+                }
+            }
+            else {
+                // std::cout << f << "-" << direction_vertices[0] << "-" << direction_vertices[1] << "-" << t << "\n";
+                int lower = f < t ? f : t;
+                int higher = f < t ? t : f;
+                g.add_edge(vertices[lower], direction_vertices[0]);
+                g.add_edge(direction_vertices[0], direction_vertices[1]);
+                g.add_edge(vertices[higher], direction_vertices[1]);
+                direction_vertices.erase(direction_vertices.begin());
+                direction_vertices.erase(direction_vertices.begin());
+            }
+        });
     }
-    i.for_each_edge([&](int f, int t, string_view) {
-        if (f < t)
-            g.add_edge(vertices[f], vertices[t]);       // Add edges (undirected)
-    });
+    else {
+        i.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                ++n_simple_edges;
+        });
+        g.initialize_graph(i.size(), n_simple_edges);       // Initialise g with nv, ne
+        vector<int> vertices;       // List of vertices
+        for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
+            bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
+            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? i.degree(v) - 1 : i.degree(v)));   // Add colour and non-looping degree
+        }
+        i.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                g.add_edge(vertices[f], vertices[t]);       // Add edges (undirected)
+        });
+    }
 
-    dejavu::groups::random_schreier rschreier{i.size()};        // Random Schreier structure with domain size nv
+    dejavu::groups::random_schreier rschreier{n_undirected_vertices};        // Random Schreier structure with domain size nv
 
     rschreier.set_base(base);       // Empty base to begin with
 
@@ -400,28 +466,29 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
     dejavu::solver s;
     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
 
-    OrderConstraints result;        // List of constraint pairs
-    std::set<std::pair<int,int>> unique_list;
+    // OrderConstraints result;        // List of constraint pairs
+    // std::set<std::pair<int,int>> unique_list;
 
-    bool stab_trivial = false;
-    dejavu::groups::orbit o{i.size()};      // Orbit structure of size nv
-    while (! stab_trivial) {        // While stabiliser is non-trivial
-        rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
-        stab_trivial = true;
-        for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
-            if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
-                stab_trivial = false;
-                base.push_back(v);          // Add v to base
-            }
-        }
+    // bool stab_trivial = false;
+    // dejavu::groups::orbit o{n_undirected_vertices};      // Orbit structure of size nv
+    // while (! stab_trivial) {        // While stabiliser is non-trivial
+    //     rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
+    //     stab_trivial = true;
+    //     for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
+    //         if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
+    //             std::cout << v << " : " << o.orbit_size(v);
+    //             stab_trivial = false;
+    //             base.push_back(v);          // Add v to base
+    //         }
+    //     }
 
-        if (! stab_trivial)
-            rschreier.set_base(base);       // Update base
-    }
+    //     if (! stab_trivial)
+    //         rschreier.set_base(base);       // Update base
+    // }
 
     std::cout << "aut_group_sz = " << s.get_automorphism_group_size() << "\n";
 
-    dejavu::groups::automorphism_workspace a(i.size());
+    dejavu::groups::automorphism_workspace a(n_undirected_vertices);
     std::vector<std::vector<int>> mappings;            // Store generators (and identity) in a sensible notation
     std::vector<int> identity;                      // We need an identity since we're composing elements from two sets
     for (int y = 0; y < i.size(); y++) {
@@ -433,7 +500,9 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
         std::vector<int> mapping;
         for (int y = 0; y < i.size(); y++) {
             mapping.push_back(a.p()[y]);            // mapping[i] maps to p*i
+            std::cout << y << "->" << mapping[y] << " ";
         }
+        std::cout << "\n";
         mappings.push_back(mapping);
     }
 

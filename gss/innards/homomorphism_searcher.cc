@@ -61,6 +61,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
         }
         // std::cout << "pattern_";
+        std::cout << model.pattern_size + model.pattern_edge_num * 2 << "\n";
         initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed());
     }
     if (params.partial_assignments_sym) {
@@ -216,7 +217,7 @@ auto HomomorphismSearcher::restarting_search(
 
     vector<uint8_t> skip_target_vertex_due_to_orbits(model.target_size, 0);
 
-    dejavu::groups::orbit pattern_orbit_partition{model.pattern_size};
+    dejavu::groups::orbit pattern_orbit_partition{static_cast<int>(model.pattern_size)};
     bool this_vertex_has_pattern_orbit = false;
     if (model.has_pattern_orbits) {
         if (pattern_orbit_base != model.pattern_orbit_base) {
@@ -236,7 +237,7 @@ auto HomomorphismSearcher::restarting_search(
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
-        dejavu::groups::orbit target_orbit_partition{model.target_size};
+        dejavu::groups::orbit target_orbit_partition{static_cast<int>(model.target_size)};
         bool this_vertex_has_target_orbit = false;
 
         if (! skip_target_vertex_due_to_orbits.at(*f_v)) {
@@ -1092,7 +1093,7 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 
         unsigned int size_before = useful_constraints.size();
 
-        int size = model.target_size * (model.directed() ? 3 : 1);
+        int size = model.target_size + (model.directed() ? 2 * model.target_edge_num : 0);
 
         innards::dynamic_order_constraints(size, base, t_rschreier, useful_constraints);    // Compute constraints at the new base point
 
@@ -1139,7 +1140,7 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
         int size_before = useful_constraints.size();
 
-        int size = model.pattern_size * (model.directed() ? 3 : 1);
+        int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
         innards::dynamic_order_constraints(size, base, p_rschreier, useful_constraints);      // Compute new constraints at new base point
 

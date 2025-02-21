@@ -54,6 +54,7 @@ namespace gss::innards
 
         const unsigned max_graphs;
         unsigned pattern_size, target_size;
+        unsigned pattern_edge_num, target_edge_num;
 
         auto has_less_thans() const -> bool;
         auto has_occur_less_thans() const -> bool;
