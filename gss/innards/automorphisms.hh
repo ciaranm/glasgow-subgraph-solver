@@ -18,7 +18,7 @@ namespace gss::innards
     auto automorphisms_as_order_constraints(const InputGraph &, const bool with_generators) -> OrderConstraints;
     auto automorphisms_as_order_constraints(const InputGraph &, std::vector<int> base) -> OrderConstraints;
     auto automorphisms_as_order_constraints_with_generators(const InputGraph &, std::vector<int> base) -> OrderConstraints;
-    auto initialise_dynamic_structure(dejavu::groups::random_schreier &, std::vector<innards::SVOBitset> m, const bool directed) -> void;
+    auto initialise_dynamic_structure(dejavu::groups::random_schreier &, std::vector<innards::SVOBitset> m, const bool directed) -> long double;
     auto dynamic_order_constraints(int sz, std::vector<int> base, dejavu::groups::random_schreier &, std::vector<std::pair<unsigned int, unsigned int>> &) -> void;
     auto generating_set(const InputGraph &i) -> std::vector<std::vector<int>>;
     auto generating_set(const InputGraph &i, std::vector<int> base) -> std::vector<std::vector<int>>;

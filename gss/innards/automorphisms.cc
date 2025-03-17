@@ -4,6 +4,7 @@
 
 #include <vector>
 #include "automorphisms.hh"
+#include "math.h"
 
 using std::string_view;
 using std::vector;
@@ -246,7 +247,7 @@ auto gss::innards::automorphisms_as_order_constraints_with_generators(const Inpu
 /**
  * Build a schreier structure for symmetry calculations during search
  */
-auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier &r, std::vector<innards::SVOBitset> m, const bool directed) -> void {
+auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier &r, std::vector<innards::SVOBitset> m, const bool directed) -> long double {
     dejavu::static_graph g;     // Declare static graph
 
     if (!directed) {
@@ -324,10 +325,11 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
 
     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
 
-    std::cout << "!\n";
-
-
     // std::cout << "aut_group_sz = " << s.get_automorphism_group_size() << "\n";
+    long double mantissa = s.get_automorphism_group_size().mantissa;
+    int exp = s.get_automorphism_group_size().exponent;
+
+    return mantissa * pow(10.0, exp);
 
     // std::cout << "Initialised rschreier!\n";
 }

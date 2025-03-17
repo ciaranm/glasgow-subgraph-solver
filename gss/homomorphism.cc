@@ -95,6 +95,10 @@ namespace
             HomomorphismAssignments assignments;
             assignments.values.reserve(model.pattern_size);
 
+            // symmetric branches
+            vector<int> branch_symmetries(model.target_size), solutions_per_branch(1);
+            std::iota(branch_symmetries.begin(), branch_symmetries.end(), 0);
+
             // start search timer
             auto search_start_time = steady_clock::now();
 
@@ -128,12 +132,12 @@ namespace
                 searcher.watches.clear_new_nogoods();
 
                 ++result.propagations;
-                if (searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
+                if (searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never, branch_symmetries, solutions_per_branch)) {
                     auto assignments_copy = assignments;
 
                     vector<int> pattern_orbit_base, target_orbit_base;
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
-                        result.solution_count, 0, *params.restarts_schedule, pattern_orbit_base, target_orbit_base)) {
+                        result.solution_count, 0, *params.restarts_schedule, pattern_orbit_base, target_orbit_base, solutions_per_branch, 0)) {
                     case SearchResult::Satisfiable:
                         searcher.save_result(assignments_copy, result);
                         result.complete = true;
@@ -173,6 +177,14 @@ namespace
                 searcher.print_pattern_constraints();
             if (model.do_dynamic_occur_less_thans())
                 searcher.print_target_constraints();
+
+            if (params.partial_assignments_sym) {
+                result.rep_solution_count = result.solution_count;
+                result.solution_count = solutions_per_branch[0];
+                // for (auto branch: branch_symmetries) {
+                //     result.solution_count += solutions_per_branch[branch];
+                // }
+            }
 
             std::cout << "sym_time = " << searcher.sym_time << "\n";
 

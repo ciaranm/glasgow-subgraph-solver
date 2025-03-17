@@ -123,7 +123,7 @@ namespace gss::innards
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
-        auto break_both_aut_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
+        auto break_both_aut_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains, std::vector<int> & branches) -> bool;
 
         auto have_seen(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
@@ -154,6 +154,8 @@ namespace gss::innards
 
         auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
 
+        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey, std::vector<int> & branches, std::vector<int> & sols_per_branch) -> bool;
+
         auto restarting_search(
             HomomorphismAssignments & assignments,
             Domains & domains,
@@ -165,6 +167,19 @@ namespace gss::innards
             std::vector<int> & pattern_orbit_base,
             std::vector<int> & target_orbit_base) -> SearchResult;
 
+        auto restarting_search(
+            HomomorphismAssignments & assignments,
+            Domains & domains,
+            unsigned long long & nodes,
+            unsigned long long & propagations,
+            loooong & solution_count,
+            int depth,
+            RestartsSchedule & restarts_schedule,
+            std::vector<int> & pattern_orbit_base,
+            std::vector<int> & target_orbit_base,
+            std::vector<int> & sols_in_branch,
+            int branch) -> SearchResult;
+
         auto save_result(const HomomorphismAssignments & assignments, HomomorphismResult & result) -> void;
 
         auto set_seed(int n) -> void;
@@ -173,6 +188,7 @@ namespace gss::innards
         auto print_target_constraints() -> void;
 
         int sym_time;
+        long double aut_sz;
 
         Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;
     };

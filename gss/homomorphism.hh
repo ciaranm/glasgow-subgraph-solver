@@ -122,6 +122,8 @@ namespace gss
 
         // Whether to do symmetry breaking dynamically
         bool dynamic_pattern = false, dynamic_target = false;
+        long double pattern_aut_mantissa, target_aut_mantissa;
+        int pattern_aut_exp, target_aut_exp;
 
         // If breaking variable and value symmetries, which strategy to use
         bool domain_filter_sym = false, partial_assignments_sym = false;
@@ -158,6 +160,12 @@ namespace gss
 
         /// Number of solutions, only if enumerating
         loooong solution_count = 0;
+
+        /// Representative solution count, only if symmetry breaking
+        loooong rep_solution_count = 0;
+
+        /// Automorphism group sizes
+        long double pattern_aut_sz, target_aut_sz;
 
         /// Did we perform a complete search?
         bool complete = false;

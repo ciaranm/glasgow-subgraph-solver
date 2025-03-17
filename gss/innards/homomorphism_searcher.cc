@@ -53,7 +53,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             adjacency_matrix.emplace_back(model.target_graph_row(0,i));
         }
         // std::cout << "target_";
-        initialise_dynamic_structure(t_rschreier, adjacency_matrix, model.directed());
+        aut_sz = initialise_dynamic_structure(t_rschreier, adjacency_matrix, model.directed());
     }
     if (model.do_dynamic_less_thans()) {
         std::vector<innards::SVOBitset> adjacency_matrix;
@@ -62,7 +62,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         }
         // std::cout << "pattern_";
         std::cout << model.pattern_size + model.pattern_edge_num * 2 << "\n";
-        initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed());
+        aut_sz = initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed());
     }
     if (params.partial_assignments_sym) {
         mapping.resize(model.pattern_size);
@@ -118,6 +118,23 @@ auto HomomorphismSearcher::restarting_search(
     vector<int> & pattern_orbit_base,
     vector<int> & target_orbit_base) -> SearchResult
 {
+    vector<int> empty;
+    return restarting_search(assignments, domains, nodes, propagations, solution_count, depth, restarts_schedule, pattern_orbit_base, target_orbit_base, empty, 0);
+}
+
+auto HomomorphismSearcher::restarting_search(
+    HomomorphismAssignments & assignments,
+    Domains & domains,
+    unsigned long long & nodes,
+    unsigned long long & propagations,
+    loooong & solution_count,
+    int depth,
+    RestartsSchedule & restarts_schedule,
+    vector<int> & pattern_orbit_base,
+    vector<int> & target_orbit_base,
+    vector<int> & sols_in_branch,
+    int branch) -> SearchResult
+{
     if (proof && proof->super_extra_verbose()) {
         vector<pair<NamedVertex, vector<NamedVertex>>> proof_domains;
         for (auto & d : domains) {
@@ -160,7 +177,16 @@ auto HomomorphismSearcher::restarting_search(
         if (params.count_solutions) {
             // we could be finding duplicate solutions, in threaded search
             if (_duplicate_solution_filterer(assignments)) {
-                ++solution_count;
+                if (params.partial_assignments_sym) {
+                    ++sols_in_branch[branch];
+                    ++solution_count;
+                }
+                if (params.dynamic_pattern) {
+                    solution_count += static_cast<loooong>(aut_sz);
+                }
+                else {
+                    ++solution_count;
+                }
                 if (params.enumerate_callback) {
                     VertexToVertexMapping mapping;
                     expand_to_full_result(assignments, mapping);
@@ -187,6 +213,18 @@ auto HomomorphismSearcher::restarting_search(
         remaining.reset(f_v);
         branch_v[branch_v_end++] = f_v;
     }
+
+    // std::cout << branch_domain->v << " : ";
+    // for (auto a : branch_v) {
+    //     std::cout << a << ",";
+    // }
+    // std::cout << "\n";
+
+    // Store which branches are symmetric
+    vector<int> sols_per_branch(model.target_size, 0); 
+    // vector<int> symmetric_branches(branch_v);
+    vector<int> symmetric_branches(model.target_size);
+    std::iota(symmetric_branches.begin(), symmetric_branches.end(), 0);
 
     switch (params.value_ordering_heuristic) {
     case ValueOrdering::None:
@@ -237,6 +275,8 @@ auto HomomorphismSearcher::restarting_search(
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
+        std::cout << branch_domain->v << " : " << *f_v << "\n";
+
         dejavu::groups::orbit target_orbit_partition{static_cast<int>(model.target_size)};
         bool this_vertex_has_target_orbit = false;
 
@@ -271,11 +311,12 @@ auto HomomorphismSearcher::restarting_search(
 
             // propagate
             ++propagations;
-            if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
+            if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always), symmetric_branches, sols_per_branch)) {
                 // failure? restore assignments and go on to the next thing
                 if (proof)
                     proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
-
+                // did this fail because of symmetry?
+                // std::cout << sols_per_branch[*f_v] << "\n";
                 assignments.values.resize(assignments_size);
                 actually_hit_a_failure = true;
             }
@@ -286,7 +327,7 @@ auto HomomorphismSearcher::restarting_search(
                 // recursive search
                 auto pattern_orbit_base_copy = pattern_orbit_base, target_orbit_base_copy = target_orbit_base;
                 auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
-                    solution_count, depth + 1, restarts_schedule, pattern_orbit_base_copy, target_orbit_base_copy);
+                    solution_count, depth + 1, restarts_schedule, pattern_orbit_base_copy, target_orbit_base_copy, sols_per_branch, *f_v);
 
                 switch (search_result) {
                 case SearchResult::Satisfiable:
@@ -362,6 +403,16 @@ auto HomomorphismSearcher::restarting_search(
     // no values remaining, backtrack, or possibly kick off a restart
     if (proof)
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
+
+    // std::cout << branch << "\n";
+    for (int i = 0; i < symmetric_branches.size(); i++) {
+        int a = symmetric_branches[i];
+        std::cout << i << "->" << a << ":" << sols_per_branch[a] << " ";
+    }
+    std::cout << "\n";
+    for (auto b : symmetric_branches) {
+        sols_in_branch[branch] += sols_per_branch[b];
+    }
 
     if (actually_hit_a_failure)
         restarts_schedule.did_a_backtrack();
@@ -1159,7 +1210,8 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
  */
 auto HomomorphismSearcher::break_both_aut_symmetries(
     const HomomorphismAssignments & assignments,
-    Domains & new_domains
+    Domains & new_domains,
+    vector<int> & branches
 ) -> bool 
 {
     // std::memset(&mapping[0], -1, sizeof(mapping[0]) * mapping.size());      // TODO Probably don't need to do this every time
@@ -1265,6 +1317,11 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
             for (unsigned int i = 0; i < model.pattern_size; i++) {
                 if (mapping[i] != -1 && permuted[i] != -1) {
                     if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                        branches[mapping[i]] = permuted[i];
+                        // for (int j = 0; j < model.target_size; j++) {
+                        //     std::cout << j << "->" << t_aut[j] << ",";
+                        // }
+                        // std::cout << "\n";
                         return false;
                     }
                     else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
@@ -1419,7 +1476,13 @@ auto HomomorphismSearcher::have_seen(const HomomorphismAssignments & assignments
     return false;
 }
 
-auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
+auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool {
+    vector<int> empty;
+    return propagate(initial, new_domains, assignments, propagate_using_lackey, empty, empty);
+}
+
+
+auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey, vector<int> & branches, vector<int> & sols_per_branch) -> bool
 {
     // nogoods might be watching things in initial assignments. this is possibly not the
     // best place to put this...
@@ -1560,7 +1623,12 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
     //     std::cout << a.assignment.pattern_vertex << "->" << a.assignment.target_vertex << " ";
     // }
     // std::cout << "\n";
-    if (params.partial_assignments_sym && !break_both_aut_symmetries(assignments, new_domains)) {
+    if (params.partial_assignments_sym && !break_both_aut_symmetries(assignments, new_domains, branches)) {
+        for (int i = 0; i < branches.size(); i++) {
+            int a = branches[i];
+            std::cout << i << "->" << a << ":" << sols_per_branch[a] << " ";
+        }
+        std::cout << "\n";
         return false;
     }
     
