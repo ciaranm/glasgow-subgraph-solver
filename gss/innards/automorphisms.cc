@@ -337,11 +337,16 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
 /**
  * Calculate any non-trivial orbits with the new (partial) base given, and make constraints from them
  */
-auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::groups::random_schreier &rschreier, std::vector<std::pair<unsigned int, unsigned int>> &constraints) -> void {
+auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, 
+    dejavu::groups::random_schreier &rschreier, 
+    std::vector<std::pair<unsigned int, unsigned int>> &constraints,
+    std::vector<std::vector<int>> &orbits
+    ) -> void {
 
     //TODO we only actually care about adding one extra layer of the chain here, maybe there is a way to limit depth of layer computation in Dejavu?
     rschreier.set_base(base);           // Recompute the stabiliser chain with the provided (partial) base
     std::vector<std::pair<unsigned int, unsigned int>> cons;
+    std::vector<std::vector<int>> orbs;
 
     dejavu::groups::orbit o{sz};      // Orbit structure of size sz
     // std::cout << "Base:\n";
@@ -349,13 +354,16 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::g
     for (int x = 0; x < base.size(); x++) {
         rschreier.get_stabilizer_orbit(x, o);       // Retrieve stabiliser orbit at this point
         int y = base.at(x);
+        std::vector<int> v;
         // std::cout << y << " : ";
         for (int z = 0; z != sz; ++z) {     // For each vertex z in the graph
             if (o.are_in_same_orbit(y,z) && y != z) {       // If y,z are symmetric (but not equal) at this stabiliser chain layer 
                 // std::cout << z << " ";
                 cons.push_back(std::make_pair(y,z));     // Add constraint y<z
+                v.push_back(z);
             }
         }
+        orbs.push_back(v);
         // std::cout << "\n";
 
         // // std::cout << y << " : ";
@@ -378,6 +386,7 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> base, dejavu::g
     }
 
     constraints = cons;
+    orbits = orbs;
 }
 
 /**

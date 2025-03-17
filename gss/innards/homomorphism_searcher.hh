@@ -93,6 +93,7 @@ namespace gss::innards
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
         std::vector<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
         std::vector<int> target_base, pattern_base; 
+        std::vector<std::vector<int>> target_orbits, pattern_orbits; 
         std::vector<int> symmetric_value_displacement;
         dejavu::groups::random_schreier t_rschreier{static_cast<int>(model.target_size + model.target_edge_num * 2)}, p_rschreier{static_cast<int>(model.pattern_size + model.pattern_edge_num * 2)};    // TODO the * 2 is a clunky upper bound in directed cases
         std::vector<int> mapping, permuted;

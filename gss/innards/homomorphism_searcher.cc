@@ -181,8 +181,20 @@ auto HomomorphismSearcher::restarting_search(
                     ++sols_in_branch[branch];
                     ++solution_count;
                 }
-                if (params.dynamic_pattern) {
-                    solution_count += static_cast<loooong>(aut_sz);
+                else if (params.dynamic_pattern) {
+                    solution_count += static_cast<loooong>(aut_sz);     // TODO this might be rounded by dejavu
+                }
+                else if (params.dynamic_target) {
+                    loooong multiplier = 1;
+                    for (int i = 0; i < target_base.size(); i++) {
+                        int val = target_base[i];
+                        if (std::find_if(assignments.values.begin(), assignments.values.end(), [&val](const HomomorphismAssignmentInformation &a) {
+                            return a.assignment.target_vertex == val;
+                        }) != assignments.values.end()) {
+                            multiplier *= target_orbits[i].size() + 1;
+                        }
+                    }
+                    solution_count += multiplier;
                 }
                 else {
                     ++solution_count;
@@ -275,7 +287,7 @@ auto HomomorphismSearcher::restarting_search(
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
-        std::cout << branch_domain->v << " : " << *f_v << "\n";
+        // std::cout << branch_domain->v << " : " << *f_v << "\n";
 
         dejavu::groups::orbit target_orbit_partition{static_cast<int>(model.target_size)};
         bool this_vertex_has_target_orbit = false;
@@ -405,11 +417,11 @@ auto HomomorphismSearcher::restarting_search(
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
     // std::cout << branch << "\n";
-    for (int i = 0; i < symmetric_branches.size(); i++) {
-        int a = symmetric_branches[i];
-        std::cout << i << "->" << a << ":" << sols_per_branch[a] << " ";
-    }
-    std::cout << "\n";
+    // for (int i = 0; i < symmetric_branches.size(); i++) {
+    //     int a = symmetric_branches[i];
+    //     std::cout << i << "->" << a << ":" << sols_per_branch[a] << " ";
+    // }
+    // std::cout << "\n";
     for (auto b : symmetric_branches) {
         sols_in_branch[branch] += sols_per_branch[b];
     }
@@ -1146,7 +1158,7 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 
         int size = model.target_size + (model.directed() ? 2 * model.target_edge_num : 0);
 
-        innards::dynamic_order_constraints(size, base, t_rschreier, useful_constraints);    // Compute constraints at the new base point
+        innards::dynamic_order_constraints(size, base, t_rschreier, useful_constraints, target_orbits);    // Compute constraints at the new base point
 
         if (model.has_less_thans() && model.do_dynamic_occur_less_thans()) {        // We need to record value order if we're also doing pattern symmetry
             for (unsigned int i = size_before; i < useful_constraints.size(); i++) {       // for each a<b just added
@@ -1193,7 +1205,7 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
         int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
-        innards::dynamic_order_constraints(size, base, p_rschreier, useful_constraints);      // Compute new constraints at new base point
+        innards::dynamic_order_constraints(size, base, p_rschreier, useful_constraints, pattern_orbits);      // Compute new constraints at new base point
 
         return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
 
