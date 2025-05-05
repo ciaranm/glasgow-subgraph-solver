@@ -767,13 +767,17 @@ auto HomomorphismModel::prepare() -> bool
                                 nt.reset(j);
                                 n_t.push_back(j);
                             }
-
                             _imp->proof->incompatible_by_degrees(0,
                                 pattern_vertex_for_proof(p_gds.at(p).first), n_p,
                                 target_vertex_for_proof(t_gds.at(t).first), n_t);
+                            // auto pp = pattern_vertex_for_proof(p_gds.at(p).first);
+                            // auto tt = target_vertex_for_proof(t_gds.at(t).first);
+                            // // std::cout<<tt.second<<std::endl;
+                            // if (pp.second == "27" && tt.second == "41")
+                            //     std::cout << "olala"<< std::endl;
+                            // // std::cout << "==============="<< std::endl;
                         }
                     }
-
                     vector<NamedVertex> patterns, targets;
                     for (unsigned p = 0; p <= i; ++p)
                         patterns.push_back(pattern_vertex_for_proof(p_gds.at(p).first));

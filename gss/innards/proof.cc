@@ -678,7 +678,7 @@ auto Proof::create_exact_path_graphs(
     }
 
     *_imp->proof_stream << "# 1\n";
-    *_imp->proof_stream << "*trim adjacency1 " << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim adjacency1 " << p.second << " " << t.second << " " << g << "\n";
     *_imp->proof_stream << "p";
 
     // if p maps to t then things in between_p_and_q have to go to one of these...
@@ -711,7 +711,7 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // if p maps to t then q does not map to t
-    *_imp->proof_stream << "*trim adjacency2 " << p.second << " " << t.second << "\n";
+    *_imp->proof_stream << "*trim adjacency2 " << p.second << " " << t.second << " " << g << "\n";
     *_imp->proof_stream << "p " << _imp->proof_line << " " << get<1>(_imp->injectivity_constraints[t.first]) << " + s \n";
     ++_imp->proof_line;
 
@@ -727,12 +727,13 @@ auto Proof::create_exact_path_graphs(
     things_to_add_up.push_back(_imp->proof_line);
 
     // cancel out anything that is two away from t, but by insufficiently many paths
-    char c = 3;
+    int c = 2;
     for (auto & u : two_away_from_t) {
         if ((u.first == t) || (d_n_t.end() != find(d_n_t.begin(), d_n_t.end(), u.first)))
             continue;
 
-        *_imp->proof_stream << "*trim adjacency" << c++ << " " << p.second << " " << t.second << "\n";
+        c++;
+        *_imp->proof_stream << "*trim adjacency" << c << " " << p.second << " " << t.second << " " << g << "\n";
         *_imp->proof_stream << "p";
         bool first = true;
         for (auto & b : between_p_and_q) {
@@ -760,7 +761,8 @@ auto Proof::create_exact_path_graphs(
     // do the getting rid of
     if (things_to_add_up.size() > 1) {
         bool first = true;
-        *_imp->proof_stream << "*trim adjacency" << c++ << " " << p.second << " " << t.second << "\n";
+        c++;
+        *_imp->proof_stream << "*trim adjacency" << c << " " << p.second << " " << t.second << " " << g << "\n";
         *_imp->proof_stream << "p";
         for (auto & t : things_to_add_up) {
             *_imp->proof_stream << " " << t;
