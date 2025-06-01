@@ -457,7 +457,7 @@ auto main(int argc, char * argv[]) -> int
             }
             cout << "pattern_";
             auto dejavu_start_time = steady_clock::now();
-            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, with_gens);
+            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, with_gens, false, params.pattern_orbit_sizes);
             was_given_pattern_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
             cout << "pattern_less_constraints =";
@@ -467,7 +467,9 @@ auto main(int argc, char * argv[]) -> int
         }
         else if (options_vars.count("pattern-symmetries-dejavu-dynamic")) {
             auto dejavu_start_time = steady_clock::now();
-            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false);
+            //TODO this is only used to check there are symmetries
+            vector<int> tmp;
+            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, tmp);
             params.dynamic_pattern = true;
             was_given_pattern_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
@@ -504,7 +506,7 @@ auto main(int argc, char * argv[]) -> int
             }
             cout << "target_";
             auto dejavu_start_time = steady_clock::now();
-            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, with_gens);
+            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, with_gens, false, params.target_orbit_sizes);
             was_given_target_automorphism_group = true;
             cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
             cout << "target_occur_less_constraints =";
@@ -514,7 +516,8 @@ auto main(int argc, char * argv[]) -> int
         }
         else if (options_vars.count("target-symmetries-dejavu-dynamic")) {
             auto dejavu_start_time = steady_clock::now();
-            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false);
+            vector<int> tmp;
+            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, tmp);
             params.dynamic_target = true;
             was_given_target_automorphism_group = true;
             cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;

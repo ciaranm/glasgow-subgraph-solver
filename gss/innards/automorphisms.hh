@@ -15,15 +15,15 @@ namespace gss::innards
 {
     using OrderConstraints = std::list<std::pair<std::string, std::string>>;
 
-    auto automorphisms_as_order_constraints(const InputGraph &, const bool with_generators) -> OrderConstraints;
-    auto automorphisms_as_order_constraints(const InputGraph &, std::vector<int> base) -> OrderConstraints;
-    auto automorphisms_as_order_constraints_with_generators(const InputGraph &, std::vector<int> base) -> OrderConstraints;
+    auto automorphisms_as_order_constraints(const InputGraph &, const bool with_generators, const bool degree_sequence, std::vector<int> &orbit_sizes) -> OrderConstraints;
+    auto automorphisms_as_order_constraints(const InputGraph &, std::vector<int> base, std::vector<int> & orbit_sizes) -> OrderConstraints;
+    auto automorphisms_as_order_constraints_with_generators(const InputGraph &, std::vector<int> base, std::vector<int> & orbit_sizes) -> OrderConstraints;
     auto initialise_dynamic_structure(dejavu::groups::random_schreier &, std::vector<innards::SVOBitset> m, const bool directed) -> void;
-    auto dynamic_order_constraints(int sz, std::vector<int> base, dejavu::groups::random_schreier &, std::vector<std::pair<unsigned int, unsigned int>> &) -> void;
-    auto generating_set(const InputGraph &i) -> std::vector<std::vector<int>>;
-    auto generating_set(const InputGraph &i, std::vector<int> base) -> std::vector<std::vector<int>>;
-    auto invert_automorphism(std::vector<int> aut) -> std::vector<int>;
-    auto invert_list(std::vector<std::vector<int>> ls) -> std::vector<std::vector<int>>;
+    auto dynamic_order_constraints(int sz, std::vector<int> base, std::vector<int> & orbit_sizes, dejavu::groups::random_schreier &, std::vector<std::pair<unsigned int, unsigned int>> &) -> void;
+    auto generating_set(const InputGraph &i) -> std::vector<std::vector<unsigned int>>;
+    auto generating_set(const InputGraph &i, std::vector<int> base) -> std::vector<std::vector<unsigned int>>;
+    auto invert_automorphism(std::vector<unsigned int> aut) -> std::vector<unsigned int>;
+    auto invert_list(std::vector<std::vector<unsigned int>> ls) -> std::vector<std::vector<unsigned int>>;
 }
 
 #endif

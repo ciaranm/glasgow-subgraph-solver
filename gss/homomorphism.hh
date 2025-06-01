@@ -102,6 +102,7 @@ namespace gss
 
         /// Less pattern constraints
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
+        std::vector<int> pattern_orbit_sizes;
 
         /// Pattern orbit tracking
         bool use_pattern_orbits = false;
@@ -111,14 +112,15 @@ namespace gss
 
         /// Occurs less target constraints
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
+        std::vector<int> target_orbit_sizes;
 
         /// Pattern automorphism group generators
-        std::vector<std::vector<int>> pattern_aut_gens;
-        std::vector<std::vector<int>> pattern_aut_inverses;
+        std::vector<std::vector<unsigned int>> pattern_aut_gens;
+        std::vector<std::vector<unsigned int>> pattern_aut_inverses;
 
         /// Target automorphism group generators
-        std::vector<std::vector<int>> target_aut_gens;
-        std::vector<std::vector<int>> target_aut_inverses;
+        std::vector<std::vector<unsigned int>> target_aut_gens;
+        std::vector<std::vector<unsigned int>> target_aut_inverses;
 
         // Whether to do symmetry breaking dynamically
         bool dynamic_pattern = false, dynamic_target = false;
