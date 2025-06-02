@@ -22,6 +22,7 @@ namespace gss::innards
     auto dynamic_order_constraints(int sz, std::vector<int> base, dejavu::groups::random_schreier &, std::vector<std::pair<unsigned int, unsigned int>> &, std::vector<std::vector<int>> &) -> void;
     auto generating_set(const InputGraph &i) -> std::vector<std::vector<int>>;
     auto generating_set(const InputGraph &i, std::vector<int> base) -> std::vector<std::vector<int>>;
+    auto dynamic_generating_set(std::vector<int> & base, int sz, dejavu::groups::random_schreier & rschreier, std::vector<vector<int>> & generators) -> void;
     auto invert_automorphism(std::vector<int> aut) -> std::vector<int>;
     auto invert_list(std::vector<std::vector<int>> ls) -> std::vector<std::vector<int>>;
 }

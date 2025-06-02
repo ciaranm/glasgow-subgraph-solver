@@ -520,6 +520,24 @@ auto gss::innards::generating_set(const InputGraph &i, std::vector<int> base) ->
     return mappings;
 }
 
+auto gss::innards::dynamic_generating_set(std::vector<int> & base, int sz, dejavu::groups::random_schreier &rschreier, std::vector<vector<int>> & generators) -> void {
+    rschreier.set_base(base);       // Empty base to begin with
+
+    dejavu::groups::automorphism_workspace a(sz);
+    generators.erase(generators.begin() + 1, generators.end());     // Leave the identity
+    std::vector<int> mapping;
+    for (int x = 0; x < rschreier.get_number_of_generators(); x++) {
+        rschreier.get_generator(x, a);              // Get the xth generator of Aut(G), p
+        mapping.clear();
+        for (int y = 0; y < base.size(); y++) {
+            mapping.push_back(a.p()[y]);            // mapping[i] maps to p*i
+            // std::cout << y << "->" << mapping[y] << " ";
+        }
+        // std::cout << "\n";
+        generators.push_back(mapping);
+    }
+}
+
 auto gss::innards::invert_automorphism(std::vector<int> aut) -> std::vector<int> {
     std::vector<int> res(aut.size());
     for (unsigned int i = 0; i < aut.size(); i++) {

@@ -61,12 +61,22 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
         }
         // std::cout << "pattern_";
-        std::cout << model.pattern_size + model.pattern_edge_num * 2 << "\n";
+        // std::cout << model.pattern_size + model.pattern_edge_num * 2 << "\n";
         aut_sz = initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed());
     }
     if (params.partial_assignments_sym) {
         mapping.resize(model.pattern_size);
         permuted.resize(model.pattern_size);
+        std::vector<innards::SVOBitset> adjacency_matrix;
+        for (size_t i = 0; i < model.pattern_size; i++) {
+            adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
+        }
+        initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed());
+        adjacency_matrix.clear();
+        for (size_t i = 0; i < model.target_size; i++) {
+            adjacency_matrix.emplace_back(model.target_graph_row(0,i));
+        }
+        initialise_dynamic_structure(t_rschreier, adjacency_matrix, model.directed());
     }
     sym_time = 0;
 }
@@ -1583,12 +1593,12 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
         if (model.do_dynamic_less_thans()) {
             if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base)) {
-                std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
+                // std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
             }
         }
         if (model.do_dynamic_occur_less_thans()) {
             if (make_useful_target_constraints(current_assignment, useful_target_constraints, target_base)) {
-                std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
+                // std::cout << current_assignment->pattern_vertex << "->" << current_assignment->target_vertex << "\n";
             }
         }
 
