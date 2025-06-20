@@ -1,7 +1,7 @@
 # this script is here to make my life easier when testing multiple instances
 struct Options
     ins::String     # one instance name (leave blank if you want all instances)
-    insid::Int      # instance id
+    insid::String   # instance id
     bench::String   # directory containing instances.
     pbopath::String   # directory containing veripb.
     solveurpath::String   # directory containing solver.
@@ -20,7 +20,7 @@ function parseargs(args)
     veripb = true
     trace = false
     prof = false
-    insid = 0
+    insid = ""
     tl = 600
     for (i, arg) in enumerate(args)
         if arg == "cd" cd() end # hack to add cd in paths
@@ -29,7 +29,7 @@ function parseargs(args)
         if arg in ["--trace","-trace","trace","-tr","tr"] trace = true end
         if arg in ["noveripb","nv"] veripb = false end
         if arg in ["timelimit","tl"] tl = parse(Int, args[i+1]) end
-        if arg in ["insid","ins"] insid = parse(Int, args[i+1]) end
+        if arg in ["insid","ins"] insid = args[i+1] end
     end
     return Options(ins,insid,bench,pbopath,solveurpath,proofs,veripb,trace,prof,tl)
 end
@@ -51,15 +51,27 @@ function run_bio_solver()
     cd()
     graphs = cd(readdir, path)
     n = length(graphs)
+    if CONFIG.insid != ""
+        ins = string("bio",CONFIG.insid)
+        solve(ins,path,CONFIG.insid[1:3]*".txt",path,CONFIG.insid[4:6]*".txt","lad",0,1_000_000_000)
+        if CONFIG.veripb
+            cd()
+            cd(CONFIG.pbopath)
+            runpboxide(ins)
+        end
+    else
     t=0
     for target in graphs[1:end], pattern in graphs[1:end]
         # target = graphs[rand(1:n)]
         # pattern = graphs[rand(1:n)]
         # t+=1
         # if t>30 break end
+        theokbigs = ["bio055013","bio064013","bio066013","bio122013","bio123013","bio002014"]
+
         if pattern != target
 
             ins = string("bio",pattern[1:end-4],target[1:end-4])
+            if ins in ["bio007013"] continue end # skip this instance, it is too big
             solve(ins,path,pattern,path,target,"lad")
             if isfile(String("$proofs/$ins$extention"))
                 res = read(`tail -n 2 $proofs/$ins$extention`,String)
@@ -74,9 +86,9 @@ function run_bio_solver()
                 end
             end
         end
-    end
+    end end
 end
-function solve(ins,pathpat,pattern,pathtar,target,format,minsize=20_000_000,maxsize=999_000_000,remake=true,verbose=false)
+function solve(ins,pathpat,pattern,pathtar,target,format,minsize=2_000_000,maxsize=10_000_000,remake=true,verbose=false)
     if remake || !isfile(string(proofs,"/",ins,".opb")) || !isfile(string(proofs,"/",ins,extention)) || 
             length(read(`tail -n 1 $proofs/$ins$extention`,String)) < 24 ||
             read(`tail -n 1 $proofs/$ins$extention`,String)[1:24] != "end pseudo-Boolean proof"
