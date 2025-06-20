@@ -343,7 +343,7 @@ auto Proof::incompatible_by_degrees(
         for (auto & n : n_t)
             recover_injectivity_constraint(n);
     }
-
+/*
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & n : n_p) {
@@ -370,6 +370,16 @@ auto Proof::incompatible_by_degrees(
     _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
 
     *_imp->proof_stream << "del id " << _imp->proof_line - 1 << " ;\n";
+*/
+    *_imp->proof_stream << "a 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ; % deg" ;
+    for (auto & n : n_p) 
+        if (_imp->adjacency_lines.count(tuple{g, p.first, n, t.first})) 
+            *_imp->proof_stream << " " << get<1>(_imp->adjacency_lines[tuple{g, p.first, n, t.first}]);
+
+    *_imp->proof_stream << " \n";
+    ++_imp->proof_line;
+
+    
 }
 
 auto Proof::incompatible_by_nds(
