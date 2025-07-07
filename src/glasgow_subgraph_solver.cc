@@ -83,10 +83,10 @@ auto main(int argc, char * argv[]) -> int
             ("pattern-symmetries-gap", "Eliminate pattern symmetries (requires Gap)")                                                  //
             ("target-symmetries-gap", "Eliminate target symmetries (requires Gap)")                                                    //
             ("pattern-symmetries-dejavu", po::value<string>(),                                                                         //
-                "Eliminate pattern symmetries using orbits or generators (orb / gens) (requires Dejavu)")                              //
+                "Eliminate pattern symmetries using orbits with static variable order (nat/deg) (requires Dejavu)")                    //
             ("pattern-symmetries-dejavu-dynamic", "Eliminate pattern symmetries dynamically (requires Dejavu)")                        //
             ("target-symmetries-dejavu", po::value<string>(),                                                                          //
-                "Eliminate target symmetries using orbits or generators (orb / gens) (requires Dejavu)")                               //
+                "Eliminate target symmetries using orbits with static variable order (nat/deg) (requires Dejavu)")                     //
             ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
             ("partial-assignments-symmetries", po::value<string>(),                                                                    //
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")                                    //
@@ -443,21 +443,13 @@ auto main(int argc, char * argv[]) -> int
             cout << endl;
         }
         else if (options_vars.count("pattern-symmetries-dejavu")) {
-            string orb_or_gens = options_vars["pattern-symmetries-dejavu"].as<string>();
-            bool with_gens = false;
-            if (orb_or_gens == "orb") {
-                with_gens = false;
+            string nat_or_deg = options_vars["pattern-symmetries-dejavu"].as<string>();
+            bool with_deg = true;           // Degree sequence by default
+            if (nat_or_deg == "nat") {
+                with_deg = false;
             }
-            else if (orb_or_gens == "gens") {
-                with_gens = true;
-            }
-            else {
-                cerr << "Unrecognised target symmetry method " << orb_or_gens << ", use (orb / gens).\n";
-                return EXIT_FAILURE;
-            }
-            cout << "pattern_";
             auto dejavu_start_time = steady_clock::now();
-            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, with_gens, false, params.pattern_orbit_sizes);
+            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, with_deg, params.pattern_orbit_sizes);
             was_given_pattern_automorphism_group = true;
             cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
             cout << "pattern_less_constraints =";
@@ -492,21 +484,13 @@ auto main(int argc, char * argv[]) -> int
             cout << endl;
         }
         else if (options_vars.count("target-symmetries-dejavu")) {
-            string orb_or_gens = options_vars["target-symmetries-dejavu"].as<string>();
-            bool with_gens = false;
-            if (orb_or_gens == "orb") {
-                with_gens = false;
+            string nat_or_deg = options_vars["target-symmetries-dejavu"].as<string>();
+            bool with_deg = true;           // Degree sequence by default
+            if (nat_or_deg == "nat") {
+                with_deg = false;
             }
-            else if (orb_or_gens == "gens") {
-                with_gens = true;
-            }
-            else {
-                cerr << "Unrecognised target symmetry method " << orb_or_gens << ", use (orb / gens).\n";
-                return EXIT_FAILURE;
-            }
-            cout << "target_";
             auto dejavu_start_time = steady_clock::now();
-            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, with_gens, false, params.target_orbit_sizes);
+            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, with_deg, params.target_orbit_sizes);
             was_given_target_automorphism_group = true;
             cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
             cout << "target_occur_less_constraints =";

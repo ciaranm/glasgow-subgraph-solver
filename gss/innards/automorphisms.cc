@@ -15,7 +15,11 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, cons
     std::vector<int> base;
 
     if (degree_sequence) {
-        //TODO construct base in order of descending vertex degree
+        base.resize(i.size());
+        std::iota(base.begin(), base.end(), 0);
+        stable_sort(base.begin(), base.end(), [&](int a, int b) -> bool {
+            return -i.degree(a) < -i.degree(b);
+        });
     }
 
     return with_generators ? automorphisms_as_order_constraints_with_generators(i, base, orbit_sizes) : automorphisms_as_order_constraints(i, base, orbit_sizes);
