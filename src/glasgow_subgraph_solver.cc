@@ -83,11 +83,11 @@ auto main(int argc, char * argv[]) -> int
             ("pattern-symmetries-gap", "Eliminate pattern symmetries (requires Gap)")                                                  //
             ("target-symmetries-gap", "Eliminate target symmetries (requires Gap)")                                                    //
             ("pattern-symmetries-dejavu", po::value<string>(),                                                                         //
-                "Eliminate pattern symmetries using orbits with static variable order (nat/deg) (requires Dejavu)")                    //
-            ("pattern-symmetries-dejavu-dynamic", "Eliminate pattern symmetries dynamically (requires Dejavu)")                        //
+                "Eliminate pattern symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)")                 //
+            // ("pattern-symmetries-dejavu-dynamic", "Eliminate pattern symmetries dynamically (requires Dejavu)")                        //
             ("target-symmetries-dejavu", po::value<string>(),                                                                          //
-                "Eliminate target symmetries using orbits with static variable order (nat/deg) (requires Dejavu)")                     //
-            ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
+                "Eliminate target symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)")                  //
+            // ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
             ("partial-assignments-symmetries", po::value<string>(),                                                                    //
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")                                    //
             ("domain-filter-symmetries", "Eliminate pattern and target symmetries on domain matrices (requires Dejavu)")               //
@@ -443,29 +443,48 @@ auto main(int argc, char * argv[]) -> int
             cout << endl;
         }
         else if (options_vars.count("pattern-symmetries-dejavu")) {
-            string nat_or_deg = options_vars["pattern-symmetries-dejavu"].as<string>();
-            bool with_deg = true;           // Degree sequence by default
-            if (nat_or_deg == "nat") {
-                with_deg = false;
+            string mode = options_vars["pattern-symmetries-dejavu"].as<string>();
+            if (mode == "natural") {
+                auto dejavu_start_time = steady_clock::now();
+                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, params.pattern_orbit_sizes);
+                was_given_pattern_automorphism_group = true;
+                cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "pattern_less_constraints =";
+                for (auto & [a, b] : params.pattern_less_constraints)
+                    cout << " " << a << "<" << b;
+                cout << endl;
             }
-            auto dejavu_start_time = steady_clock::now();
-            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, with_deg, params.pattern_orbit_sizes);
-            was_given_pattern_automorphism_group = true;
-            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
-            cout << "pattern_less_constraints =";
-            for (auto & [a, b] : params.pattern_less_constraints)
-                cout << " " << a << "<" << b;
-            cout << endl;
+            else if (mode == "degree") {
+                auto dejavu_start_time = steady_clock::now();
+                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, true, params.pattern_orbit_sizes);
+                was_given_pattern_automorphism_group = true;
+                cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "pattern_less_constraints =";
+                for (auto & [a, b] : params.pattern_less_constraints)
+                    cout << " " << a << "<" << b;
+                cout << endl;
+            }
+            else if (mode == "flexible") {
+                params.flexible_pattern = true;
+            }
+            else if (mode == "dynamic") {
+                params.dynamic_pattern = true;
+            }
+            else {
+                cerr << "Must specify symmetry ordering mode (natural / degree / flexible / dynamic)" << endl;
+                return EXIT_FAILURE;
+            }
+            
         }
-        else if (options_vars.count("pattern-symmetries-dejavu-dynamic")) {
-            auto dejavu_start_time = steady_clock::now();
-            //TODO this is only used to check there are symmetries
-            vector<int> tmp;
-            params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, tmp);
-            params.dynamic_pattern = true;
-            was_given_pattern_automorphism_group = true;
-            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
-        }
+        // else if (options_vars.count("pattern-symmetries-dejavu-dynamic")) {
+        //     auto dejavu_start_time = steady_clock::now();
+        //     //TODO this is only used to check there are symmetries
+        //     vector<int> tmp;
+        //     params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, tmp);
+        //     params.dynamic_pattern = true;
+        //     was_given_pattern_automorphism_group = true;
+        //     cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+        // }
         else if (options_vars.count("pattern-orbits-dejavu")) {
             params.use_pattern_orbits = true;
         }
@@ -484,28 +503,43 @@ auto main(int argc, char * argv[]) -> int
             cout << endl;
         }
         else if (options_vars.count("target-symmetries-dejavu")) {
-            string nat_or_deg = options_vars["target-symmetries-dejavu"].as<string>();
-            bool with_deg = true;           // Degree sequence by default
-            if (nat_or_deg == "nat") {
-                with_deg = false;
+            string mode = options_vars["target-symmetries-dejavu"].as<string>();
+            if (mode == "natural") {
+                auto dejavu_start_time = steady_clock::now();
+                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, params.target_orbit_sizes);
+                was_given_target_automorphism_group = true;
+                cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "target_occur_less_constraints =";
+                for (auto & [a, b] : params.target_occur_less_constraints)
+                    cout << " " << a << "<" << b;
+                cout << endl;
             }
-            auto dejavu_start_time = steady_clock::now();
-            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, with_deg, params.target_orbit_sizes);
-            was_given_target_automorphism_group = true;
-            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
-            cout << "target_occur_less_constraints =";
-            for (auto & [a, b] : params.target_occur_less_constraints)
-                cout << " " << a << "<" << b;
-            cout << endl;
+            else if (mode == "degree") {
+                auto dejavu_start_time = steady_clock::now();
+                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, true, params.target_orbit_sizes);
+                was_given_target_automorphism_group = true;
+                cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "target_occur_less_constraints =";
+                for (auto & [a, b] : params.target_occur_less_constraints)
+                    cout << " " << a << "<" << b;
+                cout << endl;
+            }
+            else if (mode == "flexible") {
+                params.flexible_target = true;
+            }
+            else if (mode == "dynamic") {
+                params.dynamic_target = true;
+            }
+
         }
-        else if (options_vars.count("target-symmetries-dejavu-dynamic")) {
-            auto dejavu_start_time = steady_clock::now();
-            vector<int> tmp;
-            params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, tmp);
-            params.dynamic_target = true;
-            was_given_target_automorphism_group = true;
-            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
-        }
+        // else if (options_vars.count("target-symmetries-dejavu-dynamic")) {
+        //     auto dejavu_start_time = steady_clock::now();
+        //     vector<int> tmp;
+        //     params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, tmp);
+        //     params.dynamic_target = true;
+        //     was_given_target_automorphism_group = true;
+        //     cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+        // }
         else if (options_vars.count("target-orbits-dejavu")) {
             params.use_target_orbits = true;
         }

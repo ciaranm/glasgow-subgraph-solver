@@ -302,6 +302,10 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         }
     }
 
+    if (params.dynamic_pattern || params.flexible_pattern) {
+        _imp->has_less_thans = true;
+    }
+
     // pattern orbit representatives
     if (params.use_pattern_orbits) {
         dejavu::static_graph g;
@@ -372,6 +376,10 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
         if (s.get_automorphism_group_size() != dejavu::big_number())
             has_target_orbits = true;
+    }
+
+    if (params.dynamic_target || params.flexible_target) {
+        _imp->has_occur_less_thans = true;
     }
 
     // target less than constraints
@@ -1340,12 +1348,12 @@ auto HomomorphismModel::has_occur_less_thans() const -> bool
 
 auto HomomorphismModel::do_dynamic_occur_less_thans() const -> bool 
 {
-    return _imp->params.dynamic_target;
+    return (_imp->params.dynamic_target || _imp->params.flexible_target);
 }
 
 auto HomomorphismModel::do_dynamic_less_thans() const -> bool 
 {
-    return _imp->params.dynamic_pattern;
+    return (_imp->params.dynamic_pattern || _imp->params.flexible_pattern);
 }
 
 auto HomomorphismModel::directed() const -> bool

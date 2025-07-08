@@ -123,6 +123,7 @@ namespace gss
         std::vector<std::vector<unsigned int>> target_aut_inverses;
 
         // Whether to do symmetry breaking dynamically
+        bool flexible_pattern = false, flexible_target = false;
         bool dynamic_pattern = false, dynamic_target = false;
         long double pattern_aut_mantissa, target_aut_mantissa;
         int pattern_aut_exp, target_aut_exp;
