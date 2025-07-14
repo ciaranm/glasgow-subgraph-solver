@@ -96,12 +96,15 @@ function solve(ins,pathpat,pattern,pathtar,target,format,minsize=2_000_000,maxsi
         cd(CONFIG.solveurpath)
         t = @elapsed begin
             # p = run(pipeline(`timeout $timeout ./$solver --prove $proofs/$ins --no-supplementals --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`, devnull),wait=false); wait(p)
-            if verbose
-                p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
-            else
-                redirect_stdio(stdout = devnull,stderr = devnull) do
-                p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
+            try
+                if verbose
+                    p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
+                else
+                    redirect_stdio(stdout = devnull,stderr = devnull) do
+                    p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
+                    end
                 end
+            catch e
             end
         end
         t+=0.01

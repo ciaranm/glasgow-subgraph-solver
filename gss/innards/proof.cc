@@ -110,6 +110,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
 
     _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
     stringstream al1_constraint;
+    al1_constraint << "@D" << pattern_vertex << " ";
     for (int i = 0; i < target_size; ++i)
         al1_constraint << "1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
     al1_constraint << ">= 1";
@@ -118,6 +119,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     _imp->at_least_one_value_constraints.emplace(pattern_vertex, tuple{n, _imp->recover_encoding ? 0 : n, al1_constraint.str()});
 
     stringstream am1_constraint;
+    am1_constraint << "@D" << pattern_vertex << "m ";
     for (int i = 0; i < target_size; ++i)
         am1_constraint << "-1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
     am1_constraint << ">= -1";
@@ -131,7 +133,7 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size) ->
     for (int v = 0; v < target_size; ++v) {
         _imp->model_stream << "* injectivity on value " << v << '\n';
         stringstream injectivity_constraint;
-
+        injectivity_constraint << "@inj" << v << " ";
         for (int p = 0; p < pattern_size; ++p) {
             auto x = _imp->variable_mappings.find(pair{p, v});
             if (x != _imp->variable_mappings.end())
@@ -162,6 +164,7 @@ auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> &
 {
     if (! _imp->recover_encoding) {
         stringstream adjacency_constraint;
+        adjacency_constraint << "@a" << p << "=" << t << "->" << q << " ";
         adjacency_constraint << "1 ~x" << _imp->variable_mappings[pair{p, t}];
         for (auto & u : uu)
             if (cancel.end() == find(cancel.begin(), cancel.end(), u))
@@ -343,7 +346,7 @@ auto Proof::incompatible_by_degrees(
         for (auto & n : n_t)
             recover_injectivity_constraint(n);
     }
-/*
+// /*
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & n : n_p) {
@@ -370,8 +373,8 @@ auto Proof::incompatible_by_degrees(
     _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
 
     *_imp->proof_stream << "del id " << _imp->proof_line - 1 << " ;\n";
-*/
-// /*
+// */
+/*
     *_imp->proof_stream << "a 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ; % deg" ;
     for (auto & n : n_p) 
         if (_imp->adjacency_lines.count(tuple{g, p.first, n, t.first})) 
@@ -381,7 +384,7 @@ auto Proof::incompatible_by_degrees(
 
     *_imp->proof_stream << " \n";
     ++_imp->proof_line;
-// */
+*/
 }
 
 auto Proof::incompatible_by_nds(
@@ -675,7 +678,7 @@ auto Proof::create_exact_path_graphs(
     }
 
     *_imp->proof_stream << "setlvl 1;\n";
-    *_imp->proof_stream << "pol";
+    *_imp->proof_stream << "@G" << g << "x2ap" << p.second << "=" << t.second << "->" << q.second << " pol";
 
     // if p maps to t then things in between_p_and_q have to go to one of these...
     bool first = true;
@@ -700,7 +703,7 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "@G" << g << "x2ai" << p.second << "=" << t.second << "->" << q.second << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : two_away_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first.first}];
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
