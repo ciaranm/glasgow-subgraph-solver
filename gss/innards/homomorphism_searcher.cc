@@ -45,10 +45,19 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
     if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
-        pattern_orbit_sizes = params.pattern_orbit_sizes;
+        // pattern_orbit_sizes = params.pattern_orbit_sizes;
+        for (int o: params.pattern_orbit_sizes) {
+            pattern_aut_grp_size *= o;
+        }
     }
     if (model.has_occur_less_thans() && !model.do_dynamic_occur_less_thans()) {
         target_orbit_sizes = params.target_orbit_sizes;
+        int latest = -1;
+        for (auto con: model.target_occur_less_thans_in_convenient_order) {
+            if (con.first == latest) continue;
+            target_base.push_back(con.first);
+            latest = con.first;
+        }
     }
     if (model.do_dynamic_occur_less_thans()) {
         std::vector<innards::SVOBitset> adjacency_matrix;
@@ -174,11 +183,13 @@ auto HomomorphismSearcher::restarting_search(
             // we could be finding duplicate solutions, in threaded search
             if (_duplicate_solution_filterer(assignments)) {
                 if (model.has_less_thans()) {
-                    int mult = 1;
-                    for (auto & sz : pattern_orbit_sizes) {
-                        mult *= sz;
+                    if (model.do_dynamic_less_thans() && first_sol) {
+                        first_sol = false;
+                        for (int o : pattern_orbit_sizes) {
+                            pattern_aut_grp_size *= o;
+                        }
                     }
-                    solution_count += mult;
+                    solution_count += pattern_aut_grp_size;         // This is allowed for pattern but not target
                 }
                 else if (model.has_occur_less_thans()) {
                     int mult = 1;
@@ -267,6 +278,13 @@ auto HomomorphismSearcher::restarting_search(
         }
         else
             this_vertex_has_pattern_orbit = true;
+    }
+
+    if (params.dynamic_pattern) {
+        pattern_base_cpy = pattern_base;
+    }
+    if (params.dynamic_target) {
+        target_base_cpy = target_base;
     }
 
     // for each value remaining...
@@ -397,6 +415,13 @@ auto HomomorphismSearcher::restarting_search(
     // no values remaining, backtrack, or possibly kick off a restart
     if (proof)
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
+
+    if (params.dynamic_pattern) {
+        pattern_base = pattern_base_cpy;
+    }
+    if (params.dynamic_target) {
+        target_base = target_base_cpy;
+    }
 
     if (actually_hit_a_failure)
         restarts_schedule.did_a_backtrack();
