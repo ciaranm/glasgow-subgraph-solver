@@ -86,11 +86,9 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
                 }
             }
             else {
-                int lower = f < t ? f : t;
-                int higher = f < t ? t : f;
-                g.add_edge(vertices[lower], direction_vertices[0]);
+                g.add_edge(vertices[f], direction_vertices[0]);
                 g.add_edge(direction_vertices[0], direction_vertices[1]);
-                g.add_edge(vertices[higher], direction_vertices[1]);
+                g.add_edge(vertices[t], direction_vertices[1]);
                 direction_vertices.erase(direction_vertices.begin());
                 direction_vertices.erase(direction_vertices.begin());
             }
