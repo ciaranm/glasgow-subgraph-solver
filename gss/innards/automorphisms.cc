@@ -14,21 +14,21 @@ using namespace gss::innards;
 auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, const bool with_generators, const bool degree_sequence, vector<int> &orbit_sizes) -> OrderConstraints {
     std::vector<int> base;
 
-    if (degree_sequence) {
-        base.resize(i.size());
-        std::iota(base.begin(), base.end(), 0);
-        stable_sort(base.begin(), base.end(), [&](int a, int b) -> bool {
-            return -i.degree(a) < -i.degree(b);
-        });
-    }
+    // if (degree_sequence) {
+    //     base.resize(i.size());
+    //     std::iota(base.begin(), base.end(), 0);
+    //     stable_sort(base.begin(), base.end(), [&](int a, int b) -> bool {
+    //         return -i.degree(a) < -i.degree(b);
+    //     });
+    // }
 
-    return with_generators ? automorphisms_as_order_constraints_with_generators(i, base, orbit_sizes) : automorphisms_as_order_constraints(i, base, orbit_sizes);
+    return with_generators ? automorphisms_as_order_constraints_with_generators(i, base, orbit_sizes) : automorphisms_as_order_constraints(i, base, orbit_sizes, degree_sequence);
 }
 
 /**
  * Uses orbits
 */
-auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std::vector<int> base, std::vector<int> &orbit_sizes) -> OrderConstraints
+auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std::vector<int> base, std::vector<int> &orbit_sizes, const bool degree_sequence) -> OrderConstraints
 {
     dejavu::static_graph g;     // Declare static graph
     unsigned long n_simple_edges = 0;       // Number of undirected edges
@@ -107,12 +107,21 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
     OrderConstraints result;        // List of constraint pairs
     std::set<std::pair<int,int>> unique_list;
 
+    std::vector<int> vertex_order(i.size());
+    std::iota(vertex_order.begin(), vertex_order.end(), 0);
+    if (degree_sequence) {
+        stable_sort(vertex_order.begin(), vertex_order.end(), [&](int a, int b) -> bool {
+            return -i.degree(a) < -i.degree(b);
+        });
+    }
+
     bool stab_trivial = false;
     dejavu::groups::orbit o{nv};      // Orbit structure of size nv
     while (! stab_trivial) {        // While stabiliser is non-trivial
         rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
         stab_trivial = true;
-        for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
+        // for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
+        for (auto & v : vertex_order) {        // For each vertex
             if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
                 stab_trivial = false;
                 base.push_back(v);          // Add v to base
@@ -133,6 +142,11 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
             }
         }
     }
+
+    for (auto a : base) {
+        std::cout << a << " ";
+    }
+    std::cout << "\n";
 
     for (std::pair<int, int> p: unique_list) {
         result.emplace_back(i.vertex_name(p.first), i.vertex_name(p.second));
