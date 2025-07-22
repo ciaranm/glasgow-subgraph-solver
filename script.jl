@@ -44,7 +44,8 @@ function main()
     cd(solver)
     try run(`make`)
     catch e println(e) end
-    run_bio_solver()
+    # run_bio_solver()
+    run_LV_solver()
 end
 function run_bio_solver()
     path = string(benchs,"/biochemicalReactions")
@@ -88,7 +89,66 @@ function run_bio_solver()
         end
     end end
 end
-function solve(ins,pathpat,pattern,pathtar,target,format,minsize=2_000_000,maxsize=10_000_000,remake=true,verbose=false)
+#=
+julia GlasgowPB3trimnalyser.jl LVg6g12 cshow
+julia GlasgowPB3trimnalyser.jl LVg7g71 cshow
+julia GlasgowPB3trimnalyser.jl LVg11g72 cshow
+julia GlasgowPB3trimnalyser.jl LVg17g19 cshow ?
+julia GlasgowPB3trimnalyser.jl LVg18g59 cshow
+julia GlasgowPB3trimnalyser.jl LVg16g58 cshow
+julia GlasgowPB3trimnalyser.jl LVg12g62 cshow
+
+julia GlasgowPB3trimnalyser.jl LVg26g100 cshow
+solve 14s
+LVg26g100 & 63.85 MB &          & 4.682 MB & 0    & 0    & 40.6 ( 4.97 34.4 1.22 0 ) \\\hline
+
+
+remarques, inj1 n'est pas utilise mais deg36=1 l'est
+=#
+function run_LV_solver()
+    path = string(benchs,"/LV")
+    cd()
+    graphs = cd(readdir, path)
+    n = length(graphs)
+    if CONFIG.insid != ""
+        ins = string("LV",CONFIG.insid)
+        i = findlast(c -> c == 'g', CONFIG.insid)
+        pattern = CONFIG.insid[1:i-1]
+        target = CONFIG.insid[i:end]
+        solve(ins,path,pattern,path,target,"lad",0,1_000_000_000)
+        if CONFIG.veripb
+            cd()
+            cd(CONFIG.pbopath)
+            runpboxide(ins)
+        end
+    else
+    t=0
+    stats = [stat(path*'/'*file).size for file in graphs]
+    println("stats: ", stats)
+    p = sortperm(stats)
+    for i in eachindex(graphs), j in eachindex(graphs)
+        pattern = graphs[p[i]]
+        target = graphs[p[j]]
+    # for target in graphs[1:end], pattern in graphs[1:end]
+        if pattern != target
+            ins = string("LV",pattern,target)
+            solve(ins,path,pattern,path,target,"lad")
+            if isfile(String("$proofs/$ins$extention"))
+                res = read(`tail -n 2 $proofs/$ins$extention`,String)
+                if length(res)<16 || res[1:16] != "conclusion UNSAT"
+                    printstyled("sat or unfinished proof\n", color=:green)
+                else
+                    if CONFIG.veripb
+                        cd()
+                        cd(CONFIG.pbopath)
+                        runpboxide(ins)
+                    end
+                end
+            end
+        end
+    end end
+end
+function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000,maxsize=50_000_000,remake=true,verbose=false)
     if remake || !isfile(string(proofs,"/",ins,".opb")) || !isfile(string(proofs,"/",ins,extention)) || 
             length(read(`tail -n 1 $proofs/$ins$extention`,String)) < 24 ||
             read(`tail -n 1 $proofs/$ins$extention`,String)[1:24] != "end pseudo-Boolean proof"

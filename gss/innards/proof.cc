@@ -347,6 +347,8 @@ auto Proof::incompatible_by_degrees(
             recover_injectivity_constraint(n);
     }
 // /*
+    *_imp->proof_stream << "@degp" << p.second << "=" << t.second << " ";
+
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & n : n_p) {
@@ -367,7 +369,9 @@ auto Proof::incompatible_by_degrees(
 
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
-
+    
+    *_imp->proof_stream << "@degi" << p.second << "=" << t.second << " ";
+    
     *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
     _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
