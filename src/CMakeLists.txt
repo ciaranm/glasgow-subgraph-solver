@@ -4,10 +4,13 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 link_libraries(glasgow_subgraphs)
 
 find_package(Boost 1.74 COMPONENTS program_options container REQUIRED)
+find_package(cxxopts 3.3.1 REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
+include_directories(${cxxopts_INCLUDE_DIRS})
 
 add_executable(glasgow_subgraph_solver glasgow_subgraph_solver.cc)
 target_link_libraries(glasgow_subgraph_solver LINK_PUBLIC ${Boost_LIBRARIES})
+target_link_libraries(glasgow_subgraph_solver LINK_PUBLIC ${cxxopts_LIBRARIES})
 
 add_executable(glasgow_clique_solver glasgow_clique_solver.cc)
 target_link_libraries(glasgow_clique_solver LINK_PUBLIC ${Boost_LIBRARIES})
