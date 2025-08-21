@@ -13,7 +13,6 @@
 #include <atomic>
 #include <barrier>
 #include <condition_variable>
-#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -22,7 +21,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include <boost/functional/hash.hpp>
+#include <gss/utils/hashing_utils.hh>
 
 using namespace gss;
 using namespace gss::innards;
@@ -53,8 +52,6 @@ using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::operator""ms;
-
-using boost::hash_combine;
 
 namespace
 {

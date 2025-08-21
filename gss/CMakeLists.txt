@@ -39,7 +39,8 @@ add_library(glasgow_subgraphs
         formats/input_graph.cc
         formats/lad.cc
         formats/read_file_format.cc
-        formats/vfmcs.cc)
+        formats/vfmcs.cc
+        utils/hashing_utils.hh)
 
 target_link_libraries(glasgow_subgraphs
         PUBLIC
