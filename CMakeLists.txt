@@ -50,7 +50,14 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
         GIT_TAG 6e79e682b726f524310d55dec8ddac4e9c52fb5f # v3.4.0
 )
+FetchContent_Declare(
+        cxxopts
+        GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+        GIT_TAG v3.3.1
+)
+
 FetchContent_MakeAvailable(Catch2)
+FetchContent_MakeAvailable(cxxopts)
 
 SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
 
