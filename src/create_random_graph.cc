@@ -1,7 +1,6 @@
 #include <iostream>
 #include <random>
 
-#include <boost/program_options/value_semantic.hpp>
 #include <cxxopts.hpp>
 
 using std::cerr;

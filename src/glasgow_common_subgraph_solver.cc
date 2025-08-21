@@ -11,7 +11,6 @@
 #include <memory>
 #include <optional>
 
-#include <boost/program_options/value_semantic.hpp>
 #include <unistd.h>
 
 using namespace gss;
