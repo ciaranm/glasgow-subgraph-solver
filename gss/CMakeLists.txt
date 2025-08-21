@@ -4,6 +4,14 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 find_package(Boost 1.74 COMPONENTS container REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
+find_package(PkgConfig REQUIRED)
+
+pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmp)
+pkg_check_modules(GMPXX REQUIRED IMPORTED_TARGET gmpxx)
+
+include_directories(${GMP_INCLUDE_DIRS})
+include_directories(${GMPXX_INCLUDE_DIRS})
+
 add_library(glasgow_subgraphs
         clique.cc
         common_subgraph.cc
@@ -33,13 +41,18 @@ add_library(glasgow_subgraphs
         formats/read_file_format.cc
         formats/vfmcs.cc)
 
-target_link_libraries(glasgow_subgraphs LINK_PUBLIC ${Boost_LIBRARIES})
-link_libraries(glasgow_subgraphs)
+target_link_libraries(glasgow_subgraphs
+        PUBLIC
+        ${Boost_LIBRARIES}
+        ${cxxopts_LIBRARIES}
+        PkgConfig::GMP
+        PkgConfig::GMPXX
+)
 
 add_executable(subgraph_isomorphism_test subgraph_isomorphism_test.cc)
-target_link_libraries(subgraph_isomorphism_test PRIVATE Catch2::Catch2WithMain)
+target_link_libraries(subgraph_isomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME subgraph_isomorphism_test COMMAND $<TARGET_FILE:subgraph_isomorphism_test>)
 
 add_executable(homomorphism_test homomorphism_test.cc)
-target_link_libraries(homomorphism_test PRIVATE Catch2::Catch2WithMain)
+target_link_libraries(homomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME homomorphism_test COMMAND $<TARGET_FILE:homomorphism_test>)
