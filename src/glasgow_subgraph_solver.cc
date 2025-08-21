@@ -472,7 +472,7 @@ auto main(int argc, char * argv[]) -> int
             cerr << "Maybe try specifying one of --format, --pattern-format, or --target-format?" << endl;
         return EXIT_FAILURE;
     }
-    catch (const cxxopts::exceptions::exception& e) {
+    catch (const cxxopts::exceptions::exception & e) {
         std::cerr << "Error: " << e.what() << std::endl;
         std::cerr << "Try " << argv[0] << " --help" << std::endl;
         return EXIT_FAILURE;

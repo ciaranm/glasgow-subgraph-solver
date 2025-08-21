@@ -1,9 +1,8 @@
 #include <iostream>
 #include <random>
 
-#include <boost/program_options.hpp>
-
-namespace po = boost::program_options;
+#include <boost/program_options/value_semantic.hpp>
+#include <cxxopts.hpp>
 
 using std::cerr;
 using std::cout;
@@ -15,41 +14,27 @@ using std::uniform_real_distribution;
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{"Program options"};
-        display_options.add_options()("help", "Display help information");
+        cxxopts::Options options("Create a random graph", "Get started by using option --help");
 
-        po::options_description graph_options{"Graph options"};
-        graph_options.add_options()                             //
-            ("seed", po::value<int>(), "Specify a random seed") //
-            ("directed", "Generate a directed graph")           //
-            ("loops", po::value<double>(), "Generate loops with this probability");
-        display_options.add(graph_options);
+        options.add_options("Program options")
+            ("help", "Display help information");
 
-        po::options_description all_options{"All options"};
-        all_options.add_options()                                            //
-            ("vertices", po::value<int>(), "Specify the number of vertices") //
-            ("edge-probability", po::value<double>(), "Specify the edge probability");
+        options.add_options("Graph options")
+            ("seed", "Specify a random seed", cxxopts::value<int>())
+            ("directed", "Generate a directed graph")
+            ("loops", "Generate loops with this probability", cxxopts::value<double>());
 
-        all_options.add(display_options);
+        options.add_options()
+            ("vertices", "Specify the number of vertices", cxxopts::value<int>())
+            ("edge-probability", "Specify the edge probability", cxxopts::value<double>());
 
-        po::positional_options_description positional_options;
-        positional_options
-            .add("vertices", 1)
-            .add("edge-probability", 1);
+        options.parse_positional({"vertices", "edge-probability"});
 
-        po::variables_map options_vars;
-        po::store(po::command_line_parser(argc, argv)
-                      .options(all_options)
-                      .positional(positional_options)
-                      .run(),
-            options_vars);
-        po::notify(options_vars);
+        auto options_vars = options.parse(argc, argv);
 
         /* --help? Show a message, and exit. */
         if (options_vars.count("help")) {
-            cout << "Usage: " << argv[0] << " [options] number-of-vertices edge-probability" << endl;
-            cout << endl;
-            cout << display_options << endl;
+            cout << options.help() << endl;
             return EXIT_SUCCESS;
         }
 
@@ -84,7 +69,7 @@ auto main(int argc, char * argv[]) -> int
 
         return EXIT_SUCCESS;
     }
-    catch (const po::error & e) {
+    catch (const cxxopts::exceptions::exception& e) {
         cerr << "Error: " << e.what() << endl;
         cerr << "Try " << argv[0] << " --help" << endl;
         return EXIT_FAILURE;

@@ -2,11 +2,10 @@
 #include <gss/configuration.hh>
 #include <gss/formats/read_file_format.hh>
 
-#include <boost/program_options.hpp>
+#include <cxxopts.hpp>
 
 #include <chrono>
 #include <cstdlib>
-#include <ctime>
 #include <exception>
 #include <iomanip>
 #include <iostream>
@@ -16,7 +15,6 @@
 #include <unistd.h>
 
 using namespace gss;
-namespace po = boost::program_options;
 
 using std::boolalpha;
 using std::cerr;
@@ -55,50 +53,35 @@ auto colour_class_order_from_string(string_view s) -> ColourClassOrder
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{"Program options"};
-        display_options.add_options()                                                                     //
-            ("help", "Display help information")                                                          //
-            ("timeout", po::value<int>(), "Abort after this many seconds")                                //
-            ("format", po::value<string>(), "Specify input file format (auto, lad, labelledlad, dimacs)") //
-            ("decide", po::value<int>(), "Solve this decision problem");
+        cxxopts::Options options("Glasgow Clique Solver", "Get started by using option --help");
 
-        po::options_description configuration_options{"Advanced configuration options"};
-        configuration_options.add_options()                                                                          //
-            ("colour-ordering", po::value<string>(), "Specify colour-ordering (colour / singletons-first / sorted)") //
-            ("input-order", "Use the input order for colouring (usually a bad idea)")                                //
-            ("restarts-constant", po::value<int>(), "How often to perform restarts (disabled by default)")           //
-            ("geometric-restarts", po::value<double>(), "Use geometric restarts with the specified multiplier (default is Luby)");
-        display_options.add(configuration_options);
+        options.add_options("Program options")
+            ("help", "Display help information")
+            ("timeout", "Abort after this many seconds", cxxopts::value<int>())
+            ("format", "Specify input file format (auto, lad, labelledlad, dimacs)", cxxopts::value<string>())
+            ("decide", "Solve this decision problem", cxxopts::value<int>());
 
-        po::options_description proof_logging_options{"Proof logging options"};
-        proof_logging_options.add_options()                                                                     //
-            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .pbp)") //
-            ("verbose-proofs", "Write lots of comments to the proof, for tracing")                              //
+        options.add_options("Advanced configuration options")
+            ("colour-ordering", "Specify colour-ordering (colour / singletons-first / sorted)", cxxopts::value<string>())
+            ("input-order", "Use the input order for colouring (usually a bad idea)")
+            ("restarts-constant", "How often to perform restarts (disabled by default)", cxxopts::value<int>())
+            ("geometric-restarts", "Use geometric restarts with the specified multiplier (default is Luby)", cxxopts::value<double>());
+
+        options.add_options("Proof logging options")
+            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing")
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
-        display_options.add(proof_logging_options);
 
-        po::options_description all_options{"All options"};
-        all_options.add_options()("graph-file", "Specify the graph file");
+        options.add_options()
+            ("graph_file", "Specify the graph file");
 
-        all_options.add(display_options);
+        options.parse_positional({"graph-file"});
 
-        po::positional_options_description positional_options;
-        positional_options
-            .add("graph-file", 1);
-
-        po::variables_map options_vars;
-        po::store(po::command_line_parser(argc, argv)
-                      .options(all_options)
-                      .positional(positional_options)
-                      .run(),
-            options_vars);
-        po::notify(options_vars);
+        auto options_vars = options.parse(argc, argv);
 
         /* --help? Show a message, and exit. */
         if (options_vars.count("help")) {
-            cout << "Usage: " << argv[0] << " [options] graph-file" << endl;
-            cout << endl;
-            cout << display_options << endl;
+            cout << options.help() << endl;
             return EXIT_SUCCESS;
         }
 
@@ -210,7 +193,7 @@ auto main(int argc, char * argv[]) -> int
             cerr << "Maybe try specifying --format?" << endl;
         return EXIT_FAILURE;
     }
-    catch (const po::error & e) {
+    catch (const cxxopts::exceptions::exception& e) {
         cerr << "Error: " << e.what() << endl;
         cerr << "Try " << argv[0] << " --help" << endl;
         return EXIT_FAILURE;

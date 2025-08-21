@@ -1,22 +1,20 @@
 #include <gss/common_subgraph.hh>
-#include <gss/configuration.hh>
 #include <gss/formats/read_file_format.hh>
 
-#include <boost/program_options.hpp>
+#include <cxxopts.hpp>
 
 #include <chrono>
 #include <cstdlib>
-#include <ctime>
 #include <exception>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <optional>
 
+#include <boost/program_options/value_semantic.hpp>
 #include <unistd.h>
 
 using namespace gss;
-namespace po = boost::program_options;
 
 using std::boolalpha;
 using std::cerr;
@@ -43,53 +41,38 @@ using std::chrono::system_clock;
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{"Program options"};
-        display_options.add_options()                                                            //
-            ("help", "Display help information")                                                 //
-            ("timeout", po::value<int>(), "Abort after this many seconds")                       //
-            ("decide", po::value<int>(), "Solve this decision problem")                          //
-            ("count-solutions", "Count the number of solutions (--decide only)")                 //
-            ("print-all-solutions", "Print out every solution, rather than one (--decide only)") //
-            ("connected", "Only find connected graphs")                                          //
+        cxxopts::Options options("Glasgow Subgraph Solver - but different???", "Get started by using option --help");
+
+        options.add_options("Program options")
+            ("help", "Display help information")
+            ("timeout", "Abort after this many seconds", cxxopts::value<int>())
+            ("decide", "Solve this decision problem", cxxopts::value<int>())
+            ("count-solutions", "Count the number of solutions (--decide only)")
+            ("print-all-solutions", "Print out every solution, rather than one (--decide only)")
+            ("connected", "Only find connected graphs")
             ("clique", "Use the clique solver");
 
-        po::options_description input_options{"Input file options"};
-        input_options.add_options()                                                                                          //
-            ("format", po::value<string>(), "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)") //
-            ("first-format", po::value<string>(), "Specify input file format just for the first graph")                      //
-            ("second-format", po::value<string>(), "Specify input file format just for the second graph");
-        display_options.add(input_options);
+        options.add_options("Input file options")
+            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)",  cxxopts::value<string>())
+            ("first-format", "Specify input file format just for the first graph", cxxopts::value<string>())
+            ("second-format", "Specify input file format just for the second graph", cxxopts::value<string>());
 
-        po::options_description proof_logging_options{"Proof logging options"};
-        proof_logging_options.add_options()                                                                     //
-            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .pbp)") //
-            ("verbose-proofs", "Write lots of comments to the proof, for tracing")                              //
+        options.add_options("Proof Logging Options")
+            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing")
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
-        display_options.add(proof_logging_options);
 
-        po::options_description all_options{"All options"};
-        all_options.add_options()("first-file", "Specify the first graph file")("second-file", "Specify the second graph file");
+        options.add_options()
+            ("first-file", "Specify the first graph file")
+            ("second-file", "Specify the second graph file");
 
-        all_options.add(display_options);
+        options.parse_positional({"first-file", "second-file"});
 
-        po::positional_options_description positional_options;
-        positional_options
-            .add("first-file", 1)
-            .add("second-file", 1);
-
-        po::variables_map options_vars;
-        po::store(po::command_line_parser(argc, argv)
-                      .options(all_options)
-                      .positional(positional_options)
-                      .run(),
-            options_vars);
-        po::notify(options_vars);
+        auto options_vars = options.parse(argc, argv);
 
         /* --help? Show a message, and exit. */
         if (options_vars.count("help")) {
-            cout << "Usage: " << argv[0] << " [options] graph-file graph-file" << endl;
-            cout << endl;
-            cout << display_options << endl;
+            cout << options.help() << endl;
             return EXIT_SUCCESS;
         }
 
@@ -222,7 +205,7 @@ auto main(int argc, char * argv[]) -> int
             cerr << "Maybe try specifying --format?" << endl;
         return EXIT_FAILURE;
     }
-    catch (const po::error & e) {
+    catch (const cxxopts::exceptions::exception & e) {
         cerr << "Error: " << e.what() << endl;
         cerr << "Try " << argv[0] << " --help" << endl;
         return EXIT_FAILURE;
