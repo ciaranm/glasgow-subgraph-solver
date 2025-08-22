@@ -40,7 +40,8 @@ add_library(glasgow_subgraphs
         formats/lad.cc
         formats/read_file_format.cc
         formats/vfmcs.cc
-        utils/hashing_utils.hh)
+        utils/hashing_utils.hh
+        utils/vertex_name_map.hh)
 
 target_link_libraries(glasgow_subgraphs
         PUBLIC
