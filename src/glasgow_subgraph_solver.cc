@@ -125,8 +125,8 @@ auto main(int argc, char * argv[]) -> int
             ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>());
 
         options.add_options()
-            ("pattern-file", "specify the pattern file")
-            ("target-file", "specify the target file");
+            ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
+            ("target-file", "specify the target file", cxxopts::value<std::string>());
 
         options.parse_positional({"pattern-file", "target-file"});
 

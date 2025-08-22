@@ -2,13 +2,10 @@
 #include <gss/formats/input_graph.hh>
 
 #include <algorithm>
-#include <cctype>
-#include <cstdint>
 #include <iterator>
 #include <limits>
 #include <map>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include <boost/bimap.hpp>
