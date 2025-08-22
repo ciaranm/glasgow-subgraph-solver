@@ -20,7 +20,7 @@ auto main(int argc, char * argv[]) -> int
             ("format", "Specify input file format (auto, lad, labelledlad, dimacs)", cxxopts::value<string>());
 
         options.add_options()
-            ("graph-file", "Specify the graph file");
+            ("graph-file", "Specify the graph file", cxxopts::value<string>());
 
         options.parse_positional({"graph-file"});
 
