@@ -1,9 +1,6 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-find_package(Boost 1.74 COMPONENTS container REQUIRED)
-include_directories(${Boost_INCLUDE_DIR})
-
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmp)
@@ -45,7 +42,6 @@ add_library(glasgow_subgraphs
 
 target_link_libraries(glasgow_subgraphs
         PUBLIC
-        ${Boost_LIBRARIES}
         ${cxxopts_LIBRARIES}
         PkgConfig::GMP
         PkgConfig::GMPXX
