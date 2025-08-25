@@ -1,13 +1,13 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-find_package(PkgConfig REQUIRED)
+find_path(GMP_INCLUDE_DIR gmp.h)
+find_library(GMP_LIBRARY gmp)
+find_library(GMPXX_LIBRARY gmpxx)
 
-pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmp)
-pkg_check_modules(GMPXX REQUIRED IMPORTED_TARGET gmpxx)
-
-include_directories(${GMP_INCLUDE_DIRS})
-include_directories(${GMPXX_INCLUDE_DIRS})
+if (NOT GMP_INCLUDE_DIR OR NOT GMP_LIBRARY OR NOT GMPXX_LIBRARY)
+    message(FATAL_ERROR "Could not find GMP/GMPXX libraries. Please install GMP and try again.")
+endif()
 
 add_library(glasgow_subgraphs
         clique.cc
@@ -40,11 +40,11 @@ add_library(glasgow_subgraphs
         utils/hashing_utils.hh
         utils/vertex_name_map.hh)
 
-target_link_libraries(glasgow_subgraphs
-        PUBLIC
+target_include_directories(glasgow_subgraphs PUBLIC ${GMP_INCLUDE_DIR})
+target_link_libraries(glasgow_subgraphs PUBLIC
         ${cxxopts_LIBRARIES}
-        PkgConfig::GMP
-        PkgConfig::GMPXX
+        ${GMP_LIBRARY}
+        ${GMPXX_LIBRARY}
 )
 
 add_executable(subgraph_isomorphism_test subgraph_isomorphism_test.cc)
