@@ -99,7 +99,8 @@ namespace gss::innards
         bool first_sol = true;
         dejavu::groups::random_schreier t_rschreier{static_cast<int>(model.target_size + model.target_edge_num * 2)}, p_rschreier{static_cast<int>(model.pattern_size + model.pattern_edge_num * 2)};    // TODO the * 2 is a clunky upper bound in directed cases
         std::vector<int> mapping, permuted;
-
+        std::vector<SVOBitset> occurs;            // "Which variable domains does value t appear in?"
+        std::vector<bool> occurs_check;
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 

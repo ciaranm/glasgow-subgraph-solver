@@ -446,7 +446,7 @@ auto main(int argc, char * argv[]) -> int
             string mode = options_vars["pattern-symmetries-dejavu"].as<string>();
             if (mode == "natural") {
                 auto dejavu_start_time = steady_clock::now();
-                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, params.pattern_orbit_sizes);
+                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, params.pattern_orbit_sizes, params.pattern_base);
                 was_given_pattern_automorphism_group = true;
                 cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "pattern_less_constraints =";
@@ -456,7 +456,7 @@ auto main(int argc, char * argv[]) -> int
             }
             else if (mode == "degree") {
                 auto dejavu_start_time = steady_clock::now();
-                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, true, params.pattern_orbit_sizes);
+                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, true, params.pattern_orbit_sizes, params.pattern_base);
                 was_given_pattern_automorphism_group = true;
                 cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "pattern_less_constraints =";
@@ -506,7 +506,7 @@ auto main(int argc, char * argv[]) -> int
             string mode = options_vars["target-symmetries-dejavu"].as<string>();
             if (mode == "natural") {
                 auto dejavu_start_time = steady_clock::now();
-                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, params.target_orbit_sizes);
+                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, params.target_orbit_sizes, params.target_base);
                 was_given_target_automorphism_group = true;
                 cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "target_occur_less_constraints =";
@@ -516,7 +516,7 @@ auto main(int argc, char * argv[]) -> int
             }
             else if (mode == "degree") {
                 auto dejavu_start_time = steady_clock::now();
-                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, true, params.target_orbit_sizes);
+                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, true, params.target_orbit_sizes, params.target_base);
                 was_given_target_automorphism_group = true;
                 cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "target_occur_less_constraints =";

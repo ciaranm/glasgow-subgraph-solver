@@ -101,6 +101,7 @@ namespace gss
         bool no_nds = false;
 
         /// Less pattern constraints
+        std::vector<int> pattern_base;
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
         std::vector<int> pattern_orbit_sizes;
 
@@ -111,6 +112,7 @@ namespace gss
         bool use_target_orbits = false;
 
         /// Occurs less target constraints
+        std::vector<int> target_base;
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
         std::vector<int> target_orbit_sizes;
 

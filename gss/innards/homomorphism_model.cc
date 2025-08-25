@@ -1336,9 +1336,19 @@ auto HomomorphismModel::target_has_loop(int t) const -> bool
     return _imp->target_loops[t];
 }
 
+auto HomomorphismModel::reset_has_less_thans() const -> void 
+{    
+    _imp->has_less_thans = false;
+}
+
 auto HomomorphismModel::has_less_thans() const -> bool
 {
     return _imp->has_less_thans;
+}
+
+auto HomomorphismModel::reset_has_occur_less_thans() const -> void 
+{    
+    _imp->has_occur_less_thans = false;
 }
 
 auto HomomorphismModel::has_occur_less_thans() const -> bool
