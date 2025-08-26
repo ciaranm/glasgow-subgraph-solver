@@ -389,7 +389,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "target_directed_edges = " << target.number_of_directed_edges() << endl;
 
         /* Prepare and start timeout */
-        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s); // is this a default val assignment? think yes.
+        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s);
 
         /* Start the clock */
         params.start_time = steady_clock::now();

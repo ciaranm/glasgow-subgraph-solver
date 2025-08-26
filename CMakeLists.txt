@@ -53,7 +53,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         cxxopts
         GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
-        GIT_TAG v3.3.1
+        GIT_TAG 44380e5a44706ab7347f400698c703eb2a196202 # v3.3.1
 )
 
 FetchContent_MakeAvailable(Catch2)
