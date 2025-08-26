@@ -37,14 +37,18 @@ add_library(glasgow_subgraphs
         formats/lad.cc
         formats/read_file_format.cc
         formats/vfmcs.cc
+        utils/json_utils.cc
         utils/hashing_utils.hh
-        utils/vertex_name_map.hh)
+        utils/vertex_name_map.hh
+        utils/json_utils.hh
+)
 
 target_include_directories(glasgow_subgraphs PUBLIC ${GMP_INCLUDE_DIR})
 target_link_libraries(glasgow_subgraphs PUBLIC
         ${cxxopts_LIBRARIES}
         ${GMP_LIBRARY}
         ${GMPXX_LIBRARY}
+        nlohmann_json::nlohmann_json
 )
 
 add_executable(subgraph_isomorphism_test subgraph_isomorphism_test.cc)

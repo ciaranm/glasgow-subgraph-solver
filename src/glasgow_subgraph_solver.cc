@@ -1,14 +1,12 @@
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
-#include <gss/innards/lackey.hh>
 #include <gss/innards/symmetries.hh>
 #include <gss/innards/verify.hh>
-#include <gss/restarts.hh>
 #include <gss/sip_decomposer.hh>
+#include <gss/utils/json_utils.hh>
 
 #include <cxxopts.hpp>
 
-#include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <iomanip>
@@ -18,7 +16,6 @@
 #include <vector>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <set>
 
 #include <unistd.h>
 
@@ -398,7 +395,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "target_directed_edges = " << target.number_of_directed_edges() << endl;
 
         /* Prepare and start timeout */
-        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s); // is this a default val assignment? think yes.
+        params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s);
 
         /* Start the clock */
         params.start_time = steady_clock::now();
@@ -470,74 +467,19 @@ auto main(int argc, char * argv[]) -> int
             params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);
 
         if (! params.json_output.empty()) {
-            json j;
+            json j = gss::utils::make_solver_json(
+                argc,
+                argv,
+                options_vars["pattern-file"].as<std::string>(),
+                options_vars["target-file"].as<std::string>(),
+                pattern,
+                target,
+                result
+            );
 
-            std::ofstream json_file(params.json_output);
-            if (! json_file) {
-                cerr << "Error: could not open JSON file " << params.json_output << " for writing" << endl;
-            } else {
-                std::ostringstream cmdline;
-                for (int i = 0; i < argc; ++i) {
-                    if (i != 0) cmdline << " ";
-                    cmdline << argv[i];
-                }
-                j["command"] = cmdline.str();
-
-                std::ostringstream time_stream;
-                time_stream << std::put_time(std::localtime(&started_at), "%F %T");
-                j["started_at"] = time_stream.str();
-
-                j["pattern_file"] = options_vars["pattern-file"].as<string>();
-                j["target_file"] = options_vars["target-file"].as<string>();
-                j["target_format"] = target_format_name;
-
-                j["status"] = status;
-                if (params.count_solutions)
-                    j["solution_count"] = result.solution_count.get_str();
-                j["nodes"] = result.nodes;
-                j["propagations"] = result.propagations;
-                j["runtime"] = overall_time.count();
-
-                const std::set<std::string> numeric_keys = {
-                    "restarts", "shape_graphs", "search_time", "nogoods_size", "nogoods_lengths"
-                };
-
-                // this is such a big workaround - it's friday and result.extra_stats is a beast I don't wanna refactor
-                for (const auto & stat : result.extra_stats) {
-                    auto pos = stat.find('=');
-                    if (pos == std::string::npos) continue;
-
-                    std::string key = stat.substr(0, pos);
-                    std::string value = stat.substr(pos + 1);
-
-                    key.erase(key.find_last_not_of(" \t") + 1);
-                    value.erase(0, value.find_first_not_of(" \t"));
-
-                    if (numeric_keys.count(key)) {
-                        if (value.empty()) {
-                            j[key] = nullptr;
-                        } else {
-                            j[key] = std::stoll(value);
-                        }
-                    } else {
-                        j[key] = value;
-                    }
-                }
-
-                if (! result.mapping.empty()) {
-                    json mapping_json = json::array();
-                    for (auto v : result.mapping) {
-                        mapping_json.push_back({
-                            {"pattern_vertex", pattern.vertex_name(v.first)},
-                            {"target_vertex",  target.vertex_name(v.second)}
-                        });
-                    }
-                    j["mapping"] = mapping_json;
-                }
-                json_file << j.dump(4) << endl;
-            }
+            std::ofstream out(options_vars["json-output"].as<std::string>());
+            out << j.dump(4) << std::endl;
         }
-
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {

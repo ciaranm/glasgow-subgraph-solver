@@ -62,8 +62,8 @@ auto main(int argc, char * argv[]) -> int
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
 
         options.add_options()
-            ("pattern-file", "Specify the first graph file", cxxopts::value<string>())
-            ("target-file", "Specify the second graph file", cxxopts::value<string>());
+            ("first-file", "Specify the first graph file", cxxopts::value<string>())
+            ("second-file", "Specify the second graph file", cxxopts::value<string>());
 
         options.parse_positional({"first-file", "second-file"});
 
