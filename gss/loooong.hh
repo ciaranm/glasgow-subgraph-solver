@@ -131,6 +131,17 @@ namespace gss
             return r;
         }
 
+        // Catch2 cannot make use of operator<=> needs == and != supplied for compiler to generate mixed type comparisons
+        bool operator==(const loooong& rhs) const
+        {
+            return mpz_cmp(value, rhs.value) == 0;
+        }
+
+        bool operator!=(const loooong& rhs) const
+        {
+            return mpz_cmp(value, rhs.value) != 0;
+        }
+
         std::strong_ordering operator<=>(const loooong& rhs) const noexcept {
             int cmp = mpz_cmp(value, rhs.value);
             if (cmp < 0) return std::strong_ordering::less;

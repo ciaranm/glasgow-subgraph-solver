@@ -48,7 +48,7 @@ R"(1,
     {
         params.count_solutions = true;
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == long(4 * 4 * 4));
+        CHECK(result.solution_count == 4 * 4 * 4);
         CHECK(result.complete);
     }
 }
