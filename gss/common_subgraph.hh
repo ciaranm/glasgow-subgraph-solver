@@ -51,7 +51,7 @@ namespace gss
         unsigned long long nodes = 0;
 
         /// Number of solutions, only if enumerating
-        loooong solution_count = 0;
+        loooong solution_count = 0L;
 
         /// Extra stats, to output
         std::list<std::string> extra_stats;

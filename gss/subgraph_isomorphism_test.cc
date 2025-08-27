@@ -1,5 +1,6 @@
 #include <gss/formats/csv.hh>
 #include <gss/homomorphism.hh>
+#include <gss/loooong.hh>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -43,7 +44,7 @@ R"(1,
     {
         params.count_solutions = true;
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 4 * 3 * 2);
+        CHECK(result.solution_count == long(4 * 3 * 2));
         CHECK(result.complete);
     }
 }
@@ -69,7 +70,7 @@ R"(1,2
     {
         params.count_solutions = true;
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 4);
+        CHECK(result.solution_count == 4L);
         CHECK(result.complete);
     }
 }
@@ -96,7 +97,7 @@ R"(1,2
     {
         params.count_solutions = true;
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 2);
+        CHECK(result.solution_count == 2L);
         CHECK(result.complete);
     }
 }

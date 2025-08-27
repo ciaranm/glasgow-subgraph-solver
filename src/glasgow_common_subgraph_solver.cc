@@ -172,7 +172,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "status = ";
         if (params.timeout->aborted())
             cout << "aborted";
-        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
+        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0L))
             cout << "true";
         else
             cout << "false";
