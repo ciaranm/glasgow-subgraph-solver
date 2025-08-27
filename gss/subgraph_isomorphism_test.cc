@@ -1,5 +1,6 @@
 #include <gss/formats/csv.hh>
 #include <gss/homomorphism.hh>
+#include <gss/loooong.hh>
 
 #include <catch2/catch_test_macros.hpp>
 
