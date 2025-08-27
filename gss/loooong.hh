@@ -3,6 +3,9 @@
 
 #include <gmp.h>
 #include <iostream>
+#include <cstring>
+
+using std::strlen;
 
 namespace gss
 {
