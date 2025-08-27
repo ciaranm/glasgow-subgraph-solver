@@ -762,8 +762,8 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
     // whilst we've got a unit domain...
     for (typename Domains::iterator branch_domain = find_unit_domain();
-         branch_domain != new_domains.end() || ! done_globals_at_least_once;
-         branch_domain = find_unit_domain()) {
+        branch_domain != new_domains.end() || ! done_globals_at_least_once;
+        branch_domain = find_unit_domain()) {
         optional<HomomorphismAssignment> current_assignment;
         if (branch_domain != new_domains.end()) {
             // what are we assigning?

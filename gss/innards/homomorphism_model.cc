@@ -994,9 +994,8 @@ auto HomomorphismModel::prepare() -> bool
     }
 
     if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs ||
-            next_pattern_supplemental != _imp->supplemental_graph_names.size())
-        throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) + " "
-        + to_string(_imp->supplemental_graph_names.size())};
+        next_pattern_supplemental != _imp->supplemental_graph_names.size())
+        throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) + " " + to_string(_imp->supplemental_graph_names.size())};
 
     // pattern and target degrees, for supplemental graphs
     for (unsigned g = 1; g < max_graphs; ++g) {
@@ -1083,7 +1082,7 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
 }
 
 auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-        bool pattern) -> void
+    bool pattern) -> void
 {
     for (unsigned v = 0; v < size; ++v) {
         auto nv = graph_rows[v * max_graphs + 0];

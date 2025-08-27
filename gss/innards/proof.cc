@@ -157,7 +157,7 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 }
 
 auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu, const vector<int> & cancel,
-        bool) -> void
+    bool) -> void
 {
     if (! _imp->recover_encoding) {
         stringstream adjacency_constraint;
@@ -226,23 +226,23 @@ auto Proof::finish_unsat_proof() -> void
 auto Proof::finish_sat_proof() -> void
 {
     *_imp->proof_stream << "output NONE\n"
-        << "conclusion SAT\n"
-        << "end pseudo-Boolean proof\n";
+                        << "conclusion SAT\n"
+                        << "end pseudo-Boolean proof\n";
 }
 
 auto Proof::finish_unknown_proof() -> void
 {
     *_imp->proof_stream << "output NONE\n"
-        << "conclusion NONE\n"
-        << "end pseudo-Boolean proof\n";
+                        << "conclusion NONE\n"
+                        << "end pseudo-Boolean proof\n";
 }
 
 auto Proof::finish_optimisation_proof(int size) -> void
 {
     *_imp->proof_stream << "u" << _imp->objective_sum.str() << " >= " << size << ";\n";
     *_imp->proof_stream << "output NONE\n"
-        << "conclusion BOUNDS " << size << " " << size << '\n'
-        << "end pseudo-Boolean proof\n";
+                        << "conclusion BOUNDS " << size << " " << size << '\n'
+                        << "end pseudo-Boolean proof\n";
 }
 
 auto Proof::failure_due_to_pattern_bigger_than_target() -> void
@@ -1009,12 +1009,12 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
             if (cc.size() == 1)
                 continue;
 
-            for (unsigned i = 0 ; i < cc.size() ; ++i)
-                for (unsigned j = i + 1 ; j < cc.size() ; ++j)
+            for (unsigned i = 0; i < cc.size(); ++i)
+                for (unsigned j = i + 1; j < cc.size(); ++j)
                     if (! _imp->non_edge_constraints.contains(pair{cc[i], cc[j]})) {
                         *_imp->proof_stream << "# 0\n";
                         *_imp->proof_stream << "ea -1 x" << _imp->binary_variable_mappings[cc[i]]
-                            << " -1 x" << _imp->binary_variable_mappings[cc[j]] << " >= -1 ;\n";
+                                            << " -1 x" << _imp->binary_variable_mappings[cc[j]] << " >= -1 ;\n";
                         auto n = ++_imp->proof_line;
                         _imp->non_edge_constraints[{cc[i], cc[j]}] = n;
                         _imp->non_edge_constraints[{cc[j], cc[i]}] = n;
@@ -1260,7 +1260,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
         }
 
     int last_k = 0;
-    for (int k = 2 ; ; k *= 2) {
+    for (int k = 2;; k *= 2) {
         last_k = k;
         _imp->model_stream << "* selected vertices must be connected, walk " << k << '\n';
         for (int v = 0; v < p; ++v)
