@@ -86,7 +86,7 @@ auto main(int argc, char * argv[]) -> int
             ("no-nds", "Do not use neighbourhood degree sequences");
 
         options.add_options("Advanced parallelism options")
-            ("threads", "Use threaded search, with this many threads (0 to auto-detect)", cxxopts::value<int>())
+            ("threads", "Use threaded search, with this many threads (0 to auto-detect)", cxxopts::value<unsigned>())
             ("triggered-restarts", "Have one thread trigger restarts (more nondeterminism, better performance)")
             ("delay-thread-creation", "Do not create threads until after the first restart");
 
