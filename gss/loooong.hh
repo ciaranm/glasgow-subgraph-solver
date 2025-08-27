@@ -15,6 +15,7 @@ namespace gss
         loooong() { mpz_init(value); }
         loooong(long v) { mpz_init_set_si(value, v); }
         loooong(unsigned long v) { mpz_init_set_ui(value, v); }
+        loooong(int v) { mpz_init_set_si(value, v); }
         loooong(const loooong& other) { mpz_init_set(value, other.value); }
         loooong(loooong&& other) noexcept {
             mpz_init(value);

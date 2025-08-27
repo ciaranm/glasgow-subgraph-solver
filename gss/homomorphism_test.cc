@@ -78,7 +78,7 @@ R"(1,2
     {
         params.count_solutions = true;
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 10L);
+        CHECK(result.solution_count == 10);
         CHECK(result.complete);
     }
 
@@ -131,7 +131,7 @@ R"(1,2
     SECTION("decide")
     {
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 1L);
+        CHECK(result.solution_count == 1);
         CHECK(result.nodes == 0);
         CHECK(result.complete);
     }
@@ -140,7 +140,7 @@ R"(1,2
     {
         params.count_solutions = true;
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 3L);
+        CHECK(result.solution_count == 3);
         CHECK(result.complete);
     }
 
@@ -185,7 +185,7 @@ R"(1,1
     SECTION("decide")
     {
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 1L);
+        CHECK(result.solution_count == 1);
         CHECK(result.nodes == 0);
         CHECK(result.complete);
     }
@@ -194,7 +194,7 @@ R"(1,1
     {
         params.count_solutions = true;
         auto result = solve_homomorphism_problem(pattern, target, params);
-        CHECK(result.solution_count == 3L);
+        CHECK(result.solution_count == 3);
         CHECK(result.complete);
     }
 

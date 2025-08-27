@@ -33,8 +33,8 @@ namespace
     template <typename I_>
     auto n_choose_k(I_ n, I_ k) -> I_
     {
-        I_ r = 1L;
-        for (I_ d = 1L; d <= k; ++d) {
+        I_ r = 1;
+        for (I_ d = 1; d <= k; ++d) {
             I_ numerator = n - k + d;
             I_ denominator = d;
             I_ cf = gss::gcd(r, denominator);
@@ -49,8 +49,8 @@ namespace
     template <typename I_>
     auto factorial(I_ n) -> I_
     {
-        I_ r = 1L;
-        for (I_ d = 2L; d <= n; ++d)
+        I_ r = 1;
+        for (I_ d = 2; d <= n; ++d)
             r *= d;
         return r;
     }
@@ -118,8 +118,8 @@ auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGrap
         }
 
         // fix up the solution count
-        if (params.count_solutions && result.solution_count > 0L) {
-            loooong unmapped_target_vertices = long(target.size()) - long(reduced_pattern.size());
+        if (params.count_solutions && result.solution_count > 0) {
+            loooong unmapped_target_vertices = target.size() - reduced_pattern.size();
             loooong solution_multiplier = n_choose_k<loooong>(unmapped_target_vertices, isolated_pattern_vertices.size());
             loooong isolated_symmetry_multiplier = factorial<loooong>(isolated_pattern_vertices.size());
             result.solution_count *= solution_multiplier * isolated_symmetry_multiplier;

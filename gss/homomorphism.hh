@@ -134,7 +134,7 @@ namespace gss
         std::list<std::string> extra_stats;
 
         /// Number of solutions, only if enumerating
-        loooong solution_count = 0L;
+        loooong solution_count = 0;
 
         /// Did we perform a complete search?
         bool complete = false;
