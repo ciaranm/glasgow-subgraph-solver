@@ -1,9 +1,9 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_JSON_UTILS_HH
 #define GLASGOW_SUBGRAPH_SOLVER_JSON_UTILS_HH
 
-#include <gss/homomorphism.hh>
-#include <gss/common_subgraph.hh>
 #include <gss/clique.hh>
+#include <gss/common_subgraph.hh>
+#include <gss/homomorphism.hh>
 
 #include <nlohmann/json.hpp>
 #include <string>

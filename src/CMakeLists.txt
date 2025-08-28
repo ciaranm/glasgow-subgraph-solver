@@ -6,7 +6,6 @@ link_libraries(glasgow_subgraphs)
 add_executable(glasgow_subgraph_solver glasgow_subgraph_solver.cc)
 target_link_libraries(glasgow_subgraph_solver PRIVATE
         cxxopts
-        nlohmann_json::nlohmann_json
 )
 
 add_executable(glasgow_clique_solver glasgow_clique_solver.cc)

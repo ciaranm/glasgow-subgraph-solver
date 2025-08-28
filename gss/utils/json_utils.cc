@@ -1,9 +1,9 @@
 #include "json_utils.hh"
+#include <fstream>
 #include <iomanip>
 #include <set>
 #include <sstream>
 #include <string>
-#include <fstream>
 
 using namespace std::chrono;
 
@@ -31,9 +31,11 @@ namespace gss::utils
 
         if constexpr (std::is_same_v<ResultT, HomomorphismResult>) {
             numeric_keys = {"restarts", "shape_graphs", "search_time", "nogoods_size", "nogoods_lengths"};
-        } else if constexpr (std::is_same_v<ResultT, CommonSubgraphResult>) {
+        }
+        else if constexpr (std::is_same_v<ResultT, CommonSubgraphResult>) {
             numeric_keys = {"search_time", "subgraph_nodes"};
-        } else if constexpr (std::is_same_v<ResultT, CliqueResult>) {
+        }
+        else if constexpr (std::is_same_v<ResultT, CliqueResult>) {
             numeric_keys = {"nodes", "find_nodes", "prove_nodes"};
         }
 
@@ -108,9 +110,9 @@ namespace gss::utils
             j["propagations"] = result.propagations;
             if (params.count_solutions) j["solution_count"] = result.solution_count.to_string();
             if (params.n_threads) j["threads"] = params.n_threads;
-            if (!result.extra_stats.empty()) j.update(extra_stats_to_json(result));
-            if (!result.mapping.empty()) j["mapping"] = mapping_to_json(result, pattern, target);
-            if (!result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
+            if (! result.extra_stats.empty()) j.update(extra_stats_to_json(result));
+            if (! result.mapping.empty()) j["mapping"] = mapping_to_json(result, pattern, target);
+            if (! result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
         }
         else if constexpr (std::is_same_v<ResultT, CommonSubgraphResult>) {
             j["first_file"] = pattern_file;
@@ -125,12 +127,12 @@ namespace gss::utils
 
             j["nodes"] = result.nodes;
             if (params.count_solutions) j["solution_count"] = result.solution_count.to_string();
-            if (!result.extra_stats.empty()) j.update(extra_stats_to_json(result));
-            if (!result.mapping.empty()) j["mappings"] = result.mapping;
-            if (!result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
+            if (! result.extra_stats.empty()) j.update(extra_stats_to_json(result));
+            if (! result.mapping.empty()) j["mappings"] = result.mapping;
+            if (! result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
         }
 
-        if (!filename.ends_with(".json"))
+        if (! filename.ends_with(".json"))
             filename += ".json";
         std::ofstream out(filename);
         out << j.dump(4) << std::endl;
@@ -145,15 +147,15 @@ namespace gss::utils
         const CommonSubgraphResult &, const CommonSubgraphParams &, const std::chrono::milliseconds &, const string &, string &);
 
     void make_solver_json(
-    int argc,
-    char ** argv,
-    const string & pattern_file,
-    const InputGraph & pattern,
-    const CliqueResult & result,
-    const CliqueParams & params,
-    const std::chrono::milliseconds & overall_time,
-    const string & status,
-    string & filename)
+        int argc,
+        char ** argv,
+        const string & pattern_file,
+        const InputGraph & pattern,
+        const CliqueResult & result,
+        const CliqueParams & params,
+        const std::chrono::milliseconds & overall_time,
+        const string & status,
+        string & filename)
     {
         json j;
 
@@ -178,11 +180,11 @@ namespace gss::utils
 
         j["runtime"] = overall_time.count();
 
-        if (!result.extra_stats.empty()) {
+        if (! result.extra_stats.empty()) {
             j.update(extra_stats_to_json(result));
         }
 
-        if (!filename.ends_with(".json"))
+        if (! filename.ends_with(".json"))
             filename += ".json";
         std::ofstream out(filename);
         out << j.dump(4) << std::endl;
