@@ -62,11 +62,7 @@ auto gss::innards::find_symmetries(
     if (! exists(gap_helper_file_path))
         throw GapFailedUs{"couldn't find gap/findDPfactorsOfGraphs.g, which we need for symmetry detection"};
 
-#if defined(STD_FS_IS_BOOST)
     string gap_helper_file_path_str = gap_helper_file_path.string();
-#else
-    string gap_helper_file_path_str = gap_helper_file_path;
-#endif
 
     stringstream stdin_stream;
     stdin_stream << graph.size() << endl;

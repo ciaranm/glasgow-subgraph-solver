@@ -3,7 +3,6 @@
 #include <gss/loooong.hh>
 #include <gss/sip_decomposer.hh>
 
-#include <numeric>
 #include <set>
 #include <string>
 #include <vector>
@@ -11,7 +10,6 @@
 using namespace gss;
 using namespace gss::innards;
 
-using std::gcd;
 using std::pair;
 using std::set;
 using std::to_string;
@@ -39,7 +37,7 @@ namespace
         for (I_ d = 1; d <= k; ++d) {
             I_ numerator = n - k + d;
             I_ denominator = d;
-            I_ cf = gcd(r, denominator);
+            I_ cf = gss::gcd(r, denominator);
             r /= cf;
             denominator /= cf;
             numerator /= denominator;

@@ -6,11 +6,10 @@
 #include <gss/restarts.hh>
 #include <gss/sip_decomposer.hh>
 
-#include <boost/program_options.hpp>
+#include <cxxopts.hpp>
 
 #include <chrono>
 #include <cstdlib>
-#include <ctime>
 #include <exception>
 #include <iomanip>
 #include <iostream>
@@ -21,7 +20,6 @@
 #include <unistd.h>
 
 using namespace gss;
-namespace po = boost::program_options;
 
 using std::boolalpha;
 using std::cerr;
@@ -50,124 +48,93 @@ using std::chrono::system_clock;
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{"Program options"};
-        display_options.add_options()                                      //
-            ("help", "Display help information")                           //
-            ("timeout", po::value<int>(), "Abort after this many seconds") //
+        cxxopts::Options options("Glasgow Subgraph Solver", "Get started by using option --help");
+
+        options.add_options("Program options")
+            ("help", "Display help information")
+            ("timeout", "Abort after this many seconds", cxxopts::value<int>())
             ("parallel", "Use auto-configured parallel search (highly nondeterministic runtimes)");
 
-        po::options_description problem_options{"Problem options"};
-        problem_options.add_options()                                            //
-            ("noninjective", "Drop the injectivity requirement")                 //
-            ("locally-injective", "Require only local injectivity")              //
-            ("induced", "Find an induced mapping")                               //
-            ("count-solutions", "Count the number of solutions")                 //
-            ("print-all-solutions", "Print out every solution, rather than one") //
-            ("solution-limit", po::value<unsigned long long>(), "Stop after finding this many solutions (only when --print-all-solutions)");
-        display_options.add(problem_options);
 
-        po::options_description input_options{"Input file options"};
-        input_options.add_options()                                                                                          //
-            ("format", po::value<string>(), "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)") //
-            ("pattern-format", po::value<string>(), "Specify input file format just for the pattern graph")                  //
-            ("target-format", po::value<string>(), "Specify input file format just for the target graph");
-        display_options.add(input_options);
+        options.add_options("Program options")
+            ("noninjective", "Drop the injectivity requirement")
+            ("locally-injective", "Require only local injectivity")
+            ("induced", "Find an induced mapping")
+            ("count-solutions", "Count the number of solutions")
+            ("print-all-solutions", "Print out every solution, rather than one")
+            ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>());
 
-        po::options_description search_options{"Advanced search configuration options"};
-        search_options.add_options()                                                                                                   //
-            ("restarts", po::value<string>(), "Specify restart policy (luby / geometric / timed / none)")                              //
-            ("geometric-multiplier", po::value<double>(), "Specify multiplier for geometric restarts")                                 //
-            ("geometric-constant", po::value<double>(), "Specify starting constant for geometric restarts")                            //
-            ("restart-interval", po::value<int>(), "Specify the restart interval in milliseconds for timed restarts")                  //
-            ("restart-minimum", po::value<int>(), "Specify a minimum number of backtracks before a timed restart can trigger")         //
-            ("luby-constant", po::value<int>(), "Specify the starting constant / multiplier for Luby restarts")                        //
-            ("value-ordering", po::value<string>(), "Specify value-ordering heuristic (biased / degree / antidegree / random / none)") //
-            ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")                                                      //
+        options.add_options("Input file options")
+            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
+            ("pattern-format", "Specify input file format just for the pattern graph", cxxopts::value<string>())
+            ("target-format", "Specify input file format just for the target graph", cxxopts::value<string>());
+
+        options.add_options("Advanced search configuration options")
+            ("restarts", "Specify restart policy (luby / geometric / timed / none)", cxxopts::value<string>())
+            ("geometric-multiplier", "Specify multiplier for geometric restarts", cxxopts::value<double>())
+            ("geometric-constant", "Specify starting constant for geometric restarts", cxxopts::value<double>())
+            ("restart-interval", "Specify the restart interval in milliseconds for timed restarts", cxxopts::value<int>())
+            ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
+            ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
+            ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
+            ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")
             ("target-symmetries", "Eliminate target symmetries (requires Gap)");
-        display_options.add(search_options);
 
-        po::options_description mangling_options{"Advanced input processing options"};
-        mangling_options.add_options()                                            //
-            ("no-clique-detection", "Disable clique / independent set detection") //
-            ("no-supplementals", "Do not use supplemental graphs")                //
+        options.add_options("Advanced input processing options")
+            ("no-clique-detection", "Disable clique / independent set detection")
+            ("no-supplementals", "Do not use supplemental graphs")
             ("no-nds", "Do not use neighbourhood degree sequences");
-        display_options.add(mangling_options);
 
-        po::options_description parallel_options{"Advanced parallelism options"};
-        parallel_options.add_options()                                                                           //
-            ("threads", po::value<unsigned>(), "Use threaded search, with this many threads (0 to auto-detect)") //
-            ("triggered-restarts", "Have one thread trigger restarts (more nondeterminism, better performance)") //
+        options.add_options("Advanced parallelism options")
+            ("threads", "Use threaded search, with this many threads (0 to auto-detect)", cxxopts::value<unsigned>())
+            ("triggered-restarts", "Have one thread trigger restarts (more nondeterminism, better performance)")
             ("delay-thread-creation", "Do not create threads until after the first restart");
-        display_options.add(parallel_options);
 
         vector<string> pattern_less_thans, target_occur_less_thans;
-        po::options_description symmetry_options{"Manual symmetry options"};
-        symmetry_options.add_options()                                                       //
-            ("pattern-less-than", po::value<vector<string>>(&pattern_less_thans),            //
-                "Specify a pattern less than constraint, in the form v<w")                   //
-            ("pattern-automorphism-group-size", po::value<string>(),                         //
-                "Specify the size of the pattern graph automorphism group")                  //
-            ("target-occurs-less-than", po::value<vector<string>>(&target_occur_less_thans), //
-                "Specify a target occurs less than constraint, in the form v<w")             //
-            ("target-automorphism-group-size", po::value<string>(),                          //
-                "Specify the size of the target graph automorphism group");
-        display_options.add(symmetry_options);
+        options.add_options("Manual symmetry options")
+            ("pattern-less-than", "Specify a pattern less than constraint, in the form v<w",
+                cxxopts::value<vector<string>>(pattern_less_thans))
+            ("pattern-automorphism-group-size", "Specify the size of the pattern graph automorphism group", cxxopts::value<string>())
+            ("target-occurs-less-than", "Specify a target occurs less than constraint, in the form v<w",
+                cxxopts::value<vector<string>>(target_occur_less_thans))
+            ("target-automorphism-group-size", "Specify the size of the target graph automorphism group", cxxopts::value<string>());
 
-        po::options_description lackey_options{"External constraint solver options"};
-        lackey_options.add_options()                                                                                       //
-            ("send-to-lackey", po::value<string>(), "Send candidate solutions to an external solver over this named pipe") //
-            ("receive-from-lackey", po::value<string>(), "Receive responses from external solver over this named pipe")    //
-            ("send-partials-to-lackey", "Send partial solutions to the lackey")                                            //
-            ("propagate-using-lackey", po::value<string>(), "Propagate using lackey (never / root / root-and-backjump / always)");
-        display_options.add(lackey_options);
+        options.add_options("External constraint solver options")
+            ("send-to-lackey", "Send candidate solutions to an external solver over this named pipe", cxxopts::value<string>())
+            ("receive-from-lackey", "Receive responses from external solver over this named pipe", cxxopts::value<string>())
+            ("send-partials-to-lackey", "Send partial solutions to the lackey")
+            ("propagate-using-lackey", "Propagate using lackey (never / root / root-and-backjump / always)", cxxopts::value<string>());
 
-        po::options_description proof_logging_options{"Proof logging options"};
-        proof_logging_options.add_options()                                                                     //
-            ("prove", po::value<string>(), "Write unsat proofs to this filename (suffixed with .opb and .pbp)") //
-            ("verbose-proofs", "Write lots of comments to the proof, for tracing")                              //
+        options.add_options("Proof logging options")
+            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing")
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
-        display_options.add(proof_logging_options);
 
         vector<string> shapes;
         vector<int> shape_counts, shape_injectives;
-        po::options_description hidden_options{"Hidden options"};
-        hidden_options.add_options()("enumerate", "Alias for --count-solutions (backwards compatibility)")        //
-            ("distance3", "Use distance 3 filtering (experimental)")                                              //
-            ("k4", "Use 4-clique filtering (experimental)")                                                       //
-            ("n-exact-path-graphs", po::value<int>(), "Specify number of exact path graphs")                      //
-            ("decomposition", "Use decomposition")                                                                //
-            ("cliques", "Use clique size constraints")                                                            //
-            ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")                //
-            ("shape", po::value<vector<string>>(&shapes), "Specify an extra shape graph (slow, experimental)")    //
-            ("shape-count", po::value<vector<int>>(&shape_counts), "Specify how many times the shape must occur") //
-            ("shape-injective", po::value<vector<int>>(&shape_injectives), "Specify whether the shape must occur injectively");
+        options.add_options("Hidden")
+            ("enumerate", "Alias for --count-solutions (backwards compatibility)")
+            ("distance3", "Use distance 3 filtering (experimental)")
+            ("k4", "Use 4-clique filtering (experimental)")
+            ("n-exact-path-graphs", "Specify number of exact path graphs", cxxopts::value<int>())
+            ("decomposition", "Use decomposition")
+            ("cliques", "Use clique size constraints")
+            ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")
+            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>())
+            ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>())
+            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>());
 
-        po::options_description all_options{"All options"};
-        all_options.add_options()                        //
-            ("pattern-file", "specify the pattern file") //
-            ("target-file", "specify the target file");
+        options.add_options()
+            ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
+            ("target-file", "specify the target file", cxxopts::value<std::string>());
 
-        all_options.add(display_options);
-        all_options.add(hidden_options);
+        options.parse_positional({"pattern-file", "target-file"});
 
-        po::positional_options_description positional_options;
-        positional_options
-            .add("pattern-file", 1)
-            .add("target-file", 1);
-
-        po::variables_map options_vars;
-        po::store(po::command_line_parser(argc, argv)
-                      .options(all_options)
-                      .positional(positional_options)
-                      .run(),
-            options_vars);
-        po::notify(options_vars);
+        auto options_vars = options.parse(argc, argv);
 
         /* --help? Show a message, and exit. */
         if (options_vars.count("help")) {
-            cout << "Usage: " << argv[0] << " [options] pattern target" << endl;
-            cout << endl;
-            cout << display_options << endl;
+            cout << options.help() << endl;
             return EXIT_SUCCESS;
         }
 
@@ -278,7 +245,10 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("shape")) {
             for (decltype(shapes.size()) s = 0; s != shapes.size(); ++s) {
                 auto graph = make_unique<InputGraph>(read_file_format("csv", shapes[s]));
-                params.extra_shapes.emplace_back(move(graph), s >= shape_injectives.size() ? true : shape_injectives[s], s >= shape_counts.size() ? 1 : shape_counts[s]);
+                params.extra_shapes.emplace_back(
+                    std::move(graph), // weird - issue when using std::move at headers
+                    s >= shape_injectives.size() ? true : shape_injectives[s],
+                    s >= shape_counts.size() ? 1 : shape_counts[s]);
             }
         }
 
@@ -502,9 +472,9 @@ auto main(int argc, char * argv[]) -> int
             cerr << "Maybe try specifying one of --format, --pattern-format, or --target-format?" << endl;
         return EXIT_FAILURE;
     }
-    catch (const po::error & e) {
-        cerr << "Error: " << e.what() << endl;
-        cerr << "Try " << argv[0] << " --help" << endl;
+    catch (const cxxopts::exceptions::exception & e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "Try " << argv[0] << " --help" << std::endl;
         return EXIT_FAILURE;
     }
     catch (const exception & e) {

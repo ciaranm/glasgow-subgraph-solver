@@ -16,8 +16,9 @@ Please contact [Ciaran McCreesh](mailto:ciaran.mccreesh@glasgow.ac.uk) with any 
 Compiling
 ---------
 
-To build, you will need a C++20 compiler, such as GCC 10.3, as well as Boost (use
-``libboost-all-dev`` on Ubuntu).
+To build, you will need:
+- C++20 compiler, such as GCC 10.3.
+- gmp, installation instructions can be found [here](https://gmplib.org/)
 
 ```shell
 cmake -S . -B build
