@@ -350,14 +350,28 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.contains("solution-limit"))
             solutions_remaining = options_vars["solution-limit"].as<unsigned long long>();
 
+        vector<vector<vector<string>>> all_mappings;
         if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
-                cout << "mapping = ";
-                for (auto v : mapping)
-                    cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
-                cout << endl;
 
-                return (! solutions_remaining) || (0 != --*solutions_remaining);
+            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
+                if (options_vars.count("json-output")) {
+                    vector<vector<string>> mapping_vec;
+                    mapping_vec.reserve(mapping.size());
+                    for (auto & v : mapping) {
+                        mapping_vec.push_back({
+                            pattern.vertex_name(v.first),
+                            target.vertex_name(v.second)
+                        });
+                    }
+                    all_mappings.push_back(std::move(mapping_vec));
+                } else {
+                    cout << "mapping = ";
+                    for (auto & v : mapping)
+                        cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
+                    cout << endl;
+                }
+
+                return (!solutions_remaining) || (0 != --*solutions_remaining);
             };
         }
 
@@ -453,6 +467,9 @@ auto main(int argc, char * argv[]) -> int
             params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);
 
         if (! params.json_output.empty()) {
+            if (options_vars.count("print-all-solutions"))
+                result.all_mappings = all_mappings;
+
             json j = gss::utils::make_solver_json(
                 argc,
                 argv,

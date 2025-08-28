@@ -23,7 +23,7 @@ namespace gss::utils
 
     json extra_stats_to_json(const HomomorphismResult & result)
     {
-        json j;
+        json j = json::object();
         const std::set<std::string> numeric_keys = {
             "restarts", "shape_graphs", "search_time", "nogoods_size", "nogoods_lengths"};
 
@@ -37,12 +37,10 @@ namespace gss::utils
             key.erase(key.find_last_not_of(" \t") + 1);
             value.erase(0, value.find_first_not_of(" \t"));
 
-            if (numeric_keys.count(key)) {
-                j[key] = value.empty() ? nullptr : nlohmann::json(std::stoll(value));
-            }
-            else {
+            if (numeric_keys.contains(key))
+                j[key] = std::stoll(value);
+            else
                 j[key] = value;
-            }
         }
         return j;
     }
@@ -95,15 +93,17 @@ namespace gss::utils
         j["nodes"] = result.nodes;
         j["propagations"] = result.propagations;
 
-        if (params.count_solutions) {
-            j["solution_count"] = params.count_solutions;
-        }
-        if (! result.extra_stats.empty()) {
+        if (params.count_solutions)
+            j["solution_count"] = result.solution_count.to_string();
+        if (params.n_threads)
+            j["threads"] = params.n_threads;
+
+        if (! result.extra_stats.empty())
             j.update(extra_stats_to_json(result));
-        }
-        if (! result.mapping.empty()) {
-            j.update(mapping_to_json(result, pattern, target));
-        }
+        if (! result.mapping.empty())
+            j["mapping"] = mapping_to_json(result, pattern, target);
+        if (! result.all_mappings.empty())
+            j["all_mappings"] = result.all_mappings;
 
         j["runtime"] = overall_time.count();
 

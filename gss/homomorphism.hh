@@ -126,6 +126,9 @@ namespace gss
         /// The mapping, empty if none found.
         VertexToVertexMapping mapping;
 
+        /// The mappings of counted solutions, empty if none found.
+        std::vector<std::vector<std::vector<std::string>>> all_mappings;
+
         /// Total number of nodes processed (recursive calls).
         unsigned long long nodes = 0;
 

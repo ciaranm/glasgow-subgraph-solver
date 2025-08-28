@@ -58,7 +58,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         nlohmann_json
         GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG v3.12.0
+        GIT_TAG 65ee68451d8eb2b5f3a30b410476ab83deb3289b # v3.12.0
 )
 
 FetchContent_MakeAvailable(Catch2)
