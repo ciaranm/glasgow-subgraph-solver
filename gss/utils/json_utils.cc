@@ -80,8 +80,8 @@ namespace gss::utils
         const ParamsT & params,
         const std::chrono::milliseconds & overall_time,
         const string & status,
-        string & filename
-    ) {
+        string & filename)
+    {
         json j;
 
         j["commandline"] = commandline_to_json(argc, argv);
@@ -92,20 +92,19 @@ namespace gss::utils
         j["started_at"] = ts.str();
         j["status"] = status;
 
-        j["pattern_file"] = pattern_file;
-        j["pattern_properties"] = describe(pattern);
-        j["pattern_vertices"] = pattern.size();
-        j["pattern_directed_edges"] = pattern.number_of_directed_edges();
-
-        j["target_file"] = target_file;
-        j["target_properties"] = describe(target);
-        j["target_vertices"] = target.size();
-        j["target_directed_edges"] = target.number_of_directed_edges();
-
         j["nodes"] = result.nodes;
         j["runtime"] = overall_time.count();
 
         if constexpr (std::is_same_v<ResultT, HomomorphismResult>) {
+            j["pattern_file"] = pattern_file;
+            j["pattern_properties"] = describe(pattern);
+            j["pattern_vertices"] = pattern.size();
+            j["pattern_directed_edges"] = pattern.number_of_directed_edges();
+
+            j["target_file"] = target_file;
+            j["target_properties"] = describe(target);
+            j["target_vertices"] = target.size();
+            j["target_directed_edges"] = target.number_of_directed_edges();
             j["propagations"] = result.propagations;
             if (params.count_solutions) j["solution_count"] = result.solution_count.to_string();
             if (params.n_threads) j["threads"] = params.n_threads;
@@ -114,17 +113,21 @@ namespace gss::utils
             if (!result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
         }
         else if constexpr (std::is_same_v<ResultT, CommonSubgraphResult>) {
+            j["first_file"] = pattern_file;
+            j["first_properties"] = describe(pattern);
+            j["first_vertices"] = pattern.size();
+            j["first_directed_edges"] = pattern.number_of_directed_edges();
+
+            j["second_file"] = target_file;
+            j["second_properties"] = describe(target);
+            j["second_vertices"] = target.size();
+            j["second_directed_edges"] = target.number_of_directed_edges();
+
             j["nodes"] = result.nodes;
             if (params.count_solutions) j["solution_count"] = result.solution_count.to_string();
             if (!result.extra_stats.empty()) j.update(extra_stats_to_json(result));
             if (!result.mapping.empty()) j["mappings"] = result.mapping;
             if (!result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
-        }
-        else if constexpr (std::is_same_v<ResultT, CliqueResult>) {
-            j["clique"] = result.clique;
-            j["find_nodes"] = result.find_nodes;
-            j["prove_nodes"] = result.prove_nodes;
-            if (!result.extra_stats.empty()) j.update(extra_stats_to_json(result));
         }
 
         if (!filename.ends_with(".json"))
@@ -141,9 +144,47 @@ namespace gss::utils
         int, char **, const string &, const string &, const InputGraph &, const InputGraph &,
         const CommonSubgraphResult &, const CommonSubgraphParams &, const std::chrono::milliseconds &, const string &, string &);
 
-    template void make_solver_json<CliqueResult, CliqueParams>(
-        int, char **, const string &, const string &, const InputGraph &, const InputGraph &,
-        const CliqueResult &, const CliqueParams &, const std::chrono::milliseconds &, const string &, string &);
+    void make_solver_json(
+    int argc,
+    char ** argv,
+    const string & pattern_file,
+    const InputGraph & pattern,
+    const CliqueResult & result,
+    const CliqueParams & params,
+    const std::chrono::milliseconds & overall_time,
+    const string & status,
+    string & filename)
+    {
+        json j;
+
+        j["commandline"] = commandline_to_json(argc, argv);
+
+        auto started_at = system_clock::to_time_t(system_clock::now());
+        std::ostringstream ts;
+        ts << std::put_time(std::localtime(&started_at), "%F %T");
+        j["started_at"] = ts.str();
+        j["status"] = status;
+
+        j["pattern_file"] = pattern_file;
+        j["pattern_properties"] = describe(pattern);
+        j["pattern_vertices"] = pattern.size();
+        j["pattern_directed_edges"] = pattern.number_of_directed_edges();
+
+        j["clique"] = result.clique;
+        j["find_nodes"] = result.find_nodes;
+        j["prove_nodes"] = result.prove_nodes;
+
+        j["runtime"] = overall_time.count();
+
+        if (!result.extra_stats.empty()) {
+            j.update(extra_stats_to_json(result));
+        }
+
+        if (!filename.ends_with(".json"))
+            filename += ".json";
+        std::ofstream out(filename);
+        out << j.dump(4) << std::endl;
+    }
 
     std::string describe(const InputGraph & g)
     {

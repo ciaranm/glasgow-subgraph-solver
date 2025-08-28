@@ -42,6 +42,18 @@ namespace gss::utils
         const string & status,
         string & filename);
 
+    /// Overload: solvers with *one graph* (clique)
+    void make_solver_json(
+        int argc,
+        char ** argv,
+        const string & pattern_file,
+        const InputGraph & pattern,
+        const CliqueResult & result,
+        const CliqueParams & params,
+        const std::chrono::milliseconds & overall_time,
+        const string & status,
+        string & filename);
+
     std::string describe(const InputGraph & g);
 }
 

@@ -1,6 +1,7 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/formats/read_file_format.hh>
+#include <gss/utils/json_utils.hh>
 
 #include <cxxopts.hpp>
 
@@ -59,7 +60,8 @@ auto main(int argc, char * argv[]) -> int
             ("help", "Display help information")
             ("timeout", "Abort after this many seconds", cxxopts::value<int>())
             ("format", "Specify input file format (auto, lad, labelledlad, dimacs)", cxxopts::value<string>())
-            ("decide", "Solve this decision problem", cxxopts::value<int>());
+            ("decide", "Solve this decision problem", cxxopts::value<int>())
+            ("json-output", "Dumps results to json file - takes filename as arg", cxxopts::value<string>());
 
         options.add_options("Advanced configuration options")
             ("colour-ordering", "Specify colour-ordering (colour / singletons-first / sorted)", cxxopts::value<string>())
@@ -73,7 +75,7 @@ auto main(int argc, char * argv[]) -> int
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
 
         options.add_options()
-            ("graph_file", "Specify the graph file", cxxopts::value<string>());
+            ("graph-file", "Specify the graph file", cxxopts::value<string>());
 
         options.parse_positional({"graph-file"});
 
@@ -161,14 +163,11 @@ auto main(int argc, char * argv[]) -> int
 
         params.timeout->stop();
 
-        cout << "status = ";
-        if (params.timeout->aborted())
-            cout << "aborted";
-        else if (! result.clique.empty())
-            cout << "true";
-        else
-            cout << "false";
-        cout << endl;
+        const std::string status =
+           params.timeout->aborted() ? "aborted" :
+           ! result.clique.empty() ? "true" :
+           "false";
+        cout << "status = " << status << endl;
 
         cout << "nodes = " << result.nodes << endl;
 
@@ -185,6 +184,21 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
+        if (! params.json_output.empty()) {
+
+            string filename = options_vars["json-output"].as<std::string>();
+            gss::utils::make_solver_json(
+                argc,
+                argv,
+                options_vars["first-file"].as<std::string>(),
+                graph,
+                result,
+                params,
+                overall_time,
+                status,
+                filename
+            );
+        }
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {

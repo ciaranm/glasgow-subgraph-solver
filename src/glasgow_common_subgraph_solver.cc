@@ -56,7 +56,7 @@ auto main(int argc, char * argv[]) -> int
             ("print-all-solutions", "Print out every solution, rather than one (--decide only)")
             ("connected", "Only find connected graphs")
             ("clique", "Use the clique solver")
-            ("json-output", "Dumps results to json file", cxxopts::value<string>());
+            ("json-output", "Dumps results to json file - takes filename as arg", cxxopts::value<string>());
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)",  cxxopts::value<string>())
@@ -198,8 +198,7 @@ auto main(int argc, char * argv[]) -> int
             params.timeout->aborted() ? "aborted" :
             ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0)) ? "true" :
             "false";
-
-        cout << status << endl;
+        cout << "status = " <<status << endl;
 
         if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
