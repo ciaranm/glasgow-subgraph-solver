@@ -1,5 +1,6 @@
 #include <gss/common_subgraph.hh>
 #include <gss/formats/read_file_format.hh>
+#include <gss/utils/json_utils.hh>
 
 #include <cxxopts.hpp>
 
@@ -10,8 +11,10 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <fstream>
 
 #include <unistd.h>
+#include <nlohmann/json.hpp>
 
 using namespace gss;
 
@@ -29,6 +32,7 @@ using std::make_unique;
 using std::put_time;
 using std::string;
 using std::string_view;
+using std::vector;
 
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
@@ -36,6 +40,8 @@ using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
+
+using json = nlohmann::json;
 
 auto main(int argc, char * argv[]) -> int
 {
@@ -49,7 +55,8 @@ auto main(int argc, char * argv[]) -> int
             ("count-solutions", "Count the number of solutions (--decide only)")
             ("print-all-solutions", "Print out every solution, rather than one (--decide only)")
             ("connected", "Only find connected graphs")
-            ("clique", "Use the clique solver");
+            ("clique", "Use the clique solver")
+            ("json-output", "Dumps results to json file", cxxopts::value<string>());
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)",  cxxopts::value<string>())
@@ -90,6 +97,9 @@ auto main(int argc, char * argv[]) -> int
         params.connected = options_vars.count("connected");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
         params.clique = options_vars.count("clique");
+        if (options_vars.count("json-output")) {
+            params.json_output = options_vars["json-output"].as<std::string>();
+        }
 
 #if ! defined(__WIN32)
         char hostname_buf[255];
@@ -135,12 +145,26 @@ auto main(int argc, char * argv[]) -> int
         cout << "second_vertices = " << second.size() << endl;
         cout << "second_directed_edges = " << second.number_of_directed_edges() << endl;
 
+        vector<vector<vector<string>>> all_mappings;
         if (options_vars.count("print-all-solutions")) {
+
             params.enumerate_callback = [&](const VertexToVertexMapping & mapping) {
-                cout << "mapping = ";
-                for (auto v : mapping)
-                    cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
-                cout << endl;
+                if (options_vars.count("json-output")) {
+                    vector<vector<string>> mapping_vec;
+                    mapping_vec.reserve(mapping.size());
+                    for (auto & v : mapping) {
+                        mapping_vec.push_back({
+                            first.vertex_name(v.first),
+                            second.vertex_name(v.second)
+                        });
+                    }
+                    all_mappings.push_back(std::move(mapping_vec));
+                } else {
+                    cout << "mapping = ";
+                    for (auto & v : mapping)
+                        cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
+                    cout << endl;
+                }
             };
         }
 
@@ -169,14 +193,13 @@ auto main(int argc, char * argv[]) -> int
 
         params.timeout->stop();
 
-        cout << "status = ";
-        if (params.timeout->aborted())
-            cout << "aborted";
-        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
-            cout << "true";
-        else
-            cout << "false";
-        cout << endl;
+
+        const std::string status =
+            params.timeout->aborted() ? "aborted" :
+            ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0)) ? "true" :
+            "false";
+
+        cout << status << endl;
 
         if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
@@ -196,6 +219,25 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
+        if (! params.json_output.empty()) {
+            if (options_vars.count("print-all-solutions"))
+                result.all_mappings = all_mappings;
+
+            string filename = options_vars["json-output"].as<std::string>();
+            gss::utils::make_solver_json(
+                argc,
+                argv,
+                options_vars["first-file"].as<std::string>(),
+                options_vars["second-file"].as<std::string>(),
+                first,
+                second,
+                result,
+                params,
+                overall_time,
+                status,
+                filename
+            );
+        }
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {

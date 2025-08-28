@@ -3,6 +3,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <fstream>
 
 using namespace std::chrono;
 
@@ -21,11 +22,20 @@ namespace gss::utils
         return cmd.str();
     }
 
-    json extra_stats_to_json(const HomomorphismResult & result)
+    template <typename ResultT>
+    json extra_stats_to_json(const ResultT & result)
     {
         json j = json::object();
-        const std::set<std::string> numeric_keys = {
-            "restarts", "shape_graphs", "search_time", "nogoods_size", "nogoods_lengths"};
+
+        std::set<std::string> numeric_keys;
+
+        if constexpr (std::is_same_v<ResultT, HomomorphismResult>) {
+            numeric_keys = {"restarts", "shape_graphs", "search_time", "nogoods_size", "nogoods_lengths"};
+        } else if constexpr (std::is_same_v<ResultT, CommonSubgraphResult>) {
+            numeric_keys = {"search_time", "subgraph_nodes"};
+        } else if constexpr (std::is_same_v<ResultT, CliqueResult>) {
+            numeric_keys = {"nodes", "find_nodes", "prove_nodes"};
+        }
 
         for (const auto & stat : result.extra_stats) {
             auto pos = stat.find('=');
@@ -58,18 +68,20 @@ namespace gss::utils
         return mapping_json;
     }
 
-    json make_solver_json(
+    template <typename ResultT, typename ParamsT>
+    void make_solver_json(
         int argc,
         char ** argv,
         const string & pattern_file,
         const string & target_file,
         const InputGraph & pattern,
         const InputGraph & target,
-        const HomomorphismResult & result,
-        const HomomorphismParams & params,
+        const ResultT & result,
+        const ParamsT & params,
         const std::chrono::milliseconds & overall_time,
-        const string & status)
-    {
+        const string & status,
+        string & filename
+    ) {
         json j;
 
         j["commandline"] = commandline_to_json(argc, argv);
@@ -86,29 +98,52 @@ namespace gss::utils
         j["pattern_directed_edges"] = pattern.number_of_directed_edges();
 
         j["target_file"] = target_file;
-        j["taget_properties"] = describe(target);
+        j["target_properties"] = describe(target);
         j["target_vertices"] = target.size();
         j["target_directed_edges"] = target.number_of_directed_edges();
 
         j["nodes"] = result.nodes;
-        j["propagations"] = result.propagations;
-
-        if (params.count_solutions)
-            j["solution_count"] = result.solution_count.to_string();
-        if (params.n_threads)
-            j["threads"] = params.n_threads;
-
-        if (! result.extra_stats.empty())
-            j.update(extra_stats_to_json(result));
-        if (! result.mapping.empty())
-            j["mapping"] = mapping_to_json(result, pattern, target);
-        if (! result.all_mappings.empty())
-            j["all_mappings"] = result.all_mappings;
-
         j["runtime"] = overall_time.count();
 
-        return j;
+        if constexpr (std::is_same_v<ResultT, HomomorphismResult>) {
+            j["propagations"] = result.propagations;
+            if (params.count_solutions) j["solution_count"] = result.solution_count.to_string();
+            if (params.n_threads) j["threads"] = params.n_threads;
+            if (!result.extra_stats.empty()) j.update(extra_stats_to_json(result));
+            if (!result.mapping.empty()) j["mapping"] = mapping_to_json(result, pattern, target);
+            if (!result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
+        }
+        else if constexpr (std::is_same_v<ResultT, CommonSubgraphResult>) {
+            j["nodes"] = result.nodes;
+            if (params.count_solutions) j["solution_count"] = result.solution_count.to_string();
+            if (!result.extra_stats.empty()) j.update(extra_stats_to_json(result));
+            if (!result.mapping.empty()) j["mappings"] = result.mapping;
+            if (!result.all_mappings.empty()) j["all_mappings"] = result.all_mappings;
+        }
+        else if constexpr (std::is_same_v<ResultT, CliqueResult>) {
+            j["clique"] = result.clique;
+            j["find_nodes"] = result.find_nodes;
+            j["prove_nodes"] = result.prove_nodes;
+            if (!result.extra_stats.empty()) j.update(extra_stats_to_json(result));
+        }
+
+        if (!filename.ends_with(".json"))
+            filename += ".json";
+        std::ofstream out(filename);
+        out << j.dump(4) << std::endl;
     }
+
+    template void make_solver_json<HomomorphismResult, HomomorphismParams>(
+        int, char **, const string &, const string &, const InputGraph &, const InputGraph &,
+        const HomomorphismResult &, const HomomorphismParams &, const std::chrono::milliseconds &, const string &, string &);
+
+    template void make_solver_json<CommonSubgraphResult, CommonSubgraphParams>(
+        int, char **, const string &, const string &, const InputGraph &, const InputGraph &,
+        const CommonSubgraphResult &, const CommonSubgraphParams &, const std::chrono::milliseconds &, const string &, string &);
+
+    template void make_solver_json<CliqueResult, CliqueParams>(
+        int, char **, const string &, const string &, const InputGraph &, const InputGraph &,
+        const CliqueResult &, const CliqueParams &, const std::chrono::milliseconds &, const string &, string &);
 
     std::string describe(const InputGraph & g)
     {

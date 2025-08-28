@@ -64,7 +64,8 @@ auto main(int argc, char * argv[]) -> int
             ("induced", "Find an induced mapping")
             ("count-solutions", "Count the number of solutions")
             ("print-all-solutions", "Print out every solution, rather than one")
-            ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>());
+            ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>())
+            ("json-output", "Dumps results to json file - takes filename as arg", cxxopts::value<string>());
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
@@ -124,8 +125,7 @@ auto main(int argc, char * argv[]) -> int
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")
             ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>())
             ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>())
-            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>())
-            ("json-output", "Dumps results to json file", cxxopts::value<string>());
+            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>());
 
         options.add_options()
             ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
@@ -437,6 +437,7 @@ auto main(int argc, char * argv[]) -> int
             (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining)) ? "aborted" :
             ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0)) ? "true" :
             "false";
+        cout << status << endl;
 
         if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
@@ -470,7 +471,8 @@ auto main(int argc, char * argv[]) -> int
             if (options_vars.count("print-all-solutions"))
                 result.all_mappings = all_mappings;
 
-            json j = gss::utils::make_solver_json(
+            string filename = options_vars["json-output"].as<std::string>();
+            gss::utils::make_solver_json(
                 argc,
                 argv,
                 options_vars["pattern-file"].as<std::string>(),
@@ -480,11 +482,9 @@ auto main(int argc, char * argv[]) -> int
                 result,
                 params,
                 overall_time,
-                status
+                status,
+                filename
             );
-
-            std::ofstream out(options_vars["json-output"].as<std::string>());
-            out << j.dump(4) << std::endl;
         }
         return EXIT_SUCCESS;
     }
