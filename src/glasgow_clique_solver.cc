@@ -118,6 +118,9 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("colour-ordering"))
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
         params.input_order = options_vars.count("input-order");
+        if (options_vars.count("json-output")) {
+            params.json_output = options_vars["json-output"].as<std::string>();
+        }
 
 #if ! defined(_WIN32)
         char hostname_buf[255];
@@ -190,7 +193,7 @@ auto main(int argc, char * argv[]) -> int
             gss::utils::make_solver_json(
                 argc,
                 argv,
-                options_vars["first-file"].as<std::string>(),
+                options_vars["graph-file"].as<std::string>(),
                 graph,
                 result,
                 params,

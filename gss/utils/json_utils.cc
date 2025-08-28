@@ -171,8 +171,10 @@ namespace gss::utils
         j["pattern_directed_edges"] = pattern.number_of_directed_edges();
 
         j["clique"] = result.clique;
-        j["find_nodes"] = result.find_nodes;
+        j["omega"] = result.clique.size();
+        j["nodes"] = result.nodes;
         j["prove_nodes"] = result.prove_nodes;
+        j["find_nodes"] = result.find_nodes;
 
         j["runtime"] = overall_time.count();
 
