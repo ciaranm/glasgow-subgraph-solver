@@ -73,7 +73,7 @@ auto main(int argc, char * argv[]) -> int
             ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
 
         options.add_options()
-            ("graph_file", "Specify the graph file", cxxopts::value<string>());
+            ("graph-file", "Specify the graph file", cxxopts::value<string>());
 
         options.parse_positional({"graph-file"});
 
