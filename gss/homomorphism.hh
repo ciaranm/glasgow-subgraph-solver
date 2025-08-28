@@ -3,7 +3,6 @@
 
 #include <gss/formats/input_graph.hh>
 #include <gss/innards/lackey.hh>
-#include <gss/innards/proof-fwd.hh>
 #include <gss/loooong.hh>
 #include <gss/proof_options.hh>
 #include <gss/restarts.hh>
@@ -97,6 +96,9 @@ namespace gss
         /// If we do clique constraints, do we do them on supplemental graphs too?
         bool clique_size_constraints_on_supplementals = false;
 
+        /// Log results to json
+        std::string json_output;
+
         /// Disable neighbourhood degree sequence processing?
         bool no_nds = false;
 
@@ -123,6 +125,9 @@ namespace gss
     {
         /// The mapping, empty if none found.
         VertexToVertexMapping mapping;
+
+        /// The mappings of counted solutions, empty if none found.
+        std::vector<std::vector<std::vector<std::string>>> all_mappings;
 
         /// Total number of nodes processed (recursive calls).
         unsigned long long nodes = 0;

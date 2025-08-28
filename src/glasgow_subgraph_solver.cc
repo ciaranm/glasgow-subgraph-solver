@@ -1,14 +1,12 @@
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
-#include <gss/innards/lackey.hh>
 #include <gss/innards/symmetries.hh>
 #include <gss/innards/verify.hh>
-#include <gss/restarts.hh>
 #include <gss/sip_decomposer.hh>
+#include <gss/utils/json_utils.hh>
 
 #include <cxxopts.hpp>
 
-#include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <iomanip>
@@ -16,6 +14,8 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 #include <unistd.h>
 
@@ -45,6 +45,8 @@ using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
 
+using json = nlohmann::json;
+
 auto main(int argc, char * argv[]) -> int
 {
     try {
@@ -62,7 +64,8 @@ auto main(int argc, char * argv[]) -> int
             ("induced", "Find an induced mapping")
             ("count-solutions", "Count the number of solutions")
             ("print-all-solutions", "Print out every solution, rather than one")
-            ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>());
+            ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>())
+            ("json-output", "Dumps results to json file - takes filename as arg", cxxopts::value<string>());
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
@@ -241,12 +244,15 @@ auto main(int argc, char * argv[]) -> int
         params.no_nds = options_vars.count("no-nds");
         params.clique_size_constraints = options_vars.count("cliques");
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
+        if (options_vars.count("json-output")) {
+            params.json_output = options_vars["json-output"].as<std::string>();
+        }
 
         if (options_vars.count("shape")) {
             for (decltype(shapes.size()) s = 0; s != shapes.size(); ++s) {
                 auto graph = make_unique<InputGraph>(read_file_format("csv", shapes[s]));
                 params.extra_shapes.emplace_back(
-                    std::move(graph), // weird - issue when using std::move at headers
+                    move(graph),
                     s >= shape_injectives.size() ? true : shape_injectives[s],
                     s >= shape_counts.size() ? 1 : shape_counts[s]);
             }
@@ -344,14 +350,28 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.contains("solution-limit"))
             solutions_remaining = options_vars["solution-limit"].as<unsigned long long>();
 
+        vector<vector<vector<string>>> all_mappings;
         if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
-                cout << "mapping = ";
-                for (auto v : mapping)
-                    cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
-                cout << endl;
 
-                return (! solutions_remaining) || (0 != --*solutions_remaining);
+            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
+                if (options_vars.count("json-output")) {
+                    vector<vector<string>> mapping_vec;
+                    mapping_vec.reserve(mapping.size());
+                    for (auto & v : mapping) {
+                        mapping_vec.push_back({
+                            pattern.vertex_name(v.first),
+                            target.vertex_name(v.second)
+                        });
+                    }
+                    all_mappings.push_back(std::move(mapping_vec));
+                } else {
+                    cout << "mapping = ";
+                    for (auto & v : mapping)
+                        cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
+                    cout << endl;
+                }
+
+                return (!solutions_remaining) || (0 != --*solutions_remaining);
             };
         }
 
@@ -367,24 +387,10 @@ auto main(int argc, char * argv[]) -> int
             cout << "proof_log = " << fn << ".pbp" << endl;
         }
 
-        auto describe = [&] (const InputGraph & g) {
-            if (g.directed())
-                cout << " directed";
-            if (g.loopy())
-                cout << " loopy";
-            if (g.has_vertex_labels())
-                cout << " vertex_labels";
-            if (g.has_edge_labels())
-                cout << " edge_labels";
-            cout << endl;
-        };
-
-        cout << "pattern_properties =";
-        describe(pattern);
+        cout << "pattern_properties =" << gss::utils::describe(pattern) << endl;
         cout << "pattern_vertices = " << pattern.size() << endl;
         cout << "pattern_directed_edges = " << pattern.number_of_directed_edges() << endl;
-        cout << "target_properties =";
-        describe(target);
+        cout << "target_properties =" << gss::utils::describe(target) << endl;
         cout << "target_vertices = " << target.size() << endl;
         cout << "target_directed_edges = " << target.number_of_directed_edges() << endl;
 
@@ -427,14 +433,11 @@ auto main(int argc, char * argv[]) -> int
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
 
-        cout << "status = ";
-        if (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining))
-            cout << "aborted";
-        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
-            cout << "true";
-        else
-            cout << "false";
-        cout << endl;
+        const std::string status =
+            (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining)) ? "aborted" :
+            ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0)) ? "true" :
+            "false";
+        cout << status << endl;
 
         if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
@@ -464,6 +467,25 @@ auto main(int argc, char * argv[]) -> int
         innards::verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective,
             params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);
 
+        if (! params.json_output.empty()) {
+            if (options_vars.count("print-all-solutions"))
+                result.all_mappings = all_mappings;
+
+            string filename = options_vars["json-output"].as<std::string>();
+            gss::utils::make_solver_json(
+                argc,
+                argv,
+                options_vars["pattern-file"].as<std::string>(),
+                options_vars["target-file"].as<std::string>(),
+                pattern,
+                target,
+                result,
+                params,
+                overall_time,
+                status,
+                filename
+            );
+        }
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {

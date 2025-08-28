@@ -10,3 +10,6 @@ perf.data.old
 
 # ide
 .idea/
+
+# benchmarks
+**/newSIPbenchmarks/
