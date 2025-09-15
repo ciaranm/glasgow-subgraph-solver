@@ -37,10 +37,10 @@ add_library(glasgow_subgraphs
         formats/lad.cc
         formats/read_file_format.cc
         formats/vfmcs.cc
-        utils/json_utils.cc
         utils/hashing_utils.hh
         utils/vertex_name_map.hh
-        utils/json_utils.hh
+        utils/cout_formatting.hh
+        utils/cout_formatting.cc
 )
 
 target_include_directories(glasgow_subgraphs PUBLIC ${GMP_INCLUDE_DIR})

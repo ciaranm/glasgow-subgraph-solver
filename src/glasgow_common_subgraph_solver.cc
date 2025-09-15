@@ -1,6 +1,5 @@
 #include <gss/common_subgraph.hh>
 #include <gss/formats/read_file_format.hh>
-#include <gss/utils/json_utils.hh>
 
 #include <cxxopts.hpp>
 
@@ -218,25 +217,6 @@ auto main(int argc, char * argv[]) -> int
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 
-        if (! params.json_output.empty()) {
-            if (options_vars.count("print-all-solutions"))
-                result.all_mappings = all_mappings;
-
-            string filename = options_vars["json-output"].as<std::string>();
-            gss::utils::make_solver_json(
-                argc,
-                argv,
-                options_vars["first-file"].as<std::string>(),
-                options_vars["second-file"].as<std::string>(),
-                first,
-                second,
-                result,
-                params,
-                overall_time,
-                status,
-                filename
-            );
-        }
         return EXIT_SUCCESS;
     }
     catch (const GraphFileError & e) {
