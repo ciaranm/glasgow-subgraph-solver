@@ -42,7 +42,7 @@ namespace gss
         bool clique = false;
 
         /// Log results to json
-        bool json_output;
+        bool json_output = false;
     };
 
     struct CommonSubgraphResult

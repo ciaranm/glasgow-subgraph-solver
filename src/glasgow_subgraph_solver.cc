@@ -15,7 +15,6 @@
 #include <optional>
 #include <vector>
 #include <fstream>
-#include <nlohmann/json.hpp>
 
 #include <unistd.h>
 
@@ -44,8 +43,6 @@ using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
-
-using json = nlohmann::json;
 
 auto main(int argc, char * argv[]) -> int
 {
@@ -486,8 +483,14 @@ auto main(int argc, char * argv[]) -> int
             was_given_target_automorphism_group = true;
             format_cout_with_int_value("target_symmetry_time", duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count(), params.json_output);
             string value;
+            bool first = true;
             for (auto & [a, b] : params.target_occur_less_constraints)
-                value += std::format(" {}<{}", a, b);
+                if (first) {
+                    value = a + "<" + b;
+                    first = false;
+                }
+                else
+                    value += " " + a + "<" + b;
             format_cout_with_string_value("target_occur_less_constraints", value, params.json_output);
         }
 

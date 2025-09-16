@@ -55,15 +55,9 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
         GIT_TAG 44380e5a44706ab7347f400698c703eb2a196202 # v3.3.1
 )
-FetchContent_Declare(
-        nlohmann_json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG 65ee68451d8eb2b5f3a30b410476ab83deb3289b # v3.12.0
-)
 
 FetchContent_MakeAvailable(Catch2)
 FetchContent_MakeAvailable(cxxopts)
-FetchContent_MakeAvailable(nlohmann_json)
 
 SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
 

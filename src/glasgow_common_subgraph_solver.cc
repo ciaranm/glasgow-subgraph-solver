@@ -14,7 +14,6 @@
 #include <fstream>
 
 #include <unistd.h>
-#include <nlohmann/json.hpp>
 
 using namespace gss;
 
@@ -41,7 +40,6 @@ using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
 
-using json = nlohmann::json;
 
 auto main(int argc, char * argv[]) -> int
 {

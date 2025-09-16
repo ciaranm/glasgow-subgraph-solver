@@ -48,7 +48,6 @@ target_link_libraries(glasgow_subgraphs PUBLIC
         ${cxxopts_LIBRARIES}
         ${GMP_LIBRARY}
         ${GMPXX_LIBRARY}
-        nlohmann_json::nlohmann_json
 )
 
 add_executable(subgraph_isomorphism_test subgraph_isomorphism_test.cc)
