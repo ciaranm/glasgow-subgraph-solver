@@ -1,6 +1,7 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/formats/read_file_format.hh>
+#include <gss/utils/cout_formatting.hh>
 
 #include <cxxopts.hpp>
 
@@ -117,28 +118,31 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("colour-ordering"))
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
         params.input_order = options_vars.count("input-order");
-        if (options_vars.count("json-output")) {
-            params.json_output = options_vars["json-output"].count();
-        }
+        if (options_vars.count("json"))
+            params.json_output = true;
 
+        if (params.json_output)
+            cout << "{" << endl;
 #if ! defined(_WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
-            cout << "hostname = " << string(hostname_buf) << endl;
+            format_cout_with_string_value("hostname", string(hostname_buf), params.json_output);
 #endif
-        cout << "commandline =";
+        string command;
         for (int i = 0; i < argc; ++i)
-            cout << " " << argv[i];
-        cout << endl;
+            command += argv[i];
+        format_cout_with_string_value("command", command, params.json_output);
 
         auto started_at = system_clock::to_time_t(system_clock::now());
-        cout << "started_at = " << put_time(localtime(&started_at), "%F %T") << endl;
+        std::ostringstream oss;
+        oss << put_time(localtime(&started_at), "%F %T");
+        format_cout_with_string_value("started_at", oss.str(), params.json_output);
 
         /* Read in the graphs */
         string pattern_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
         auto graph = read_file_format(pattern_format_name, options_vars["graph-file"].as<string>());
 
-        cout << "file = " << options_vars["graph-file"].as<string>() << endl;
+        format_cout_with_string_value("file", options_vars["graph-file"].as<string>(), params.json_output);
 
         if (options_vars.count("prove")) {
             string fn = options_vars["prove"].as<string>();
@@ -148,8 +152,8 @@ auto main(int argc, char * argv[]) -> int
                 .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
-            cout << "proof_model = " << fn << ".opb" << endl;
-            cout << "proof_log = " << fn << ".pbp" << endl;
+            format_cout_with_string_value("proof_model", fn + ".opb", params.json_output);
+            format_cout_with_string_value("proof_log", fn + ".pbp", params.json_output);
         }
 
         /* Prepare and start timeout */
@@ -169,22 +173,29 @@ auto main(int argc, char * argv[]) -> int
            params.timeout->aborted() ? "aborted" :
            ! result.clique.empty() ? "true" :
            "false";
-        cout << "status = " << status << endl;
+        format_cout_with_string_value("status", status, params.json_output);
 
-        cout << "nodes = " << result.nodes << endl;
+        format_cout_with_int_value("nodes", result.nodes, params.json_output);
 
         if (! result.clique.empty()) {
-            cout << "omega = " << result.clique.size() << endl;
-            cout << "clique =";
+            format_cout_with_int_value("omega", result.clique.size(), params.json_output);
+            string value;
+            bool first = true;
             for (auto v : result.clique)
-                cout << " " << graph.vertex_name(v);
-            cout << endl;
+                if (first) {
+                    value = graph.vertex_name(v);
+                    first = false;
+                }
+                else
+                    value += " " + graph.vertex_name(v);
         }
 
-        cout << "runtime = " << overall_time.count() << endl;
-
+        format_cout_with_int_value("runtime", overall_time.count(), params.json_output);
         for (const auto & s : result.extra_stats)
             cout << s << endl;
+
+        if (params.json_output)
+            cout << "}" << endl;
 
         return EXIT_SUCCESS;
     }

@@ -295,7 +295,8 @@ auto main(int argc, char * argv[]) -> int
             return EXIT_FAILURE;
         }
 
-        cout << "{" << endl;
+        if (params.json_output)
+            cout << "{" << endl;
 #if ! defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
@@ -365,10 +366,9 @@ auto main(int argc, char * argv[]) -> int
                 if (!file_out->is_open())
                     throw std::runtime_error("Could not open file " + filename + " for writing.");
 
-                *file_out << "\"mappings\": [";
-
+                *file_out << "{\"mappings\": [[";
                 params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
-                    if (!first_mapping) *file_out << ",";
+                    if (!first_mapping) *file_out << ",[";
                     first_mapping = false;
 
                     *file_out << "[";
@@ -382,17 +382,18 @@ auto main(int argc, char * argv[]) -> int
                                   << R"("target_vertex":")"  << target.vertex_name(v.second) << "\""
                                   << "}";
                     }
-                    *file_out << "],";
+                    *file_out << "]";
 
                     return (!solutions_remaining) || (0 != --*solutions_remaining);
                 };
             }
             else if (options_vars.count("json")) {
                 params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
-                    if (!first_mapping) cout << ",";
+                    if (!first_mapping) cout << ",[";
+                    else
+                        cout << "\"mappings\": [[";
                     first_mapping = false;
 
-                    cout << "\"mappings\": [";
                     bool first_pair = true;
                     for (auto & v : mapping) {
                         if (!first_pair) cout << ",";
@@ -403,7 +404,7 @@ auto main(int argc, char * argv[]) -> int
                                   << R"("target_vertex":")"  << target.vertex_name(v.second) << "\""
                                   << "}";
                     }
-                    cout << "],";
+                    cout << "]";
                     return (!solutions_remaining) || (0 != --*solutions_remaining);
                 };
             }
@@ -427,21 +428,21 @@ auto main(int argc, char * argv[]) -> int
                 .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
-            cout << "proof_model = " << fn << ".opb" << endl;
-            cout << "proof_log = " << fn << ".pbp" << endl;
+            format_cout_with_string_value("proof_model", fn + ".opb", params.json_output);
+            format_cout_with_string_value("proof_log", fn + ".pbp", params.json_output);
         }
 
         auto describe =  [&] (const InputGraph & g) -> string
         {
             string shape_group;
             if (g.directed())
-                shape_group = " directed";
+                shape_group = "directed";
             if (g.loopy())
-                shape_group = " loopy";
+                shape_group = "loopy";
             if (g.has_vertex_labels())
-                shape_group = " vertex_labels";
+                shape_group = "vertex_labels";
             if (g.has_edge_labels())
-                shape_group = " edge_labels";
+                shape_group = "edge_labels";
             return shape_group;
         };
 
@@ -462,11 +463,18 @@ auto main(int argc, char * argv[]) -> int
             auto gap_start_time = steady_clock::now();
             innards::find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
             was_given_pattern_automorphism_group = true;
-            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
-            cout << "pattern_less_constraints =";
-            for (auto & [a, b] : params.pattern_less_constraints)
-                cout << " " << a << "<" << b;
-            cout << endl;
+            format_cout_with_int_value("pattern_symmetry_time", duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count(), params.json_output);
+            string value;
+            bool first;
+            for (auto & [a, b] : params.pattern_less_constraints) {
+                if (first) {
+                    value = a + "<" + "b";
+                    first = false;
+                }
+                else
+                    value += " " + a + "<" + "b";
+            }
+            format_cout_with_string_value("pattern_less_constraints", value, params.json_output);
         }
 
         if (was_given_pattern_automorphism_group)
@@ -488,20 +496,20 @@ auto main(int argc, char * argv[]) -> int
 
         auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params) : solve_homomorphism_problem(pattern, target, params);
 
+        /* Stop the clock. */
+        auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
+
         if (options_vars.count("print-all-solutions")) {
             if (options_vars.count("mappings-to-json")) {
                 if (file_out && file_out->is_open()) {
-                    *file_out << "]," << std::endl;
+                    *file_out << "]}" << endl;
                     file_out->close();
                 }
             }
-            else if (options_vars.count("json")) {
-                cout << "]," << std::endl;
+            else if (options_vars.count("json") and result.solution_count > 0) {
+                cout << "]," << endl;
             }
         }
-
-        /* Stop the clock. */
-        auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
 
         const std::string status =
             (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining)) ? "aborted" :
@@ -526,7 +534,7 @@ auto main(int argc, char * argv[]) -> int
                 if (!file_out->is_open())
                     throw std::runtime_error("Could not open file " + filename + " for writing.");
 
-                *file_out << "\"mapping\": [";
+                *file_out << "{\"mapping\": [";
                 bool first_pair = true;
 
                 for (auto & v : result.mapping) {
@@ -538,7 +546,7 @@ auto main(int argc, char * argv[]) -> int
                                 << R"("target_vertex":")"  << target.vertex_name(v.second) << "\""
                                 << "}";
                 }
-                *file_out << "]," << endl;
+                *file_out << "]}" << endl;
                 file_out->close();
             }
             else if (options_vars.count("json")) {
@@ -575,6 +583,9 @@ auto main(int argc, char * argv[]) -> int
             format_cout_with_int_value("lackey_deletions", params.lackey->number_of_deletions(), params.json_output);
             format_cout_with_int_value("lackey_propagations", params.lackey->number_of_propagations(), params.json_output);
         }
+
+        if (params.json_output)
+            cout << "}"<< endl;
 
         innards::verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective,
             params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);
