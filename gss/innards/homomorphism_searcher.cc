@@ -1,3 +1,5 @@
+#include "gss/utils/cout_formatting.hh"
+
 #include <gss/innards/cheap_all_different.hh>
 #include <gss/innards/homomorphism_searcher.hh>
 
@@ -66,10 +68,16 @@ auto HomomorphismSearcher::save_result(const HomomorphismAssignments & assignmen
 {
     expand_to_full_result(assignments, result.mapping);
 
-    string where = "where =";
+    bool first = true;
+    string value;
     for (auto & a : assignments.values)
-        where.append(" " + to_string(a.discrepancy_count) + "/" + to_string(a.choice_count));
-    result.extra_stats.push_back(where);
+        if (first) {
+            value = to_string(a.discrepancy_count) + "/" + to_string(a.choice_count);
+            first = false;
+        }
+        else
+            value += to_string(a.discrepancy_count) + "/" + to_string(a.choice_count);
+    result.extra_stats.push_back(format_extra_results("where", value, params.json_output));
 }
 
 auto HomomorphismSearcher::restarting_search(

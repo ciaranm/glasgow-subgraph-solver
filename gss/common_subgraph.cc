@@ -1,3 +1,5 @@
+#include "utils/cout_formatting.hh"
+
 #include <gss/clique.hh>
 #include <gss/common_subgraph.hh>
 #include <gss/configuration.hh>
@@ -478,7 +480,7 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
             result.mapping.emplace(assoc_encoding[m]);
         result.nodes = clique_result.nodes;
         result.extra_stats = move(clique_result.extra_stats);
-        result.extra_stats.emplace_back("used_clique_solver = true");
+        result.extra_stats.emplace_back(format_extra_results("used_clique_solver", "true", params.json_output));
         result.complete = clique_result.complete;
 
         return result;

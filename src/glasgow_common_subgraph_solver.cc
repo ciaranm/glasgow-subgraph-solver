@@ -55,7 +55,7 @@ auto main(int argc, char * argv[]) -> int
             ("print-all-solutions", "Print out every solution, rather than one (--decide only)")
             ("connected", "Only find connected graphs")
             ("clique", "Use the clique solver")
-            ("json-output", "Dumps results to json file - takes filename as arg", cxxopts::value<string>());
+            ("json-output", "Dumps results to json file - takes filename as arg");
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)",  cxxopts::value<string>())
@@ -97,7 +97,7 @@ auto main(int argc, char * argv[]) -> int
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
         params.clique = options_vars.count("clique");
         if (options_vars.count("json-output")) {
-            params.json_output = options_vars["json-output"].as<std::string>();
+            params.json_output = options_vars["json-output"].count();
         }
 
 #if ! defined(__WIN32)

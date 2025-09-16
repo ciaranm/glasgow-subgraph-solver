@@ -365,7 +365,7 @@ auto main(int argc, char * argv[]) -> int
                 if (!file_out->is_open())
                     throw std::runtime_error("Could not open file " + filename + " for writing.");
 
-                *file_out << "{\"mappings\": [";
+                *file_out << "\"mappings\": [";
 
                 params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
                     if (!first_mapping) *file_out << ",";
@@ -382,7 +382,7 @@ auto main(int argc, char * argv[]) -> int
                                   << R"("target_vertex":")"  << target.vertex_name(v.second) << "\""
                                   << "}";
                     }
-                    *file_out << "]";
+                    *file_out << "],";
 
                     return (!solutions_remaining) || (0 != --*solutions_remaining);
                 };
@@ -392,7 +392,7 @@ auto main(int argc, char * argv[]) -> int
                     if (!first_mapping) cout << ",";
                     first_mapping = false;
 
-                    cout << "{\"mappings\": [";
+                    cout << "\"mappings\": [";
                     bool first_pair = true;
                     for (auto & v : mapping) {
                         if (!first_pair) cout << ",";
@@ -403,7 +403,7 @@ auto main(int argc, char * argv[]) -> int
                                   << R"("target_vertex":")"  << target.vertex_name(v.second) << "\""
                                   << "}";
                     }
-                    cout << "]";
+                    cout << "],";
                     return (!solutions_remaining) || (0 != --*solutions_remaining);
                 };
             }
@@ -491,12 +491,12 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("print-all-solutions")) {
             if (options_vars.count("mappings-to-json")) {
                 if (file_out && file_out->is_open()) {
-                    *file_out << "]}" << std::endl;
+                    *file_out << "]," << std::endl;
                     file_out->close();
                 }
             }
             else if (options_vars.count("json")) {
-                cout << "]}" << std::endl;
+                cout << "]," << std::endl;
             }
         }
 
@@ -526,7 +526,7 @@ auto main(int argc, char * argv[]) -> int
                 if (!file_out->is_open())
                     throw std::runtime_error("Could not open file " + filename + " for writing.");
 
-                *file_out << "{\"mapping\": [";
+                *file_out << "\"mapping\": [";
                 bool first_pair = true;
 
                 for (auto & v : result.mapping) {
@@ -538,7 +538,7 @@ auto main(int argc, char * argv[]) -> int
                                 << R"("target_vertex":")"  << target.vertex_name(v.second) << "\""
                                 << "}";
                 }
-                *file_out << "]}" << endl;
+                *file_out << "]," << endl;
                 file_out->close();
             }
             else if (options_vars.count("json")) {
@@ -554,7 +554,7 @@ auto main(int argc, char * argv[]) -> int
                               << R"("target_vertex":")"  << target.vertex_name(v.second) << "\""
                               << "}";
                 }
-                cout << "]" << endl;
+                cout << "]," << endl;
             }
             else {
                 cout << "mapping = ";
@@ -566,8 +566,6 @@ auto main(int argc, char * argv[]) -> int
 
         format_cout_with_int_value("runtime", overall_time.count(), params.json_output);
 
-        // TODO: do something neat and tidy for json handling
-        //  - likely best fix is do it at point of appending to result.extra_stats
         for (const auto & s : result.extra_stats)
             cout << s << endl;
 

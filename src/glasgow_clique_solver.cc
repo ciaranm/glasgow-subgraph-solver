@@ -60,7 +60,7 @@ auto main(int argc, char * argv[]) -> int
             ("timeout", "Abort after this many seconds", cxxopts::value<int>())
             ("format", "Specify input file format (auto, lad, labelledlad, dimacs)", cxxopts::value<string>())
             ("decide", "Solve this decision problem", cxxopts::value<int>())
-            ("json-output", "Dumps results to json file - takes filename as arg", cxxopts::value<string>());
+            ("json", "Changes the stdout format to json");
 
         options.add_options("Advanced configuration options")
             ("colour-ordering", "Specify colour-ordering (colour / singletons-first / sorted)", cxxopts::value<string>())
@@ -118,7 +118,7 @@ auto main(int argc, char * argv[]) -> int
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
         params.input_order = options_vars.count("input-order");
         if (options_vars.count("json-output")) {
-            params.json_output = options_vars["json-output"].as<std::string>();
+            params.json_output = options_vars["json-output"].count();
         }
 
 #if ! defined(_WIN32)

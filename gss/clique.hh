@@ -66,7 +66,7 @@ namespace gss
         std::optional<int> adjust_objective_for_mcs = std::nullopt;
 
         /// Log results to json
-        std::string json_output;
+        bool json_output;
     };
 
     struct CliqueResult

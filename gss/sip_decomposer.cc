@@ -2,6 +2,7 @@
 #include <gss/innards/proof.hh>
 #include <gss/loooong.hh>
 #include <gss/sip_decomposer.hh>
+#include <gss/utils/cout_formatting.hh>
 
 #include <set>
 #include <string>
@@ -93,7 +94,7 @@ auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGrap
         }
         auto result = solve_homomorphism_problem(reduced_pattern, target, params);
 
-        result.extra_stats.emplace_back("isolated_pattern_vertices = " + to_string(isolated_pattern_vertices.size()));
+        result.extra_stats.emplace_back(format_extra_results("isolated_pattern_vertices", to_string(isolated_pattern_vertices.size()), params.json_output));
 
         // fix up the result to be in the non-decomposed form
         if (! result.mapping.empty()) {

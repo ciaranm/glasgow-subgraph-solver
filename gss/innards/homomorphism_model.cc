@@ -2,6 +2,7 @@
 #include <gss/configuration.hh>
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_traits.hh>
+#include <gss/utils/cout_formatting.hh>
 
 #include <chrono>
 #include <functional>
@@ -1287,25 +1288,31 @@ auto HomomorphismModel::directed() const -> bool
 
 auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
 {
-    auto join = [](string_view t, auto & l) -> string {
-        stringstream s;
-        s << t;
+    auto join = [](auto & l) -> string
+    {
+        string s = "\"";
+        bool first = true;
         for (auto & i : l)
-            s << " " << i;
-        return s.str();
+            if (first) {
+                s += i;
+                first=false;
+            }
+            else s += "," + i;
+        return s + "\"";
     };
 
     if (! _imp->pattern_cliques_sizes.empty()) {
-        x.emplace_back(join("pattern_cliques_build_times =", _imp->pattern_cliques_build_times));
-        x.emplace_back(join("pattern_cliques_solve_times =", _imp->pattern_cliques_solve_times));
-        x.emplace_back(join("pattern_cliques_solve_find_nodes =", _imp->pattern_cliques_solve_find_nodes));
-        x.emplace_back(join("pattern_cliques_solve_prove_nodes =", _imp->pattern_cliques_solve_prove_nodes));
+        x.emplace_back(format_extra_results("pattern_cliques_build_times", join(_imp->pattern_cliques_build_times), _imp->params.json_output));
+        x.emplace_back(format_extra_results("pattern_cliques_solve_times", join(_imp->pattern_cliques_solve_times), _imp->params.json_output));
+        x.emplace_back(format_extra_results("pattern_cliques_solve_find_nodes", join(_imp->pattern_cliques_solve_find_nodes), _imp->params.json_output));
+        x.emplace_back(format_extra_results("pattern_cliques_solve_prove_nodes", join(_imp->pattern_cliques_solve_prove_nodes), _imp->params.json_output));
 
-        x.emplace_back(join("target_cliques_build_times =", _imp->target_cliques_build_times));
-        x.emplace_back(join("target_cliques_solve_times =", _imp->target_cliques_solve_times));
-        x.emplace_back(join("target_cliques_solve_find_nodes =", _imp->target_cliques_solve_find_nodes));
-        x.emplace_back(join("target_cliques_solve_prove_nodes =", _imp->target_cliques_solve_prove_nodes));
+
+        x.emplace_back(format_extra_results("target_cliques_solve_times", join(_imp->target_cliques_solve_times), _imp->params.json_output));
+        x.emplace_back(format_extra_results("target_cliques_build_times", join(_imp->target_cliques_build_times), _imp->params.json_output));
+        x.emplace_back(format_extra_results("target_cliques_solve_find_nodes", join(_imp->target_cliques_solve_find_nodes), _imp->params.json_output));
+        x.emplace_back(format_extra_results("target_cliques_solve_prove_nodes", join(_imp->target_cliques_solve_prove_nodes), _imp->params.json_output));
     }
 
-    x.emplace_back(join("supplemental_graph_names =", _imp->supplemental_graph_names));
+    x.emplace_back(format_extra_results("supplemental_graph_names", join(_imp->supplemental_graph_names), _imp->params.json_output));
 }
