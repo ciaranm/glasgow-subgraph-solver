@@ -3,7 +3,6 @@
 
 #include <gss/formats/input_graph.hh>
 #include <gss/innards/lackey.hh>
-#include <gss/innards/proof-fwd.hh>
 #include <gss/loooong.hh>
 #include <gss/proof_options.hh>
 #include <gss/restarts.hh>
@@ -96,6 +95,9 @@ namespace gss
 
         /// If we do clique constraints, do we do them on supplemental graphs too?
         bool clique_size_constraints_on_supplementals = false;
+
+        /// Should we dump to stdout in json format?
+        bool json_output = false;
 
         /// Disable neighbourhood degree sequence processing?
         bool no_nds = false;

@@ -1,5 +1,6 @@
 #include <gss/common_subgraph.hh>
 #include <gss/formats/read_file_format.hh>
+#include <gss/utils/cout_formatting.hh>
 
 #include <cxxopts.hpp>
 
@@ -10,6 +11,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <fstream>
 
 #include <unistd.h>
 
@@ -29,6 +31,7 @@ using std::make_unique;
 using std::put_time;
 using std::string;
 using std::string_view;
+using std::vector;
 
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
@@ -36,6 +39,7 @@ using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
+
 
 auto main(int argc, char * argv[]) -> int
 {
@@ -49,7 +53,9 @@ auto main(int argc, char * argv[]) -> int
             ("count-solutions", "Count the number of solutions (--decide only)")
             ("print-all-solutions", "Print out every solution, rather than one (--decide only)")
             ("connected", "Only find connected graphs")
-            ("clique", "Use the clique solver");
+            ("clique", "Use the clique solver")
+            ("mappings-to-json", "Dumps mapping to json file - takes filename as arg", cxxopts::value<string>())
+            ("json", "Changes the stdout format to json");
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)",  cxxopts::value<string>())
@@ -90,19 +96,25 @@ auto main(int argc, char * argv[]) -> int
         params.connected = options_vars.count("connected");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("print-all-solutions");
         params.clique = options_vars.count("clique");
+        if (options_vars.count("json"))
+            params.json_output = true;
 
+        if (params.json_output)
+            cout << "{" << endl;
 #if ! defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
-            cout << "hostname = " << string(hostname_buf) << endl;
+            format_cout_with_string_value("hostname", string(hostname_buf), params.json_output);
 #endif
-        cout << "commandline =";
+        string command;
         for (int i = 0; i < argc; ++i)
-            cout << " " << argv[i];
-        cout << endl;
+            command += argv[i];
+        format_cout_with_string_value("command", command, params.json_output);
 
         auto started_at = system_clock::to_time_t(system_clock::now());
-        cout << "started_at = " << put_time(localtime(&started_at), "%F %T") << endl;
+        std::ostringstream oss;
+        oss << put_time(localtime(&started_at), "%F %T");
+        format_cout_with_string_value("started_at", oss.str(), params.json_output);
 
         /* Read in the graphs */
         string default_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
@@ -111,37 +123,89 @@ auto main(int argc, char * argv[]) -> int
         auto first = read_file_format(first_format_name, options_vars["first-file"].as<string>());
         auto second = read_file_format(second_format_name, options_vars["second-file"].as<string>());
 
-        cout << "first_file = " << options_vars["first-file"].as<string>() << endl;
-        cout << "second_file = " << options_vars["second-file"].as<string>() << endl;
+        format_cout_with_string_value("first_file", options_vars["first-file"].as<string>(), params.json_output);
+        format_cout_with_string_value("second_file", options_vars["second-file"].as<string>(), params.json_output);
 
-        auto describe = [&] (const InputGraph & g) {
+        auto describe = [&] (const InputGraph & g)
+        {
+            string shape_group;
             if (g.directed())
-                cout << " directed";
+                shape_group = "directed";
             if (g.loopy())
-                cout << " loopy";
+                shape_group = "loopy";
             if (g.has_vertex_labels())
-                cout << " vertex_labels";
+                shape_group = "vertex_labels";
             if (g.has_edge_labels())
-                cout << " edge_labels";
-            cout << endl;
+                shape_group = "edge_labels";
+            return shape_group;
         };
 
-        cout << "first_properties =";
-        describe(first);
-        cout << "first_vertices = " << first.size() << endl;
-        cout << "first_directed_edges = " << first.number_of_directed_edges() << endl;
-        cout << "second_properties =";
-        describe(second);
-        cout << "second_vertices = " << second.size() << endl;
-        cout << "second_directed_edges = " << second.number_of_directed_edges() << endl;
+        format_cout_with_string_value("first-properties", describe(first), params.json_output);
+        format_cout_with_int_value("first_vertices", first.size(), params.json_output);
+        format_cout_with_int_value("first_directed_edges", first.number_of_directed_edges(), params.json_output);
+        format_cout_with_string_value("second_properties", describe(second), params.json_output);
+        format_cout_with_int_value("second_vertices", second.size(), params.json_output);
+        format_cout_with_int_value("second_directed_edges", second.number_of_directed_edges(), params.json_output);
 
+        std::optional<std::ofstream> file_out;
+        bool first_mapping = true;
         if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) {
-                cout << "mapping = ";
-                for (auto v : mapping)
-                    cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
-                cout << endl;
-            };
+            if (options_vars.count("mappings-to-json")) {
+                string filename = options_vars["mappings-to-json"].as<std::string>();
+                if (!filename.ends_with(".json"))
+                    filename += ".json";
+
+                file_out.emplace(filename);
+                if (!file_out->is_open())
+                    throw std::runtime_error("Could not open file " + filename + " for writing.");
+
+                *file_out << "{\"mappings\": [[";
+                params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> void {
+                    if (!first_mapping) *file_out << ",[";
+                    first_mapping = false;
+
+                    *file_out << "[";
+                    bool first_pair = true;
+                    for (auto & v : mapping) {
+                        if (!first_pair) *file_out << ",";
+                        first_pair = false;
+
+                        *file_out << "{"
+                                  << R"("pattern_vertex":")" << first.vertex_name(v.first) << "\","
+                                  << R"("target_vertex":")"  << second.vertex_name(v.second) << "\""
+                                  << "}";
+                    }
+                    *file_out << "]";
+                };
+            }
+            else if (options_vars.count("json")) {
+                params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> void {
+                    if (!first_mapping) cout << ",[";
+                    else
+                        cout << "\"mappings\": [[";
+                    first_mapping = false;
+
+                    bool first_pair = true;
+                    for (auto & v : mapping) {
+                        if (!first_pair) cout << ",";
+                        first_pair = false;
+
+                        cout << "{"
+                                  << R"("pattern_vertex":")" << first.vertex_name(v.first) << "\","
+                                  << R"("target_vertex":")"  << second.vertex_name(v.second) << "\""
+                                  << "}";
+                    }
+                    cout << "]";
+                };
+            }
+            else {
+                params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> void {
+                    cout << "mapping = ";
+                    for (auto v : mapping)
+                        cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
+                    cout << endl;
+                };
+            }
         }
 
         if (options_vars.count("prove")) {
@@ -152,8 +216,8 @@ auto main(int argc, char * argv[]) -> int
                 .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
-            cout << "proof_model = " << fn << ".opb" << endl;
-            cout << "proof_log = " << fn << ".pbp" << endl;
+            format_cout_with_string_value("proof_model", fn + ".opb", params.json_output);
+            format_cout_with_string_value("proof_log", fn + ".pbp", params.json_output);
         }
 
         /* Prepare and start timeout */
@@ -169,32 +233,86 @@ auto main(int argc, char * argv[]) -> int
 
         params.timeout->stop();
 
-        cout << "status = ";
-        if (params.timeout->aborted())
-            cout << "aborted";
-        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
-            cout << "true";
-        else
-            cout << "false";
-        cout << endl;
-
-        if (params.count_solutions)
-            cout << "solution_count = " << result.solution_count << endl;
-
-        cout << "nodes = " << result.nodes << endl;
-
-        if (! result.mapping.empty() && ! options_vars.count("print-all-solutions")) {
-            cout << "size = " << result.mapping.size() << endl;
-            cout << "mapping = ";
-            for (auto v : result.mapping)
-                cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
-            cout << endl;
+        if (options_vars.count("print-all-solutions")) {
+            if (options_vars.count("mappings-to-json")) {
+                if (file_out && file_out->is_open()) {
+                    *file_out << "]}" << endl;
+                    file_out->close();
+                }
+            }
+            if (options_vars.count("json") and result.solution_count > 0) {
+                cout << "]," << endl;
+            }
         }
 
-        cout << "runtime = " << overall_time.count() << endl;
+        const std::string status =
+            params.timeout->aborted() ? "aborted" :
+            ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0)) ? "true" :
+            "false";
+        format_cout_with_string_value("status", status, params.json_output);
+
+        if (params.count_solutions)
+            format_cout_with_string_value("solution_count", result.solution_count.to_string(), params.json_output);
+
+        format_cout_with_int_value("nodes", result.nodes, params.json_output);
+
+        if (! result.mapping.empty() && ! options_vars.count("print-all-solutions")) {
+            format_cout_with_int_value("size", result.mapping.size(), params.json_output);
+            if (options_vars.count("mappings-to-json")) {
+                string filename = options_vars["mappings-to-json"].as<std::string>();
+                if (!filename.ends_with(".json"))
+                    filename += ".json";
+
+                file_out.emplace(filename);
+                if (!file_out->is_open())
+                    throw std::runtime_error("Could not open file " + filename + " for writing.");
+
+                *file_out << "{\"mapping\": [";
+                bool first_pair = true;
+
+                for (auto & v : result.mapping) {
+                    if (!first_pair) *file_out << ",";
+                    first_pair = false;
+
+                    *file_out << "{"
+                                << R"("pattern_vertex":")" << first.vertex_name(v.first) << "\","
+                                << R"("target_vertex":")"  << second.vertex_name(v.second) << "\""
+                                << "}";
+                }
+                *file_out << "]}" << endl;
+                file_out->close();
+            }
+            else if (options_vars.count("json")) {
+                cout << "\"mapping\": [";
+                bool first_pair = true;
+
+                for (auto & v : result.mapping) {
+                    if (!first_pair) cout << ",";
+                    first_pair = false;
+
+                    cout << "{"
+                              << R"("pattern_vertex":")" << first.vertex_name(v.first) << "\","
+                              << R"("target_vertex":")"  << second.vertex_name(v.second) << "\""
+                              << "}";
+                }
+                cout << "]," << endl;
+            }
+            else {
+                cout << "mapping = ";
+                for (auto v : result.mapping)
+                    cout << "(" << first.vertex_name(v.first) << " -> " << second.vertex_name(v.second) << ") ";
+                cout << endl;
+            }
+        }
+
+        format_cout_with_int_value("runtime", overall_time.count(), params.json_output);
 
         for (const auto & s : result.extra_stats)
             cout << s << endl;
+
+        if (params.json_output)
+
+            cout << "}" << endl;
 
         return EXIT_SUCCESS;
     }

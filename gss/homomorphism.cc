@@ -8,6 +8,7 @@
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/proof.hh>
 #include <gss/innards/thread_utils.hh>
+#include <gss/utils/cout_formatting.hh>
 
 #include <algorithm>
 #include <atomic>
@@ -166,14 +167,15 @@ namespace
             }
 
             if (params.restarts_schedule->might_restart())
-                result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
+                result.extra_stats.emplace_back(format_extra_results("restarts", to_string(number_of_restarts), params.json_output));
 
-            result.extra_stats.emplace_back("shape_graphs = " + to_string(model.max_graphs));
 
-            result.extra_stats.emplace_back("search_time = " + to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+            result.extra_stats.emplace_back(format_extra_results("shape_graphs", to_string(model.max_graphs), params.json_output));
+
+            result.extra_stats.emplace_back(format_extra_results("search_time", to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()), params.json_output));
 
             if (might_have_watches(params)) {
-                result.extra_stats.emplace_back("nogoods_size = " + to_string(searcher.watches.nogoods.size()));
+                result.extra_stats.emplace_back(format_extra_results("nogoods_size", to_string(searcher.watches.nogoods.size()), params.json_output));
 
                 map<int, int> nogoods_lengths;
                 for (auto & n : searcher.watches.nogoods)
@@ -184,7 +186,10 @@ namespace
                     nogoods_lengths_str += " ";
                     nogoods_lengths_str += to_string(n.first) + ":" + to_string(n.second);
                 }
-                result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
+
+                // do check for nogoods_size check
+                if (searcher.watches.nogoods.size() != 0)
+                    result.extra_stats.emplace_back(format_extra_results("nogoods_lengths", nogoods_lengths_str, params.json_output));
             }
 
             model.add_extra_stats(result.extra_stats);
@@ -394,9 +399,9 @@ namespace
                     th.join();
             }
 
-            common_result.extra_stats.emplace_back("by_thread_nodes =" + by_thread_nodes);
-            common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
-            common_result.extra_stats.emplace_back("search_time = " + to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+            common_result.extra_stats.emplace_back(format_extra_results("by_thread_nodes", by_thread_nodes, params.json_output));
+            common_result.extra_stats.emplace_back(format_extra_results("by_thead_propagations", by_thread_propagations, params.json_output));
+            common_result.extra_stats.emplace_back(format_extra_results("search_time", to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()), params.json_output));
 
             return common_result;
         }
@@ -494,7 +499,7 @@ auto gss::solve_homomorphism_problem(
     // does the target have loops, and are we looking for a single non-injective mapping?
     if ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback) {
         HomomorphismResult result;
-        result.extra_stats.emplace_back("used_loops_property = true");
+        result.extra_stats.emplace_back(format_extra_results("used_loops_property", "true", params.json_output));
         result.complete = true;
         int loop = -1;
         for (int t = 0; t < target.size(); ++t)
@@ -531,7 +536,7 @@ auto gss::solve_homomorphism_problem(
         }
         result.nodes = clique_result.nodes;
         result.extra_stats = move(clique_result.extra_stats);
-        result.extra_stats.emplace_back("used_clique_solver = true");
+        result.extra_stats.emplace_back(format_extra_results("used_clique_solver", "true", params.json_output));
         result.complete = clique_result.complete;
 
         return result;
@@ -542,7 +547,7 @@ auto gss::solve_homomorphism_problem(
 
         if (! model.prepare()) {
             HomomorphismResult result;
-            result.extra_stats.emplace_back("model_consistent = false");
+            result.extra_stats.emplace_back(format_extra_results("model_consistent", "false", params.json_output));
             result.complete = true;
             if (proof)
                 proof->finish_unsat_proof();

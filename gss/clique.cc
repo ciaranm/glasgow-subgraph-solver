@@ -1,3 +1,5 @@
+#include "utils/cout_formatting.hh"
+
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/innards/proof.hh>
@@ -634,7 +636,7 @@ namespace
             }
 
             if (params.restarts_schedule->might_restart())
-                result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
+                result.extra_stats.emplace_back(format_extra_results("restarts", to_string(number_of_restarts), params.json_output));
 
             if (proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
                 proof->finish_unsat_proof();

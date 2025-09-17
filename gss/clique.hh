@@ -64,6 +64,9 @@ namespace gss
 
         /// If logging proofs, adjust the objective if solving MCS
         std::optional<int> adjust_objective_for_mcs = std::nullopt;
+
+        /// Log results to json
+        bool json_output= false;
     };
 
     struct CliqueResult

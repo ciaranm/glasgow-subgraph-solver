@@ -40,6 +40,9 @@ namespace gss
 
         /// Solve using the clique algorithm instead?
         bool clique = false;
+
+        /// Log results to json
+        bool json_output = false;
     };
 
     struct CommonSubgraphResult
