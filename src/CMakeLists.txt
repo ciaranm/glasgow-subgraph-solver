@@ -4,9 +4,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 link_libraries(glasgow_subgraphs)
 
 add_executable(glasgow_subgraph_solver glasgow_subgraph_solver.cc)
-target_link_libraries(glasgow_subgraph_solver PRIVATE
-        cxxopts
-)
+target_link_libraries(glasgow_subgraph_solver PRIVATE cxxopts)
 
 add_executable(glasgow_clique_solver glasgow_clique_solver.cc)
 target_link_libraries(glasgow_clique_solver PRIVATE cxxopts)

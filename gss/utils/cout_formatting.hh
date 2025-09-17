@@ -1,6 +1,7 @@
 #ifndef GLASGOW_SUBGRAPH_SOLVER_COUT_FORMATTING_HH
 #define GLASGOW_SUBGRAPH_SOLVER_COUT_FORMATTING_HH
-#include <__fwd/string.h>
+
+#include <string>
 
 using std::string;
 
