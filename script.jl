@@ -10,16 +10,23 @@ struct Options
     trace::Bool     # veripb trace
     profiling::Bool # profiling
     timelimit::Int # time limit
+    rand::Bool # randomize the instances
 end
 function parseargs(args)
     ins = ""
-    bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
-    pbopath = "/home/arthur_gla/veriPB/subgraphsolver/pboxide-dev"
-    solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"
-    proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
+    # bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
+    bench = "/users/grad/arthur/newSIPbenchmarks"
+    # pbopath = "/home/arthur_gla/veriPB/subgraphsolver/pboxide-dev"
+    pbopath = "/users/grad/arthur/pboxide-dev"
+    # solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
+    solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
+    # proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
+    # proofs = "/home/arthur_gla/veriPB/subgraphsolver/nolabelsproofs"
+    proofs = "/scratch/arthur/proofs/"
     veripb = true
     trace = false
     prof = false
+    rand = false
     insid = ""
     tl = 600
     for (i, arg) in enumerate(args)
@@ -27,11 +34,12 @@ function parseargs(args)
         if arg in ["--trace","-trace","trace"] trace = true end
         if arg in ["--profiling","-profiling","profiling","prof","-prof","--prof"] prof = true end
         if arg in ["--trace","-trace","trace","-tr","tr"] trace = true end
+        if arg in ["rand","random"] rand = true end
         if arg in ["noveripb","nv"] veripb = false end
         if arg in ["timelimit","tl"] tl = parse(Int, args[i+1]) end
         if arg in ["insid","ins"] insid = args[i+1] end
     end
-    return Options(ins,insid,bench,pbopath,solveurpath,proofs,veripb,trace,prof,tl)
+    return Options(ins,insid,bench,pbopath,solveurpath,proofs,veripb,trace,prof,tl,rand)
 end
 const CONFIG = parseargs(ARGS)
 const benchs = CONFIG.bench 
@@ -44,8 +52,11 @@ function main()
     cd(solver)
     try run(`make`)
     catch e println(e) end
-    # run_bio_solver()
+    if "bio" in ARGS
+    run_bio_solver()
+    else 
     run_LV_solver()
+    end
 end
 function run_bio_solver()
     path = string(benchs,"/biochemicalReactions")
@@ -62,9 +73,16 @@ function run_bio_solver()
         end
     else
     t=0
-    for target in graphs[1:end], pattern in graphs[1:end]
-        # target = graphs[rand(1:n)]
-        # pattern = graphs[rand(1:n)]
+    stats = [stat(path*'/'*file).size for file in graphs]
+    println("stats: ", stats)
+    p = sortperm(stats)
+    for i in eachindex(graphs), j in eachindex(graphs)
+        if CONFIG.rand
+            i = rand(1:length(graphs))
+            j = rand(1:length(graphs))
+        end
+        pattern = graphs[p[i]]
+        target = graphs[p[j]]
         # t+=1
         # if t>30 break end
         theokbigs = ["bio055013","bio064013","bio066013","bio122013","bio123013","bio002014"]
@@ -89,22 +107,6 @@ function run_bio_solver()
         end
     end end
 end
-#=
-julia GlasgowPB3trimnalyser.jl LVg6g12 cshow
-julia GlasgowPB3trimnalyser.jl LVg7g71 cshow
-julia GlasgowPB3trimnalyser.jl LVg11g72 cshow
-julia GlasgowPB3trimnalyser.jl LVg17g19 cshow ?
-julia GlasgowPB3trimnalyser.jl LVg18g59 cshow
-julia GlasgowPB3trimnalyser.jl LVg16g58 cshow
-julia GlasgowPB3trimnalyser.jl LVg12g62 cshow
-
-julia GlasgowPB3trimnalyser.jl LVg26g100 cshow
-solve 14s
-LVg26g100 & 63.85 MB &          & 4.682 MB & 0    & 0    & 40.6 ( 4.97 34.4 1.22 0 ) \\\hline
-
-
-remarques, inj1 n'est pas utilise mais deg36=1 l'est
-=#
 function run_LV_solver()
     path = string(benchs,"/LV")
     cd()
@@ -127,10 +129,14 @@ function run_LV_solver()
     println("stats: ", stats)
     p = sortperm(stats)
     for i in eachindex(graphs), j in eachindex(graphs)
+        if CONFIG.rand
+            i = rand(1:length(graphs))
+            j = rand(1:length(graphs))
+        end
         pattern = graphs[p[i]]
         target = graphs[p[j]]
     # for target in graphs[1:end], pattern in graphs[1:end]
-        if pattern != target
+        if pattern != target && !(pattern in ["g2","g3"])
             ins = string("LV",pattern,target)
             solve(ins,path,pattern,path,target,"lad")
             if isfile(String("$proofs/$ins$extention"))
@@ -148,7 +154,7 @@ function run_LV_solver()
         end
     end end
 end
-function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000,maxsize=50_000_000,remake=true,verbose=false)
+function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000_000,maxsize=10_000_000,remake=true,verbose=false)
     if remake || !isfile(string(proofs,"/",ins,".opb")) || !isfile(string(proofs,"/",ins,extention)) || 
             length(read(`tail -n 1 $proofs/$ins$extention`,String)) < 24 ||
             read(`tail -n 1 $proofs/$ins$extention`,String)[1:24] != "end pseudo-Boolean proof"
@@ -170,15 +176,16 @@ function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000,maxsize=5
         t+=0.01
         ok = false
         print(prettytime(t))
+        size = stat(string(proofs,"/",ins,extention)).size
         if t>tl
             printstyled(" timeout "; color = :red)
         elseif read(`tail -n 2 $proofs/$ins$extention`,String)[1:14] == "conclusion SAT"
             printstyled(" sat     "; color = 166)
-        elseif minsize > stat(string(proofs,"/",ins,extention)).size            
-            printstyled(" toosmal "; color = :yellow)
-        elseif maxsize < stat(string(proofs,"/",ins,extention)).size            
-            printstyled(" toobig "; color = :red)
-        else printstyled(" OK      "; color = :green)
+        elseif minsize > size            
+            printstyled(" toosmal ",prettybytes(size); color = :yellow)            
+        elseif maxsize < size            
+            printstyled(" toobig  ",prettybytes(size); color = :red)
+        else printstyled(" OK      ",prettybytes(size); color = :green)
             ok = true
             # g = ladtograph(pathpat,pattern)
             # draw(PNG(string(proofs,"/aimg/graphs/",ins,pattern[1:3],".png"), 16cm, 16cm), gplot(g))
@@ -224,4 +231,81 @@ function prettytime(b)
         return  string(round(b; sigdigits=3))
     end
 end
+function prettybytes(b)
+    if b>=10^9
+        return string(round(b/(10^9); sigdigits=4)," GB")
+    elseif b>=10^6
+        return string(round(b/(10^6); sigdigits=4)," MB")
+    elseif b>=10^3
+        return string(round(b/(10^3); sigdigits=4)," KB")
+    else
+        return  string(round(b; sigdigits=4)," B")
+    end
+end 
 main()
+
+
+
+#=
+julia GlasgowPB3trimnalyser.jl LVg6g12 cshow
+julia GlasgowPB3trimnalyser.jl LVg7g71 cshow
+julia GlasgowPB3trimnalyser.jl LVg11g72 cshow
+julia GlasgowPB3trimnalyser.jl LVg17g19 cshow ?
+julia GlasgowPB3trimnalyser.jl LVg18g59 cshow
+julia GlasgowPB3trimnalyser.jl LVg16g58 cshow
+julia GlasgowPB3trimnalyser.jl LVg12g62 cshow
+
+ julia script.jl ins g6g12 nv
+
+julia GlasgowPB3trimnalyser.jl LVg26g100 cshow
+solve 14s
+LVg26g100 & 63.85 MB &          & 4.682 MB & 0    & 0    & 40.6 ( 4.97 34.4 1.22 0 ) \\\hline
+
+LVg26g100 & 62.83 MB &          & 5.073 MB & 0    & 0    & 46.5 (5.59 39.9 0.93 0   ) \\\hline
+
+conflict analysis
+                                  4.085 MB                 48.6  5.64 42.1 0.84 0
+ca + wtrim
+                                  4.085 MB                 46.6  4.59 41.1 0.91 0
+ca + wtrim + @labels
+                                  4.982 MB                 44.5  4.37 39.2 0.93 0
+remarques, inj1 n'est pas utilise mais deg36=1 l'est
+
+
+berhan watch list a pleins d'elements ce qui est bizare.
+mais ce qui tue le truc c'est qu'il faut parcourir toute la liste pour trouver le dernier element et le supprimer.
+ca peut venir du fait que on regarde le defered set et qu'on ne compute pas le slack de ces contraintes
+quand on regarde le code de veripb meme quand on suprime la database complete, on a pas ca parce que les watched literaux on ete update par des rup call.
+
+dans la propagation tu ajoute dans les watched literal tous les lits et du coup tu galere a  les suprimer.
+
+
+nice instances 
+LVg3g52 & 10.92 MB & 582.9 KB & 194.6 KB & 3.25 & 4.82 & 5.67 (0.8  4.61 0.01 0.25) \\\hline
+
+
+
+weird instances.
+LVg3g17 & 1.665 MB & 499.4 KB & 643.8 KB & 0.46 & 0.79 & 1.19 (0.21 0.66 0.02 0.3 ) \\\hline
+LVg2g80 & 5.219 MB & 6.455 MB & 414.1 KB & 44.2 & 12.5 & 100.0(2.7  96.5 0.16 0.86) \\\hline
+LVg3g41 & 8.664 MB & 6.284 MB & 421.1 KB & 45.3 & 46.4 & 261.0(4.72 245.01.02 9.94) \\\hline
+
+LVg3g39 & 6.552 MB & 4.058 MB & 328.6 KB & 30.0 & 28.4 & 168.0(3.27 157.00.88 6.79) \\\hline
+
+bio027085 & 2.922 MB & 333.2 KB & 75.15 KB & 4.28 & 32.4 & 3.7  (2.35 0.98 0.02 0.35) \\\hline
+
+bio068087 & 6.905 MB & 6.235 MB & 292.0 KB & 9.64 & 125.0& 18.3 (8.09 9.37 0.05 0.81) \\\hline
+bio084056 & 12.74 MB &          &          & 21.9 &      &      (                   ) \\\hline
+
+
+bio169086 & 16.12 MB & 7.491 MB & 106.5 KB & 16.4 & 126.0& 23.6 (11.2 10.0 1.79 0.57) \\\hline
+
+bio092151 & 14.28 MB & 22.42 MB & 1.194 MB & 18.8 & 871.0& 73.2 (23.2 47.9 0.11 1.99) \\\hline
+
+bio171015 & 14.93 MB & 27.89 MB & 1.092 MB & 146.0& 268.0& 1500 (9.35 1370.8.95 114) \\\hline
+bio170075 & 18.54 MB & 14.15 MB & 585.5 KB & 192.0& 173.0& 571.0(15.3 523.02.26 30.8) \\\hline
+
+bio068151 & 19.0 MB  &          &          & 44.1^C
+
+a surveiller bio037111 elle parais hyper longue.
+=#
