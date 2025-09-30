@@ -14,16 +14,16 @@ struct Options
 end
 function parseargs(args)
     ins = ""
-    # bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
-    bench = "/users/grad/arthur/newSIPbenchmarks"
-    # pbopath = "/home/arthur_gla/veriPB/subgraphsolver/pboxide-dev"
-    pbopath = "/users/grad/arthur/pboxide-dev"
-    # solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
-    solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
-    # proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
+    bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
+    # bench = "/users/grad/arthur/newSIPbenchmarks"
+    pbopath = "/home/arthur_gla/veriPB/subgraphsolver/pboxide-dev"
+    # pbopath = "/users/grad/arthur/pboxide-dev"
+    solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
+    # solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
+    proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
     # proofs = "/home/arthur_gla/veriPB/subgraphsolver/nolabelsproofs"
-    proofs = "/scratch/arthur/proofs/"
-    veripb = true
+    # proofs = "/scratch/arthur/proofs/"
+    veripb = false
     trace = false
     prof = false
     rand = false
@@ -35,7 +35,7 @@ function parseargs(args)
         if arg in ["--profiling","-profiling","profiling","prof","-prof","--prof"] prof = true end
         if arg in ["--trace","-trace","trace","-tr","tr"] trace = true end
         if arg in ["rand","random"] rand = true end
-        if arg in ["noveripb","nv"] veripb = false end
+        if arg in ["veripb","verif"] veripb = true end
         if arg in ["timelimit","tl"] tl = parse(Int, args[i+1]) end
         if arg in ["insid","ins"] insid = args[i+1] end
     end

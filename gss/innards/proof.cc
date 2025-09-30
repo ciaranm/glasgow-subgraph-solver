@@ -110,7 +110,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
 
     _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
     stringstream al1_constraint;
-    // al1_constraint << "@D" << pattern_vertex << " ";
+    al1_constraint << "@D" << pattern_vertex << " ";
     for (int i = 0; i < target_size; ++i)
         al1_constraint << "1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
     al1_constraint << ">= 1";
@@ -119,7 +119,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     _imp->at_least_one_value_constraints.emplace(pattern_vertex, tuple{n, _imp->recover_encoding ? 0 : n, al1_constraint.str()});
 
     stringstream am1_constraint;
-    // am1_constraint << "@D" << pattern_vertex << "m ";
+    am1_constraint << "@D" << pattern_vertex << "m ";
     for (int i = 0; i < target_size; ++i)
         am1_constraint << "-1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
     am1_constraint << ">= -1";
@@ -133,7 +133,7 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size) ->
     for (int v = 0; v < target_size; ++v) {
         _imp->model_stream << "* injectivity on value " << v << '\n';
         stringstream injectivity_constraint;
-        // injectivity_constraint << "@inj" << v << " ";
+        injectivity_constraint << "@inj" << v << " ";
         for (int p = 0; p < pattern_size; ++p) {
             auto x = _imp->variable_mappings.find(pair{p, v});
             if (x != _imp->variable_mappings.end())
@@ -164,7 +164,7 @@ auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> &
 {
     if (! _imp->recover_encoding) {
         stringstream adjacency_constraint;
-        // adjacency_constraint << "@a" << p << "e" << t << "i" << q << " ";
+        adjacency_constraint << "@a" << p << "e" << t << "i" << q << " ";
         adjacency_constraint << "1 ~x" << _imp->variable_mappings[pair{p, t}];
         for (auto & u : uu)
             if (cancel.end() == find(cancel.begin(), cancel.end(), u))
@@ -347,7 +347,7 @@ auto Proof::incompatible_by_degrees(
             recover_injectivity_constraint(n);
     }
 // /*
-    // *_imp->proof_stream << "@degp" << p.second << "e" << t.second << " ";
+    *_imp->proof_stream << "@degp" << p.second << "e" << t.second << " ";
 
     *_imp->proof_stream << "pol";
     bool first = true;
@@ -370,7 +370,7 @@ auto Proof::incompatible_by_degrees(
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
     
-    // *_imp->proof_stream << "@degi" << p.second << "e" << t.second << " ";
+    *_imp->proof_stream << "@degi" << p.second << "e" << t.second << " ";
     
     *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
@@ -521,7 +521,7 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
 auto Proof::propagation_failure(const vector<pair<int, int>> & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
     *_imp->proof_stream << "% [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << '\n';
-    // *_imp->proof_stream << "@fail" << branch_v.second << "e" << val.second << " ";
+    *_imp->proof_stream << "@fail" << branch_v.second << "e" << val.second << " ";
     *_imp->proof_stream << "rup ";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
@@ -683,7 +683,7 @@ auto Proof::create_exact_path_graphs(
     }
 
     *_imp->proof_stream << "setlvl 1;\n";
-    // *_imp->proof_stream << "@G" << g << "x2ap" << p.second << "e" << t.second << "i" << q.second << " ";
+    *_imp->proof_stream << "@G" << g << "x2ap" << p.second << "e" << t.second << "i" << q.second << " ";
     *_imp->proof_stream << "pol";
 
     // if p maps to t then things in between_p_and_q have to go to one of these...
@@ -709,7 +709,7 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
-    // *_imp->proof_stream << "@G" << g << "x2ai" << p.second << "e" << t.second << "i" << q.second << " ";
+    *_imp->proof_stream << "@G" << g << "x2ai" << p.second << "e" << t.second << "i" << q.second << " ";
     *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : two_away_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first.first}];
@@ -763,7 +763,7 @@ auto Proof::create_exact_path_graphs(
     // do the getting rid of
     if (things_to_add_up.size() > 1) {
         bool first = true;
-        // *_imp->proof_stream << "@G" << g << "x2app" << p.second << "e" << t.second << e << q.second << " ";
+        *_imp->proof_stream << "@G" << g << "x2app" << p.second << "e" << t.second << "i" << q.second << " ";
         *_imp->proof_stream << "pol";
         for (auto & t : things_to_add_up) {
             *_imp->proof_stream << " " << t;
@@ -776,7 +776,7 @@ auto Proof::create_exact_path_graphs(
     }
 
     *_imp->proof_stream << "setlvl 0;\n";
-    // *_imp->proof_stream << "@G" << g << "x2aii" << p.second << "e" << t.second << "i" << q.second << " ";
+    *_imp->proof_stream << "@G" << g << "x2aii" << p.second << "e" << t.second << "i" << q.second << " ";
     *_imp->proof_stream << "ia " << tidied_up.str() << " " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, tuple{_imp->proof_line, _imp->proof_line, ""});
