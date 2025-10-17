@@ -108,7 +108,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     for (int i = 0; i < target_size; ++i)
         _imp->variable_mappings.emplace(pair{pattern_vertex, i}, pattern_name(pattern_vertex) + "_" + target_name(i));
 
-    _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
+    _imp->model_stream << "% vertex " << pattern_vertex << " domain\n";
     stringstream al1_constraint;
     for (int i = 0; i < target_size; ++i)
         al1_constraint << "1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
@@ -129,7 +129,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
 auto Proof::create_injectivity_constraints(int pattern_size, int target_size) -> void
 {
     for (int v = 0; v < target_size; ++v) {
-        _imp->model_stream << "* injectivity on value " << v << '\n';
+        _imp->model_stream << "% injectivity on value " << v << '\n';
         stringstream injectivity_constraint;
 
         for (int p = 0; p < pattern_size; ++p) {
@@ -154,7 +154,7 @@ auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
 
 auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 {
-    _imp->model_stream << "* adjacency " << p << " maps to " << t << '\n';
+    _imp->model_stream << "% adjacency " << p << " maps to " << t << '\n';
 }
 
 auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu, const vector<int> & cancel,
@@ -193,8 +193,8 @@ auto Proof::finalise_model() -> void
 {
     unique_ptr<ostream> f = make_unique<ofstream>(_imp->opb_filename);
 
-    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
-       << " #constraint= " << _imp->nb_constraints << '\n';
+    *f << "% #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
+       << " #constraint= " << _imp->nb_constraints << ";\n";
     copy(istreambuf_iterator<char>{_imp->model_prelude_stream}, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{*f});
     _imp->model_prelude_stream.clear();
     copy(istreambuf_iterator<char>{_imp->model_stream}, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{*f});
@@ -205,7 +205,7 @@ auto Proof::finalise_model() -> void
 
     _imp->proof_stream = make_unique<ofstream>(_imp->log_filename);
 
-    *_imp->proof_stream << "pseudo-Boolean proof version 3.0\n";
+    *_imp->proof_stream << "pseudo-Boolean proof version 3.0;\n";
 
     *_imp->proof_stream << "f " << _imp->nb_constraints << " ;\n";
     _imp->proof_line += _imp->nb_constraints;
@@ -226,24 +226,24 @@ auto Proof::finish_unsat_proof() -> void
 
 auto Proof::finish_sat_proof() -> void
 {
-    *_imp->proof_stream << "output NONE\n"
-        << "conclusion SAT\n"
-        << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE;\n"
+        << "conclusion SAT;\n"
+        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::finish_unknown_proof() -> void
 {
-    *_imp->proof_stream << "output NONE\n"
-        << "conclusion NONE\n"
-        << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE;\n"
+        << "conclusion NONE;\n"
+        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::finish_optimisation_proof(int size) -> void
 {
     *_imp->proof_stream << "rup" << _imp->objective_sum.str() << " >= " << size << ";\n";
-    *_imp->proof_stream << "output NONE\n"
-        << "conclusion BOUNDS " << size << " " << size << '\n'
-        << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE;\n"
+        << "conclusion BOUNDS " << size << " " << size << ";\n"
+        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::failure_due_to_pattern_bigger_than_target() -> void
@@ -587,7 +587,7 @@ auto Proof::post_solution(const vector<int> & solution) -> void
     *_imp->proof_stream << "solx";
     for (auto & v : solution)
         *_imp->proof_stream << " x" << _imp->binary_variable_mappings[v];
-    *_imp->proof_stream << '\n';
+    *_imp->proof_stream << ";\n";
     ++_imp->proof_line;
 }
 
@@ -608,7 +608,7 @@ auto Proof::new_incumbent(const vector<tuple<NamedVertex, NamedVertex, bool>> & 
     *_imp->proof_stream << "o";
     for (auto & [var, val, t] : decisions)
         *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->variable_mappings[pair{var.first, val.first}];
-    *_imp->proof_stream << '\n';
+    *_imp->proof_stream << ";\n";
     _imp->objective_line = ++_imp->proof_line;
 }
 
@@ -1036,7 +1036,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
                 *_imp->proof_stream << " " << (i + 1) << " d";
             }
 
-            *_imp->proof_stream << '\n';
+            *_imp->proof_stream << ";\n";
             to_sum.push_back(++_imp->proof_line);
         }
         else if (cc.size() == 2) {
@@ -1076,7 +1076,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
 
         for (auto & t : to_sum)
             *_imp->proof_stream << " " << t << " +";
-        *_imp->proof_stream << '\n';
+        *_imp->proof_stream << ";\n";
         ++_imp->proof_line;
     }
 }
@@ -1113,7 +1113,7 @@ auto Proof::start_hom_clique_proof(const NamedVertex & p, vector<NamedVertex> &&
             *_imp->proof_stream << " +";
         first = false;
     }
-    *_imp->proof_stream << '\n';
+    *_imp->proof_stream << ";\n";
     _imp->objective_line = ++_imp->proof_line;
 
     *_imp->proof_stream << "% hom clique non edges for injectivity\n";
@@ -1208,7 +1208,7 @@ auto Proof::mcs_bound(
         for (auto & v : r)
             *_imp->proof_stream << " " << get<1>(_imp->injectivity_constraints[v]) << " +";
 
-        *_imp->proof_stream << '\n';
+        *_imp->proof_stream << ";\n";
         to_sum.push_back(to_string(++_imp->proof_line));
     }
 
@@ -1216,7 +1216,7 @@ auto Proof::mcs_bound(
         *_imp->proof_stream << "pol  " << _imp->objective_line;
         for (auto & t : to_sum)
             *_imp->proof_stream << " " << t << " +";
-        *_imp->proof_stream << '\n';
+        *_imp->proof_stream << ";\n";
         ++_imp->proof_line;
     }
 }
@@ -1228,7 +1228,7 @@ auto Proof::rewrite_mcs_objective(int pattern_size) -> void
         *_imp->proof_stream << "pol  " << _imp->objective_line;
         for (int v = 0; v < pattern_size; ++v)
             *_imp->proof_stream << " " << get<1>(_imp->at_most_one_value_constraints[v]) << " +";
-        *_imp->proof_stream << '\n';
+        *_imp->proof_stream << ";\n";
         _imp->objective_line = ++_imp->proof_line;
     }
 }
