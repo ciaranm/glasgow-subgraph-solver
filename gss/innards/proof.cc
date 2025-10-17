@@ -108,7 +108,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     for (int i = 0; i < target_size; ++i)
         _imp->variable_mappings.emplace(pair{pattern_vertex, i}, pattern_name(pattern_vertex) + "_" + target_name(i));
 
-    _imp->model_stream << "% vertex " << pattern_vertex << " domain\n";
+    _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
     stringstream al1_constraint;
     for (int i = 0; i < target_size; ++i)
         al1_constraint << "1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
@@ -129,7 +129,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
 auto Proof::create_injectivity_constraints(int pattern_size, int target_size) -> void
 {
     for (int v = 0; v < target_size; ++v) {
-        _imp->model_stream << "% injectivity on value " << v << '\n';
+        _imp->model_stream << "* injectivity on value " << v << '\n';
         stringstream injectivity_constraint;
 
         for (int p = 0; p < pattern_size; ++p) {
@@ -146,7 +146,7 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size) ->
 
 auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
 {
-    _imp->model_stream << "% forbidden assignment\n";
+    _imp->model_stream << "* forbidden assignment\n";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
     ++_imp->nb_constraints;
     _imp->eliminations.emplace(pair{p, t}, _imp->nb_constraints);
@@ -154,7 +154,7 @@ auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
 
 auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 {
-    _imp->model_stream << "% adjacency " << p << " maps to " << t << '\n';
+    _imp->model_stream << "* adjacency " << p << " maps to " << t << '\n';
 }
 
 auto Proof::create_adjacency_constraint(int p, int q, int t, const vector<int> & uu, const vector<int> & cancel,
@@ -193,7 +193,7 @@ auto Proof::finalise_model() -> void
 {
     unique_ptr<ostream> f = make_unique<ofstream>(_imp->opb_filename);
 
-    *f << "% #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
+    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
        << " #constraint= " << _imp->nb_constraints << ";\n";
     copy(istreambuf_iterator<char>{_imp->model_prelude_stream}, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{*f});
     _imp->model_prelude_stream.clear();
@@ -205,7 +205,7 @@ auto Proof::finalise_model() -> void
 
     _imp->proof_stream = make_unique<ofstream>(_imp->log_filename);
 
-    *_imp->proof_stream << "pseudo-Boolean proof version 3.0;\n";
+    *_imp->proof_stream << "pseudo-Boolean proof version 3.0\n";
 
     *_imp->proof_stream << "f " << _imp->nb_constraints << " ;\n";
     _imp->proof_line += _imp->nb_constraints;
@@ -279,7 +279,7 @@ auto Proof::recover_adjacency_lines(int g, int p, int n, int t) -> void
     auto it = _imp->adjacency_lines.find(tuple{g, p, n, t});
     if (it != _imp->adjacency_lines.end() && 0 == get<1>(it->second)) {
         *_imp->proof_stream << "setlvl 0;\n";
-        *_imp->proof_stream << "red " << get<2>(it->second) << ": : ;\n";//TODO: check if this is correct
+        *_imp->proof_stream << "red " << get<2>(it->second) << ";\n";
         get<1>(it->second) = ++_imp->proof_line;
         *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
     }
@@ -914,7 +914,7 @@ auto Proof::create_binary_variable(int vertex,
 auto Proof::create_objective(int n, optional<int> d) -> void
 {
     if (d) {
-        _imp->model_stream << "% objective\n";
+        _imp->model_stream << "* objective\n";
         for (int v = 0; v < n; ++v)
             _imp->model_stream << "1 x" << _imp->binary_variable_mappings[v] << " ";
         _imp->model_stream << ">= " << *d << ";\n";
@@ -945,7 +945,7 @@ auto Proof::create_non_edge_constraint(int p, int q) -> void
 auto Proof::create_null_decision_bound(int p, int t, optional<int> d) -> void
 {
     if (d) {
-        _imp->model_stream << "% objective\n";
+        _imp->model_stream << "* objective\n";
         for (int v = 0; v < p; ++v)
             _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{v, t}] << " ";
         _imp->model_stream << ">= " << *d << " ;\n";
@@ -1235,7 +1235,7 @@ auto Proof::rewrite_mcs_objective(int pattern_size) -> void
 
 auto Proof::create_connected_constraints(int p, int t, const function<auto(int, int)->bool> & adj) -> void
 {
-    _imp->model_stream << "% selected vertices must be connected, walk 1\n";
+    _imp->model_stream << "* selected vertices must be connected, walk 1\n";
     int mapped_to_null = t;
     int cnum = _imp->variable_mappings.size();
 
@@ -1263,7 +1263,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
     int last_k = 0;
     for (int k = 2 ; ; k *= 2) {
         last_k = k;
-        _imp->model_stream << "% selected vertices must be connected, walk " << k << '\n';
+        _imp->model_stream << "* selected vertices must be connected, walk " << k << '\n';
         for (int v = 0; v < p; ++v)
             for (int w = 0; w < v; ++w) {
                 string n = "conn" + to_string(k) + "_" + to_string(v) + "_" + to_string(w);
@@ -1310,7 +1310,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
             break;
     }
 
-    _imp->model_stream << "% if two vertices are used, they must be connected\n";
+    _imp->model_stream << "* if two vertices are used, they must be connected\n";
     for (int v = 0; v < p; ++v)
         for (int w = 0; w < v; ++w) {
             _imp->model_stream << "1 x" << _imp->variable_mappings[pair{v, mapped_to_null}]
