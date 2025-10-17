@@ -29,6 +29,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Fetch VeriPB
+      run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
+
     - name: Install VeriPB using cargo
       run: cargo install --path ./VeriPB
 
