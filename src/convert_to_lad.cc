@@ -2,8 +2,7 @@
 
 #include <iostream>
 
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
+#include <cxxopts.hpp>
 
 using std::cerr;
 using std::cout;
@@ -14,33 +13,22 @@ using std::string;
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        po::options_description display_options{"Program options"};
-        display_options.add_options()            //
-            ("help", "Display help information") //
-            ("format", po::value<string>(), "Specify input file format (auto, lad, labelledlad, dimacs)");
+        cxxopts::Options options("Convert graph to lad format", "Get started by using option --help");
 
-        po::options_description all_options{"All options"};
-        all_options.add_options()("graph-file", "Specify the graph file");
+        options.add_options("Program options")
+            ("help", "Display help information")
+            ("format", "Specify input file format (auto, lad, labelledlad, dimacs)", cxxopts::value<string>());
 
-        all_options.add(display_options);
+        options.add_options()
+            ("graph-file", "Specify the graph file", cxxopts::value<string>());
 
-        po::positional_options_description positional_options;
-        positional_options
-            .add("graph-file", 1);
+        options.parse_positional({"graph-file"});
 
-        po::variables_map options_vars;
-        po::store(po::command_line_parser(argc, argv)
-                      .options(all_options)
-                      .positional(positional_options)
-                      .run(),
-            options_vars);
-        po::notify(options_vars);
+        auto options_vars = options.parse(argc, argv);
 
         /* --help? Show a message, and exit. */
         if (options_vars.count("help")) {
-            cout << "Usage: " << argv[0] << " [options] graph-file" << endl;
-            cout << endl;
-            cout << display_options << endl;
+            cout << options.help() << endl;
             return EXIT_SUCCESS;
         }
 
@@ -76,7 +64,7 @@ auto main(int argc, char * argv[]) -> int
             cerr << "Maybe try specifying --format?" << endl;
         return EXIT_FAILURE;
     }
-    catch (const po::error & e) {
+    catch (const cxxopts::exceptions::exception& e) {
         cerr << "Error: " << e.what() << endl;
         cerr << "Try " << argv[0] << " --help" << endl;
         return EXIT_FAILURE;

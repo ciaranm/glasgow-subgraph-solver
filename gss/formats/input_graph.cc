@@ -1,19 +1,13 @@
 #include <gss/formats/graph_file_error.hh>
 #include <gss/formats/input_graph.hh>
+#include <gss/utils/vertex_name_map.hh>
 
 #include <algorithm>
-#include <cctype>
-#include <cstdint>
 #include <iterator>
 #include <limits>
 #include <map>
 #include <string>
-#include <type_traits>
 #include <vector>
-
-#include <boost/bimap.hpp>
-#include <boost/bimap/unordered_set_of.hpp>
-#include <boost/container/allocator.hpp>
 
 using std::back_inserter;
 using std::count_if;
@@ -36,11 +30,6 @@ using std::to_string;
 using std::transform;
 using std::vector;
 
-using Names = boost::bimap<
-    boost::bimaps::unordered_set_of<int>,
-    boost::bimaps::unordered_set_of<string>,
-    boost::container::allocator<pair<int, string>>>;
-
 namespace
 {
     auto sanity_check_name(string_view name, const char * const explanation) -> void
@@ -59,7 +48,7 @@ struct InputGraph::Imp
     bool has_vertex_labels, has_edge_labels;
     map<pair<int, int>, string> edges;
     vector<string> vertex_labels;
-    Names vertex_names;
+    BiMap vertex_names;
     bool loopy = false, directed = false;
 };
 
@@ -145,14 +134,14 @@ auto InputGraph::vertex_label(int v) const -> string_view
 auto InputGraph::set_vertex_name(int v, string_view l) -> void
 {
     sanity_check_name(l, "vertex name");
-    _imp->vertex_names.left.erase(v);
-    _imp->vertex_names.insert(Names::value_type{v, string{l}});
+    _imp->vertex_names.erase(v);
+    _imp->vertex_names.insert(v, string(l));
 }
 
 auto InputGraph::vertex_name(int v) const -> string
 {
-    auto it = _imp->vertex_names.left.find(v);
-    if (it == _imp->vertex_names.left.end())
+    auto it = _imp->vertex_names.find_left(v);
+    if (it == _imp->vertex_names.id_to_name.end())
         return to_string(v);
     else
         return it->second;
@@ -160,8 +149,8 @@ auto InputGraph::vertex_name(int v) const -> string
 
 auto InputGraph::vertex_from_name(string_view n) const -> optional<int>
 {
-    auto it = _imp->vertex_names.right.find(string{n});
-    if (it == _imp->vertex_names.right.end())
+    auto it = _imp->vertex_names.find_right(string(n));
+    if (it == _imp->vertex_names.name_to_id.end())
         return nullopt;
     else
         return make_optional(it->second);
