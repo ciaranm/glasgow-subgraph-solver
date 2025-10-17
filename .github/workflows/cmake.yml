@@ -29,22 +29,8 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-      if: startsWith(matrix.os, 'ubuntu')
-
-    - name: Fetch VeriPB
-      run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
-
-    - name: Install VeriPB using pip
-      run: pip install ./VeriPB
-      if: startsWith(matrix.os, 'ubuntu')
-
-    - name: Install VeriPB using pipx
-      run: env CPPFLAGS="-I`brew --prefix gmp`/include" LDFLAGS="-L`brew --prefix gmp`/lib" pipx install ./VeriPB
-      if: startsWith(matrix.os, 'macos')
+    - name: Install VeriPB using cargo
+      run: cargo install --path ./VeriPB
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
