@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, ubuntu-24.04, macos-13, macos-14 ]
+        os: [ ubuntu-22.04, ubuntu-24.04, macos-14, macos-latest ] # macos-14 and macos-15 as of 10/25
 
     steps:
     - name: Telling you what the matrix is
