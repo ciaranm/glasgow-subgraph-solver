@@ -229,24 +229,24 @@ auto Proof::finish_unsat_proof() -> void
 
 auto Proof::finish_sat_proof() -> void
 {
-    *_imp->proof_stream << "output NONE\n"
-        << "conclusion SAT\n"
-        << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE;\n"
+        << "conclusion SAT;\n"
+        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::finish_unknown_proof() -> void
 {
-    *_imp->proof_stream << "output NONE\n"
-        << "conclusion NONE\n"
-        << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE;\n"
+        << "conclusion NONE;\n"
+        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::finish_optimisation_proof(int size) -> void
 {
     *_imp->proof_stream << "rup" << _imp->objective_sum.str() << " >= " << size << ";\n";
-    *_imp->proof_stream << "output NONE\n"
-        << "conclusion BOUNDS " << size << " " << size << '\n'
-        << "end pseudo-Boolean proof\n";
+    *_imp->proof_stream << "output NONE;\n"
+        << "conclusion BOUNDS " << size << " ;" << size << '\n'
+        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::failure_due_to_pattern_bigger_than_target() -> void
@@ -492,6 +492,14 @@ auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vec
             recover_at_least_one_constraint(l.first);
     }
 
+    *_imp->proof_stream << "@hall";
+    for (auto & l : lhs)
+        *_imp->proof_stream << "a" << l.second;
+    *_imp->proof_stream << "vs";
+    for (auto & r : rhs)
+        *_imp->proof_stream << "a" << r.second;
+    *_imp->proof_stream << " ";
+
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & l : lhs) {
@@ -536,6 +544,7 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
     else
         *_imp->proof_stream << "% [" << decisions.size() << "] backtracking\n";
 
+    *_imp->proof_stream << "@backtrack ";
     *_imp->proof_stream << "rup";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];

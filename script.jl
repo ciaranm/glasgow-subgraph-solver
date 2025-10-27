@@ -11,23 +11,25 @@ struct Options
     profiling::Bool # profiling
     timelimit::Int # time limit
     rand::Bool # randomize the instances
+    pattern::String # pattern name
+    target::String  # target name
 end
 function parseargs(args)
     ins = ""
     bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
     # bench = "/users/grad/arthur/newSIPbenchmarks"
-    pbopath = "/home/arthur_gla/veriPB/subgraphsolver/pboxide-dev"
+    pbopath = "/home/arthur_gla/veriPB/subgraphsolver/veripb-dev"
     # pbopath = "/users/grad/arthur/pboxide-dev"
     solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
     # solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
     proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
-    # proofs = "/home/arthur_gla/veriPB/subgraphsolver/nolabelsproofs"
+    # proofs = "/home/arthur_gla/veriPB/subgraphsolver/nolabelsproofs3"
     # proofs = "/scratch/arthur/proofs/"
     veripb = false
     trace = false
     prof = false
     rand = false
-    insid = ""
+    insid = pattern = target = ""
     tl = 600
     for (i, arg) in enumerate(args)
         if arg == "cd" cd() end # hack to add cd in paths
@@ -38,8 +40,10 @@ function parseargs(args)
         if arg in ["veripb","verif"] veripb = true end
         if arg in ["timelimit","tl"] tl = parse(Int, args[i+1]) end
         if arg in ["insid","ins"] insid = args[i+1] end
+        if arg in ["pattern","p"] pattern = args[i+1] end
+        if arg in ["target","t"] target = args[i+1] end
     end
-    return Options(ins,insid,bench,pbopath,solveurpath,proofs,veripb,trace,prof,tl,rand)
+    return Options(ins,insid,bench,pbopath,solveurpath,proofs,veripb,trace,prof,tl,rand,pattern,target)
 end
 const CONFIG = parseargs(ARGS)
 const benchs = CONFIG.bench 
@@ -65,7 +69,7 @@ function run_bio_solver()
     n = length(graphs)
     if CONFIG.insid != ""
         ins = string("bio",CONFIG.insid)
-        solve(ins,path,CONFIG.insid[1:3]*".txt",path,CONFIG.insid[4:6]*".txt","lad",0,1_000_000_000)
+        solve(ins,path,CONFIG.insid[1:3]*".txt",path,CONFIG.insid[4:6]*".txt","lad",0,200_000_000_000)
         if CONFIG.veripb
             cd()
             cd(CONFIG.pbopath)
@@ -117,7 +121,7 @@ function run_LV_solver()
         i = findlast(c -> c == 'g', CONFIG.insid)
         pattern = CONFIG.insid[1:i-1]
         target = CONFIG.insid[i:end]
-        solve(ins,path,pattern,path,target,"lad",0,1_000_000_000)
+        solve(ins,path,pattern,path,target,"lad",0,200_000_000_000)
         if CONFIG.veripb
             cd()
             cd(CONFIG.pbopath)
@@ -154,20 +158,23 @@ function run_LV_solver()
         end
     end end
 end
-function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000_000,maxsize=10_000_000,remake=true,verbose=false)
+function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000,maxsize=1_000_000,remake=true,verbose=false)
     if remake || !isfile(string(proofs,"/",ins,".opb")) || !isfile(string(proofs,"/",ins,extention)) || 
             length(read(`tail -n 1 $proofs/$ins$extention`,String)) < 24 ||
             read(`tail -n 1 $proofs/$ins$extention`,String)[1:24] != "end pseudo-Boolean proof"
         print(ins,' ')
         cd(CONFIG.solveurpath)
+        # println("timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target")
         t = @elapsed begin
             # p = run(pipeline(`timeout $timeout ./$solver --prove $proofs/$ins --no-supplementals --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`, devnull),wait=false); wait(p)
             try
                 if verbose
                     p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
                 else
+                    # println(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
                     redirect_stdio(stdout = devnull,stderr = devnull) do
                     p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
+                    # p = run(`timeout $tl ./glasgow_subgraph_solver --no-clique-detection $pathpat/$pattern $pathtar/$target`) # no proof version for comparison
                     end
                 end
             catch e
@@ -308,4 +315,20 @@ bio170075 & 18.54 MB & 14.15 MB & 585.5 KB & 192.0& 173.0& 571.0(15.3 523.02.26 
 bio068151 & 19.0 MB  &          &          & 44.1^C
 
 a surveiller bio037111 elle parais hyper longue.
+
+
+
+bio029051 & 18.88 MB &          & 940.9 KB & 36.5 & 0    & 82.4 (33.3 46.9 0.2  2.04) \\\hline
+bio170075 & 19.07 MB &          & 609.0 KB & 158.0& 0    & 564.0(14.6 510.02.2  37.5) \\\hline
+
+interessante ?
+bio116023
+
+
+LVg46g74 10.1 OK      5.16 MB
+LVg22g79 54.5 toobig  2.18 GB
+LVg22g30 24.9 toobig  1.143 GB
+
+
+./glasgow_subgraph_solver --prove /home/arthur_gla/veriPB/subgraphsolver/proofs/bio170075 --no-clique-detection --format directedlad /home/arthur_gla/veriPB/newSIPbenchmarks/biochemicalReactions/170.txt /home/arthur_gla/veriPB/newSIPbenchmarks/biochemicalReactions/075.txt
 =#
