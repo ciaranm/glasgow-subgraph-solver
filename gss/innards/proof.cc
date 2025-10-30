@@ -259,6 +259,7 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
     }
 
     // we get a hall violator by adding up all of the things
+    *_imp->proof_stream << "@hall ";
     *_imp->proof_stream << "pol";
     bool first = true;
 
@@ -325,6 +326,7 @@ auto Proof::need_elimination(int p, int t) -> void
 {
     if (! _imp->eliminations.contains(pair{p, t})) {
         *_imp->proof_stream << "setlvl 0;\n";
+        *_imp->proof_stream << "@elim ";
         *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
         _imp->eliminations[pair{p, t}] = ++_imp->proof_line;
         *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
@@ -416,6 +418,7 @@ auto Proof::incompatible_by_nds(
         need_elimination(n, t_subsequence.back());
 
     // summing up horizontally
+    *_imp->proof_stream << "@ndsp" << p.second << "e" << t.second << " ";
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & n : p_subsequence) {
@@ -453,6 +456,7 @@ auto Proof::incompatible_by_nds(
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
 
+    *_imp->proof_stream << "@ndsia" << p.second << "e" << t.second << " ";
     *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
@@ -465,6 +469,7 @@ auto Proof::incompatible_by_loops(
 {
     if (_imp->recover_encoding) {
         *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
+        *_imp->proof_stream << "@loop" << p.second << "e" << t.second << " ";
         *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
         ++_imp->proof_line;
     }
@@ -544,7 +549,7 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
     else
         *_imp->proof_stream << "% [" << decisions.size() << "] backtracking\n";
 
-    *_imp->proof_stream << "@backtrack ";
+    *_imp->proof_stream << "@bt" << decisions.size() << " ";
     *_imp->proof_stream << "rup";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
@@ -590,6 +595,7 @@ auto Proof::back_up_to_top() -> void
 auto Proof::post_restart_nogood(const vector<pair<int, int>> & decisions) -> void
 {
     *_imp->proof_stream << "% [" << decisions.size() << "] restart nogood\n";
+    *_imp->proof_stream << "@restartnogood ";
     *_imp->proof_stream << "rup";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
@@ -851,6 +857,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
 
     *_imp->proof_stream << "setlvl 1;\n";
 
+    *_imp->proof_stream << "@G" << g << "x3x2ap" << p.second << "e" << t.second << "i" << q.second << " ";
     *_imp->proof_stream << "pol";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
@@ -903,6 +910,7 @@ auto Proof::create_distance3_graphs(
 
     *_imp->proof_stream << "setlvl 1;\n";
 
+    *_imp->proof_stream << "@G" << g << "x3ap" << p.second << "e" << t.second << "i" << q.second << " ";
     *_imp->proof_stream << "pol";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
@@ -998,6 +1006,7 @@ auto Proof::create_null_decision_bound(int p, int t, optional<int> d) -> void
 auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
 {
     if (! _imp->doing_hom_colour_proof) {
+        *_imp->proof_stream << "@btbincolour ";
         *_imp->proof_stream << "rup";
         for (auto & w : v)
             *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
@@ -1006,6 +1015,7 @@ auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
     }
     else {
         *_imp->proof_stream << "% backtrack shenanigans, depth " << v.size() << '\n';
+        *_imp->proof_stream << "@btbinshin ";
         function<auto(unsigned, const vector<pair<int, int>> &)->void> f;
         f = [&](unsigned d, const vector<pair<int, int>> & trail) -> void {
             if (d == v.size()) {
@@ -1060,6 +1070,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
     vector<long> to_sum;
     auto do_one_cc = [&](const auto & cc, const auto & non_edge_constraint) {
         if (cc.size() > 2) {
+            *_imp->proof_stream << "@colorb ";
             *_imp->proof_stream << "pol  " << non_edge_constraint(cc[0], cc[1]);
 
             for (unsigned i = 2; i < cc.size(); ++i) {
@@ -1099,6 +1110,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
         else
             do_one_cc(cc, [&](int a, int b) -> long { return _imp->non_edge_constraints[pair{a, b}]; });
 
+        *_imp->proof_stream << "@colorb ";
         *_imp->proof_stream << "pol  " << _imp->objective_line;
 
         if (_imp->doing_mcs_by_clique) {
@@ -1138,6 +1150,7 @@ auto Proof::start_hom_clique_proof(const NamedVertex & p, vector<NamedVertex> &&
         to_sum.push_back(++_imp->proof_line);
     }
 
+    *_imp->proof_stream << "@homclique ";
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & t : to_sum) {
@@ -1181,6 +1194,7 @@ auto Proof::finish_hom_clique_proof(const NamedVertex & p, const NamedVertex & t
 {
     *_imp->proof_stream << "% end clique of size " << size << " around neighbourhood of " << p.second << " but not " << t.second << '\n';
     *_imp->proof_stream << "setlvl 0;\n";
+    *_imp->proof_stream << "@homcliqueend ";
     *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
     *_imp->proof_stream << "wiplvl 1;\n";
     ++_imp->proof_line;
@@ -1199,6 +1213,7 @@ auto Proof::add_hom_clique_non_edge(
     for (auto & p : p_clique) {
         for (auto & q : p_clique) {
             if (p != q) {
+                *_imp->proof_stream << "@homcliquene" << t.second << "v" << u.second << " ";
                 *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{pp.first, tt.first}]
                                     << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}]
                                     << " 1 ~x" << _imp->variable_mappings[pair{q.first, u.first}] << " >= 1 ;\n";
@@ -1229,6 +1244,7 @@ auto Proof::mcs_bound(
         if (r.size() >= l.size())
             continue;
 
+        *_imp->proof_stream << "@mcspart ";
         *_imp->proof_stream << "pol";
         bool first = true;
         for (auto & v : l) {
@@ -1246,6 +1262,7 @@ auto Proof::mcs_bound(
     }
 
     if (! to_sum.empty()) {
+        *_imp->proof_stream << "@mcsend ";
         *_imp->proof_stream << "pol  " << _imp->objective_line;
         for (auto & t : to_sum)
             *_imp->proof_stream << " " << t << " +";
@@ -1258,6 +1275,7 @@ auto Proof::rewrite_mcs_objective(int pattern_size) -> void
 {
     if (! _imp->recover_encoding) {
         *_imp->proof_stream << "% get the objective function to talk about nulls, not non-nulls\n";
+        *_imp->proof_stream << "@mcsobjrewrite ";
         *_imp->proof_stream << "pol  " << _imp->objective_line;
         for (int v = 0; v < pattern_size; ++v)
             *_imp->proof_stream << " " << get<1>(_imp->at_most_one_value_constraints[v]) << " +";
@@ -1358,6 +1376,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
 
 auto Proof::not_connected_in_underlying_graph(const std::vector<int> & x, int y) -> void
 {
+    *_imp->proof_stream << "@underG ";
     *_imp->proof_stream << "rup 1 ~x" << _imp->binary_variable_mappings[y];
     for (auto & v : x)
         *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[v];
@@ -1388,6 +1407,7 @@ auto Proof::create_clique_encoding(
 
 auto Proof::create_clique_nonedge(int v, int w) -> void
 {
+    *_imp->proof_stream << "@cliquene ";
     *_imp->proof_stream << "rup 1 ~x" << _imp->binary_variable_mappings[v]
                         << " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;\n";
     ++_imp->proof_line;

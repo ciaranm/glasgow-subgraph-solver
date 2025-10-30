@@ -806,7 +806,7 @@ auto HomomorphismModel::prepare() -> bool
                         auto named_p = pattern_vertex_for_proof(p);
                         auto named_q = pattern_vertex_for_proof(q);
 
-                        auto n_p_q = _imp->pattern_graph_rows[p * max_graphs + 0];
+                        auto n_p_q = _imp->pattern_graph_rows[p * max_graphs + 0]; //TODO fix this bitset for the directed case
                         n_p_q &= _imp->pattern_graph_rows[q * max_graphs + 0];
                         vector<NamedVertex> between_p_and_q;
                         for (auto v = n_p_q.find_first(); v != decltype(n_p_q)::npos; v = n_p_q.find_first()) {

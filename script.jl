@@ -13,6 +13,7 @@ struct Options
     rand::Bool # randomize the instances
     pattern::String # pattern name
     target::String  # target name
+    format::String  # format of the instances ex lad or directedlad
 end
 function parseargs(args)
     ins = ""
@@ -29,6 +30,7 @@ function parseargs(args)
     trace = false
     prof = false
     rand = false
+    format = "lad"
     insid = pattern = target = ""
     tl = 600
     for (i, arg) in enumerate(args)
@@ -42,8 +44,10 @@ function parseargs(args)
         if arg in ["insid","ins"] insid = args[i+1] end
         if arg in ["pattern","p"] pattern = args[i+1] end
         if arg in ["target","t"] target = args[i+1] end
+        if arg in ["format"] format = args[i+1] end
+        if arg in ["directed"] format = "directedlad" end
     end
-    return Options(ins,insid,bench,pbopath,solveurpath,proofs,veripb,trace,prof,tl,rand,pattern,target)
+    return Options(ins,insid,bench,pbopath,solveurpath,proofs,veripb,trace,prof,tl,rand,pattern,target,format)
 end
 const CONFIG = parseargs(ARGS)
 const benchs = CONFIG.bench 
@@ -51,6 +55,7 @@ const pbopath = CONFIG.pbopath
 const solver = CONFIG.solveurpath 
 const proofs = CONFIG.proofs 
 const tl = CONFIG.timelimit
+const format = CONFIG.format
 const extention = ".pbp"
 function main()
     cd(solver)
@@ -67,14 +72,24 @@ function run_bio_solver()
     cd()
     graphs = cd(readdir, path)
     n = length(graphs)
-    if CONFIG.insid != ""
-        ins = string("bio",CONFIG.insid)
-        solve(ins,path,CONFIG.insid[1:3]*".txt",path,CONFIG.insid[4:6]*".txt","lad",0,200_000_000_000)
+    if CONFIG.insid != "" || CONFIG.pattern != "" && CONFIG.target != ""
+        pattern = length(CONFIG.pattern)>0 && CONFIG.pattern[end-2:end]=="txt" ? CONFIG.pattern[1:end-4] : CONFIG.pattern
+        target = length(CONFIG.target)>0 && CONFIG.target[end-2:end]=="txt" ? CONFIG.target[1:end-4] : CONFIG.target
+        ins = CONFIG.insid
+        if ins != ""
+            ins = ins[1:3]=="bio" ? ins : string("bio",ins)
+            pattern = CONFIG.insid[4:6]
+            target = CONFIG.insid[7:9]
+        else
+            ins = string("bio",pattern,target)
+        end
+        solve(ins,path,pattern*".txt",path,target*".txt",0,200_000_000_000)
         if CONFIG.veripb
             cd()
             cd(CONFIG.pbopath)
             runpboxide(ins)
         end
+        println()
     else
     t=0
     stats = [stat(path*'/'*file).size for file in graphs]
@@ -95,7 +110,7 @@ function run_bio_solver()
 
             ins = string("bio",pattern[1:end-4],target[1:end-4])
             if ins in ["bio007013"] continue end # skip this instance, it is too big
-            solve(ins,path,pattern,path,target,"lad")
+            solve(ins,path,pattern,path,target)
             if isfile(String("$proofs/$ins$extention"))
                 res = read(`tail -n 2 $proofs/$ins$extention`,String)
                 if length(res)<16 || res[1:16] != "conclusion UNSAT"
@@ -108,6 +123,7 @@ function run_bio_solver()
                     end
                 end
             end
+            println()
         end
     end end
 end
@@ -116,17 +132,18 @@ function run_LV_solver()
     cd()
     graphs = cd(readdir, path)
     n = length(graphs)
-    if CONFIG.insid != ""
+    if CONFIG.pattern != "" && CONFIG.target != "" || CONFIG.insid != ""
         ins = string("LV",CONFIG.insid)
         i = findlast(c -> c == 'g', CONFIG.insid)
         pattern = CONFIG.insid[1:i-1]
         target = CONFIG.insid[i:end]
-        solve(ins,path,pattern,path,target,"lad",0,200_000_000_000)
+        solve(ins,path,pattern,path,target,0,200_000_000_000)
         if CONFIG.veripb
             cd()
             cd(CONFIG.pbopath)
             runpboxide(ins)
         end
+        println()
     else
     t=0
     stats = [stat(path*'/'*file).size for file in graphs]
@@ -142,7 +159,7 @@ function run_LV_solver()
     # for target in graphs[1:end], pattern in graphs[1:end]
         if pattern != target && !(pattern in ["g2","g3"])
             ins = string("LV",pattern,target)
-            solve(ins,path,pattern,path,target,"lad")
+            solve(ins,path,pattern,path,target)
             if isfile(String("$proofs/$ins$extention"))
                 res = read(`tail -n 2 $proofs/$ins$extention`,String)
                 if length(res)<16 || res[1:16] != "conclusion UNSAT"
@@ -155,10 +172,11 @@ function run_LV_solver()
                     end
                 end
             end
+            println()
         end
     end end
 end
-function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000,maxsize=1_000_000,remake=true,verbose=false)
+function solve(ins,pathpat,pattern,pathtar,target,minsize=10_000_000,maxsize=50_000_000,remake=true,verbose=false)
     if remake || !isfile(string(proofs,"/",ins,".opb")) || !isfile(string(proofs,"/",ins,extention)) || 
             length(read(`tail -n 1 $proofs/$ins$extention`,String)) < 24 ||
             read(`tail -n 1 $proofs/$ins$extention`,String)[1:24] != "end pseudo-Boolean proof"
@@ -172,7 +190,7 @@ function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000,maxsize=1
                     p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
                 else
                     # println(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
-                    redirect_stdio(stdout = devnull,stderr = devnull) do
+                    redirect_stdio(stdout = devnull) do
                     p = run(`timeout $tl ./glasgow_subgraph_solver --prove $proofs/$ins --no-clique-detection --format $format $pathpat/$pattern $pathtar/$target`)
                     # p = run(`timeout $tl ./glasgow_subgraph_solver --no-clique-detection $pathpat/$pattern $pathtar/$target`) # no proof version for comparison
                     end
@@ -199,7 +217,6 @@ function solve(ins,pathpat,pattern,pathtar,target,format,minsize=1_000,maxsize=1
             # g = ladtograph(pathtar,target)
             # draw(PNG(string(proofs,"/aimg/graphs/",ins,target[1:3],".png"), 16cm, 16cm), gplot(g))
         end
-        println()
         if !ok
             run(`rm -f $proofs/$ins$extention`)
             run(`rm -f $proofs/$ins.opb`)
@@ -209,14 +226,15 @@ end
 function runpboxide(file)
     t1 = t2 = 0
     prof = CONFIG.profiling ? "flamegraph" : "r"
+    tll = 10*tl
     t1 = @elapsed begin
         try
-            printstyled("veriPB check ", color=:blue)
+            printstyled("    veriPB check ", color=:blue)
                 if CONFIG.trace
-                    v1 = run(`timeout $tl cargo $prof -- $proofs/$file.opb $proofs/$file$extention `)
+                    v1 = run(`timeout $tll cargo $prof -- $proofs/$file.opb $proofs/$file$extention `)
                 else
                     redirect_stdio(stdout = devnull,stderr = devnull) do
-                        v1 = run(`timeout $tl cargo $prof -- $proofs/$file.opb $proofs/$file$extention `)
+                        v1 = run(`timeout $tll cargo $prof -- $proofs/$file.opb $proofs/$file$extention `)
                     end
                 end
         catch e
@@ -224,7 +242,10 @@ function runpboxide(file)
             # print(e)
         end
     end
-    printstyled(prettytime(t1),"  \n"; color = :cyan)
+    if t1>tll
+        printstyled("timeout "; color = :red)
+    end
+    printstyled(prettytime(t1); color = :cyan)
     # printstyled(prettytime(t1),"  ",prettytime(t2),"  "; color = :cyan)
 end
 function prettytime(b)
@@ -329,6 +350,9 @@ LVg46g74 10.1 OK      5.16 MB
 LVg22g79 54.5 toobig  2.18 GB
 LVg22g30 24.9 toobig  1.143 GB
 
+exemple de degre non trime jusqau bout 
+bio105014
 
 ./glasgow_subgraph_solver --prove /home/arthur_gla/veriPB/subgraphsolver/proofs/bio170075 --no-clique-detection --format directedlad /home/arthur_gla/veriPB/newSIPbenchmarks/biochemicalReactions/170.txt /home/arthur_gla/veriPB/newSIPbenchmarks/biochemicalReactions/075.txt
+./glasgow_subgraph_solver --prove /home/arthur_gla/veriPB/subgraphsolver/proofs/LVg6g12 --no-clique-detection --format directedlad /home/arthur_gla/veriPB/newSIPbenchmarks/LV/g6 /home/arthur_gla/veriPB/newSIPbenchmarks/LV/g12
 =#
