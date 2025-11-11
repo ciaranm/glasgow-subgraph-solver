@@ -17,15 +17,15 @@ struct Options
 end
 function parseargs(args)
     ins = ""
-    bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
-    # bench = "/users/grad/arthur/newSIPbenchmarks"
-    pbopath = "/home/arthur_gla/veriPB/subgraphsolver/veripb-dev"
-    # pbopath = "/users/grad/arthur/pboxide-dev"
-    solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
-    # solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
-    proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
+    # bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
+    bench = "/users/grad/arthur/newSIPbenchmarks"
+    # pbopath = "/home/arthur_gla/veriPB/subgraphsolver/veripb-dev"
+    pbopath = "/users/grad/arthur/pboxide-dev"
+    # solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
+    solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
+    # proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
     # proofs = "/home/arthur_gla/veriPB/subgraphsolver/nolabelsproofs3"
-    # proofs = "/scratch/arthur/proofs/"
+    proofs = "/scratch/arthur/proofs_test_veriPBtrim_mem_out/"
     veripb = false
     trace = false
     prof = false
@@ -176,7 +176,7 @@ function run_LV_solver()
         end
     end end
 end
-function solve(ins,pathpat,pattern,pathtar,target,minsize=10_000_000,maxsize=50_000_000,remake=true,verbose=false)
+function solve(ins,pathpat,pattern,pathtar,target,minsize=50_000_000,maxsize=2_000_000_000,remake=true,verbose=false)
     if remake || !isfile(string(proofs,"/",ins,".opb")) || !isfile(string(proofs,"/",ins,extention)) || 
             length(read(`tail -n 1 $proofs/$ins$extention`,String)) < 24 ||
             read(`tail -n 1 $proofs/$ins$extention`,String)[1:24] != "end pseudo-Boolean proof"
