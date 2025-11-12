@@ -26,8 +26,8 @@ function parseargs(args)
     # proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
     # proofs = "/home/arthur_gla/veriPB/subgraphsolver/nolabelsproofs3"
     # proofs = "/scratch/arthur/proofs_test_veriPBtrim_mem_out"
-    # proofs = "users/grad/arthur/proofs"
-    proofs = "users/grad/arthur/proofs2"
+    # proofs = "/users/grad/arthur/proofs"
+    proofs = "/users/grad/arthur/proofs2"
     veripb = false
     trace = false
     prof = false
