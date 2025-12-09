@@ -62,7 +62,7 @@ struct Proof::Imp
     map<long, tuple<long, long, string>> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<long, long, long, long>, tuple<long, long, string>> adjacency_lines;
     map<pair<long, long>, long> eliminations;
-    map<pair<long, long>, long> non_edge_constraints;
+    map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
     stringstream objective_sum;
 
@@ -72,7 +72,6 @@ struct Proof::Imp
     long proof_line = 0;
     int largest_level_set = 0;
     int active_level = 0;
-    
 
     bool clique_encoding = false;
     bool doing_mcs_by_clique = false;
@@ -931,14 +930,16 @@ auto Proof::create_objective(int n, optional<int> d) -> void
     }
 }
 
-auto Proof::create_non_edge_constraint(int p, int q) -> void
+auto Proof::create_non_edge_constraint(const NamedVertex & p, const NamedVertex & q) -> void
 {
-    _imp->model_stream << "-1 x" << _imp->binary_variable_mappings[p] << " -1 x" << _imp->binary_variable_mappings[q] << " >= -1 ;\n";
+    auto name = string{"@noedge"} + (p.first < q.first ? p.second : q.second) + "_" + (p.first < q.first ? q.second : p.second);
+
+    _imp->model_stream << name << " -1 x" << _imp->binary_variable_mappings[p.first] << " -1 x" << _imp->binary_variable_mappings[q.first] << " >= -1 ;\n";
 
     ++_imp->nb_constraints;
     if (! _imp->recover_encoding) {
-        _imp->non_edge_constraints.emplace(pair{p, q}, _imp->nb_constraints);
-        _imp->non_edge_constraints.emplace(pair{q, p}, _imp->nb_constraints);
+        _imp->non_edge_constraints.emplace(pair{p.first, q.first}, name);
+        _imp->non_edge_constraints.emplace(pair{q.first, p.first}, name);
     }
 }
 
@@ -1042,7 +1043,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
             });
         }
         else
-            do_one_cc(cc, [&](int a, int b) -> long { return _imp->non_edge_constraints[pair{a, b}]; });
+            do_one_cc(cc, [&](int a, int b) -> string { return _imp->non_edge_constraints[pair{a, b}]; });
     }
 
     *_imp->proof_stream << " " << _imp->objective_line;
@@ -1329,8 +1330,8 @@ auto Proof::create_clique_nonedge(int v, int w) -> void
     *_imp->proof_stream << "rup 1 ~x" << _imp->binary_variable_mappings[v]
                         << " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;\n";
     ++_imp->proof_line;
-    _imp->non_edge_constraints.emplace(pair{v, w}, _imp->proof_line);
-    _imp->non_edge_constraints.emplace(pair{w, v}, _imp->proof_line);
+    _imp->non_edge_constraints.emplace(pair{v, w}, to_string(_imp->proof_line));
+    _imp->non_edge_constraints.emplace(pair{w, v}, to_string(_imp->proof_line));
 }
 
 auto Proof::super_extra_verbose() const -> bool

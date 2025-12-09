@@ -110,7 +110,7 @@ namespace
                 for (int p = 0; p < g.size(); ++p)
                     for (int q = 0; q < p; ++q)
                         if (! g.adjacent(p, q))
-                            proof->create_non_edge_constraint(p, q);
+                            proof->create_non_edge_constraint(pair{p, g.vertex_name(p)}, pair{q, g.vertex_name(q)});
 
                 proof->finalise_model();
             }
