@@ -1005,29 +1005,10 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
     }
     *_imp->proof_stream << '\n';
 
-    if (_imp->recover_encoding && ! _imp->doing_hom_colour_proof) {
-        for (auto & cc : ccs) {
-            if (cc.size() == 1)
-                continue;
-
-            for (unsigned i = 0 ; i < cc.size() ; ++i)
-                for (unsigned j = i + 1 ; j < cc.size() ; ++j)
-                    if (! _imp->non_edge_constraints.contains(pair{cc[i], cc[j]})) {
-                        *_imp->proof_stream << "setlvl 0;\n";
-                        *_imp->proof_stream << "ea -1 x" << _imp->binary_variable_mappings[cc[i]]
-                            << " -1 x" << _imp->binary_variable_mappings[cc[j]] << " >= -1 ;\n";
-                        auto n = ++_imp->proof_line;
-                        _imp->non_edge_constraints[{cc[i], cc[j]}] = n;
-                        _imp->non_edge_constraints[{cc[j], cc[i]}] = n;
-                        *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
-                    }
-        }
-    }
-
-    vector<long> to_sum;
+    auto how_many_summands = 0u;
     auto do_one_cc = [&](const auto & cc, const auto & non_edge_constraint) {
         if (cc.size() > 2) {
-            *_imp->proof_stream << "pol  " << non_edge_constraint(cc[0], cc[1]);
+            *_imp->proof_stream << " " << non_edge_constraint(cc[0], cc[1]);
 
             for (unsigned i = 2; i < cc.size(); ++i) {
                 *_imp->proof_stream << " " << i << " *";
@@ -1036,13 +1017,15 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
                 *_imp->proof_stream << " " << (i + 1) << " d";
             }
 
-            *_imp->proof_stream << ";\n";
-            to_sum.push_back(++_imp->proof_line);
+            ++how_many_summands;
         }
         else if (cc.size() == 2) {
-            to_sum.push_back(non_edge_constraint(cc[0], cc[1]));
+            *_imp->proof_stream << " " << non_edge_constraint(cc[0], cc[1]);
+            ++how_many_summands;
         }
     };
+
+    *_imp->proof_stream << "pol ";
 
     for (auto & cc : ccs) {
         if (cc.size() == 1)
@@ -1054,31 +1037,19 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
                 for (auto & v : _imp->p_clique)
                     bigger_cc.push_back(pair{v, _imp->t_clique_neighbourhood.find(c)->second});
 
-            *_imp->proof_stream << "% colour class [";
-            for (auto & c : bigger_cc)
-                *_imp->proof_stream << " " << c.first.second << "/" << c.second.second;
-            *_imp->proof_stream << " ]\n";
-
             do_one_cc(bigger_cc, [&](const pair<NamedVertex, NamedVertex> & a, const pair<NamedVertex, NamedVertex> & b) -> long {
                 return _imp->clique_for_hom_non_edge_constraints[pair{a, b}];
             });
         }
         else
             do_one_cc(cc, [&](int a, int b) -> long { return _imp->non_edge_constraints[pair{a, b}]; });
-
-        *_imp->proof_stream << "pol  " << _imp->objective_line;
-
-        if (_imp->doing_mcs_by_clique) {
-            for (auto & [_, v] : _imp->at_least_one_value_constraints) {
-                *_imp->proof_stream << " " << get<1>(v) << " +";
-            }
-        }
-
-        for (auto & t : to_sum)
-            *_imp->proof_stream << " " << t << " +";
-        *_imp->proof_stream << ";\n";
-        ++_imp->proof_line;
     }
+
+    *_imp->proof_stream << " " << _imp->objective_line;
+    for (unsigned n = 0; n < how_many_summands; ++n)
+        *_imp->proof_stream << " +";
+    *_imp->proof_stream << ";\n";
+    ++_imp->proof_line;
 }
 
 auto Proof::prepare_hom_clique_proof(const NamedVertex & p, const NamedVertex & t, unsigned size) -> void
