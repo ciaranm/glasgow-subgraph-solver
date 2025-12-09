@@ -937,10 +937,8 @@ auto Proof::create_non_edge_constraint(const NamedVertex & p, const NamedVertex 
     _imp->model_stream << name << " -1 x" << _imp->binary_variable_mappings[p.first] << " -1 x" << _imp->binary_variable_mappings[q.first] << " >= -1 ;\n";
 
     ++_imp->nb_constraints;
-    if (! _imp->recover_encoding) {
-        _imp->non_edge_constraints.emplace(pair{p.first, q.first}, name);
-        _imp->non_edge_constraints.emplace(pair{q.first, p.first}, name);
-    }
+    _imp->non_edge_constraints.emplace(pair{p.first, q.first}, name);
+    _imp->non_edge_constraints.emplace(pair{q.first, p.first}, name);
 }
 
 auto Proof::create_null_decision_bound(int p, int t, optional<int> d) -> void
