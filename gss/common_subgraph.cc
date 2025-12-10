@@ -183,7 +183,6 @@ namespace
                                         assignments.assigned.end() != find(assignments.assigned.begin(), assignments.assigned.end(), pair{v, w}));
                             proof->start_level(0);
                             proof->new_incumbent(solution);
-                            proof->rewrite_mcs_objective(first.size());
                             proof->start_level(depth);
                         }
                     }
@@ -369,7 +368,8 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
         proof->create_null_decision_bound(first.size(), second.size(), params.decide);
 
         // generate constraints for injectivity
-        proof->create_injectivity_constraints(first.size(), second.size());
+        proof->create_injectivity_constraints(first.size(), second.size(),
+            [&](int v) { if (v == second.size()) return string("null"); else return second.vertex_name(v); });
 
         // generate edge constraints, and also handle loops here
         for (int p = 0; p < first.size(); ++p) {
@@ -391,7 +391,10 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
                                     permitted.push_back(u);
                             // or null
                             permitted.push_back(second.size());
-                            proof->create_adjacency_constraint(p, q, t, permitted, vector<int>{}, false);
+                            proof->create_adjacency_constraint(
+                                NamedVertex{p, first.vertex_name(p)},
+                                NamedVertex{q, first.vertex_name(q)},
+                                NamedVertex{t, second.vertex_name(t)}, permitted, vector<int>{}, false);
                         }
                 }
             }
@@ -413,7 +416,6 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
                         NamedVertex{w, second.vertex_name(w)},
                         false);
             proof->new_incumbent(solution);
-            proof->rewrite_mcs_objective(first.size());
         }
     }
 

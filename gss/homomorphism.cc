@@ -438,7 +438,8 @@ auto gss::solve_homomorphism_problem(
 
         // generate constraints for injectivity
         if (params.injectivity == Injectivity::Injective)
-            proof->create_injectivity_constraints(pattern.size(), target.size());
+            proof->create_injectivity_constraints(pattern.size(), target.size(),
+                [&](int v) { return target.vertex_name(v); });
 
         // generate edge constraints, and also handle loops here
         for (int p = 0; p < pattern.size(); ++p) {
@@ -458,7 +459,11 @@ auto gss::solve_homomorphism_problem(
                                 if (t == u)
                                     cancel_out.push_back(t);
                             }
-                        proof->create_adjacency_constraint(p, q, t, permitted, cancel_out, false);
+                        proof->create_adjacency_constraint(
+                            NamedVertex{p, pattern.vertex_name(p)},
+                            NamedVertex{q, pattern.vertex_name(q)},
+                            NamedVertex{t, target.vertex_name(t)},
+                            permitted, cancel_out, false);
                     }
 
                 // same for non-adjacency for induced
@@ -470,7 +475,11 @@ auto gss::solve_homomorphism_problem(
                             for (int u = 0; u < target.size(); ++u)
                                 if (t != u && ! target.adjacent(t, u))
                                     permitted.push_back(u);
-                            proof->create_adjacency_constraint(p, q, t, permitted, vector<int>{}, true);
+                            proof->create_adjacency_constraint(
+                                NamedVertex{p, pattern.vertex_name(p)},
+                                NamedVertex{q, pattern.vertex_name(q)},
+                                NamedVertex{t, target.vertex_name(t)},
+                                permitted, vector<int>{}, true);
                         }
                 }
             }

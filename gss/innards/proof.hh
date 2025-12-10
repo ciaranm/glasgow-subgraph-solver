@@ -36,10 +36,6 @@ namespace gss::innards
         struct Imp;
         std::unique_ptr<Imp> _imp;
 
-        auto recover_adjacency_lines(int g, int p, int n, int t) -> void;
-        auto recover_injectivity_constraint(int p) -> void;
-        auto recover_at_least_one_constraint(int p) -> void;
-        auto recover_at_most_one_constraint(int p) -> void;
         auto need_elimination(int p, int t) -> void;
 
     public:
@@ -58,11 +54,13 @@ namespace gss::innards
             const std::function<auto(int)->std::string> & pattern_name,
             const std::function<auto(int)->std::string> & target_name) -> void;
 
-        auto create_injectivity_constraints(int pattern_size, int target_size) -> void;
+        auto create_injectivity_constraints(int pattern_size, int target_size,
+            const std::function<auto(int)->std::string> & target_name) -> void;
+
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
-        auto create_adjacency_constraint(int p, int q, int t, const std::vector<int> & u,
-               const std::vector<int> & cancel_out, bool induced) -> void;
+        auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
+            const std::vector<int> & u, const std::vector<int> & cancel_out, bool induced) -> void;
 
         auto finalise_model() -> void;
 
@@ -191,7 +189,6 @@ namespace gss::innards
 
         // common subgraphs
         auto create_null_decision_bound(int p, int t, std::optional<int> d) -> void;
-        auto rewrite_mcs_objective(int pattern_size) -> void;
         auto mcs_bound(
             const std::vector<std::pair<std::set<int>, std::set<int>>> & partitions) -> void;
         auto create_connected_constraints(int p, int t, const std::function<auto(int, int)->bool> & adj) -> void;
