@@ -88,7 +88,9 @@ auto main(int argc, char * argv[]) -> int
             ("target-symmetries-dejavu", po::value<string>(),                                                                          //
                 "Eliminate target symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)")                  //
             // ("target-symmetries-dejavu-dynamic", "Eliminate target symmetries dynamically (requires Dejavu)")                          //
-            ("partial-assignments-symmetries", po::value<string>(),                                                                    //
+            ("pattern-coset-symmetries", po::value<string>(),                                                                    //
+                "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")                                    //
+            ("target-coset-symmetries", po::value<string>(),                                                                    //
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")                                    //
             ("domain-filter-symmetries", "Eliminate pattern and target symmetries on domain matrices (requires Dejavu)")               //
             ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")                                    //
@@ -543,35 +545,73 @@ auto main(int argc, char * argv[]) -> int
         else if (options_vars.count("target-orbits-dejavu")) {
             params.use_target_orbits = true;
         }
-        else if (options_vars.count("partial-assignments-symmetries")) {
-            string method = options_vars["partial-assignments-symmetries"].as<string>();
-            if (method == "pattern") {
-                params.pattern_gen_syms = true;
-            }
-            else if (method == "target") {
-                params.target_gen_syms = true;
-            }
-            else if (method == "both") {
-                params.both_gen_syms = true;
-            }
-            else if (method == "separate") {
-                params.separate_gen_syms = true;
-            }
-            else {
-                cout << "Unrecognised partial assignment symmetry policy " << method << ", use (pattern / target / both / separate).\n";
-                return EXIT_FAILURE;
-            }
-            if (!params.pattern_gen_syms) {
-                params.target_aut_gens = innards::generating_set(target);
-                params.target_aut_inverses = innards::invert_list(params.target_aut_gens);
-            }
-            if (!params.target_gen_syms) {
+        // else if (options_vars.count("partial-assignments-symmetries")) {
+        //     string method = options_vars["partial-assignments-symmetries"].as<string>();
+        //     if (method == "pattern") {
+        //         params.pattern_gen_syms = true;
+        //     }
+        //     else if (method == "target") {
+        //         params.target_gen_syms = true;
+        //     }
+        //     else if (method == "both") {
+        //         params.both_gen_syms = true;
+        //     }
+        //     else if (method == "separate") {
+        //         params.separate_gen_syms = true;
+        //     }
+        //     else {
+        //         cout << "Unrecognised partial assignment symmetry policy " << method << ", use (pattern / target / both / separate).\n";
+        //         return EXIT_FAILURE;
+        //     }
+        //     if (!params.pattern_gen_syms) {
+        //         params.target_aut_gens = innards::generating_set(target);
+        //         params.target_aut_inverses = innards::invert_list(params.target_aut_gens);
+        //     }
+        //     if (!params.target_gen_syms) {
+        //         params.pattern_aut_gens = innards::generating_set(pattern);
+        //         params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_gens);
+        //     }
+        //     params.partial_assignments_sym = true;
+        // }
+        if (options_vars.count("pattern-coset-symmetries")) {
+            string method = options_vars["pattern-coset-symmetries"].as<string>();
+            params.pattern_gen_syms = true;
+            if (method == "natural") {
                 params.pattern_aut_gens = innards::generating_set(pattern);
                 params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_gens);
             }
+            else if (method == "flexible") {
+                params.flexible_pattern = true;
+            }
+            else if (method == "dynamic") {
+                params.dynamic_pattern = true;
+            }
+            else {
+                cout << "Unrecognised pattern symmetry policy " << method << ", use (natural/flexible/dynamic).\n";
+                return EXIT_FAILURE;
+            }
             params.partial_assignments_sym = true;
         }
-        else if (options_vars.count("domain-filter-symmetries")) {
+        if (options_vars.count("target-coset-symmetries")) {
+            string method = options_vars["target-coset-symmetries"].as<string>();
+            params.target_gen_syms = true;
+            if (method == "natural") {
+                params.target_aut_gens = innards::generating_set(pattern);
+                params.target_aut_inverses = innards::invert_list(params.pattern_aut_gens);
+            }
+            else if (method == "flexible") {
+                params.flexible_target = true;
+            }
+            else if (method == "dynamic") {
+                params.dynamic_target = true;
+            }
+            else {
+                cout << "Unrecognised pattern symmetry policy " << method << ", use (natural/flexible/dynamic).\n";
+                return EXIT_FAILURE;
+            }
+            params.partial_assignments_sym = true;
+        }
+        if (options_vars.count("domain-filter-symmetries")) {
             params.target_aut_gens = innards::generating_set(target);
             params.pattern_aut_gens = innards::generating_set(pattern);
             params.domain_filter_sym = true;

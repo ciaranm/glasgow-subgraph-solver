@@ -45,42 +45,41 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
     if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
-        for (int o: params.pattern_orbit_sizes) {
-            pattern_aut_grp_size *= o;
+        // pattern_orbit_sizes = params.pattern_orbit_sizes;
+        if (params.pattern_gen_syms) {
+            // TODO work out grp size
+        }
+        else {
+            for (int o: params.pattern_orbit_sizes) {
+                pattern_aut_grp_size *= o;
+            }
         }
     }
     if (model.has_occur_less_thans() && !model.do_dynamic_occur_less_thans()) {
-        int latest = -1;
-        target_orbit_sizes.resize(model.target_size, 1);
-        for (auto & con: model.target_occur_less_thans_in_convenient_order) {
-            target_orbit_sizes[con.first]++;
-            if (con.first == latest) {
-                continue;
-            }
-            target_base.push_back(con.first);
-            latest = con.first;
-        }
+        target_base = params.target_base;
+        target_orbit_sizes = params.target_orbit_sizes;
     }
     if (model.do_dynamic_occur_less_thans()) {
-        occurs.resize(model.target_size, SVOBitset(model.pattern_size, 0));
-        occurs_check.resize(model.target_size, false);
         target_orbit_sizes.resize(model.target_size, 1);
         std::vector<innards::SVOBitset> adjacency_matrix;
         for (size_t i = 0; i < model.target_size; i++) {
             adjacency_matrix.emplace_back(model.target_graph_row(0,i));
         }
+        // std::cout << "target_";
         if (!initialise_dynamic_structure(t_rschreier, adjacency_matrix, model.directed())) {
             model.reset_has_occur_less_thans();
-        };
+        }
     }
     if (model.do_dynamic_less_thans()) {
+        pattern_orbit_sizes.resize(model.pattern_size, 1);
         std::vector<innards::SVOBitset> adjacency_matrix;
         for (size_t i = 0; i < model.pattern_size; i++) {
             adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
         }
+        // std::cout << "pattern_";
         if (!initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed())) {
             model.reset_has_less_thans();
-        };
+        }
     }
     if (params.partial_assignments_sym) {
         mapping.resize(model.pattern_size);
@@ -199,16 +198,8 @@ auto HomomorphismSearcher::restarting_search(
                 }
                 else if (model.has_occur_less_thans()) {
                     int mult = 1;
-                    // for (std::size_t i = 0; i < target_base.size(); i++) {
-                    //     for (auto & a : assignments.values) {           // This might be more efficient the other way around but assignments sometimes has duplicates
-                    //         if (a.assignment.target_vertex == static_cast<unsigned int>(target_base[i])) {
-                    //             mult *= target_orbit_sizes[i];
-                    //             break;
-                    //         }
-                    //     }
-                    // }
                     for (int i = 0; i < assignments.values.size(); i++) { // The list of assignments sometimes contains duplicates so we have to account for that
-                        if ( i > 0 && assignments.values[i].assignment == assignments.values[i-1].assignment) {     // Assuming the duplicates will be next to each other
+                        if (i > 0 && assignments.values[i].assignment == assignments.values[i-1].assignment) {     // Assuming the duplicates will be next to each other
                             continue;
                         }
                         mult *= target_orbit_sizes[assignments.values[i].assignment.target_vertex];
@@ -926,21 +917,16 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
     const HomomorphismAssignments & assignments,
     Domains & new_domains) -> bool
 {
-    // vector<SVOBitset> occurs(model.target_size);            // "Which variable domains does value t appear in?"
-    // vector<bool> occurs_check(model.target_size, false);
-    std::fill(occurs_check.begin(), occurs_check.end(), false);
+    vector<optional<SVOBitset>> occurs(model.target_size);
 
     auto build_occurs = [&](int p) -> void {
-        if (occurs_check[p]) {                              // We've already done this value
+        if (occurs[p])
             return;
-        }
-        occurs_check[p] = true;
-        occurs[p].reset();
 
-        // occurs[p] = SVOBitset(model.pattern_size, 0);
-        for (auto & d : new_domains)                        // For each unassigned domain
-            if (d.values.test(p))                           // Check for value p
-                occurs[p].set(d.v);                         // Mark that p occurs in d.v
+        occurs[p] = make_optional<SVOBitset>(model.pattern_size, 0);
+        for (auto & d : new_domains)
+            if (d.values.test(p))
+                occurs[p]->set(d.v);
     };
 
     for (auto & [a, b] : useful_target_constraints) {
@@ -948,16 +934,16 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
         build_occurs(b);
     }
 
-    for (auto & a : assignments.values)                     // For each assignment so far...
-        if (occurs_check[a.assignment.target_vertex])       // If it's used in a constraint...
-            occurs[a.assignment.target_vertex].set(a.assignment.pattern_vertex);    // Mark which variable is assigned to it
+    for (auto & a : assignments.values)
+        if (occurs[a.assignment.target_vertex])
+            occurs[a.assignment.target_vertex]->set(a.assignment.pattern_vertex);
 
     // propagate lower bounds
     for (auto & [a, b] : useful_target_constraints) {
-        auto first_a = occurs[a].find_first();
+        auto first_a = occurs[a]->find_first();
         if (first_a == SVOBitset::npos) {
             // no occurrence of value a, value b cannot be used either
-            occurs[b].reset();
+            occurs[b]->reset();
             for (auto & d : new_domains)
                 if (d.values.test(b)) {
                     d.values.reset(b);
@@ -968,8 +954,8 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
         else {
             // value a first occurs in variable x, value b cannot be used in a variable lower than x
             for (auto & d : new_domains) {
-                if (d.v < first_a && d.values.test(b)) {
-                    occurs[b].reset(d.v);
+                if (d.v < first_a && d.values.test(b)) {        // TODO this line might get funky with pattern symmetries
+                    occurs[b]->reset(d.v);
                     d.values.reset(b);
                     if (0 == --d.count)
                         return false;
@@ -981,10 +967,11 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
     // propagate other way: if value b must occur (because it has been assigned) then
     // value a must go before
     if (current_assignment) {
+        // for (auto & [a, b] : model.target_occur_less_thans_in_convenient_order) {
         for (auto & [a, b] : useful_target_constraints) {
             if (b != current_assignment->target_vertex) {
                 // TODO sanity check more efficiently
-                if (occurs[a].count() == 0) {  // a has not been and will not be assigned
+                if (occurs[a]->count() == 0) {  // a has not been and will not be assigned
                     for (auto & d: assignments.values) {
                         if (b == d.assignment.target_vertex) return false;  // b has been assigned previously
                     }
@@ -1002,7 +989,7 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
                 else if (d.v > current_assignment->pattern_vertex) {
                     // comes after, can't use a
                     if (d.values.test(a)) {
-                        occurs[a].reset(d.v);
+                        occurs[a]->reset(d.v);
                         d.values.reset(a);
                         if (0 == --d.count)
                             return false;
@@ -1010,12 +997,11 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
                 }
             }
 
-            for (auto & d : assignments.values) {
+            for (auto & d : assignments.values)
                 if (d.assignment.pattern_vertex < current_assignment->pattern_vertex && a == d.assignment.target_vertex) {
                     saw_an_a = true;
                     break;
                 }
-            }
 
             if (! saw_an_a)
                 return false;
@@ -1072,15 +1058,23 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
     if (std::find(base.begin(), base.end(), p) == base.end()) {
         base.push_back(p);      // Add this vertex as a new base point
-        pattern_orbit_sizes.push_back(1);
+        // pattern_orbit_sizes.push_back(1);
 
-        int size_before = useful_constraints.size();
+        if (params.pattern_gen_syms) {
+            //TODO create some useful pattern constraints
 
-        int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
+            std::cout << "add new constraints\n";
+            return false;
+        }
+        else {            
+            int size_before = useful_constraints.size();
 
-        innards::dynamic_order_constraints(size, base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
+            int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
-        return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
+            innards::dynamic_order_constraints(size, base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
+
+            return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
+        }
 
     }
 
@@ -1103,7 +1097,7 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
         mapping[a.assignment.pattern_vertex] = a.assignment.target_vertex;      // Construct the current mapping as a vector
     }
     // ** PATTERN AND TARGET **
-    if (params.both_gen_syms) {
+    if (params.pattern_gen_syms && params.target_gen_syms) {
         for (unsigned int p = 0; p < params.pattern_aut_gens.size(); p++) {
             for (unsigned int t = 0; t < params.target_aut_gens.size(); t++) {
                 const std::vector<unsigned int> &p_aut = params.pattern_aut_gens[p];
@@ -1146,7 +1140,16 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
         }
     }
     // ** PATTERN ONLY **
-    if (params.pattern_gen_syms || params.separate_gen_syms) {
+    if (params.pattern_gen_syms) {
+        var_order.resize(0);        // reconstruct the var order
+        for (auto &b : target_base) {
+            var_order.push_back(b);
+        }
+        for (int i = 0; i < model.pattern_size; i++) {
+            if (std::find(var_order.begin(), var_order.end(), i) == var_order.end()) {
+                var_order.push_back(i);
+            }
+        }
         for (unsigned int p = 0; p < params.pattern_aut_gens.size(); p++) {
             const std::vector<unsigned int> &p_inv = params.pattern_aut_inverses[p];
             const std::vector<unsigned int> &p_aut = params.pattern_aut_gens[p];
@@ -1154,15 +1157,16 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
             for (const auto &a: assignments.values) {
                 permuted[p_aut[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
             }
-            for (unsigned int i = 0; i < model.pattern_size; i++) {
+            for (unsigned int x = 0; x < model.pattern_size; x++) {
+                int i = var_order[x];
                 if (mapping[i] != -1 && permuted[i] != -1) {
-                    if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                    if (dynamic_order_less(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
                         return false;
                     }
                     else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
                         continue;
                     }
-                    else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+                    else if (dynamic_order_less(mapping[i], permuted[i])) {      // The original mapping is lex-less-than the permutation
                         break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
                     }
                 }
@@ -1170,7 +1174,7 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
                     for (auto &d : new_domains) {
                         if (d.v == p_inv[i]) {               // Find the variable's domain
                             for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                if (x < static_cast<unsigned int>(mapping[i])) {
+                                if (dynamic_order_less(x,mapping[i])) {
                                     d.values.reset(x);
                                 }
                             }
@@ -1185,7 +1189,7 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
         }
     }
     // ** TARGET ONLY **
-    if (params.target_gen_syms || params.separate_gen_syms) {
+    if (params.target_gen_syms) {
         for (unsigned int t = 0; t < params.target_aut_gens.size(); t++) {
             const std::vector<unsigned int> &t_aut = params.target_aut_gens[t];
             const std::vector<unsigned int> &t_inv = params.target_aut_inverses[t];
@@ -1225,6 +1229,23 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
     }
 
     return true;
+}
+
+/**
+ * The value order is always [Base(T)] + [V_T \ Base(T)]
+ * 
+ * Check if a < b
+ */
+auto HomomorphismSearcher::dynamic_order_less(int a, int b) -> bool {
+    // TODO this can probably be made more efficient, proof of concept for the moment
+    auto index_b = std::find(target_base.begin(), target_base.end(), b);
+    auto index_a = std::find(target_base.begin(), index_b, a);
+    if (index_b != target_base.end()) {
+        return index_a < index_b;
+    }
+    else {
+        return (index_a != index_b) || a < b;
+    }
 }
 
 /**
@@ -1432,7 +1453,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                     return false;
                 }
             }
-
+        
         sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
 
         // propagate all different
@@ -1497,7 +1518,7 @@ auto HomomorphismSearcher::set_seed(int t) -> void
 }
 
 auto HomomorphismSearcher::print_pattern_constraints() -> void {
-    std::cout << "pattern_less_constraints = ";
+    std::cout << "pattern constraints = ";
     for (auto & [a,b] : useful_pattern_constraints) {
         std::cout << a << "<" << b << " ";
     }
@@ -1505,7 +1526,7 @@ auto HomomorphismSearcher::print_pattern_constraints() -> void {
 }
 
 auto HomomorphismSearcher::print_target_constraints() -> void {
-    std::cout << "target_occur_less_constraints = ";
+    std::cout << "target constraints = ";
     for (auto & [a,b] : useful_target_constraints) {
         std::cout << a << "<" << b << " ";
     }

@@ -11,8 +11,16 @@ using std::vector;
 
 using namespace gss::innards;
 
-auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, const bool with_generators, const bool degree_sequence, vector<int> &orbit_sizes, vector<int> &base) -> OrderConstraints {
+auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, const bool with_generators, const bool degree_sequence, vector<int> &orbit_sizes, vector<int> & base) -> OrderConstraints {
     // std::vector<int> base;
+
+    // if (degree_sequence) {
+    //     base.resize(i.size());
+    //     std::iota(base.begin(), base.end(), 0);
+    //     stable_sort(base.begin(), base.end(), [&](int a, int b) -> bool {
+    //         return -i.degree(a) < -i.degree(b);
+    //     });
+    // }
 
     return with_generators ? automorphisms_as_order_constraints_with_generators(i, base, orbit_sizes) : automorphisms_as_order_constraints(i, base, orbit_sizes, degree_sequence);
 }
@@ -20,7 +28,7 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, cons
 /**
  * Uses orbits
 */
-auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std::vector<int> &base, std::vector<int> &orbit_sizes, const bool degree_sequence) -> OrderConstraints
+auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std::vector<int> & base, std::vector<int> &orbit_sizes, const bool degree_sequence) -> OrderConstraints
 {
     dejavu::static_graph g;     // Declare static graph
     unsigned long n_simple_edges = 0;       // Number of undirected edges
@@ -65,6 +73,12 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
             bool loop = i.adjacent(v, v);       // Check if v is adjacent to itself
             vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? degrees[v] - 1 : degrees[v]));   // Add colour and non-looping degree
         }
+        vector<int> direction_vertices;
+        for (int v = i.size(), v_end = nv; v != v_end; v += 2) { // For each additional vertex (direction indicators)
+            direction_vertices.push_back(g.add_vertex(2, 2));   // From
+            direction_vertices.push_back(g.add_vertex(3, 2));   // To
+        }
+
         i.for_each_edge([&](int f, int t, string_view) {
             if (i.adjacent(t, f)) {
                 if (f < t) {
@@ -72,11 +86,11 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
                 }
             }
             else {
-                vertices.push_back(g.add_vertex(2, 2));     // From
-                vertices.push_back(g.add_vertex(3, 2));     // To
-                g.add_edge(vertices[f], vertices[vertices.size() - 2]);
-                g.add_edge(vertices[vertices.size() - 2], vertices[vertices.size() - 1]);
-                g.add_edge(vertices[t], vertices[vertices.size() - 1]);
+                g.add_edge(vertices[f], direction_vertices[0]);
+                g.add_edge(direction_vertices[0], direction_vertices[1]);
+                g.add_edge(vertices[t], direction_vertices[1]);
+                direction_vertices.erase(direction_vertices.begin());
+                direction_vertices.erase(direction_vertices.begin());
             }
         });
     }
@@ -95,7 +109,7 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
 
     std::vector<int> vertex_order(i.size());
     std::iota(vertex_order.begin(), vertex_order.end(), 0);
-    if (degree_sequence) {      // TODO we should actually use the softmax_shuffle from homomorphism_searcher here, plain degree sequence is usually a poor guess
+    if (degree_sequence) {
         stable_sort(vertex_order.begin(), vertex_order.end(), [&](int a, int b) -> bool {
             return -i.degree(a) < -i.degree(b);
         });
@@ -106,6 +120,7 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
     while (! stab_trivial) {        // While stabiliser is non-trivial
         rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
         stab_trivial = true;
+        // for (int v = 0, v_end = i.size(); v != v_end; ++v) {        // For each vertex
         for (auto & v : vertex_order) {        // For each vertex
             if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
                 stab_trivial = false;
@@ -128,7 +143,7 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
         }
         orbit_sizes.push_back(o_sz);
     }
-    
+
     for (std::pair<int, int> p: unique_list) {
         result.emplace_back(i.vertex_name(p.first), i.vertex_name(p.second));
     }
@@ -319,9 +334,7 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
 
     dejavu::big_number sz = s.get_automorphism_group_size();
-    if (sz.mantissa == 1 && sz.exponent == 0) {
-        return false;
-    }
+    if (sz.mantissa == 1 && sz.exponent == 0) return false;
 
     return true;
 }
@@ -331,17 +344,8 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
  */
 auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<int> &orbit_sizes, dejavu::groups::random_schreier &rschreier, std::vector<std::pair<unsigned int, unsigned int>> &constraints) -> void {
 
-    // vector<int> base(base1);
     //TODO we only actually care about adding one extra layer of the chain here, maybe there is a way to limit depth of layer computation in Dejavu?
-    
-                        std::cout << "getting here?\n";
-    for (auto a : base) {
-        std::cout << a << " ";
-    }
-    std::cout << "set\n";
     rschreier.set_base(base);           // Recompute the stabiliser chain with the provided (partial) base
-
-                        std::cout << "getting here2?\n";
     std::vector<std::pair<unsigned int, unsigned int>> cons;
     std::vector<std::vector<int>> orbs;
 

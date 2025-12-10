@@ -273,7 +273,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     };
 
     // pattern less than constraints
-    if (! _imp->params.pattern_less_constraints.empty()) {
+    if (! _imp->params.pattern_less_constraints.empty() || ! params.pattern_aut_gens.empty()) {
         _imp->has_less_thans = true;
         list<pair<unsigned, unsigned>> pattern_less_thans_in_wrong_order;
         for (auto & [a, b] : _imp->params.pattern_less_constraints) {
@@ -304,6 +304,10 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     if (params.dynamic_pattern || params.flexible_pattern) {
         _imp->has_less_thans = true;
+    }
+
+    if (params.partial_assignments_sym) {
+
     }
 
     // pattern orbit representatives
@@ -1336,24 +1340,24 @@ auto HomomorphismModel::target_has_loop(int t) const -> bool
     return _imp->target_loops[t];
 }
 
-auto HomomorphismModel::reset_has_less_thans() const -> void 
-{    
-    _imp->has_less_thans = false;
-}
-
 auto HomomorphismModel::has_less_thans() const -> bool
 {
     return _imp->has_less_thans;
 }
 
-auto HomomorphismModel::reset_has_occur_less_thans() const -> void 
-{    
-    _imp->has_occur_less_thans = false;
+auto HomomorphismModel::reset_has_less_thans() const -> void
+{
+    _imp->has_less_thans = false;
 }
 
 auto HomomorphismModel::has_occur_less_thans() const -> bool
 {
     return _imp->has_occur_less_thans;
+}
+
+auto HomomorphismModel::reset_has_occur_less_thans() const -> void
+{
+    _imp->has_occur_less_thans = false;
 }
 
 auto HomomorphismModel::do_dynamic_occur_less_thans() const -> bool 

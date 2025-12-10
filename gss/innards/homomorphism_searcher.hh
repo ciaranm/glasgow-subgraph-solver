@@ -7,6 +7,7 @@
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/watches.hh>
 #include <gss/innards/automorphisms.hh>
+#include <gss/innards/symmetry_model.hh>
 
 #include <functional>
 #include <random>
@@ -93,14 +94,16 @@ namespace gss::innards
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
         std::vector<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
         std::vector<int> target_base, pattern_base;
+        std::vector<int> var_order, suffix;
         std::vector<int> target_base_cpy, pattern_base_cpy;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
         int pattern_aut_grp_size = 1;
         bool first_sol = true;
         dejavu::groups::random_schreier t_rschreier{static_cast<int>(model.target_size + model.target_edge_num * 2)}, p_rschreier{static_cast<int>(model.pattern_size + model.pattern_edge_num * 2)};    // TODO the * 2 is a clunky upper bound in directed cases
         std::vector<int> mapping, permuted;
-        std::vector<SVOBitset> occurs;            // "Which variable domains does value t appear in?"
+        std::vector<SVOBitset> occurs;
         std::vector<bool> occurs_check;
+
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
@@ -128,6 +131,8 @@ namespace gss::innards
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
         auto break_both_aut_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
+
+        auto dynamic_order_less(int a, int b) -> bool;
 
         auto have_seen(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 

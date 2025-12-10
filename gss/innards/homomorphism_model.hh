@@ -57,8 +57,8 @@ namespace gss::innards
         unsigned pattern_edge_num, target_edge_num;
 
         auto has_less_thans() const -> bool;
-        auto has_occur_less_thans() const -> bool;
         auto reset_has_less_thans() const -> void;
+        auto has_occur_less_thans() const -> bool;
         auto reset_has_occur_less_thans() const -> void;
         auto do_dynamic_occur_less_thans() const -> bool;
         auto do_dynamic_less_thans() const -> bool;

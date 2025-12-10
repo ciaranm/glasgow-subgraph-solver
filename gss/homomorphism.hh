@@ -101,9 +101,9 @@ namespace gss
         bool no_nds = false;
 
         /// Less pattern constraints
-        std::vector<int> pattern_base;
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
         std::vector<int> pattern_orbit_sizes;
+        std::vector<int> pattern_base;
 
         /// Pattern orbit tracking
         bool use_pattern_orbits = false;
@@ -112,9 +112,9 @@ namespace gss
         bool use_target_orbits = false;
 
         /// Occurs less target constraints
-        std::vector<int> target_base;
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
         std::vector<int> target_orbit_sizes;
+        std::vector<int> target_base;
 
         /// Pattern automorphism group generators
         std::vector<std::vector<unsigned int>> pattern_aut_gens;
@@ -134,7 +134,7 @@ namespace gss
         bool domain_filter_sym = false, partial_assignments_sym = false;
 
         // If breaking symmetries with generators, which type to use
-        bool pattern_gen_syms = false, target_gen_syms = false, both_gen_syms = false, separate_gen_syms = false; 
+        bool pattern_gen_syms = false, target_gen_syms = false; 
 
         /// Optional lackey, for external side constraints
         std::unique_ptr<innards::Lackey> lackey;
