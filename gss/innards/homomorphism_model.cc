@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include <dejavu.h>
+
 using namespace gss;
 using namespace gss::innards;
 
@@ -138,6 +140,7 @@ struct HomomorphismModel::Imp
     mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
 
     mutable list<string> supplemental_graph_names;
+    string pattern_automorphism_group_size, target_automorphism_group_size;
 
     Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r) :
         params(p),
@@ -151,7 +154,9 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     _imp(new Imp(params, proof)),
     max_graphs(calculate_n_shape_graphs(params)),
     pattern_size(pattern.size()),
-    target_size(target.size())
+    target_size(target.size()),
+    pattern_edge_num(pattern.number_of_directed_edges()),
+    target_edge_num(target.number_of_directed_edges())
 {
     if (_imp->params.clique_size_constraints)
         _imp->max_graphs_for_clique_size_constraints = (_imp->params.clique_size_constraints_on_supplementals ? max_graphs : 1);
@@ -269,7 +274,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     };
 
     // pattern less than constraints
-    if (! _imp->params.pattern_less_constraints.empty()) {
+    if (! _imp->params.pattern_less_constraints.empty() || ! params.pattern_aut_gens.empty()) {
         _imp->has_less_thans = true;
         list<pair<unsigned, unsigned>> pattern_less_thans_in_wrong_order;
         for (auto & [a, b] : _imp->params.pattern_less_constraints) {
@@ -296,6 +301,90 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             if (loop_detect)
                 throw UnsupportedConfiguration{"Pattern less than constraints form a loop"};
         }
+    }
+
+    if (params.dynamic_pattern || params.flexible_pattern) {
+        _imp->has_less_thans = true;
+    }
+
+    if (params.partial_assignments_sym) {
+
+    }
+
+    // pattern orbit representatives
+    if (params.use_pattern_orbits) {
+        dejavu::static_graph g;
+        unsigned long n_simple_edges = 0;
+        pattern.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                ++n_simple_edges;
+        });
+        g.initialize_graph(pattern.size(), n_simple_edges);
+        vector<int> vertices;
+        for (int v = 0, v_end = pattern.size(); v != v_end; ++v) {
+            bool loop = pattern.adjacent(v, v);
+            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? pattern.degree(v) - 1 : pattern.degree(v)));
+        }
+        pattern.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                g.add_edge(vertices[f], vertices[t]);
+        });
+
+        pattern_orbits_schreier.reset(new dejavu::groups::random_schreier{pattern.size()});
+        pattern_orbits_schreier->set_base(pattern_orbit_base);
+
+        dejavu::hooks::schreier_hook hook(*pattern_orbits_schreier);
+        dejavu::solver s;
+        s.automorphisms(&g, hook.get_hook());
+
+        {
+            stringstream aut;
+            aut << s.get_automorphism_group_size();
+            _imp->pattern_automorphism_group_size = aut.str();
+        }
+
+        if (s.get_automorphism_group_size() != dejavu::big_number())
+            has_pattern_orbits = true;
+    }
+
+    // target orbit representatives
+    if (params.use_target_orbits) {
+        dejavu::static_graph g;
+        unsigned long n_simple_edges = 0;
+        target.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                ++n_simple_edges;
+        });
+        g.initialize_graph(target.size(), n_simple_edges);
+        vector<int> vertices;
+        for (int v = 0, v_end = target.size(); v != v_end; ++v) {
+            bool loop = target.adjacent(v, v);
+            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? target.degree(v) - 1 : target.degree(v)));
+        }
+        target.for_each_edge([&](int f, int t, string_view) {
+            if (f < t)
+                g.add_edge(vertices[f], vertices[t]);
+        });
+
+        target_orbits_schreier.reset(new dejavu::groups::random_schreier{target.size()});
+        target_orbits_schreier->set_base(target_orbit_base);
+
+        dejavu::hooks::schreier_hook hook(*target_orbits_schreier);
+        dejavu::solver s;
+        s.automorphisms(&g, hook.get_hook());
+
+        {
+            stringstream aut;
+            aut << s.get_automorphism_group_size();
+            _imp->target_automorphism_group_size = aut.str();
+        }
+
+        if (s.get_automorphism_group_size() != dejavu::big_number())
+            has_target_orbits = true;
+    }
+
+    if (params.dynamic_target || params.flexible_target) {
+        _imp->has_occur_less_thans = true;
     }
 
     // target less than constraints
@@ -1276,9 +1365,29 @@ auto HomomorphismModel::has_less_thans() const -> bool
     return _imp->has_less_thans;
 }
 
+auto HomomorphismModel::reset_has_less_thans() const -> void
+{
+    _imp->has_less_thans = false;
+}
+
 auto HomomorphismModel::has_occur_less_thans() const -> bool
 {
     return _imp->has_occur_less_thans;
+}
+
+auto HomomorphismModel::reset_has_occur_less_thans() const -> void
+{
+    _imp->has_occur_less_thans = false;
+}
+
+auto HomomorphismModel::do_dynamic_occur_less_thans() const -> bool 
+{
+    return (_imp->params.dynamic_target || _imp->params.flexible_target);
+}
+
+auto HomomorphismModel::do_dynamic_less_thans() const -> bool 
+{
+    return (_imp->params.dynamic_pattern || _imp->params.flexible_pattern);
 }
 
 auto HomomorphismModel::directed() const -> bool
@@ -1309,4 +1418,9 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
     }
 
     x.emplace_back(join("supplemental_graph_names =", _imp->supplemental_graph_names));
+    if (! _imp->pattern_automorphism_group_size.empty())
+        x.emplace_back("pattern_automorphism_group_size = " + _imp->pattern_automorphism_group_size);
+
+    if (! _imp->target_automorphism_group_size.empty())
+        x.emplace_back("target_automorphism_group_size = " + _imp->target_automorphism_group_size);
 }

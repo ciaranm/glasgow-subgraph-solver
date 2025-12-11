@@ -102,9 +102,39 @@ namespace gss
 
         /// Less pattern constraints
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
+        std::vector<int> pattern_orbit_sizes;
+        std::vector<int> pattern_base;
+
+        /// Pattern orbit tracking
+        bool use_pattern_orbits = false;
+
+        /// Target orbit tracking
+        bool use_target_orbits = false;
 
         /// Occurs less target constraints
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
+        std::vector<int> target_orbit_sizes;
+        std::vector<int> target_base;
+
+        /// Pattern automorphism group generators
+        std::vector<std::vector<unsigned int>> pattern_aut_gens;
+        std::vector<std::vector<unsigned int>> pattern_aut_inverses;
+
+        /// Target automorphism group generators
+        std::vector<std::vector<unsigned int>> target_aut_gens;
+        std::vector<std::vector<unsigned int>> target_aut_inverses;
+
+        // Whether to do symmetry breaking dynamically
+        bool flexible_pattern = false, flexible_target = false;
+        bool dynamic_pattern = false, dynamic_target = false;
+        long double pattern_aut_mantissa, target_aut_mantissa;
+        int pattern_aut_exp, target_aut_exp;
+
+        // If breaking variable and value symmetries, which strategy to use
+        bool domain_filter_sym = false, partial_assignments_sym = false;
+
+        // If breaking symmetries with generators, which type to use
+        bool pattern_gen_syms = false, target_gen_syms = false; 
 
         /// Optional lackey, for external side constraints
         std::unique_ptr<innards::Lackey> lackey;
@@ -135,6 +165,12 @@ namespace gss
 
         /// Number of solutions, only if enumerating
         loooong solution_count = 0;
+
+        /// Representative solution count, only if symmetry breaking
+        loooong rep_solution_count = 0;
+
+        /// Automorphism group sizes
+        long double pattern_aut_sz, target_aut_sz;
 
         /// Did we perform a complete search?
         bool complete = false;

@@ -6,9 +6,13 @@
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/watches.hh>
+#include <gss/innards/automorphisms.hh>
+// #include <gss/innards/symmetry_model.hh>
 
 #include <functional>
 #include <random>
+
+#include "dejavu.h"
 
 namespace gss::innards
 {
@@ -86,6 +90,23 @@ namespace gss::innards
 
         std::mt19937 global_rand;
 
+        // Maybe should be moved into Model?
+        std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
+        std::vector<std::vector<unsigned int>> pattern_coset_reps, target_coset_reps;
+        std::vector<std::vector<unsigned int>> pattern_coset_invs, target_coset_invs;
+        std::vector<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
+        std::vector<int> target_base, pattern_base;
+        std::vector<int> var_order, suffix;
+        // std::vector<int> target_base_cpy, pattern_base_cpy;
+        std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
+        int pattern_aut_grp_size = 1;
+        bool first_sol = true;
+        dejavu::groups::random_schreier t_rschreier{static_cast<int>(model.target_size + model.target_edge_num * 2)}, p_rschreier{static_cast<int>(model.pattern_size + model.pattern_edge_num * 2)};    // TODO the * 2 is a clunky upper bound in directed cases
+        std::vector<int> mapping, permuted;
+        std::vector<SVOBitset> occurs;
+        std::vector<bool> occurs_check;
+
+
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
         auto solution_in_proof_form(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<NamedVertex, NamedVertex>>;
@@ -99,7 +120,23 @@ namespace gss::innards
 
         auto propagate_less_thans(Domains & new_domains) -> bool;
 
+        auto propagate_less_thans(Domains & new_domains, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool;
+
+        auto propagate_less_thans(HomomorphismAssignments assignments, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool;
+
         auto propagate_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
+
+        auto propagate_dynamic_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
+
+        auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
+        
+        auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
+
+        auto break_both_aut_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
+
+        auto dynamic_order_less(int a, int b) -> bool;
+
+        auto have_seen(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 
@@ -130,16 +167,23 @@ namespace gss::innards
 
         auto restarting_search(
             HomomorphismAssignments & assignments,
-            const Domains & domains,
+            Domains & domains,
             unsigned long long & nodes,
             unsigned long long & propagations,
             loooong & solution_count,
             int depth,
-            RestartsSchedule & restarts_schedule) -> SearchResult;
+            RestartsSchedule & restarts_schedule,
+            std::vector<int> & pattern_orbit_base,
+            std::vector<int> & target_orbit_base) -> SearchResult;
 
         auto save_result(const HomomorphismAssignments & assignments, HomomorphismResult & result) -> void;
 
         auto set_seed(int n) -> void;
+
+        auto print_pattern_constraints() -> void;
+        auto print_target_constraints() -> void;
+
+        int sym_time;
 
         Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;
     };
