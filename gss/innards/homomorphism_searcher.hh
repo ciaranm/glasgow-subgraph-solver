@@ -7,7 +7,7 @@
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/watches.hh>
 #include <gss/innards/automorphisms.hh>
-#include <gss/innards/symmetry_model.hh>
+// #include <gss/innards/symmetry_model.hh>
 
 #include <functional>
 #include <random>
@@ -92,10 +92,12 @@ namespace gss::innards
 
         // Maybe should be moved into Model?
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
+        std::vector<std::vector<unsigned int>> pattern_coset_reps, target_coset_reps;
+        std::vector<std::vector<unsigned int>> pattern_coset_invs, target_coset_invs;
         std::vector<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
         std::vector<int> target_base, pattern_base;
         std::vector<int> var_order, suffix;
-        std::vector<int> target_base_cpy, pattern_base_cpy;
+        // std::vector<int> target_base_cpy, pattern_base_cpy;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
         int pattern_aut_grp_size = 1;
         bool first_sol = true;

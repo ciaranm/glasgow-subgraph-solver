@@ -48,6 +48,8 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         // pattern_orbit_sizes = params.pattern_orbit_sizes;
         if (params.pattern_gen_syms) {
             // TODO work out grp size
+            pattern_coset_reps = params.pattern_aut_gens;
+            pattern_coset_invs = params.pattern_aut_inverses;
         }
         else {
             for (int o: params.pattern_orbit_sizes) {
@@ -56,8 +58,14 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         }
     }
     if (model.has_occur_less_thans() && !model.do_dynamic_occur_less_thans()) {
-        target_base = params.target_base;
-        target_orbit_sizes = params.target_orbit_sizes;
+        if (params.target_gen_syms) {
+            target_coset_reps = params.target_aut_gens;
+            target_coset_invs = params.target_aut_inverses;
+        }
+        else {
+            target_base = params.target_base;
+            target_orbit_sizes = params.target_orbit_sizes;
+        }
     }
     if (model.do_dynamic_occur_less_thans()) {
         target_orbit_sizes.resize(model.target_size, 1);
@@ -282,6 +290,8 @@ auto HomomorphismSearcher::restarting_search(
         else
             this_vertex_has_pattern_orbit = true;
     }
+
+    std::vector<int> pattern_base_cpy, target_base_cpy;     // Hotfix solution
 
     if (params.dynamic_pattern) {
         pattern_base_cpy = pattern_base;
@@ -1029,14 +1039,16 @@ auto HomomorphismSearcher::make_useful_target_constraints(
         base.push_back(t);       // Add this vertex as a new base point
         // target_orbit_sizes.push_back(1);
 
-        unsigned int size_before = useful_constraints.size();
+        if (params.target_gen_syms) {
+            // TODO
+        }
+        else {
+            unsigned int size_before = useful_constraints.size();
 
-        int size = model.target_size + (model.directed() ? 2 * model.target_edge_num : 0);
-
-        innards::dynamic_order_constraints(size, base, target_orbit_sizes, t_rschreier, useful_constraints);    // Compute constraints at the new base point
-
-        return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
-
+            int size = model.target_size + (model.directed() ? 2 * model.target_edge_num : 0);
+            innards::dynamic_order_constraints(size, base, target_orbit_sizes, t_rschreier, useful_constraints);    // Compute constraints at the new base point
+            return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
+        }
     }
 
     return false;
@@ -1058,12 +1070,9 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
     if (std::find(base.begin(), base.end(), p) == base.end()) {
         base.push_back(p);      // Add this vertex as a new base point
-        // pattern_orbit_sizes.push_back(1);
 
         if (params.pattern_gen_syms) {
             //TODO create some useful pattern constraints
-
-            std::cout << "add new constraints\n";
             return false;
         }
         else {            
@@ -1140,9 +1149,9 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
         }
     }
     // ** PATTERN ONLY **
-    if (params.pattern_gen_syms) {
+    else if (params.pattern_gen_syms) {
         var_order.resize(0);        // reconstruct the var order
-        for (auto &b : target_base) {
+        for (auto &b : pattern_base) {
             var_order.push_back(b);
         }
         for (int i = 0; i < model.pattern_size; i++) {
@@ -1150,9 +1159,9 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
                 var_order.push_back(i);
             }
         }
-        for (unsigned int p = 0; p < params.pattern_aut_gens.size(); p++) {
-            const std::vector<unsigned int> &p_inv = params.pattern_aut_inverses[p];
-            const std::vector<unsigned int> &p_aut = params.pattern_aut_gens[p];
+        for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
+            const std::vector<unsigned int> &p_inv = pattern_coset_reps[p];
+            const std::vector<unsigned int> &p_aut = pattern_coset_invs[p];
             std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
             for (const auto &a: assignments.values) {
                 permuted[p_aut[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
@@ -1189,7 +1198,7 @@ auto HomomorphismSearcher::break_both_aut_symmetries(
         }
     }
     // ** TARGET ONLY **
-    if (params.target_gen_syms) {
+    else if (params.target_gen_syms) {
         for (unsigned int t = 0; t < params.target_aut_gens.size(); t++) {
             const std::vector<unsigned int> &t_aut = params.target_aut_gens[t];
             const std::vector<unsigned int> &t_inv = params.target_aut_inverses[t];
