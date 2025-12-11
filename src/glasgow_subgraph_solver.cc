@@ -65,7 +65,6 @@ auto main(int argc, char * argv[]) -> int
             ("print-all-solutions", "Print out every solution, rather than one")
             ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>());
 
-<<<<<<< HEAD
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
             ("pattern-format", "Specify input file format just for the pattern graph", cxxopts::value<string>())
@@ -79,18 +78,21 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
-            ("pattern-symmetries-dejavu", po::value<string>(),
-                "Eliminate pattern symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)")
-            ("target-symmetries-dejavu", po::value<string>(),
-                "Eliminate target symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)")
-            ("pattern-coset-symmetries", po::value<string>(),
-                "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")
-            ("target-coset-symmetries", po::value<string>(),
-                "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)")
+            ("pattern-symmetries-dejavu",
+                "Eliminate pattern symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)",
+                cxxopts::value<string>())
+            ("target-symmetries-dejavu",
+                "Eliminate target symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)",
+                cxxopts::value<string>())
+            ("pattern-coset-symmetries",
+                "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
+                cxxopts::value<string>())
+            ("target-coset-symmetries",
+                "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
+                cxxopts::value<string>())
             ("domain-filter-symmetries", "Eliminate pattern and target symmetries on domain matrices (requires Dejavu)")
             ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")
             ("target-orbits-dejavu", "Eliminate target symmetries dynamically (requires Dejavu)");
-        display_options.add(search_options);
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")
