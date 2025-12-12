@@ -52,9 +52,14 @@ namespace gss::innards
 
         const unsigned max_graphs;
         unsigned pattern_size, target_size;
+        unsigned pattern_edge_num, target_edge_num;
 
         auto has_less_thans() const -> bool;
+        auto reset_has_less_thans() const -> void;
         auto has_occur_less_thans() const -> bool;
+        auto reset_has_occur_less_thans() const -> void;
+        auto do_dynamic_occur_less_thans() const -> bool;
+        auto do_dynamic_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,

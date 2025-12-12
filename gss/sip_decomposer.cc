@@ -120,8 +120,8 @@ auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGrap
         // fix up the solution count
         if (params.count_solutions && result.solution_count > 0) {
             loooong unmapped_target_vertices = target.size() - reduced_pattern.size();
-            loooong solution_multiplier = n_choose_k<loooong>(unmapped_target_vertices, isolated_pattern_vertices.size());
-            loooong isolated_symmetry_multiplier = factorial<loooong>(isolated_pattern_vertices.size());
+            loooong solution_multiplier = n_choose_k<loooong>(unmapped_target_vertices, (int) isolated_pattern_vertices.size());
+            loooong isolated_symmetry_multiplier = factorial<loooong>((int) isolated_pattern_vertices.size());
             result.solution_count *= solution_multiplier * isolated_symmetry_multiplier;
         }
 
