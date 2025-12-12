@@ -274,7 +274,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     };
 
     // pattern less than constraints
-    if (! _imp->params.pattern_less_constraints.empty() || ! params.pattern_aut_gens.empty()) {
+    if (! _imp->params.pattern_less_constraints.empty() || ! params.pattern_aut_reps.empty()) {
         _imp->has_less_thans = true;
         list<pair<unsigned, unsigned>> pattern_less_thans_in_wrong_order;
         for (auto & [a, b] : _imp->params.pattern_less_constraints) {
@@ -307,88 +307,8 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         _imp->has_less_thans = true;
     }
 
-    if (params.partial_assignments_sym) {
-
-    }
-
-    // pattern orbit representatives
-    if (params.use_pattern_orbits) {
-        dejavu::static_graph g;
-        unsigned long n_simple_edges = 0;
-        pattern.for_each_edge([&](int f, int t, string_view) {
-            if (f < t)
-                ++n_simple_edges;
-        });
-        g.initialize_graph(pattern.size(), n_simple_edges);
-        vector<int> vertices;
-        for (int v = 0, v_end = pattern.size(); v != v_end; ++v) {
-            bool loop = pattern.adjacent(v, v);
-            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? pattern.degree(v) - 1 : pattern.degree(v)));
-        }
-        pattern.for_each_edge([&](int f, int t, string_view) {
-            if (f < t)
-                g.add_edge(vertices[f], vertices[t]);
-        });
-
-        pattern_orbits_schreier.reset(new dejavu::groups::random_schreier{pattern.size()});
-        pattern_orbits_schreier->set_base(pattern_orbit_base);
-
-        dejavu::hooks::schreier_hook hook(*pattern_orbits_schreier);
-        dejavu::solver s;
-        s.automorphisms(&g, hook.get_hook());
-
-        {
-            stringstream aut;
-            aut << s.get_automorphism_group_size();
-            _imp->pattern_automorphism_group_size = aut.str();
-        }
-
-        if (s.get_automorphism_group_size() != dejavu::big_number())
-            has_pattern_orbits = true;
-    }
-
-    // target orbit representatives
-    if (params.use_target_orbits) {
-        dejavu::static_graph g;
-        unsigned long n_simple_edges = 0;
-        target.for_each_edge([&](int f, int t, string_view) {
-            if (f < t)
-                ++n_simple_edges;
-        });
-        g.initialize_graph(target.size(), n_simple_edges);
-        vector<int> vertices;
-        for (int v = 0, v_end = target.size(); v != v_end; ++v) {
-            bool loop = target.adjacent(v, v);
-            vertices.push_back(g.add_vertex(loop ? 1 : 0, loop ? target.degree(v) - 1 : target.degree(v)));
-        }
-        target.for_each_edge([&](int f, int t, string_view) {
-            if (f < t)
-                g.add_edge(vertices[f], vertices[t]);
-        });
-
-        target_orbits_schreier.reset(new dejavu::groups::random_schreier{target.size()});
-        target_orbits_schreier->set_base(target_orbit_base);
-
-        dejavu::hooks::schreier_hook hook(*target_orbits_schreier);
-        dejavu::solver s;
-        s.automorphisms(&g, hook.get_hook());
-
-        {
-            stringstream aut;
-            aut << s.get_automorphism_group_size();
-            _imp->target_automorphism_group_size = aut.str();
-        }
-
-        if (s.get_automorphism_group_size() != dejavu::big_number())
-            has_target_orbits = true;
-    }
-
-    if (params.dynamic_target || params.flexible_target) {
-        _imp->has_occur_less_thans = true;
-    }
-
     // target less than constraints
-    if (! _imp->params.target_occur_less_constraints.empty()) {
+    if (! _imp->params.target_occur_less_constraints.empty() || ! params.target_aut_reps.empty()) {
         _imp->has_occur_less_thans = true;
         list<pair<unsigned, unsigned>> target_occur_less_thans_in_wrong_order;
         for (auto & [a, b] : _imp->params.target_occur_less_constraints) {
@@ -426,6 +346,10 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             _imp->target_cliques_best_knowns.push_back(vector<int>(target.size(), 0));
         }
         _imp->largest_pattern_clique.resize(_imp->max_graphs_for_clique_size_constraints);
+    }
+
+    if (params.dynamic_target || params.flexible_target) {
+        _imp->has_occur_less_thans = true;
     }
 }
 

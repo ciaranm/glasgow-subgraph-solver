@@ -105,23 +105,17 @@ namespace gss
         std::vector<int> pattern_orbit_sizes;
         std::vector<int> pattern_base;
 
-        /// Pattern orbit tracking
-        bool use_pattern_orbits = false;
-
-        /// Target orbit tracking
-        bool use_target_orbits = false;
-
         /// Occurs less target constraints
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
         std::vector<int> target_orbit_sizes;
         std::vector<int> target_base;
 
         /// Pattern automorphism group generators
-        std::vector<std::vector<unsigned int>> pattern_aut_gens;
+        std::vector<std::vector<unsigned int>> pattern_aut_reps;
         std::vector<std::vector<unsigned int>> pattern_aut_inverses;
 
         /// Target automorphism group generators
-        std::vector<std::vector<unsigned int>> target_aut_gens;
+        std::vector<std::vector<unsigned int>> target_aut_reps;
         std::vector<std::vector<unsigned int>> target_aut_inverses;
 
         // Whether to do symmetry breaking dynamically
@@ -131,10 +125,10 @@ namespace gss
         int pattern_aut_exp, target_aut_exp;
 
         // If breaking variable and value symmetries, which strategy to use
-        bool domain_filter_sym = false, partial_assignments_sym = false;
+        bool partial_assignments_sym = false;
 
-        // If breaking symmetries with generators, which type to use
-        bool pattern_gen_syms = false, target_gen_syms = false; 
+        // If breaking symmetries with coset representatives, which type to use
+        bool pattern_rep_syms = false, target_rep_syms = false; 
 
         /// Optional lackey, for external side constraints
         std::unique_ptr<innards::Lackey> lackey;

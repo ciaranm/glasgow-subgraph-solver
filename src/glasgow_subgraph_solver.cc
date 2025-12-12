@@ -78,10 +78,10 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
-            ("pattern-symmetries-dejavu",
+            ("pattern-orb-symmetries",
                 "Eliminate pattern symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)",
                 cxxopts::value<string>())
-            ("target-symmetries-dejavu",
+            ("target-orb-symmetries",
                 "Eliminate target symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)",
                 cxxopts::value<string>())
             ("pattern-coset-symmetries",
@@ -89,10 +89,7 @@ auto main(int argc, char * argv[]) -> int
                 cxxopts::value<string>())
             ("target-coset-symmetries",
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
-                cxxopts::value<string>())
-            ("domain-filter-symmetries", "Eliminate pattern and target symmetries on domain matrices (requires Dejavu)")
-            ("pattern-orbits-dejavu", "Eliminate pattern symmetries dynamically (requires Dejavu)")
-            ("target-orbits-dejavu", "Eliminate target symmetries dynamically (requires Dejavu)");
+                cxxopts::value<string>());
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")
@@ -418,11 +415,11 @@ auto main(int argc, char * argv[]) -> int
                 cout << " " << a << "<" << b;
             cout << endl;
         }
-        else if (options_vars.count("pattern-symmetries-dejavu")) {
-            string mode = options_vars["pattern-symmetries-dejavu"].as<string>();
+        else if (options_vars.count("pattern-orb-symmetries")) {
+            string mode = options_vars["pattern-orb-symmetries"].as<string>();
             if (mode == "natural") {
                 auto dejavu_start_time = steady_clock::now();
-                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, params.pattern_orbit_sizes, params.pattern_base);
+                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, params.pattern_base, params.pattern_orbit_sizes, false);
                 was_given_pattern_automorphism_group = true;
                 cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "pattern_less_constraints =";
@@ -432,7 +429,7 @@ auto main(int argc, char * argv[]) -> int
             }
             else if (mode == "degree") {
                 auto dejavu_start_time = steady_clock::now();
-                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, true, params.pattern_orbit_sizes, params.pattern_base);
+                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, params.pattern_base, params.pattern_orbit_sizes, true);
                 was_given_pattern_automorphism_group = true;
                 cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "pattern_less_constraints =";
@@ -452,18 +449,6 @@ auto main(int argc, char * argv[]) -> int
             }
 
         }
-        // else if (options_vars.count("pattern-symmetries-dejavu-dynamic")) {
-        //     auto dejavu_start_time = steady_clock::now();
-        //     //TODO this is only used to check there are symmetries
-        //     vector<int> tmp;
-        //     params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, false, false, tmp);
-        //     params.dynamic_pattern = true;
-        //     was_given_pattern_automorphism_group = true;
-        //     cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
-        // }
-        else if (options_vars.count("pattern-orbits-dejavu")) {
-            params.use_pattern_orbits = true;
-        }
 
         if (was_given_pattern_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
@@ -478,11 +463,11 @@ auto main(int argc, char * argv[]) -> int
                 cout << " " << a << "<" << b;
             cout << endl;
         }
-        else if (options_vars.count("target-symmetries-dejavu")) {
-            string mode = options_vars["target-symmetries-dejavu"].as<string>();
+        else if (options_vars.count("target-orb-symmetries")) {
+            string mode = options_vars["target-orb-symmetries"].as<string>();
             if (mode == "natural") {
                 auto dejavu_start_time = steady_clock::now();
-                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, params.target_orbit_sizes, params.target_base);
+                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, params.target_base, params.target_orbit_sizes, false);
                 was_given_target_automorphism_group = true;
                 cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "target_occur_less_constraints =";
@@ -492,7 +477,7 @@ auto main(int argc, char * argv[]) -> int
             }
             else if (mode == "degree") {
                 auto dejavu_start_time = steady_clock::now();
-                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, true, params.target_orbit_sizes, params.target_base);
+                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, params.target_base, params.target_orbit_sizes, true);
                 was_given_target_automorphism_group = true;
                 cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
                 cout << "target_occur_less_constraints =";
@@ -508,51 +493,12 @@ auto main(int argc, char * argv[]) -> int
             }
 
         }
-        // else if (options_vars.count("target-symmetries-dejavu-dynamic")) {
-        //     auto dejavu_start_time = steady_clock::now();
-        //     vector<int> tmp;
-        //     params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, false, false, tmp);
-        //     params.dynamic_target = true;
-        //     was_given_target_automorphism_group = true;
-        //     cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
-        // }
-        else if (options_vars.count("target-orbits-dejavu")) {
-            params.use_target_orbits = true;
-        }
-        // else if (options_vars.count("partial-assignments-symmetries")) {
-        //     string method = options_vars["partial-assignments-symmetries"].as<string>();
-        //     if (method == "pattern") {
-        //         params.pattern_gen_syms = true;
-        //     }
-        //     else if (method == "target") {
-        //         params.target_gen_syms = true;
-        //     }
-        //     else if (method == "both") {
-        //         params.both_gen_syms = true;
-        //     }
-        //     else if (method == "separate") {
-        //         params.separate_gen_syms = true;
-        //     }
-        //     else {
-        //         cout << "Unrecognised partial assignment symmetry policy " << method << ", use (pattern / target / both / separate).\n";
-        //         return EXIT_FAILURE;
-        //     }
-        //     if (!params.pattern_gen_syms) {
-        //         params.target_aut_gens = innards::generating_set(target);
-        //         params.target_aut_inverses = innards::invert_list(params.target_aut_gens);
-        //     }
-        //     if (!params.target_gen_syms) {
-        //         params.pattern_aut_gens = innards::generating_set(pattern);
-        //         params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_gens);
-        //     }
-        //     params.partial_assignments_sym = true;
-        // }
         if (options_vars.count("pattern-coset-symmetries")) {
             string method = options_vars["pattern-coset-symmetries"].as<string>();
-            params.pattern_gen_syms = true;
+            params.pattern_rep_syms = true;
             if (method == "natural") {
-                params.pattern_aut_gens = innards::generating_set(pattern);
-                params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_gens);
+                params.pattern_aut_reps = innards::coset_reps(pattern, params.pattern_orbit_sizes);
+                params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_reps);
             }
             else if (method == "flexible") {
                 params.flexible_pattern = true;
@@ -568,10 +514,10 @@ auto main(int argc, char * argv[]) -> int
         }
         if (options_vars.count("target-coset-symmetries")) {
             string method = options_vars["target-coset-symmetries"].as<string>();
-            params.target_gen_syms = true;
+            params.target_rep_syms = true;
             if (method == "natural") {
-                params.target_aut_gens = innards::generating_set(pattern);
-                params.target_aut_inverses = innards::invert_list(params.pattern_aut_gens);
+                params.target_aut_reps = innards::coset_reps(target, params.target_orbit_sizes);
+                params.target_aut_inverses = innards::invert_list(params.target_aut_reps);
             }
             else if (method == "flexible") {
                 params.flexible_target = true;
@@ -584,11 +530,6 @@ auto main(int argc, char * argv[]) -> int
                 return EXIT_FAILURE;
             }
             params.partial_assignments_sym = true;
-        }
-        if (options_vars.count("domain-filter-symmetries")) {
-            params.target_aut_gens = innards::generating_set(target);
-            params.pattern_aut_gens = innards::generating_set(pattern);
-            params.domain_filter_sym = true;
         }
 
         if (was_given_target_automorphism_group)

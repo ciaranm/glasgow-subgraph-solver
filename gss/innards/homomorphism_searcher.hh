@@ -94,10 +94,9 @@ namespace gss::innards
         std::vector<std::pair<unsigned,unsigned>> useful_target_constraints, useful_pattern_constraints;
         std::vector<std::vector<unsigned int>> pattern_coset_reps, target_coset_reps;
         std::vector<std::vector<unsigned int>> pattern_coset_invs, target_coset_invs;
-        std::vector<std::vector<innards::SVOBitset>> seen_before;     //TODO not sure set is the best structure for this
+        std::vector<std::vector<innards::SVOBitset>> seen_before;
         std::vector<int> target_base, pattern_base;
         std::vector<int> var_order, suffix;
-        // std::vector<int> target_base_cpy, pattern_base_cpy;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
         int pattern_aut_grp_size = 1;
         bool first_sol = true;
@@ -132,7 +131,7 @@ namespace gss::innards
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
-        auto break_both_aut_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
+        auto break_coset_rep_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
         auto dynamic_order_less(int a, int b) -> bool;
 
@@ -172,9 +171,7 @@ namespace gss::innards
             unsigned long long & propagations,
             loooong & solution_count,
             int depth,
-            RestartsSchedule & restarts_schedule,
-            std::vector<int> & pattern_orbit_base,
-            std::vector<int> & target_orbit_base) -> SearchResult;
+            RestartsSchedule & restarts_schedule) -> SearchResult;
 
         auto save_result(const HomomorphismAssignments & assignments, HomomorphismResult & result) -> void;
 
@@ -182,6 +179,8 @@ namespace gss::innards
 
         auto print_pattern_constraints() -> void;
         auto print_target_constraints() -> void;
+
+        auto count_solution(const HomomorphismAssignments & assignments) -> long;
 
         int sym_time;
 
