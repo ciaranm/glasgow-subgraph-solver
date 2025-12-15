@@ -168,6 +168,9 @@ namespace
                 searcher.print_pattern_constraints();
             if (model.do_dynamic_occur_less_thans())
                 searcher.print_target_constraints();
+            if (model.has_less_thans() || model.has_occur_less_thans()) {
+                result.rep_solution_count = searcher.rep_solution_count;
+            }
 
             std::cout << "sym_time = " << searcher.sym_time << "\n";
 

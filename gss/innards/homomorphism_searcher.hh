@@ -135,8 +135,6 @@ namespace gss::innards
 
         auto dynamic_order_less(int a, int b) -> bool;
 
-        auto have_seen(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
-
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 
         auto copy_nonfixed_domains_and_make_assignment(
@@ -183,6 +181,7 @@ namespace gss::innards
         auto count_solution(const HomomorphismAssignments & assignments) -> long;
 
         int sym_time;
+        loooong rep_solution_count = 0;
 
         Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;
     };

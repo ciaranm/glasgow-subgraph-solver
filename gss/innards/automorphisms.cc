@@ -204,17 +204,17 @@ auto gss::innards::dynamic_coset_reps(std::vector<int> & base, int sz, dejavu::g
     for (unsigned int x = 0; x < base.size(); x++) {
         vector<int> orb = rschreier.get_fixed_orbit(x);       // Retrieve stabiliser orbit at this point
         orbit_sizes[base.at(x)] = orb.size();
-        std::cout << base.at(x) << " " << orbit_sizes[base.at(x)] << "\n";
+        // std::cout << base.at(x) << " " << orbit_sizes[base.at(x)] << "\n";
         for (auto v : orb) {
             if (v == base.at(x)) continue;
-            std::cout << base.at(x) << "->" << v << ":: ";
+            // std::cout << base.at(x) << "<" << v << ":: ";
             if (rschreier.get_transversal_element(x,v,a)) {
                 mapping.clear();
                 for (int y = 0; y < sz; y++) {
                     mapping.push_back(a.p()[y]);
-                    std::cout << y << "->" << mapping[y] << " ";
+                    // std::cout << y << "->" << mapping[y] << " ";
                 }
-                std::cout << "\n";
+                // std::cout << "\n";
                 invs.push_back(mapping);
                 reps.push_back(invert_automorphism(mapping));
             }
@@ -223,6 +223,7 @@ auto gss::innards::dynamic_coset_reps(std::vector<int> & base, int sz, dejavu::g
             }
         }
     }
+    // std::cout << "\n";
 }
 
 auto gss::innards::invert_automorphism(std::vector<unsigned int> aut) -> std::vector<unsigned int> {
