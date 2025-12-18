@@ -198,23 +198,20 @@ auto gss::innards::dynamic_coset_reps(std::vector<int> & base, int sz, dejavu::g
 
     dejavu::groups::automorphism_workspace a(sz);       // TODO maybe only need to look at the most recent element
     reps.erase(reps.begin() + 1, reps.end());     // Leave the identity
+    invs.erase(invs.begin() + 1, invs.end());
     std::vector<unsigned int> mapping;
 
     // int x = base.size() - 1;            // Only interested in the most recently added base point
     for (unsigned int x = 0; x < base.size(); x++) {
         vector<int> orb = rschreier.get_fixed_orbit(x);       // Retrieve stabiliser orbit at this point
         orbit_sizes[base.at(x)] = orb.size();
-        // std::cout << base.at(x) << " " << orbit_sizes[base.at(x)] << "\n";
         for (auto v : orb) {
             if (v == base.at(x)) continue;
-            // std::cout << base.at(x) << "<" << v << ":: ";
             if (rschreier.get_transversal_element(x,v,a)) {
                 mapping.clear();
                 for (int y = 0; y < sz; y++) {
                     mapping.push_back(a.p()[y]);
-                    // std::cout << y << "->" << mapping[y] << " ";
                 }
-                // std::cout << "\n";
                 invs.push_back(mapping);
                 reps.push_back(invert_automorphism(mapping));
             }
@@ -223,7 +220,6 @@ auto gss::innards::dynamic_coset_reps(std::vector<int> & base, int sz, dejavu::g
             }
         }
     }
-    // std::cout << "\n";
 }
 
 auto gss::innards::invert_automorphism(std::vector<unsigned int> aut) -> std::vector<unsigned int> {

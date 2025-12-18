@@ -117,6 +117,8 @@ namespace gss::innards
 
         auto propagate_simple_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> bool;
 
+        auto propagate_all_symmetries(Domains & domains, const HomomorphismAssignment & current_assignment, const HomomorphismAssignments & assignments) -> bool;
+
         auto propagate_less_thans(Domains & new_domains) -> bool;
 
         auto propagate_less_thans(Domains & new_domains, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool;
@@ -128,12 +130,18 @@ namespace gss::innards
         auto propagate_dynamic_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
 
         auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
+
+        auto make_useful_target_constraints(int target_vertex, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
         auto break_coset_rep_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
-        auto dynamic_order_less(int a, int b) -> bool;
+        auto filter_val_syms_from_domain(const HomomorphismAssignments & assignments, Domains & domains, int branch_v) -> bool;
+
+        auto occurs_before(int a, int b) -> bool;
+
+        auto adjust_variable_order() -> void;
 
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 

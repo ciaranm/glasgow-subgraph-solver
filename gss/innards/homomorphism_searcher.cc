@@ -99,10 +99,10 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
     if (params.target_rep_syms) {
         mapping.resize(model.pattern_size);
         permuted.resize(model.pattern_size);
-        if (!params.pattern_rep_syms) {
-            var_order.resize(model.pattern_size);
-            std::iota(var_order.begin(), var_order.begin() + model.pattern_size, 0);
-        }
+    }
+    if (params.partial_assignments_sym) {
+        var_order.resize(model.pattern_size);
+        std::iota(var_order.begin(), var_order.begin() + model.pattern_size, 0);
     }
     sym_time = 0;
 }
@@ -249,7 +249,8 @@ auto HomomorphismSearcher::restarting_search(
     // override whether we use the lackey for propagation, in case we are inside a backjump
     bool use_lackey_for_propagation = false;
 
-    std::vector<int> pattern_base_cpy, target_base_cpy;     // Hotfix solution
+    // remember what the base was in case we're doing dynamic symmetries
+    std::vector<int> pattern_base_cpy, target_base_cpy;
 
     if (params.dynamic_pattern) {
         pattern_base_cpy = pattern_base;
@@ -257,9 +258,15 @@ auto HomomorphismSearcher::restarting_search(
     if (params.dynamic_target) {
         target_base_cpy = target_base;
     }
+    bool did_filter = false;
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
+
+        // Maybe this was filtered by symmetry breaking
+        if (did_filter && !branch_domain->values.test(*f_v)) {
+            continue;
+        }
 
         if (proof)
             proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
@@ -269,6 +276,18 @@ auto HomomorphismSearcher::restarting_search(
 
         // make the assignment
         assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
+
+        // propagate symmetries to filter domains if we're working with target symmetries
+        if (params.target_rep_syms) {
+            if (model.do_dynamic_occur_less_thans()) {
+                if (make_useful_target_constraints(*f_v, useful_target_constraints, target_base)) {
+                    // added new constraints -- may want to log something
+                }
+            }
+            if (filter_val_syms_from_domain(assignments, domains, branch_domain->v)) {
+                did_filter = true;
+            }
+        }
 
         // set up new domains
         Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
@@ -686,6 +705,56 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
     return true;
 }
 
+auto HomomorphismSearcher::propagate_all_symmetries(Domains & domains, 
+        const HomomorphismAssignment & current_assignment, 
+        const HomomorphismAssignments & assignments) -> bool {
+    auto sym_start_time = steady_clock::now();
+    if (model.do_dynamic_less_thans()) {
+        if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base)) {
+            // added new constraints -- may want to log something
+        }
+    }
+    if (model.do_dynamic_occur_less_thans()) {
+        if (make_useful_target_constraints(current_assignment, useful_target_constraints, target_base)) {
+            // added new constraints -- may want to log something
+        }
+    }
+
+    // propagate orbit less thans - extra assignments -> more constraints to propagate
+    if (model.has_less_thans() && !model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
+        if (!propagate_less_thans(domains)) {
+            sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
+            return false;
+        }
+    }
+    
+    if (model.has_occur_less_thans() && !params.target_rep_syms) {
+        if (model.do_dynamic_occur_less_thans()) {
+            if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, domains)) {
+                sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
+                return false;
+            }
+        }
+        else if (! propagate_occur_less_thans(current_assignment, assignments, domains)) {
+            sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
+            return false;
+        }
+    }
+    if (model.has_less_thans() && model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
+            if (!propagate_less_thans(domains, useful_pattern_constraints)) {
+                sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
+                return false;
+            }
+        }
+
+    if (params.partial_assignments_sym && !break_coset_rep_symmetries(assignments, domains)) {
+        sym_time += (duration_cast<milliseconds>(steady_clock::now() - sym_start_time).count());
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * Propagate less-than symmetry constraints found before search
  */
@@ -985,8 +1054,24 @@ auto HomomorphismSearcher::make_useful_target_constraints(
     if(!current_assignment) return false;
     unsigned int t = current_assignment->target_vertex;
 
-    if (std::find(base.begin(), base.end(), t) == base.end()) {
-        base.push_back(t);       // Add this vertex as a new base point
+    return make_useful_target_constraints(t, useful_constraints, base);
+}
+
+
+/**
+ * Generate occurs-less-than symmetry constraints according to a given base
+ * 
+ * @returns true if constraints were added
+ */
+auto HomomorphismSearcher::make_useful_target_constraints(
+    int target_vertex,
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+    std::vector<int> & base
+) -> bool
+{
+
+    if (std::find(base.begin(), base.end(), target_vertex) == base.end()) {
+        base.push_back(target_vertex);       // Add this vertex as a new base point
 
         if (params.target_rep_syms) {
             int size_before = target_coset_reps.size();
@@ -1023,6 +1108,8 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
     if(!current_assignment) return false;
     unsigned int p = current_assignment->pattern_vertex;
 
+    bool added = false;
+
     if (std::find(base.begin(), base.end(), p) == base.end()) {
         base.push_back(p);      // Add this vertex as a new base point
 
@@ -1033,7 +1120,7 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
             innards::dynamic_coset_reps(pattern_base, size, p_rschreier, pattern_coset_reps, pattern_coset_invs, pattern_orbit_sizes);
 
-            return pattern_coset_reps.size() - size_before;
+            added = pattern_coset_reps.size() - size_before;
         }
         else {            
             int size_before = useful_constraints.size();
@@ -1042,12 +1129,15 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
             innards::dynamic_order_constraints(size, base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
 
-            return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
+            added = (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
         }
 
+        if (added) {
+            adjust_variable_order();
+        }
     }
 
-    return false;
+    return added;
 }
 
 /**
@@ -1066,35 +1156,27 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
         mapping[a.assignment.pattern_vertex] = a.assignment.target_vertex;      // Construct the current mapping as a vector
     }
     // ** PATTERN AND TARGET **
-    if (params.pattern_rep_syms && params.target_rep_syms) {
-        var_order.resize(0);        // reconstruct the var order
-        for (auto &b : pattern_base) {
-            var_order.push_back(b);
-        }
-        for (int i = 0; i < model.pattern_size; i++) {
-            if (std::find(var_order.begin(), var_order.end(), i) == var_order.end()) {
-                var_order.push_back(i);
-            }
-        }
+    if (params.pattern_rep_syms && params.target_rep_syms) {            // TODO we could actually just do this one in all cases... might be slower?
         for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
             for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
-                const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];
+                // const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];          // Do we need the list of pattern auts at all?
                 const std::vector<unsigned int> &t_aut = target_coset_reps[t];
                 const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
                 const std::vector<unsigned int> &t_inv = target_coset_invs[t];
                 std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
                 for (const auto &a: assignments.values) {
-                    permuted[p_aut[a.assignment.pattern_vertex]] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
+                    permuted[p_inv[a.assignment.pattern_vertex]] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
                 }
-                for (unsigned int i = 0; i < model.pattern_size; i++) {
+                for (unsigned int y = 0; y < model.pattern_size; y++) {
+                    int i = var_order[y];
                     if (mapping[i] != -1 && permuted[i] != -1) {
-                        if (permuted[i] < mapping[i]) {       // The permuted mapping is 'less than' the original
+                        if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
                             return false;
                         }
                         else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
                             continue;
                         }
-                        else if (permuted[i] > mapping[i]) {      // The original mapping is 'less than' the permutation
+                        else if (occurs_before(mapping[i], permuted[i])) {      // The original mapping is 'less than' the permutation
                             break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
                         }
                     }
@@ -1102,7 +1184,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         for (auto &d : new_domains) {
                             if (d.v == p_inv[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                    if (t_inv[x] < static_cast<unsigned int>(mapping[i])) {         // TODO value order
+                                    if (occurs_before(t_inv[x], static_cast<unsigned int>(mapping[i]))) {
                                         d.values.reset(t_inv[x]);
                                     }
                                 }
@@ -1119,32 +1201,23 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
     }
     // ** PATTERN ONLY **
     else if (params.pattern_rep_syms) {
-        var_order.resize(0);        // reconstruct the var order
-        for (auto &b : pattern_base) {
-            var_order.push_back(b);
-        }
-        for (int i = 0; i < model.pattern_size; i++) {
-            if (std::find(var_order.begin(), var_order.end(), i) == var_order.end()) {
-                var_order.push_back(i);
-            }
-        }
         for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
-            const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];
+            // const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];
             const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
             std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
             for (const auto &a: assignments.values) {
-                permuted[p_aut[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
+                permuted[p_inv[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
             }
-            for (unsigned int x = 0; x < model.pattern_size; x++) {
-                int i = var_order[x];
+            for (unsigned int y = 0; y < model.pattern_size; y++) {
+                int i = var_order[y];
                 if (mapping[i] != -1 && permuted[i] != -1) {
-                    if (dynamic_order_less(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
+                    if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
                         return false;
                     }
                     else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
                         continue;
                     }
-                    else if (dynamic_order_less(mapping[i], permuted[i])) {      // The original mapping is lex-less-than the permutation
+                    else if (occurs_before(mapping[i], permuted[i])) {      // The original mapping is lex-less-than the permutation
                         break;                          // TODO we don't need to check this particular p_aut again until we backtrack
                     }
                 }
@@ -1152,7 +1225,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                     for (auto &d : new_domains) {
                         if (d.v == p_inv[i]) {               // Find the variable's domain
                             for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                if (x < mapping[i]) {       // (TODO according to the value order)
+                                if (occurs_before(x, mapping[i])) {       // (TODO according to the value order)
                                     d.values.reset(x);
                                 }
                             }
@@ -1175,29 +1248,26 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
             for (const auto &a: assignments.values) {
                 permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
             }
-            for (unsigned int i = 0; i < model.pattern_size; i++) {
-                if (mapping[i] != -1 && permuted[i] != -1) {
-                    if (dynamic_order_less(permuted[i],mapping[i])) {       // The permuted mapping is 'less than' the original
+            for (unsigned int y = 0; y < model.pattern_size; y++) {
+                int i = var_order[y];
+                if (mapping[i] != -1) {
+                    if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is 'less than' the original
                         return false;
                     }
                     else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
                         continue;
                     }
-                    else if (dynamic_order_less(mapping[i],permuted[i])) {      // The original mapping is 'less than' the permutation
-                        break;                          // TODO we don't need to check this particular t_aut again until we backtrack
-                    }
-                }
-                else if (mapping[i] != -1) {
-                    for (auto &d : new_domains) {
-                        if (d.v == i) {               // Find the variable's domain
-                            for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                if (t_inv[x] < static_cast<unsigned int>(mapping[i])) {         // TODO value order
-                                    d.values.reset(t_inv[x]);
+                    else if (occurs_before(mapping[i],permuted[i])) {      // The original mapping is 'less than' the permutation
+                        for (auto &d : new_domains) {
+                            if (d.v == i) {
+                                d.values.reset(permuted[i]);                // Don't bother searching permuted[i], we know it's symmetrical to mapping[i]
+                                if (!d.values.any()) {
+                                    return false;
                                 }
                             }
                         }
+                        break;                          // TODO we don't need to check this particular t_aut again until we backtrack
                     }
-                    break;
                 }
                 else {
                     break;
@@ -1210,11 +1280,63 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
 }
 
 /**
+ * We want to filter top-level domains when value symmetry breaking. (Don't bother trying to break symmetries until we have propagated unit domains + adjacency.)
+ * 
+ * @returns true if a domain was filtered, false otherwise.
+ */
+auto HomomorphismSearcher::filter_val_syms_from_domain(const HomomorphismAssignments & assignments, Domains & domains, int branch_v) -> bool {
+    bool did_filter = false;
+
+    HomomorphismDomain * domain = nullptr;
+    for (auto & d : domains) {
+        if (d.v == branch_v) {
+            domain = &d;
+            break;
+        }
+    }
+
+    std::fill(mapping.begin(), mapping.end(), -1);
+    for (const auto &a: assignments.values) {
+        mapping[a.assignment.pattern_vertex] = a.assignment.target_vertex;      // Construct the current mapping as a vector
+    }
+
+    for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+        const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+        const std::vector<unsigned int> &t_inv = target_coset_invs[t];
+        std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
+        for (const auto &a: assignments.values) {
+            permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
+        }
+        for (unsigned int y = 0; y < model.pattern_size; y++) {
+            int i = var_order[y];
+            if (mapping[i] != -1) {
+                if (i != domain->v) {            // Not our branch domain, move on
+                    continue;
+                }
+                if (occurs_before(mapping[i],permuted[i])) {      // The original mapping is 'less than' the permutation
+                    domain->values.reset(permuted[i]);                // Don't bother searching permuted[i], we know it's symmetrical to mapping[i]
+                    did_filter = true;
+                    break;
+                }
+            }
+            else {                              // Not enough information to do lex ordering from here
+                break;
+            }
+        }
+    }
+
+    return did_filter;
+}
+
+/**
  * The value order is always [Base(T)] + [V_T \ Base(T)]
  * 
  * Check if a < b
  */
-auto HomomorphismSearcher::dynamic_order_less(int a, int b) -> bool {
+auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {            // TODO orbits
+    if (!model.has_occur_less_thans()) {     // Default order is natural
+        return a < b;
+    }
     // TODO this can probably be made more efficient, proof of concept for the moment
     auto index_b = std::find(target_base.begin(), target_base.end(), b);
     auto index_a = std::find(target_base.begin(), index_b, a);
@@ -1223,6 +1345,21 @@ auto HomomorphismSearcher::dynamic_order_less(int a, int b) -> bool {
     }
     else {
         return (index_a != index_b) || a < b;
+    }
+}
+
+/**
+ * Adjust the variable order when the pattern base changes
+ */
+auto HomomorphismSearcher::adjust_variable_order() -> void {
+    var_order.resize(0);        // reconstruct the var order
+    for (auto &b : pattern_base) {
+        var_order.push_back(b);
+    }
+    for (int i = 0; i < model.pattern_size; i++) {
+        if (std::find(var_order.begin(), var_order.end(), i) == var_order.end()) {
+            var_order.push_back(i);
+        }
     }
 }
 
@@ -1308,8 +1445,9 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             }
 
             // propagate simple all different and adjacency
-            if (! propagate_simple_constraints(new_domains, *current_assignment))
+            if (! propagate_simple_constraints(new_domains, *current_assignment)) {
                 return false;
+            }
         }
         auto sym_start_time = steady_clock::now();
 
@@ -1412,7 +1550,7 @@ auto HomomorphismSearcher::set_seed(int t) -> void
     global_rand.seed(t);
 }
 
-auto HomomorphismSearcher::print_pattern_constraints() -> void {
+auto HomomorphismSearcher::print_pattern_constraints() -> void {        // TODO coset printing
     std::cout << "pattern constraints = ";
     for (auto & [a,b] : useful_pattern_constraints) {
         std::cout << a << "<" << b << " ";

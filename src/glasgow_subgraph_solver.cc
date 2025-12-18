@@ -497,8 +497,8 @@ auto main(int argc, char * argv[]) -> int
             string method = options_vars["pattern-coset-symmetries"].as<string>();
             params.pattern_rep_syms = true;
             if (method == "natural") {
-                params.pattern_aut_reps = innards::coset_reps(pattern, params.pattern_orbit_sizes);
-                params.pattern_aut_inverses = innards::invert_list(params.pattern_aut_reps);
+                params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes);
+                params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
             }
             else if (method == "flexible") {
                 params.flexible_pattern = true;
