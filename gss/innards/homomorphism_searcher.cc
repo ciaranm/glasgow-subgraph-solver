@@ -772,6 +772,10 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
     for (unsigned i = 0, i_end = new_domains.size(); i != i_end; ++i)
         find_domain[new_domains[i].v] = i;
 
+    if (model.has_occur_less_thans() && target_base.size() < 1) {               // We don't know anything about the value order so can't do inference
+        return true;
+    }
+
     for (auto & [a, b] : constraints) {
         if (find_domain[a] == -1 || find_domain[b] == -1)
             continue;
@@ -779,19 +783,27 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto & b_domain = new_domains[find_domain[b]];
 
         // first value of b must be at least one after the first possible value of a according to the value order
+        auto a_values_copy = a_domain.values;
         auto first_a = a_domain.values.find_first();
-        if (first_a == decltype(a_domain.values)::npos)
+        for (auto v = first_a; v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
+            a_values_copy.reset(v);
+            if (occurs_before(v, first_a)) {
+                first_a = v;
+            }
+        }
+        if (first_a == decltype(a_domain.values)::npos)         // didn't find a valid value for a
             return false;
-        
-        auto first_allowed_b = first_a + 1;
 
-        if (first_allowed_b >= model.target_size)
-            return false;
+        // if (first_a >= model.target_size - 1)                // TODO if a is the last element in the value order, fail
+        //     return false;
 
-        for (auto v = b_domain.values.find_first(); v != decltype(b_domain.values)::npos; v = b_domain.values.find_first()) {
-                if (v >= first_allowed_b)
-                    break;
+        auto b_values_copy = b_domain.values;
+        auto first_allowed_b = b_domain.values.find_first();
+        for (auto v = first_allowed_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
+            if (occurs_before(v, first_a) || v == first_a) {
                 b_domain.values.reset(v);
+            }
+            b_values_copy.reset(v);
         }
 
         // b might have shrunk (and detect empty before the next bit to make life easier)
@@ -804,6 +816,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto & [a, b] = constraints[i];
         if (find_domain[a] == -1 || find_domain[b] == -1)
             continue;
+        
         auto & a_domain = new_domains[find_domain[a]];
         auto & b_domain = new_domains[find_domain[b]];
 
@@ -812,18 +825,20 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto last_b = b_domain.values.find_first();
         for (auto v = last_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
             b_values_copy.reset(v);
-            last_b = v;
+            if (occurs_before(last_b, v)) {
+                last_b = v;
+            }
         }
 
-        if (last_b == 0)
+        if ((target_base.size() > 0 && last_b == target_base[0]) || (target_base.size() == 0 && last_b == 0))                   // b is the first element in the value order
             return false;
-        auto last_allowed_a = last_b - 1;
 
         auto a_values_copy = a_domain.values;
         for (auto v = a_values_copy.find_first(); v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
             a_values_copy.reset(v);
-            if (v > last_allowed_a)
+            if (occurs_before(last_b, v) || last_b == v) {
                 a_domain.values.reset(v);
+            }
         }
 
         // a might have shrunk
@@ -1345,7 +1360,10 @@ auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {            // T
         return index_a < index_b;
     }
     else {
-        return (index_a != index_b) || a < b;
+        if (index_a != index_b) {
+            return true;        // a is in the base, but b is not => a < b
+        }
+        return false;       // neither a nor b in the base => order undecided
     }
 }
 

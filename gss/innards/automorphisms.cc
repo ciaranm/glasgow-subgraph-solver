@@ -121,17 +121,9 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<i
 }
 
 /**
- * Calculate the generating set for the automorphism group of an input graph (picking a random base)
- */
-auto::gss::innards::coset_reps(const InputGraph & i, std::vector<int> & orbit_sizes, const bool degree_sequence) -> std::vector<std::vector<unsigned int>> {
-    std::vector<int> base;
-    return coset_reps(i, orbit_sizes, base, degree_sequence);
-}
-
-/**
  * Calulcate the generating set for the automorphism group of an input graph (given a [partial] base)
  */
-auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_sizes, std::vector<int> base, const bool degree_sequence) -> std::vector<std::vector<unsigned int>> {
+auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_sizes, std::vector<int> & base, const bool degree_sequence) -> std::vector<std::vector<unsigned int>> {
     dejavu::static_graph g = build_static_graph(i);
     int nv = g.get_sgraph()->v_size;
 
