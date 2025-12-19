@@ -500,7 +500,7 @@ auto main(int argc, char * argv[]) -> int
                 params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes, false);
                 params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
             }            
-            if (method == "degree") {
+            else if (method == "degree") {
                 params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes, true);
                 params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
             }
@@ -511,7 +511,7 @@ auto main(int argc, char * argv[]) -> int
                 params.dynamic_pattern = true;
             }
             else {
-                cout << "Unrecognised pattern symmetry policy " << method << ", use (natural/flexible/dynamic).\n";
+                cout << "Unrecognised pattern symmetry policy " << method << ", use (natural/degree/flexible/dynamic).\n";
                 return EXIT_FAILURE;
             }
             params.partial_assignments_sym = true;
@@ -523,7 +523,7 @@ auto main(int argc, char * argv[]) -> int
                 params.target_aut_reps = innards::coset_reps(target, params.target_orbit_sizes, false);
                 params.target_aut_inverses = innards::invert_list(params.target_aut_reps);
             }
-            if (method == "degree") {
+            else if (method == "degree") {
                 params.target_aut_reps = innards::coset_reps(target, params.target_orbit_sizes, true);
                 params.target_aut_inverses = innards::invert_list(params.target_aut_reps);
             }
@@ -534,7 +534,7 @@ auto main(int argc, char * argv[]) -> int
                 params.dynamic_target = true;
             }
             else {
-                cout << "Unrecognised pattern symmetry policy " << method << ", use (natural/flexible/dynamic).\n";
+                cout << "Unrecognised target symmetry policy " << method << ", use (natural/degree/flexible/dynamic).\n";
                 return EXIT_FAILURE;
             }
             params.partial_assignments_sym = true;

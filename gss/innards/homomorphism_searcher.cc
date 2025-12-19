@@ -778,7 +778,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto & a_domain = new_domains[find_domain[a]];
         auto & b_domain = new_domains[find_domain[b]];
 
-        // first value of b must be at least one after the first possible value of a
+        // first value of b must be at least one after the first possible value of a according to the value order
         auto first_a = a_domain.values.find_first();
         if (first_a == decltype(a_domain.values)::npos)
             return false;
@@ -1177,6 +1177,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                             continue;
                         }
                         else if (occurs_before(mapping[i], permuted[i])) {      // The original mapping is 'less than' the permutation
+                            // TODO some domain inference here?
                             break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
                         }
                     }
