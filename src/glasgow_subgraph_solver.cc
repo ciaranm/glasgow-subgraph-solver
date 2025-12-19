@@ -497,7 +497,11 @@ auto main(int argc, char * argv[]) -> int
             string method = options_vars["pattern-coset-symmetries"].as<string>();
             params.pattern_rep_syms = true;
             if (method == "natural") {
-                params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes);
+                params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes, false);
+                params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
+            }            
+            if (method == "degree") {
+                params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes, true);
                 params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
             }
             else if (method == "flexible") {
@@ -516,7 +520,11 @@ auto main(int argc, char * argv[]) -> int
             string method = options_vars["target-coset-symmetries"].as<string>();
             params.target_rep_syms = true;
             if (method == "natural") {
-                params.target_aut_reps = innards::coset_reps(target, params.target_orbit_sizes);
+                params.target_aut_reps = innards::coset_reps(target, params.target_orbit_sizes, false);
+                params.target_aut_inverses = innards::invert_list(params.target_aut_reps);
+            }
+            if (method == "degree") {
+                params.target_aut_reps = innards::coset_reps(target, params.target_orbit_sizes, true);
                 params.target_aut_inverses = innards::invert_list(params.target_aut_reps);
             }
             else if (method == "flexible") {

@@ -123,15 +123,15 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<i
 /**
  * Calculate the generating set for the automorphism group of an input graph (picking a random base)
  */
-auto::gss::innards::coset_reps(const InputGraph & i, std::vector<int> & orbit_sizes) -> std::vector<std::vector<unsigned int>> {
+auto::gss::innards::coset_reps(const InputGraph & i, std::vector<int> & orbit_sizes, const bool degree_sequence) -> std::vector<std::vector<unsigned int>> {
     std::vector<int> base;
-    return coset_reps(i, orbit_sizes, base);
+    return coset_reps(i, orbit_sizes, base, degree_sequence);
 }
 
 /**
  * Calulcate the generating set for the automorphism group of an input graph (given a [partial] base)
  */
-auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_sizes, std::vector<int> base) -> std::vector<std::vector<unsigned int>> {
+auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_sizes, std::vector<int> base, const bool degree_sequence) -> std::vector<std::vector<unsigned int>> {
     dejavu::static_graph g = build_static_graph(i);
     int nv = g.get_sgraph()->v_size;
 
@@ -140,6 +140,14 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
     dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
 
     rschreier.set_base(base);       // Empty base to begin with
+
+    std::vector<int> vertex_order(i.size());                // Decide on a fixed vertex order
+    std::iota(vertex_order.begin(), vertex_order.end(), 0);
+    if (degree_sequence) {
+        stable_sort(vertex_order.begin(), vertex_order.end(), [&](int a, int b) -> bool {
+            return -i.degree(a) < -i.degree(b);
+        });
+    }
 
     dejavu::hooks::schreier_hook hook(rschreier);
     dejavu::solver s;
@@ -159,7 +167,7 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
     while (! stab_trivial) {        // While stabiliser is non-trivial
         rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
         stab_trivial = true;
-        for (int v = 0; v < i.size(); v++) {        // For each vertex
+        for (int v: vertex_order) {        // For each vertex
             if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
                 stab_trivial = false;
                 base.push_back(v);          // Add v to base
