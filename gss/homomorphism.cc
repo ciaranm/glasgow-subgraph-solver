@@ -123,7 +123,6 @@ namespace
                 }
 
                 searcher.watches.clear_new_nogoods();
-
                 ++result.propagations;
                 if (searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                     auto assignments_copy = assignments;
@@ -164,6 +163,16 @@ namespace
 
                 params.restarts_schedule->did_a_restart();
             }
+
+            if (model.do_dynamic_less_thans())
+                searcher.print_pattern_constraints();
+            if (model.do_dynamic_occur_less_thans())
+                searcher.print_target_constraints();
+            if (model.has_less_thans() || model.has_occur_less_thans()) {
+                result.rep_solution_count = searcher.rep_solution_count;
+            }
+
+            std::cout << "sym_time = " << searcher.sym_time << "\n";
 
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
