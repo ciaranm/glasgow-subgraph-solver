@@ -126,6 +126,7 @@ namespace gss
 
         // If breaking variable and value symmetries, which strategy to use
         bool partial_assignments_sym = false;
+        bool orbit_sym = false;
 
         // If breaking symmetries with coset representatives, which type to use
         bool pattern_rep_syms = false, target_rep_syms = false; 

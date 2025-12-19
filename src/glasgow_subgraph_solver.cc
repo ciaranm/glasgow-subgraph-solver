@@ -447,7 +447,7 @@ auto main(int argc, char * argv[]) -> int
                 cerr << "Must specify symmetry ordering mode (natural / degree / flexible / dynamic)" << endl;
                 return EXIT_FAILURE;
             }
-
+            params.orbit_sym = true;
         }
 
         if (was_given_pattern_automorphism_group)
@@ -491,7 +491,7 @@ auto main(int argc, char * argv[]) -> int
             else if (mode == "dynamic") {
                 params.dynamic_target = true;
             }
-
+            params.orbit_sym = true;
         }
         if (options_vars.count("pattern-coset-symmetries")) {
             string method = options_vars["pattern-coset-symmetries"].as<string>();
@@ -558,7 +558,7 @@ auto main(int argc, char * argv[]) -> int
         cout << endl;
 
         if (params.count_solutions) {
-            if (params.partial_assignments_sym) {
+            if (params.partial_assignments_sym || params.orbit_sym) {
                 cout << "representative_solution_count = " << result.rep_solution_count << endl;
             }
             cout << "solution_count = " << result.solution_count << endl;
