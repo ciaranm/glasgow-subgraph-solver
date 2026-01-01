@@ -31,6 +31,7 @@ struct Timeout::Detail
     mutex timeout_mutex;
     condition_variable timeout_cv;
     atomic<bool> abort;
+    atomic<bool> * int_or_term_flag = nullptr;
 };
 
 Timeout::Timeout(const seconds limit) :
@@ -64,7 +65,12 @@ Timeout::~Timeout()
 
 auto Timeout::should_abort() const -> bool
 {
-    return _detail->abort.load();
+    return _detail->abort.load() || (_detail->int_or_term_flag && _detail->int_or_term_flag->load());
+}
+
+auto Timeout::killed() const -> bool
+{
+    return _detail->int_or_term_flag && _detail->int_or_term_flag->load();
 }
 
 auto Timeout::aborted() const -> bool
@@ -88,4 +94,9 @@ auto Timeout::stop() -> void
         }
         _detail->timeout_thread.join();
     }
+}
+
+auto Timeout::monitor_int_or_term_flag(atomic<bool> * int_or_term_flag) -> void
+{
+    _detail->int_or_term_flag = int_or_term_flag;
 }

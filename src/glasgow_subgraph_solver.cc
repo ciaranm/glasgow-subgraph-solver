@@ -11,6 +11,7 @@
 #include <cxxopts.hpp>
 
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <iomanip>
@@ -23,6 +24,7 @@
 
 using namespace gss;
 
+using std::atomic;
 using std::boolalpha;
 using std::cerr;
 using std::cout;
@@ -46,6 +48,17 @@ using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
 using std::chrono::system_clock;
+
+namespace
+{
+    static atomic<bool> int_or_term_flag{false};
+
+    extern "C" auto sig_int_or_term_handler(int) -> void
+    {
+        int_or_term_flag.store(true);
+    }
+
+}
 
 auto main(int argc, char * argv[]) -> int
 {
@@ -403,6 +416,11 @@ auto main(int argc, char * argv[]) -> int
         /* Prepare and start timeout */
         params.timeout = make_shared<Timeout>(options_vars.count("timeout") ? seconds{options_vars["timeout"].as<int>()} : 0s);
 
+        signal(SIGINT, &sig_int_or_term_handler);
+        signal(SIGTERM, &sig_int_or_term_handler);
+
+        params.timeout->monitor_int_or_term_flag(&int_or_term_flag);
+
         /* Start the clock */
         params.start_time = steady_clock::now();
 
@@ -550,7 +568,9 @@ auto main(int argc, char * argv[]) -> int
         auto overall_time = duration_cast<microseconds>(steady_clock::now() - params.start_time);
 
         cout << "status = ";
-        if (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining))
+        if (params.timeout->killed())
+            cout << "killed";
+        else if (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining))
             cout << "aborted";
         else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
             cout << "true";
