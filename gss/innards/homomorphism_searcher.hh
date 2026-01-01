@@ -188,7 +188,7 @@ namespace gss::innards
 
         auto count_solution(const HomomorphismAssignments & assignments) -> long;
 
-        int sym_time;
+        std::chrono::microseconds sym_time;
         loooong rep_solution_count = 0;
 
         Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;

@@ -8,6 +8,7 @@
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/proof.hh>
 #include <gss/innards/thread_utils.hh>
+#include <gss/time.hh>
 
 #include <algorithm>
 #include <atomic>
@@ -49,9 +50,9 @@ using std::unordered_set;
 using std::vector;
 
 using std::chrono::duration_cast;
-using std::chrono::milliseconds;
+using std::chrono::microseconds;
 using std::chrono::steady_clock;
-using std::chrono::operator""ms;
+using std::chrono::operator""us;
 
 namespace
 {
@@ -172,14 +173,14 @@ namespace
                 result.rep_solution_count = searcher.rep_solution_count;
             }
 
-            std::cout << "sym_time = " << searcher.sym_time << "\n";
+            std::cout << "sym_time = " << microseconds_to_string(searcher.sym_time) << "\n";
 
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
             result.extra_stats.emplace_back("shape_graphs = " + to_string(model.max_graphs));
 
-            result.extra_stats.emplace_back("search_time = " + to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+            result.extra_stats.emplace_back("search_time = " + microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - search_start_time)));
 
             if (might_have_watches(params)) {
                 result.extra_stats.emplace_back("nogoods_size = " + to_string(searcher.watches.nogoods.size()));
@@ -405,7 +406,7 @@ namespace
 
             common_result.extra_stats.emplace_back("by_thread_nodes =" + by_thread_nodes);
             common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
-            common_result.extra_stats.emplace_back("search_time = " + to_string(duration_cast<milliseconds>(steady_clock::now() - search_start_time).count()));
+            common_result.extra_stats.emplace_back("search_time = " + microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - search_start_time)));
 
             return common_result;
         }

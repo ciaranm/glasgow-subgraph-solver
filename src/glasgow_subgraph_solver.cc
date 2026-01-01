@@ -6,6 +6,7 @@
 #include <gss/innards/verify.hh>
 #include <gss/restarts.hh>
 #include <gss/sip_decomposer.hh>
+#include <gss/time.hh>
 
 #include <cxxopts.hpp>
 
@@ -40,7 +41,7 @@ using std::string;
 using std::vector;
 
 using std::chrono::duration_cast;
-using std::chrono::milliseconds;
+using std::chrono::microseconds;
 using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
@@ -74,7 +75,7 @@ auto main(int argc, char * argv[]) -> int
             ("restarts", "Specify restart policy (luby / geometric / timed / none)", cxxopts::value<string>())
             ("geometric-multiplier", "Specify multiplier for geometric restarts", cxxopts::value<double>())
             ("geometric-constant", "Specify starting constant for geometric restarts", cxxopts::value<double>())
-            ("restart-interval", "Specify the restart interval in milliseconds for timed restarts", cxxopts::value<int>())
+            ("restart-interval", "Specify the restart interval in microseconds for timed restarts", cxxopts::value<int>())
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
@@ -200,10 +201,10 @@ auto main(int argc, char * argv[]) -> int
                 params.restarts_schedule = make_unique<GeometricRestartsSchedule>(geometric_constant, geometric_multiplier);
             }
             else if (restarts_policy == "timed") {
-                milliseconds duration = TimedRestartsSchedule::default_duration;
+                microseconds duration = TimedRestartsSchedule::default_duration;
                 unsigned long long minimum_backtracks = TimedRestartsSchedule::default_minimum_backtracks;
                 if (options_vars.count("restart-interval"))
-                    duration = milliseconds{options_vars["restart-interval"].as<int>()};
+                    duration = microseconds{options_vars["restart-interval"].as<int>()};
                 if (options_vars.count("restart-minimum"))
                     minimum_backtracks = options_vars["restart-minimum"].as<int>();
                 params.restarts_schedule = make_unique<TimedRestartsSchedule>(duration, minimum_backtracks);
@@ -329,8 +330,8 @@ auto main(int argc, char * argv[]) -> int
                 options_vars["send-to-lackey"].as<string>(),
                 options_vars["receive-from-lackey"].as<string>(),
                 pattern, target);
-            auto lackey_time = duration_cast<milliseconds>(steady_clock::now() - lackey_started_at);
-            cout << "lackey_init_time = " << lackey_time.count() << endl;
+            auto lackey_time = duration_cast<microseconds>(steady_clock::now() - lackey_started_at);
+            cout << "lackey_init_time = " << microseconds_to_string(lackey_time) << endl;
         }
         params.send_partials_to_lackey = options_vars.count("send-partials-to-lackey");
         if (options_vars.count("propagate-using-lackey")) {
@@ -409,7 +410,7 @@ auto main(int argc, char * argv[]) -> int
             auto gap_start_time = steady_clock::now();
             innards::find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
             was_given_pattern_automorphism_group = true;
-            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
+            cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - gap_start_time)) << endl;
             cout << "pattern_less_constraints =";
             for (auto & [a, b] : params.pattern_less_constraints)
                 cout << " " << a << "<" << b;
@@ -421,7 +422,7 @@ auto main(int argc, char * argv[]) -> int
                 auto dejavu_start_time = steady_clock::now();
                 params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, params.pattern_base, params.pattern_orbit_sizes, false);
                 was_given_pattern_automorphism_group = true;
-                cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
                 cout << "pattern_less_constraints =";
                 for (auto & [a, b] : params.pattern_less_constraints)
                     cout << " " << a << "<" << b;
@@ -431,7 +432,7 @@ auto main(int argc, char * argv[]) -> int
                 auto dejavu_start_time = steady_clock::now();
                 params.pattern_less_constraints = innards::automorphisms_as_order_constraints(pattern, params.pattern_base, params.pattern_orbit_sizes, true);
                 was_given_pattern_automorphism_group = true;
-                cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
                 cout << "pattern_less_constraints =";
                 for (auto & [a, b] : params.pattern_less_constraints)
                     cout << " " << a << "<" << b;
@@ -457,7 +458,7 @@ auto main(int argc, char * argv[]) -> int
             auto gap_start_time = steady_clock::now();
             innards::find_symmetries(argv[0], target, params.target_occur_less_constraints, target_automorphism_group_size);
             was_given_target_automorphism_group = true;
-            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
+            cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - gap_start_time)) << endl;
             cout << "target_occur_less_constraints =";
             for (auto & [a, b] : params.target_occur_less_constraints)
                 cout << " " << a << "<" << b;
@@ -469,7 +470,7 @@ auto main(int argc, char * argv[]) -> int
                 auto dejavu_start_time = steady_clock::now();
                 params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, params.target_base, params.target_orbit_sizes, false);
                 was_given_target_automorphism_group = true;
-                cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
                 cout << "target_occur_less_constraints =";
                 for (auto & [a, b] : params.target_occur_less_constraints)
                     cout << " " << a << "<" << b;
@@ -479,7 +480,7 @@ auto main(int argc, char * argv[]) -> int
                 auto dejavu_start_time = steady_clock::now();
                 params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(target, params.target_base, params.target_orbit_sizes, true);
                 was_given_target_automorphism_group = true;
-                cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - dejavu_start_time).count() << endl;
+                cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
                 cout << "target_occur_less_constraints =";
                 for (auto & [a, b] : params.target_occur_less_constraints)
                     cout << " " << a << "<" << b;
@@ -499,7 +500,7 @@ auto main(int argc, char * argv[]) -> int
             if (method == "natural") {
                 params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes, params.pattern_base, false);
                 params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
-            }            
+            }
             else if (method == "degree") {
                 params.pattern_aut_inverses = innards::coset_reps(pattern, params.pattern_orbit_sizes, params.pattern_base, true);
                 params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
@@ -546,7 +547,7 @@ auto main(int argc, char * argv[]) -> int
         auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params) : solve_homomorphism_problem(pattern, target, params);
 
         /* Stop the clock. */
-        auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
+        auto overall_time = duration_cast<microseconds>(steady_clock::now() - params.start_time);
 
         cout << "status = ";
         if (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining))
@@ -574,7 +575,7 @@ auto main(int argc, char * argv[]) -> int
             cout << endl;
         }
 
-        cout << "runtime = " << overall_time.count() << endl;
+        cout << "runtime = " << microseconds_to_string(overall_time) << endl;
 
         for (const auto & s : result.extra_stats)
             cout << s << endl;

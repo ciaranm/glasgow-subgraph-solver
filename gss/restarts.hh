@@ -88,14 +88,14 @@ namespace gss
     {
     private:
         long long _number_of_backtracks = 0, _minimum_backtracks;
-        std::chrono::milliseconds _duration;
+        std::chrono::microseconds _duration;
         std::chrono::steady_clock::time_point _next_restart_point;
 
     public:
-        static constexpr std::chrono::milliseconds default_duration{100};
+        static constexpr std::chrono::microseconds default_duration{100000};
         static constexpr unsigned long long default_minimum_backtracks = 100;
 
-        TimedRestartsSchedule(std::chrono::milliseconds duration, unsigned long long minimum_backtracks);
+        TimedRestartsSchedule(std::chrono::microseconds duration, unsigned long long minimum_backtracks);
 
         virtual auto did_a_backtrack() -> void override;
         virtual auto did_a_restart() -> void override;

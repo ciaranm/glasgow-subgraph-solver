@@ -18,6 +18,7 @@ add_library(glasgow_subgraphs
         homomorphism.cc
         restarts.cc
         sip_decomposer.cc
+        time.cc
         timeout.cc
         innards/automorphisms.cc
         innards/cheap_all_different.cc

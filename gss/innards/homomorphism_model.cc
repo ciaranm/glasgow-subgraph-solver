@@ -2,6 +2,7 @@
 #include <gss/configuration.hh>
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_traits.hh>
+#include <gss/time.hh>
 
 #include <chrono>
 #include <functional>
@@ -37,7 +38,7 @@ using std::to_string;
 using std::vector;
 
 using std::chrono::duration_cast;
-using std::chrono::milliseconds;
+using std::chrono::microseconds;
 using std::chrono::steady_clock;
 
 namespace
@@ -95,13 +96,13 @@ namespace
                     if (f != t && include[t] != -1 && rows[f * max_graphs + g].test(t))
                         gv.add_edge(include[f], include[t]);
 
-        build_times.push_back(to_string(duration_cast<milliseconds>(steady_clock::now() - start_time).count()));
+        build_times.push_back(microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - start_time)));
 
         start_time = steady_clock::now();
 
         auto result = solve_clique_problem(gv, params);
 
-        solve_times.push_back(to_string(duration_cast<milliseconds>(steady_clock::now() - start_time).count()));
+        solve_times.push_back(microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - start_time)));
         find_nodes.push_back(to_string(result.find_nodes));
         prove_nodes.push_back(to_string(result.prove_nodes));
 
