@@ -32,6 +32,10 @@ public:
 
     ~InputGraph();
 
+    auto operator=(const InputGraph & other) -> InputGraph & = delete;
+
+    auto operator=(InputGraph &&) -> InputGraph &;
+
     /**
      * Number of vertices.
      */

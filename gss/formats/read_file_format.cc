@@ -1,5 +1,6 @@
 #include <gss/formats/csv.hh>
 #include <gss/formats/dimacs.hh>
+#include <gss/formats/flat.hh>
 #include <gss/formats/lad.hh>
 #include <gss/formats/read_file_format.hh>
 #include <gss/formats/vfmcs.hh>
@@ -11,6 +12,7 @@
 
 using std::ifstream;
 using std::ios;
+using std::istream;
 using std::move;
 using std::regex;
 using std::smatch;
@@ -20,7 +22,7 @@ using std::stringstream;
 using std::to_string;
 using std::vector;
 
-auto detect_format(ifstream & infile, const string & filename) -> string
+auto detect_format(istream & infile, const string & filename) -> string
 {
     string line;
     if (! getline(infile, line) || line.empty())
@@ -91,6 +93,11 @@ auto detect_format(ifstream & infile, const string & filename) -> string
 auto read_file_format(const string & format, const string & filename) -> InputGraph
 {
     ifstream infile{filename};
+    return read_file_format(format, filename, infile);
+}
+
+auto read_file_format(const string & format, const string & filename, std::istream & infile) -> InputGraph
+{
     if (! infile)
         throw GraphFileError{filename, "unable to open file", false};
 
@@ -120,6 +127,8 @@ auto read_file_format(const string & format, const string & filename) -> InputGr
         return read_vertex_labelled_undirected_vfmcs(move(infile), filename);
     else if (actual_format == "vfmcsvd")
         return read_vertex_labelled_directed_vfmcs(move(infile), filename);
+    else if (actual_format == "flat")
+        return read_flat(move(infile), filename);
     else if (0 == actual_format.compare(0, 8, "csvname:"))
         return read_csv_name(move(infile), filename, actual_format.substr(8));
     else

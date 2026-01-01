@@ -36,6 +36,7 @@ add_library(glasgow_subgraphs
         innards/watches.cc
         formats/csv.cc
         formats/dimacs.cc
+        formats/flat.cc
         formats/graph_file_error.cc
         formats/input_graph.cc
         formats/lad.cc

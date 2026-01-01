@@ -12,27 +12,27 @@
  *
  * \throw GraphFileError
  */
-auto read_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_lad(std::istream && infile, const std::string & filename) -> InputGraph;
 
 /**
  * Read a LAD format file into an InputGraph, treating edges as directed.
  *
  * \throw GraphFileError
  */
-auto read_directed_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_directed_lad(std::istream && infile, const std::string & filename) -> InputGraph;
 
 /**
  * Read a Labelled LAD format file into an InputGraph.
  *
  * \throw GraphFileError
  */
-auto read_labelled_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_labelled_lad(std::istream && infile, const std::string & filename) -> InputGraph;
 
 /**
  * Read a Vertex-Labelled LAD format file into an InputGraph.
  *
  * \throw GraphFileError
  */
-auto read_vertex_labelled_lad(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_vertex_labelled_lad(std::istream && infile, const std::string & filename) -> InputGraph;
 
 #endif
