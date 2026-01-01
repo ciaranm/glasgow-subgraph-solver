@@ -64,7 +64,7 @@ SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
 FetchContent_Declare(
         dejavu
         GIT_REPOSITORY https://github.com/markusa4/dejavu.git
-        GIT_TAG 2a1554c36812fd3120e41747a4d185e191b6c84b
+        GIT_TAG db72b19df28823ab4c0c7e81d2d453f6e3ca6475
 )
 FetchContent_MakeAvailable(dejavu)
 
