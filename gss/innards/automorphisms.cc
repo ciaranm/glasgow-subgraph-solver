@@ -29,6 +29,11 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
     OrderConstraints result;        // List of constraint pairs
     std::set<std::pair<int,int>> unique_list;
 
+    dejavu::big_number sz = s.get_automorphism_group_size();
+    if (sz.mantissa == 1 && sz.exponent == 0) return result;
+
+    std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
+
     std::vector<int> vertex_order(i.size());
     std::iota(vertex_order.begin(), vertex_order.end(), 0);
     if (degree_sequence) {
@@ -90,6 +95,8 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
 
     dejavu::big_number sz = s.get_automorphism_group_size();
     if (sz.mantissa == 1 && sz.exponent == 0) return false;
+
+    std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
 
     return true;
 }
@@ -153,6 +160,11 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
         identity.push_back(y);                      // Every element maps to itself
     }
     mappings.push_back(identity);
+
+    dejavu::big_number sz = s.get_automorphism_group_size();
+    if (sz.mantissa == 1 && sz.exponent == 0) return mappings;
+
+    std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
 
     bool stab_trivial = false;
     dejavu::groups::orbit o{nv};      // Orbit structure of size nv
