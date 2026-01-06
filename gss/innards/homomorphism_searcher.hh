@@ -98,7 +98,7 @@ namespace gss::innards
         std::vector<int> target_base, pattern_base;
         std::vector<int> var_order, suffix;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
-        int pattern_aut_grp_size = 1;
+        loooong pattern_aut_grp_size = 1;
         bool first_sol = true;
         dejavu::groups::random_schreier t_rschreier{static_cast<int>(model.target_size + model.target_edge_num * 2)}, p_rschreier{static_cast<int>(model.pattern_size + model.pattern_edge_num * 2)};    // TODO the * 2 is a clunky upper bound in directed cases
         std::vector<int> mapping, permuted;
@@ -186,7 +186,7 @@ namespace gss::innards
         auto print_pattern_constraints() -> void;
         auto print_target_constraints() -> void;
 
-        auto count_solution(const HomomorphismAssignments & assignments) -> long;
+        auto count_solution(const HomomorphismAssignments & assignments) -> loooong;
 
         std::chrono::microseconds sym_time;
         loooong rep_solution_count = 0;

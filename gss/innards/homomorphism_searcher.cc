@@ -67,6 +67,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         for (size_t i = 0; i < model.target_size; i++) {
             adjacency_matrix.emplace_back(model.target_graph_row(0,i));
         }
+        std::cout << "target_";
         if (!initialise_dynamic_structure(t_rschreier, adjacency_matrix, model.directed())) {
             model.reset_has_occur_less_thans();
         }
@@ -83,6 +84,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         for (size_t i = 0; i < model.pattern_size; i++) {
             adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
         }
+        std::cout << "pattern_";
         if (!initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed())) {
             model.reset_has_less_thans();
         }
@@ -386,7 +388,7 @@ auto HomomorphismSearcher::restarting_search(
         return use_lackey_for_propagation ? SearchResult::UnsatisfiableAndBackjumpUsingLackey : SearchResult::Unsatisfiable;
 }
 
-auto HomomorphismSearcher::count_solution(const HomomorphismAssignments & assignments) -> long {
+auto HomomorphismSearcher::count_solution(const HomomorphismAssignments & assignments) -> loooong {
     ++rep_solution_count;
     if (model.has_less_thans() && !model.has_occur_less_thans()) {
         if (model.do_dynamic_less_thans() && first_sol) {
