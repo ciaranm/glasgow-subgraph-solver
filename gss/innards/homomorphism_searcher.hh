@@ -126,14 +126,19 @@ namespace gss::innards
         auto propagate_less_thans(HomomorphismAssignments assignments, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool;
 
         auto propagate_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
+        auto propagate_occur_less_thans(const HomomorphismAssignments &, Domains & new_domains, const std::vector<std::pair<unsigned int, unsigned int>> &, const std::vector<std::pair<int,int>> &new_assignments) -> bool;
 
         auto propagate_dynamic_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
 
         auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
 
         auto make_useful_target_constraints(int target_vertex, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
+        auto make_useful_target_constraints(std::vector<int> target_vertices, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
+
+        auto make_useful_pattern_constraints(int pattern_vertex, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
+        auto make_useful_pattern_constraints(std::vector<int> pattern_vertices, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
 
         auto break_coset_rep_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 

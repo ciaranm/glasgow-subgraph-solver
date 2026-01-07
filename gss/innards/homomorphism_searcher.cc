@@ -103,7 +103,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         mapping.resize(model.pattern_size);
         permuted.resize(model.pattern_size);
     }
-    if (params.partial_assignments_sym) {
+    if (params.partial_assignments_sym || model.has_occur_less_thans()) {
         var_order.resize(model.pattern_size);
         std::iota(var_order.begin(), var_order.begin() + model.pattern_size, 0);
     }
@@ -290,6 +290,9 @@ auto HomomorphismSearcher::restarting_search(
             if (filter_val_syms_from_domain(assignments, domains, branch_domain->v)) {
                 did_filter = true;
             }
+        }
+        if (params.dynamic_pattern || params.flexible_pattern) {
+            make_useful_pattern_constraints(branch_domain->v, useful_pattern_constraints, pattern_base);
         }
 
         // set up new domains
@@ -795,8 +798,9 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
                 first_a = v;
             }
         }
-        if (first_a == decltype(a_domain.values)::npos)         // didn't find a valid value for a
+        if (first_a == decltype(a_domain.values)::npos)   {
             return false;
+        }      // didn't find a valid value for a
 
         // if (first_a >= model.target_size - 1)                // TODO if a is the last element in the value order, fail
         //     return false;
@@ -812,8 +816,9 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
 
         // b might have shrunk (and detect empty before the next bit to make life easier)
         b_domain.count = b_domain.values.count();
-        if (0 == b_domain.count)
+        if (0 == b_domain.count) {
             return false;
+        }
     }
 
     for (int i = constraints.size() - 1; i >= 0; i--) {
@@ -834,8 +839,9 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
             }
         }
 
-        if ((target_base.size() > 0 && last_b == target_base[0]) || (target_base.size() == 0 && last_b == 0))                   // b is the first element in the value order
+        if ((target_base.size() > 0 && last_b == target_base[0]) || (target_base.size() == 0 && last_b == 0)) {
             return false;
+        }      // b is the first element in the value order
 
         auto a_values_copy = a_domain.values;
         for (auto v = a_values_copy.find_first(); v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
@@ -847,8 +853,29 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
 
         // a might have shrunk
         a_domain.count = a_domain.values.count();
-        if (0 == a_domain.count)
+        if (0 == a_domain.count) {
             return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Don't do any domain filtering, just check whether the current assignments satisfy the less-than symmetry constraints
+ */
+auto HomomorphismSearcher::propagate_less_thans(HomomorphismAssignments assignments, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool {
+    std::vector<int> tup(model.pattern_size, -1);
+    for (const auto &a: assignments.values) {
+        tup[a.assignment.pattern_vertex] = a.assignment.target_vertex;      // Construct the current mapping as a vector
+    }
+    for (auto &[a,b] : constraints) {           // value assigned to a must precede the value assigned to b in the value order
+        if (tup[a] == -1 || tup[b] == -1) {
+            continue;
+        }
+        if (occurs_before(tup[b], tup[a])) {
+            return false;
+        }
     }
 
     return true;
@@ -1060,7 +1087,108 @@ auto HomomorphismSearcher::propagate_dynamic_occur_less_thans(
 }
 
 /**
- * Generate occurs-less-than symmetry constraints according to a given base
+ * This is propagator probably not interact well with other symmetry breaking propagators
+ */
+auto HomomorphismSearcher::propagate_occur_less_thans(
+    const HomomorphismAssignments &assignments, 
+    Domains &new_domains, 
+    const std::vector<std::pair<unsigned int, unsigned int>> &constraints, 
+    const std::vector<std::pair<int,int>> &new_assignments) -> bool 
+{
+    // list of pattern vertices in whose domain each unassigned value is present in
+    vector<optional<SVOBitset>> occurs(model.target_size);
+
+    auto build_occurs = [&](int p) -> void {
+        if (occurs[p])
+            return;
+
+        occurs[p] = make_optional<SVOBitset>(model.pattern_size, 0);
+        for (auto & d : new_domains)
+            if (d.values.test(p))
+                occurs[p]->set(d.v);
+    };
+
+    for (auto & [a, b] : constraints) {
+        build_occurs(a);
+        build_occurs(b);
+    }
+
+    for (auto & a : assignments.values)
+        if (occurs[a.assignment.target_vertex])
+            occurs[a.assignment.target_vertex]->set(a.assignment.pattern_vertex);
+
+    // propagate lower bounds
+    for (auto & [a, b] : constraints) {
+        auto first_a = occurs[a]->find_first();
+        if (first_a == SVOBitset::npos) {
+            // no occurrence of value a, value b cannot be used either
+            occurs[b]->reset();
+            for (auto & d : new_domains)
+                if (d.values.test(b)) {
+                    d.values.reset(b);
+                    if (0 == --d.count)
+                        return false;
+                }
+        }
+        else {
+            // value a first occurs in variable x, value b cannot be used in a variable lower than x
+            for (auto & d : new_domains) {
+                if (d.v < first_a && d.values.test(b)) {
+                    occurs[b]->reset(d.v);
+                    d.values.reset(b);
+                    if (0 == --d.count)
+                        return false;
+                }
+            }
+        }
+    }
+
+    for (auto &[p,t] : new_assignments) {
+        for (auto & [a, b] : constraints) {
+            if (b != t) {
+                // TODO sanity check more efficiently
+                if (occurs[a]->count() == 0) {  // a has not been and will not be assigned
+                    for (auto & d: assignments.values) {
+                        if (b == d.assignment.target_vertex) return false;  // b has been assigned previously
+                    }
+                }
+                continue;
+            }
+
+            bool saw_an_a = false;
+            for (auto & d : new_domains) {
+                if (d.v < p) {
+                    // it's before
+                    if (d.values.test(a))
+                        saw_an_a = true;
+                }
+                else if (d.v > p) {
+                    // comes after, can't use a
+                    if (d.values.test(a)) {
+                        occurs[a]->reset(d.v);
+                        d.values.reset(a);
+                        if (0 == --d.count)
+                            return false;
+                    }
+                }
+            }
+
+            for (auto & d : assignments.values)
+                if (d.assignment.pattern_vertex < p && a == t) {
+                    saw_an_a = true;
+                    break;
+                }
+
+            if (! saw_an_a)
+                return false;
+        }
+    }
+    
+    return true;
+}
+
+/**
+ * Generate occurs-less-than symmetry constraints according to an additional base point
  *
  * @returns true if constraints were added
  */
@@ -1077,7 +1205,27 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 }
 
 /**
- * Generate occurs-less-than symmetry constraints according to a given base
+ * Generate occurs-less-than symmetry constraints according to a given some additional base points
+ *
+ * @returns true if constraints were added
+ */
+auto HomomorphismSearcher::make_useful_target_constraints(
+    std::vector<int> target_vertices,
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+    std::vector<int> & base
+) -> bool
+{
+    bool added = false;
+
+    for (auto &t : target_vertices) {
+        added |= make_useful_target_constraints(t, useful_constraints, base);
+    }
+
+    return added;
+}
+
+/**
+ * Generate occurs-less-than symmetry constraints according to an additional base point
  *
  * @returns true if constraints were added
  */
@@ -1126,6 +1274,40 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
     if(!current_assignment) return false;
     unsigned int p = current_assignment->pattern_vertex;
 
+    return make_useful_pattern_constraints(p, useful_constraints, base);
+}
+
+/**
+ * Generate less-than symmetry constraints according to a given base
+ *
+ * @returns true if constraints were added
+ */
+auto HomomorphismSearcher::make_useful_pattern_constraints(
+    std::vector<int> pattern_vertices,
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+    std::vector<int> & base
+) -> bool 
+{
+    bool added = false;
+
+    for (auto &p : pattern_vertices) {
+        added |= make_useful_pattern_constraints(p, useful_constraints, base);
+    }
+
+    return added;
+}
+
+/**
+ * Generate less-than symmetry constraints according to a given base
+ *
+ * @returns true if constraints were added
+ */
+auto HomomorphismSearcher::make_useful_pattern_constraints(
+    int p,
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+    std::vector<int> & base
+) -> bool
+{
     bool added = false;
 
     if (std::find(base.begin(), base.end(), p) == base.end()) {
@@ -1146,6 +1328,8 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
             int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
             innards::dynamic_order_constraints(size, base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
+
+            // TODO are the domains of the symmetrical vertices equivalent? They should be.
 
             added = (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
         }
@@ -1373,6 +1557,9 @@ auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {            // T
  * Adjust the variable order when the pattern base changes
  */
 auto HomomorphismSearcher::adjust_variable_order() -> void {
+    if (!model.do_dynamic_less_thans()) {       // Leave the variable order as it is
+        return;
+    }
     var_order.resize(0);        // reconstruct the var order
     for (auto &b : pattern_base) {
         var_order.push_back(b);
@@ -1421,6 +1608,9 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
     bool done_globals_at_least_once = false;
 
+    std::vector<int> add_to_pattern_base, add_to_target_base;
+    std::vector<std::pair<int,int>> new_assignments;
+
     // whilst we've got a unit domain...
     for (typename Domains::iterator branch_domain = find_unit_domain();
          branch_domain != new_domains.end() || ! done_globals_at_least_once;
@@ -1429,6 +1619,16 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         if (branch_domain != new_domains.end()) {
             // what are we assigning?
             current_assignment = HomomorphismAssignment{branch_domain->v, unsigned(branch_domain->values.find_first())};
+
+            if (model.do_dynamic_less_thans()) {
+                add_to_pattern_base.push_back(current_assignment->pattern_vertex);
+            }
+            if (model.do_dynamic_occur_less_thans()) {
+                add_to_target_base.push_back(current_assignment->target_vertex);
+            }
+            if (model.has_less_thans()) {
+                new_assignments.push_back(std::make_pair(current_assignment->pattern_vertex, current_assignment->target_vertex));
+            }
 
             // ok, make the assignment
             branch_domain->fixed = true;
@@ -1472,45 +1672,45 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         }
         auto sym_start_time = steady_clock::now();
 
-        if (model.do_dynamic_less_thans()) {
-            if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base)) {
-                // added new constraints -- may want to log something
-            }
-        }
-        if (model.do_dynamic_occur_less_thans()) {
-            if (make_useful_target_constraints(current_assignment, useful_target_constraints, target_base)) {
-                // added new constraints -- may want to log something
-            }
-        }
+        // if (model.do_dynamic_less_thans()) {
+        //     if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base)) {
+        //         // added new constraints -- may want to log something
+        //     }
+        // }
+        // if (model.do_dynamic_occur_less_thans()) {
+        //     if (make_useful_target_constraints(current_assignment, useful_target_constraints, target_base)) {
+        //         // added new constraints -- may want to log something
+        //     }
+        // }
 
-        // propagate orbit less thans - extra assignments -> more constraints to propagate
-        if (model.has_less_thans() && !model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
-            if (!propagate_less_thans(new_domains)) {
-                sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                return false;
-            }
-        }
+        // // propagate orbit less thans - extra assignments -> more constraints to propagate
+        // if (model.has_less_thans() && !model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
+        //     if (!propagate_less_thans(new_domains)) {
+        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+        //         return false;
+        //     }
+        // }
 
-        if (model.has_occur_less_thans() && !params.target_rep_syms) {
-            if (model.do_dynamic_occur_less_thans()) {
-                if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, new_domains)) {
-                    sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                    return false;
-                }
-            }
-            else if (! propagate_occur_less_thans(current_assignment, assignments, new_domains)) {
-                sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                return false;
-            }
-        }
-        if (model.has_less_thans() && model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
-                if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
-                    sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                    return false;
-                }
-            }
+        // if (model.has_occur_less_thans() && !params.target_rep_syms) {
+        //     if (model.do_dynamic_occur_less_thans()) {
+        //         if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, new_domains)) {
+        //             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+        //             return false;
+        //         }
+        //     }
+        //     else if (! propagate_occur_less_thans(current_assignment, assignments, new_domains)) {
+        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+        //         return false;
+        //     }
+        // }
+        // if (model.has_less_thans() && model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
+        //         if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+        //             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+        //             return false;
+        //         }
+        //     }
 
-            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+        //     sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
 
             // propagate all different
             if (params.injectivity == Injectivity::Injective)
@@ -1520,8 +1720,51 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         done_globals_at_least_once = true;
     }
 
-    // propagate permutation symmetries - extra assignments make this more effective
+
     auto sym_start_time = steady_clock::now();
+    // propagate orbit symmetries here -- need to make sure we have resolved adjacency propagators before making constraints
+    if (model.do_dynamic_less_thans()) {
+        if (make_useful_pattern_constraints(add_to_pattern_base, useful_pattern_constraints, pattern_base)) {
+            // added new constraints -- may want to log something
+        }
+    }
+    if (model.do_dynamic_occur_less_thans()) {
+        if (make_useful_target_constraints(add_to_target_base, useful_target_constraints, target_base)) {
+            // added new constraints -- may want to log something
+        }
+    }
+
+    // propagate orbit less thans
+    if (model.has_less_thans() && !params.pattern_rep_syms) {
+        if (model.do_dynamic_less_thans()) {
+            if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                return false;
+            }
+        }
+        else {
+            if (!propagate_less_thans(new_domains)) {
+                sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                return false;
+            }
+        }
+    }
+
+    // propagate orbit occurs less thans
+    if (model.has_occur_less_thans() && !params.target_rep_syms) {
+        if (model.do_dynamic_occur_less_thans()) {
+            if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, new_assignments)) {
+                sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                return false;
+            }
+        }
+        else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, new_assignments)) {
+            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            return false;
+        }
+    }
+
+    // propagate permutation symmetries - extra assignments make this more effective
     if (params.partial_assignments_sym && !break_coset_rep_symmetries(assignments, new_domains)) {
         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         return false;
