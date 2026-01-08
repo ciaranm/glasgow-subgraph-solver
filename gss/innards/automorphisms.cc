@@ -108,6 +108,7 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<i
     // TODO rewrite with get_fixed_orbit
     //TODO we only actually care about adding one extra layer of the chain here, maybe there is a way to limit depth of layer computation in Dejavu?
     rschreier.set_base(base);           // Recompute the stabiliser chain with the provided (partial) base
+
     std::vector<std::pair<unsigned int, unsigned int>> cons;
     std::vector<std::vector<int>> orbs;
 

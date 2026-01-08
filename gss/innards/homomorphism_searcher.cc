@@ -291,8 +291,12 @@ auto HomomorphismSearcher::restarting_search(
                 did_filter = true;
             }
         }
-        if (params.dynamic_pattern || params.flexible_pattern) {
-            make_useful_pattern_constraints(branch_domain->v, useful_pattern_constraints, pattern_base);
+
+        if (params.dynamic_pattern) {
+            pattern_base = pattern_base_cpy;
+        }
+        if (params.dynamic_target) {
+            target_base = target_base_cpy;
         }
 
         // set up new domains
@@ -1535,7 +1539,7 @@ auto HomomorphismSearcher::filter_val_syms_from_domain(const HomomorphismAssignm
  *
  * Check if a < b
  */
-auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {            // TODO orbits
+auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {
     if (!model.has_occur_less_thans()) {     // Default order is natural
         return a < b;
     }
