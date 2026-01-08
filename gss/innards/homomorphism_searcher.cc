@@ -280,6 +280,13 @@ auto HomomorphismSearcher::restarting_search(
         // make the assignment
         assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
 
+        if (params.dynamic_pattern) {
+            pattern_base = pattern_base_cpy;
+        }
+        if (params.dynamic_target) {
+            target_base = target_base_cpy;
+        }
+
         // propagate symmetries to filter domains if we're working with target symmetries
         if (params.target_rep_syms) {
             if (model.do_dynamic_occur_less_thans()) {
@@ -287,16 +294,9 @@ auto HomomorphismSearcher::restarting_search(
                     // added new constraints -- may want to log something
                 }
             }
-            if (filter_val_syms_from_domain(assignments, domains, branch_domain->v)) {
-                did_filter = true;
-            }
-        }
-
-        if (params.dynamic_pattern) {
-            pattern_base = pattern_base_cpy;
-        }
-        if (params.dynamic_target) {
-            target_base = target_base_cpy;
+            // if (filter_val_syms_from_domain(assignments, domains, branch_domain->v)) {      // We don't want to search symmetrical siblings 
+            //     did_filter = true;
+            // }
         }
 
         // set up new domains
@@ -1360,6 +1360,11 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
     for (const auto &a: assignments.values) {
         mapping[a.assignment.pattern_vertex] = a.assignment.target_vertex;      // Construct the current mapping as a vector
     }
+    // std::cout << "breaking sym\nm = ";
+    // for (int i = 0; i < mapping.size(); i++) {
+    //     std::cout << i << "->" << mapping[i] << " ";
+    // }
+    // std::cout << "\n--\n";
     // ** PATTERN AND TARGET **
     if (params.pattern_rep_syms && params.target_rep_syms) {            // TODO we could actually just do this one in all cases... might be slower?
         for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
@@ -1431,7 +1436,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                     for (auto &d : new_domains) {
                         if (d.v == p_inv[i]) {               // Find the variable's domain
                             for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                if (occurs_before(x, mapping[i])) {       // (TODO according to the value order)
+                                if (occurs_before(x, mapping[i])) {
                                     d.values.reset(x);
                                 }
                             }
@@ -1449,15 +1454,20 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
     else if (params.target_rep_syms) {
         for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
             const std::vector<unsigned int> &t_aut = target_coset_reps[t];
-            const std::vector<unsigned int> &t_inv = target_coset_invs[t];
+            // const std::vector<unsigned int> &t_inv = target_coset_invs[t];
             std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
             for (const auto &a: assignments.values) {
                 permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
             }
+            // for (int i = 0; i < permuted.size(); i++) {
+            //     std::cout << i << "->" << permuted[i] << " ";
+            // }
+            // std::cout << "\n";
             for (unsigned int y = 0; y < model.pattern_size; y++) {
                 int i = var_order[y];
                 if (mapping[i] != -1) {
                     if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is 'less than' the original
+                        // std::cout << "lex less\n";
                         return false;
                     }
                     else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
@@ -1467,7 +1477,9 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         for (auto &d : new_domains) {
                             if (d.v == i) {
                                 d.values.reset(permuted[i]);                // Don't bother searching permuted[i], we know it's symmetrical to mapping[i]
+                                // std::cout << "reset " << permuted[i] << " in domain " << i << "\n";
                                 if (!d.values.any()) {
+                                    // std::cout << "domain wipeout of " << i << "\n";
                                     return false;
                                 }
                             }
@@ -1818,18 +1830,46 @@ auto HomomorphismSearcher::set_seed(int t) -> void
     global_rand.seed(t);
 }
 
-auto HomomorphismSearcher::print_pattern_constraints() -> void {        // TODO coset printing
+auto HomomorphismSearcher::print_pattern_constraints() -> void {
     std::cout << "pattern constraints = ";
-    for (auto & [a,b] : useful_pattern_constraints) {
-        std::cout << a << "<" << b << " ";
+    if (params.partial_assignments_sym) {
+        std::cout << "[";
+        for (auto p : pattern_coset_reps) {
+            for (int i = 0; i < model.pattern_size; i++) {      // The first representative is the identity
+                if (i != p[i]) {
+                    std::cout << i << "->" << p[i] << " ";
+                }
+            }
+            std::cout << "\n";
+        }
+        std::cout << "]\n";
     }
-    std::cout << "\n";
+    else {
+        for (auto & [a,b] : useful_pattern_constraints) {
+            std::cout << a << "<" << b << " ";
+        }
+        std::cout << "\n";
+    }
 }
 
 auto HomomorphismSearcher::print_target_constraints() -> void {
     std::cout << "target constraints = ";
-    for (auto & [a,b] : useful_target_constraints) {
-        std::cout << a << "<" << b << " ";
+    if (params.partial_assignments_sym) {
+        std::cout << "[";
+        for (auto t : target_coset_reps) {
+            for (int i = 0; i < model.target_size; i++) {      // The first representative is the identity
+                if (i != t[i]) {
+                    std::cout << i << "->" << t[i] << " ";
+                }
+            }
+            std::cout << "\n";
+        }
+        std::cout << "]\n";
     }
-    std::cout << "\n";
+    else {
+        for (auto & [a,b] : useful_target_constraints) {
+            std::cout << a << "<" << b << " ";
+        }
+        std::cout << "\n";
+    }
 }

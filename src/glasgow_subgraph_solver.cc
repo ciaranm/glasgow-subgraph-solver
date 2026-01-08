@@ -426,11 +426,31 @@ namespace
                 std::cout << "pattern_";
                 params.pattern_aut_inverses = innards::coset_reps(*pattern, params.pattern_orbit_sizes, params.pattern_base, false);
                 params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
+                std::cout << "pattern_constraints = [";
+                for (auto p : params.pattern_aut_reps) {
+                    for (int i = 0; i < p.size(); i++) {
+                        if (i != p[i]) {
+                            std::cout << i << "->" << p[i] << " ";
+                        }
+                    }
+                    std::cout << "\n";
+                }
+                std::cout << "]\n";
             }
             else if (method == "degree") {
                 std::cout << "pattern_";
                 params.pattern_aut_inverses = innards::coset_reps(*pattern, params.pattern_orbit_sizes, params.pattern_base, true);
                 params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
+                std::cout << "pattern_constraints = [";
+                for (auto p : params.pattern_aut_reps) {
+                    for (int i = 0; i < p.size(); i++) {
+                        if (i != p[i]) {
+                            std::cout << i << "->" << p[i] << " ";
+                        }
+                    }
+                    std::cout << "\n";
+                }
+                std::cout << "]\n";
             }
             else if (method == "flexible") {
                 params.flexible_pattern = true;
@@ -449,13 +469,33 @@ namespace
             params.target_rep_syms = true;
             if (method == "natural") {
                 std::cout << "target_";
-                params.target_aut_reps = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, false);
-                params.target_aut_inverses = innards::invert_list(params.target_aut_reps);
+                params.target_aut_inverses = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, false);
+                params.target_aut_reps = innards::invert_list(params.target_aut_inverses);
+                std::cout << "target_constraints = [";
+                for (auto t : params.target_aut_reps) {
+                    for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
+                        if (i != t[i]) {
+                            std::cout << i << "->" << t[i] << " ";
+                        }
+                    }
+                    std::cout << "\n";
+                }
+                std::cout << "]\n";
             }
             else if (method == "degree") {
                 std::cout << "target_";
-                params.target_aut_reps = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, true);
-                params.target_aut_inverses = innards::invert_list(params.target_aut_reps);
+                params.target_aut_inverses = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, true);
+                params.target_aut_reps = innards::invert_list(params.target_aut_inverses);
+                std::cout << "target_constraints = [";
+                for (auto t : params.target_aut_reps) {
+                    for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
+                        if (i != t[i]) {
+                            std::cout << i << "->" << t[i] << " ";
+                        }
+                    }
+                    std::cout << "\n";
+                }
+                std::cout << "]\n";
             }
             else if (method == "flexible") {
                 params.flexible_target = true;
