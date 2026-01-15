@@ -291,7 +291,9 @@ auto HomomorphismSearcher::restarting_search(
 
         // Make sure we don't search symmetrical sibling branches (if dynamically breaking value symmetries)
         if (params.target_rep_syms && params.dynamic_target) {
+            auto sym_start_time = steady_clock::now();
             did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v);
+            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         }
 
         // set up new domains
@@ -1125,8 +1127,9 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
             for (auto & d : new_domains)
                 if (d.values.test(b)) {
                     d.values.reset(b);
-                    if (0 == --d.count)
+                    if (0 == --d.count) {
                         return false;
+                    }
                 }
         }
         else {
@@ -1135,20 +1138,24 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
                 if (d.v < first_a && d.values.test(b)) {
                     occurs[b]->reset(d.v);
                     d.values.reset(b);
-                    if (0 == --d.count)
+                    if (0 == --d.count) {
                         return false;
+                    }
                 }
             }
         }
     }
 
+    // If b has been assigned, then a must precede it
     for (auto &[p,t] : new_assignments) {
         for (auto & [a, b] : constraints) {
             if (b != t) {
                 // TODO sanity check more efficiently
                 if (occurs[a]->count() == 0) {  // a has not been and will not be assigned
                     for (auto & d: assignments.values) {
-                        if (b == d.assignment.target_vertex) return false;  // b has been assigned previously
+                        if (b == d.assignment.target_vertex) {
+                            return false;  // b has been assigned previously
+                        }
                     }
                 }
                 continue;
@@ -1166,20 +1173,23 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
                     if (d.values.test(a)) {
                         occurs[a]->reset(d.v);
                         d.values.reset(a);
-                        if (0 == --d.count)
+                        if (0 == --d.count) {
                             return false;
+                        }
                     }
                 }
             }
 
-            for (auto & d : assignments.values)
-                if (d.assignment.pattern_vertex < p && a == t) {
+            for (auto & d : assignments.values) {
+                if (d.assignment.pattern_vertex < p && a == d.assignment.target_vertex) {
                     saw_an_a = true;
                     break;
                 }
+            }
 
-            if (! saw_an_a)
+            if (! saw_an_a) {
                 return false;
+            }
         }
     }
     
@@ -1632,7 +1642,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             if (model.do_dynamic_occur_less_thans()) {
                 add_to_target_base.push_back(current_assignment->target_vertex);
             }
-            if (model.has_less_thans()) {
+            if (model.has_occur_less_thans()) {
                 new_assignments.push_back(std::make_pair(current_assignment->pattern_vertex, current_assignment->target_vertex));
             }
 
@@ -1679,53 +1689,12 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 return false;
             }
         }
-        auto sym_start_time = steady_clock::now();
 
-        // if (model.do_dynamic_less_thans()) {
-        //     if (make_useful_pattern_constraints(current_assignment, useful_pattern_constraints, pattern_base)) {
-        //         // added new constraints -- may want to log something
-        //     }
-        // }
-        // if (model.do_dynamic_occur_less_thans()) {
-        //     if (make_useful_target_constraints(current_assignment, useful_target_constraints, target_base)) {
-        //         // added new constraints -- may want to log something
-        //     }
-        // }
-
-        // // propagate orbit less thans - extra assignments -> more constraints to propagate
-        // if (model.has_less_thans() && !model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
-        //     if (!propagate_less_thans(new_domains)) {
-        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-        //         return false;
-        //     }
-        // }
-
-        // if (model.has_occur_less_thans() && !params.target_rep_syms) {
-        //     if (model.do_dynamic_occur_less_thans()) {
-        //         if (!propagate_dynamic_occur_less_thans(current_assignment, assignments, new_domains)) {
-        //             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-        //             return false;
-        //         }
-        //     }
-        //     else if (! propagate_occur_less_thans(current_assignment, assignments, new_domains)) {
-        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-        //         return false;
-        //     }
-        // }
-        // if (model.has_less_thans() && model.do_dynamic_less_thans() && !params.pattern_rep_syms) {
-        //         if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
-        //             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-        //             return false;
-        //         }
-        //     }
-
-        //     sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-
-            // propagate all different
-            if (params.injectivity == Injectivity::Injective)
-                if (! cheap_all_different(model.target_size, new_domains, proof, &model)) {
-                    return false;
-                }
+        // propagate all different
+        if (params.injectivity == Injectivity::Injective)
+            if (! cheap_all_different(model.target_size, new_domains, proof, &model)) {
+                return false;
+            }
         done_globals_at_least_once = true;
     }
 
