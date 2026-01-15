@@ -142,7 +142,7 @@ namespace gss::innards
 
         auto break_coset_rep_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
-        auto filter_val_syms_from_domain(const HomomorphismAssignments & assignments, Domains & domains, int branch_v) -> bool;
+        auto filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v) -> bool;
 
         auto occurs_before(int a, int b) -> bool;
 
