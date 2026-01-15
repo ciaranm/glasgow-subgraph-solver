@@ -101,7 +101,7 @@ namespace gss::innards
         loooong pattern_aut_grp_size = 1;
         bool first_sol = true;
         dejavu::groups::random_schreier t_rschreier{static_cast<int>(model.target_size + model.target_edge_num * 2)}, p_rschreier{static_cast<int>(model.pattern_size + model.pattern_edge_num * 2)};    // TODO the * 2 is a clunky upper bound in directed cases
-        std::vector<int> mapping, permuted;
+        std::vector<int> mapping, permuted;             // Tuples in *natural* variable order
         std::vector<SVOBitset> occurs;
         std::vector<bool> occurs_check;
 
@@ -131,9 +131,9 @@ namespace gss::innards
         auto propagate_dynamic_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
 
         auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
-
         auto make_useful_target_constraints(int target_vertex, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         auto make_useful_target_constraints(std::vector<int> target_vertices, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
+        auto make_useful_target_constraints(std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
