@@ -1382,7 +1382,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
     Domains & new_domains) -> bool
 {
     // ** PATTERN AND TARGET **
-    if (params.pattern_rep_syms && params.target_rep_syms) {            // TODO we could actually just do this one in all cases... might be slower?
+    if (params.pattern_rep_syms && params.target_rep_syms) {
         for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
             for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
                 // const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];          // Do we need the list of pattern auts at all?
@@ -1411,8 +1411,11 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         for (auto &d : new_domains) {
                             if (d.v == p_inv[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                    if (occurs_before(t_inv[x], static_cast<unsigned int>(mapping[i]))) {
+                                    if (occurs_before(t_inv[x], static_cast<unsigned int>(mapping[i])) && std::find(permuted.begin(), permuted.end(), t_inv[x]) == permuted.end()) {
                                         d.values.reset(t_inv[x]);
+                                        if (!d.values.any()) {
+                                            return false;
+                                        }
                                     }
                                 }
                             }
@@ -1572,7 +1575,7 @@ auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {
     auto index_b = std::find(target_base.begin(), target_base.end(), b);
     auto index_a = std::find(target_base.begin(), index_b, a);
     if (index_b != target_base.end()) {
-        return index_a < index_b;
+        return index_a < index_b;       // b is in the base, does a appear before it?
     }
     else {
         if (index_a != index_b) {

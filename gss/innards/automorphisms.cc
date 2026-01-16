@@ -149,6 +149,10 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
         });
     }
 
+    // for (int v : vertex_order) {
+    //     base.push_back(v);
+    // }
+
     dejavu::hooks::schreier_hook hook(rschreier);
     dejavu::solver s;
     s.set_print(false);
@@ -166,21 +170,12 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
     std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
     if (sz.mantissa == 1 && sz.exponent == 0) return mappings;
 
-
-    bool stab_trivial = false;
-    dejavu::groups::orbit o{nv};      // Orbit structure of size nv
-    while (! stab_trivial) {        // While stabiliser is non-trivial
-        rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
-        stab_trivial = true;
+    while (base.size() < i.size()) {
         for (int v: vertex_order) {        // For each vertex
-            if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
-                stab_trivial = false;
                 base.push_back(v);          // Add v to base
-            }
         }
 
-        if (! stab_trivial)
-            rschreier.set_base(base);       // Update base
+        rschreier.set_base(base);       // Update base
     }
 
     for (int x = 0; x < base.size(); x++) {
