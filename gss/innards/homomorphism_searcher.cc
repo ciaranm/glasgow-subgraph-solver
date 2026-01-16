@@ -386,6 +386,13 @@ auto HomomorphismSearcher::restarting_search(
         if (proof)
             proof->back_up_to_top();
         post_nogood(assignments);
+        if (params.dynamic_pattern) {
+            pattern_base.resize(0);
+        }
+        if (params.dynamic_target) {
+            target_base.resize(0);
+        }
+        std::fill(mapping.begin(), mapping.end(), -1);
         return SearchResult::Restart;
     }
     else
@@ -1447,6 +1454,9 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                             for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
                                 if (occurs_before(x, mapping[i])) {
                                     d.values.reset(x);
+                                    if (!d.values.any()) {
+                                        return false;
+                                    }
                                 }
                             }
                         }
@@ -1540,19 +1550,22 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignm
 }
 
 /**
- * Check if a < b according to the value order
+ * Check if a < b according to the value order, where a is the permuted variable and b is the current mapping
  * 
  * @returns true if a is definitely before b
  */
 auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {
+    if (a < 0 || b < 0) {
+        return false;           // Order undecided
+    }
     if (!model.has_occur_less_thans()) {     // Default order is natural
         return a < b;
     }
     if (params.dynamic_target) {
-        for (int i = 0; i < mapping.size(); i++) {      // TODO Replace with for-each
-            if (mapping[var_order[i]] == b || mapping[var_order[i]] == -1) return false;     // definitely not or can't say for sure
-            if (mapping[var_order[i]] == a) return true;                                     // definitely is
-        }
+        // for (int i = 0; i < mapping.size(); i++) {      // TODO Replace with for-each
+        //     if (mapping[var_order[i]] == b || mapping[var_order[i]] == -1) return false;     // definitely not or can't say for sure
+        //     if (mapping[var_order[i]] == a) return true;                                     // definitely is
+        // }
         return false;                                                                        // can't say for sure
     }
     // TODO this can probably be made more efficient, proof of concept for the moment
@@ -1680,8 +1693,9 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                         }
                     });
 
-                if (wipeout)
+                if (wipeout) {
                     return false;
+                }
             }
 
             // propagate simple all different and adjacency
