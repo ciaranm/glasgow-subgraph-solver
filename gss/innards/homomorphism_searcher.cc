@@ -265,15 +265,20 @@ auto HomomorphismSearcher::restarting_search(
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
 
+        // std::cout << "assigning " << branch_domain->v << "->" << *f_v << "\n"; 
+
         if (params.dynamic_pattern) {
             pattern_base = pattern_base_cpy;
         }
-        if (params.target_rep_syms && (params.dynamic_target || params.flexible_target)) {
+        // if (params.target_rep_syms && (params.dynamic_target || params.flexible_target)) {
+        if ((params.dynamic_target || params.flexible_target)) {
             if (params.dynamic_target) {
                 if (did_filter && !branch_domain->values.test(*f_v)) continue;
                 target_base = target_base_cpy;
             }
+            auto sym_start_time = steady_clock::now();
             make_useful_target_constraints(*f_v, useful_target_constraints, target_base);
+            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         }
 
         if (proof)
@@ -290,9 +295,9 @@ auto HomomorphismSearcher::restarting_search(
         }
 
         // Make sure we don't search symmetrical sibling branches (if dynamically breaking value symmetries)
-        if (params.target_rep_syms && params.dynamic_target) {
+        if (params.dynamic_target) {
             auto sym_start_time = steady_clock::now();
-            did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v);
+            did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         }
 
@@ -386,15 +391,17 @@ auto HomomorphismSearcher::restarting_search(
             proof->back_up_to_top();
         post_nogood(assignments);
         //TODO post symmetrical nogoods
-        for (auto a : assignments.values) {
-            std::cout << a.assignment.pattern_vertex << "->" << a.assignment.target_vertex << " ";
-        }
-        std::cout << "\n";
         if (params.dynamic_pattern) {
             pattern_base.resize(0);
+            if (!params.pattern_rep_syms) {
+                useful_pattern_constraints.resize(0);
+            }
         }
         if (params.dynamic_target) {
             target_base.resize(0);
+            if (!params.target_rep_syms) {
+                useful_target_constraints.resize(0);
+            }
         }
         std::fill(mapping.begin(), mapping.end(), -1);
         return SearchResult::Restart;
@@ -1260,6 +1267,8 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 ) -> bool
 {
 
+    // std::cout << target_vertex << "\n";
+
     if (std::find(base.begin(), base.end(), target_vertex) == base.end()) {
         base.push_back(target_vertex);       // Add this vertex as a new base point
 
@@ -1525,7 +1534,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
  *
  * @returns true if a domain was filtered, false otherwise.
  */
-auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v) -> bool {
+auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v, int val) -> bool {
     bool did_filter = false;
 
     HomomorphismDomain * domain = nullptr;
@@ -1536,26 +1545,39 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignm
         }
     }
 
-    for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
-        const std::vector<unsigned int> &t_aut = target_coset_reps[t];
-        // const std::vector<unsigned int> &t_inv = target_coset_invs[t];
-        std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
-        bool sibling = true;
-        for (const auto &a: assignments.values) {               // TODO maybe we could just use the target base here instead of the assignments
-            permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
-            if (a.assignment.pattern_vertex != branch_v && permuted[a.assignment.pattern_vertex] != a.assignment.target_vertex) {
-                sibling = false;        // This permutation maps to a branch further back in the tree
-                break;
+    if (params.target_rep_syms) {
+        for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+            const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+            // const std::vector<unsigned int> &t_inv = target_coset_invs[t];
+            std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
+            bool sibling = true;
+            for (const auto &a: assignments.values) {               // TODO maybe we could just use the target base here instead of the assignments
+                permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
+                if (a.assignment.pattern_vertex != branch_v && permuted[a.assignment.pattern_vertex] != a.assignment.target_vertex) {
+                    sibling = false;        // This permutation maps to a branch further back in the tree
+                    break;
+                }
+            }
+            if (!sibling) {
+                continue;
+            }
+            if (permuted[branch_v] != mapping[branch_v]) {
+                if (domain->values.test(permuted[branch_v])) {
+                    domain->values.reset(permuted[branch_v]);
+                    did_filter = true;
+                }
             }
         }
-        if (!sibling) {
-            continue;
-        }
-        if (permuted[branch_v] != mapping[branch_v]) {
-            domain->values.reset(permuted[branch_v]);
-            did_filter = true;
+    }
+    else {
+        for (auto &[a,b] : useful_target_constraints) {
+            if (a == val && domain->values.test(b)) {
+                domain->values.reset(b);
+                did_filter = true;
+            }
         }
     }
+
 
     return did_filter;
 }
@@ -1653,7 +1675,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
     if (initial) {
         for (auto a: assignments.values) {
-            if (model.do_dynamic_less_thans()){
+            if (model.do_dynamic_less_thans()) {
                 make_useful_pattern_constraints(a.assignment.pattern_vertex, useful_pattern_constraints, pattern_base);
             }
             if (model.do_dynamic_occur_less_thans()) {
@@ -1670,6 +1692,8 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         if (branch_domain != new_domains.end()) {
             // what are we assigning?
             current_assignment = HomomorphismAssignment{branch_domain->v, unsigned(branch_domain->values.find_first())};
+
+            // std::cout << "unit domain " << branch_domain->v << "->" << current_assignment->target_vertex << "\n";
 
             // if (model.do_dynamic_less_thans()) {
             //     add_to_pattern_base.push_back(current_assignment->pattern_vertex);
@@ -1755,11 +1779,14 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
             // propagate orbit occurs less thans
             if (model.has_occur_less_thans() && !params.target_rep_syms) {
-                if (model.do_dynamic_occur_less_thans()) {
+                if (params.flexible_target) {
                     if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, new_assignments)) {
                         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
                         return false;
                     }
+                }
+                else if (params.dynamic_target) {
+                    // Can we actually do anything here?
                 }
                 else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, new_assignments)) {
                     sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
@@ -1777,9 +1804,37 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         done_globals_at_least_once = true;
     }
 
+    // int ti = 0;
+    // bool start_mismatch = false;
+    // // std::cout << "begin\n";
+    // if (target_base.size() > 0 && assignments.values.size() > 0) {
+    //     start_mismatch = target_base[0] == assignments.values[0].assignment.target_vertex;
+    // }
+    // // std::cout << "here\n";
+    // if (!start_mismatch) {
+    //     for (auto a: assignments.values) {
+    //         if (target_base.size() <= ti) break;
+    //         if (a.assignment.target_vertex == target_base[ti]) {
+    //             ti++;
+    //         }
+    //         if (ti == target_base.size()) break;
+    //     }
+    // }
+    // // std::cout << "here2\n";
+    // if (start_mismatch || ti < target_base.size()) {
+    //     for (auto a : assignments.values) {
+    //         std::cout << a.assignment.pattern_vertex << "->" << a.assignment.target_vertex << " ";
+    //     }
+    //     std::cout << "\n";
+    //     for (auto t : target_base) {
+    //         std::cout << t << " ";
+    //     }
+    //     std::cout << "\n";
+    // }
 
     auto sym_start_time = steady_clock::now();
     // propagate permutation symmetries - extra assignments make this more effective
+    // TODO does this actually do anything for dynamic target alone?
     if (params.partial_assignments_sym && !break_coset_rep_symmetries(assignments, new_domains)) {
         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         return false;
