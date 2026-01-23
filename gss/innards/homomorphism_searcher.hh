@@ -158,6 +158,9 @@ namespace gss::innards
         auto post_nogood(
             const HomomorphismAssignments & assignments) -> void;
 
+        auto post_symmetrical_nogoods(
+            const HomomorphismAssignments & assignments) -> void;
+
         auto softmax_shuffle(
             std::vector<int> & branch_v,
             unsigned branch_v_end) -> void;

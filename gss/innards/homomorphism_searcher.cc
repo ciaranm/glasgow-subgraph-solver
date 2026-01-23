@@ -271,11 +271,10 @@ auto HomomorphismSearcher::restarting_search(
             pattern_base = pattern_base_cpy;
         }
         // if (params.target_rep_syms && (params.dynamic_target || params.flexible_target)) {
-        if ((params.dynamic_target || params.flexible_target)) {
-            if (params.dynamic_target) {
-                if (did_filter && !branch_domain->values.test(*f_v)) continue;
-                target_base = target_base_cpy;
-            }
+        // if ((params.dynamic_target || params.flexible_target)) {
+        if (params.dynamic_target) {
+            if (did_filter && !branch_domain->values.test(*f_v)) continue;
+            target_base = target_base_cpy;
             auto sym_start_time = steady_clock::now();
             make_useful_target_constraints(*f_v, useful_target_constraints, target_base);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
@@ -335,7 +334,12 @@ auto HomomorphismSearcher::restarting_search(
                 // post nogoods for everything we've done so far
                 for (auto l = branch_v.begin(); l != f_v; ++l) {
                     assignments.values.push_back({{branch_domain->v, unsigned(*l)}, true, -2, -2});
-                    post_nogood(assignments);
+                    if (params.orbit_sym || params.partial_assignments_sym) {
+                        post_symmetrical_nogoods(assignments);
+                    }
+                    else {
+                        post_nogood(assignments);
+                    }
                     assignments.values.pop_back();
                 }
                 return SearchResult::Restart;
@@ -389,7 +393,12 @@ auto HomomorphismSearcher::restarting_search(
     if (restarts_schedule.should_restart()) {
         if (proof)
             proof->back_up_to_top();
-        post_nogood(assignments);
+        if (params.orbit_sym || params.partial_assignments_sym) {
+            post_symmetrical_nogoods(assignments);
+        }
+        else {
+            post_nogood(assignments);
+        }
         //TODO post symmetrical nogoods
         if (params.dynamic_pattern) {
             pattern_base.resize(0);
@@ -508,6 +517,92 @@ auto HomomorphismSearcher::post_nogood(const HomomorphismAssignments & assignmen
 
     if (proof)
         proof->post_restart_nogood(assignments_as_proof_decisions(assignments));
+}
+
+/**
+ * If the current branch lead to a dead end, then every branch symmetrical to it will as well.
+ */
+auto HomomorphismSearcher::post_symmetrical_nogoods(const HomomorphismAssignments & assignments) -> void {
+    if (! might_have_watches(params))
+        return;
+
+    // post_nogood(assignments); return;
+    
+    HomomorphismAssignments sym_assignments;
+
+    if (params.orbit_sym) {
+        post_nogood(assignments);
+        if (params.dynamic_target) {        // Not convinced we can do anything with non-dynamic orbits
+            sym_assignments.values.resize(0);
+            int last_decision = 0, counter = 0;          // The constraints reason over the subtree stemming from the most recent decision
+            for (auto &a : assignments.values) {
+                if (a.is_decision) {
+                    last_decision = counter;
+                }
+                counter++;
+            }
+            for (int i = 0; i < last_decision; i++) {           // Construct the branch prior to the decision
+                sym_assignments.values.push_back(assignments.values[i]);
+            }
+            for (auto &[t, u] : useful_target_constraints) {
+                if (t == assignments.values[last_decision].assignment.target_vertex) {
+                    sym_assignments.values.push_back({{assignments.values[last_decision].assignment.pattern_vertex, u}, true, 
+                            assignments.values[last_decision].discrepancy_count, assignments.values[last_decision].choice_count});
+                    post_nogood(sym_assignments);
+                    sym_assignments.values.pop_back();
+                }
+            }
+        }
+        if (params.dynamic_pattern) {
+            for (auto &[p,q] : useful_pattern_constraints) {            // Find the equivalent branch node
+                sym_assignments.values.resize(0);
+                for (auto &a : assignments.values) {
+                    if (a.assignment.pattern_vertex == p) {
+                        sym_assignments.values.push_back({{q, a.assignment.target_vertex}, a.is_decision, a.discrepancy_count, a.choice_count});
+                        post_nogood(sym_assignments);
+                        break;
+                    }
+                    else {
+                        sym_assignments.values.push_back(a);
+                    }
+                }
+            }
+        }
+    }
+    //TODO probably need to make sure we don't add duplicate nogoods
+    if (params.pattern_rep_syms && params.target_rep_syms) {
+        for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
+            for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+                const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+                const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
+                sym_assignments.values.resize(0);
+                for (const auto &a: assignments.values) {
+                    sym_assignments.values.push_back({{p_inv[a.assignment.pattern_vertex], t_aut[a.assignment.target_vertex]}, a.is_decision, a.discrepancy_count, a.choice_count});
+                }
+                post_nogood(sym_assignments);
+            }
+        }
+    }
+    else if (params.pattern_rep_syms) {
+        for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
+            const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
+            sym_assignments.values.resize(0);
+            for (const auto &a: assignments.values) {
+                sym_assignments.values.push_back({{p_inv[a.assignment.pattern_vertex], a.assignment.target_vertex}, a.is_decision, a.discrepancy_count, a.choice_count});
+            }
+            post_nogood(sym_assignments);
+        }
+    }
+    else if (params.target_rep_syms) {
+        for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+            const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+            sym_assignments.values.resize(0);
+            for (const auto &a: assignments.values) {
+                sym_assignments.values.push_back({{a.assignment.pattern_vertex, t_aut[a.assignment.target_vertex]}, a.is_decision, a.discrepancy_count, a.choice_count});
+            }
+            post_nogood(sym_assignments);
+        }
+    }
 }
 
 auto HomomorphismSearcher::copy_nonfixed_domains_and_make_assignment(
