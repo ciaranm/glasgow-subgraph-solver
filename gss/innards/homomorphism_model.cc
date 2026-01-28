@@ -304,7 +304,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         }
     }
 
-    if (params.dynamic_pattern || params.flexible_pattern) {
+    if (params.dynamic_pattern || params.flexible_pattern || params.semi_flexible_pattern) {
         _imp->has_less_thans = true;
     }
 
@@ -349,7 +349,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         _imp->largest_pattern_clique.resize(_imp->max_graphs_for_clique_size_constraints);
     }
 
-    if (params.dynamic_target || params.flexible_target) {
+    if (params.dynamic_target || params.flexible_target || params.semi_flexible_target) {
         _imp->has_occur_less_thans = true;
     }
 }
@@ -1307,12 +1307,12 @@ auto HomomorphismModel::reset_has_occur_less_thans() const -> void
 
 auto HomomorphismModel::do_dynamic_occur_less_thans() const -> bool 
 {
-    return (_imp->params.dynamic_target || _imp->params.flexible_target);
+    return (_imp->params.dynamic_target || _imp->params.flexible_target || _imp->params.semi_flexible_target);
 }
 
 auto HomomorphismModel::do_dynamic_less_thans() const -> bool 
 {
-    return (_imp->params.dynamic_pattern || _imp->params.flexible_pattern);
+    return (_imp->params.dynamic_pattern || _imp->params.flexible_pattern || _imp->params.semi_flexible_pattern);
 }
 
 auto HomomorphismModel::directed() const -> bool

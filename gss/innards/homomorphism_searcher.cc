@@ -266,10 +266,10 @@ auto HomomorphismSearcher::restarting_search(
     std::vector<int> pattern_base_cpy, target_base_cpy, mapping_cpy, val_order_cpy;
     int latest_value_index_cpy = model.target_size;
 
-    if (params.dynamic_pattern) {
+    if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
         pattern_base_cpy = pattern_base;
     }
-    if (params.dynamic_target) {
+    if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
         target_base_cpy = target_base;
         val_order_cpy = val_order;
         latest_value_index_cpy = latest_value_index;
@@ -284,12 +284,12 @@ auto HomomorphismSearcher::restarting_search(
 
         // std::cout << "assigning " << branch_domain->v << "->" << *f_v << "\n"; 
 
-        if (params.dynamic_pattern) {
+        if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
             pattern_base = pattern_base_cpy;
         }
         // if (params.target_rep_syms && (params.dynamic_target || params.flexible_target)) {
         // if ((params.dynamic_target || params.flexible_target)) {
-        if (params.dynamic_target) {
+        if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
             if (did_filter && !branch_domain->values.test(*f_v)) continue;
             target_base = target_base_cpy;
             auto sym_start_time = steady_clock::now();
@@ -304,7 +304,7 @@ auto HomomorphismSearcher::restarting_search(
         auto assignments_size = assignments.values.size();
 
         // Make sure we don't search symmetrical sibling branches (if dynamically breaking value symmetries)
-        if (params.dynamic_target) {
+        if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
             auto sym_start_time = steady_clock::now();
             did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
@@ -1901,7 +1901,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
             // propagate orbit occurs less thans
             if (model.has_occur_less_thans() && !params.target_rep_syms) {
-                if (params.flexible_target) {
+                if (params.flexible_target || (params.semi_flexible_target && rep_solution_count != 0)) {
                     if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, new_assignments)) {
                         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
                         return false;

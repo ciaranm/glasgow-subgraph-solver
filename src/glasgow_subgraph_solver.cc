@@ -365,11 +365,14 @@ namespace
             else if (mode == "flexible") {
                 params.flexible_pattern = true;
             }
+            else if (mode == "semiflex") {
+                params.semi_flexible_pattern = true;
+            }
             else if (mode == "dynamic") {
                 params.dynamic_pattern = true;
             }
             else {
-                cerr << "Must specify symmetry ordering mode (natural / degree / flexible / dynamic)" << endl;
+                cerr << "Must specify symmetry ordering mode (natural / degree / flexible / semiflex / dynamic)" << endl;
                 return EXIT_FAILURE;
             }
             params.orbit_sym = true;
@@ -416,6 +419,9 @@ namespace
             else if (mode == "flexible") {
                 params.flexible_target = true;
             }
+            else if (mode == "semiflex") {
+                params.semi_flexible_target = true;
+            }
             else if (mode == "dynamic") {
                 params.dynamic_target = true;
             }
@@ -457,6 +463,9 @@ namespace
             }
             else if (method == "flexible") {
                 params.flexible_pattern = true;
+            }
+            else if (method == "semiflex") {
+                params.semi_flexible_pattern = true;
             }
             else if (method == "dynamic") {
                 params.dynamic_pattern = true;
@@ -503,6 +512,9 @@ namespace
             }
             else if (method == "flexible") {
                 params.flexible_target = true;
+            }
+            else if (method == "semiflex") {
+                params.semi_flexible_target = true;
             }
             else if (method == "dynamic") {
                 params.dynamic_target = true;
@@ -604,10 +616,10 @@ auto main(int argc, char * argv[]) -> int
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
             ("pattern-orb-symmetries",
-                "Eliminate pattern symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)",
+                "Eliminate pattern symmetries using orbits (natural / degree / flexible / semiflex / dynamic) (requires Dejavu)",
                 cxxopts::value<string>())
             ("target-orb-symmetries",
-                "Eliminate target symmetries using orbits (natural / degree / flexible / dynamic) (requires Dejavu)",
+                "Eliminate target symmetries using orbits (natural / degree / flexible / semiflex / dynamic) (requires Dejavu)",
                 cxxopts::value<string>())
             ("pattern-coset-symmetries",
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
