@@ -100,11 +100,21 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         permuted.resize(model.pattern_size, -1);
         var_order.resize(model.pattern_size);
         std::iota(var_order.begin(), var_order.begin() + model.pattern_size, 0);
+        if (params.degree_sym_pattern) {
+            stable_sort(var_order.begin(), var_order.end(), [&](int a, int b) -> bool {
+                return -model.pattern_degree(0,a) < -model.pattern_degree(0,b);
+            });
+        }
         val_order.resize(model.target_size, model.target_size);
         latest_value_index = -1;
         if (!params.dynamic_target && !params.flexible_target) {
             std::iota(val_order.begin(), val_order.begin() + model.target_size, 0);
             latest_value_index = model.target_size;
+            if (params.degree_sym_pattern) {
+                stable_sort(val_order.begin(), val_order.end(), [&](int a, int b) -> bool {
+                    return -model.target_degree(0,a) < -model.target_degree(0,b);
+                });
+            }
         }
     }
     sym_time = 0us;
