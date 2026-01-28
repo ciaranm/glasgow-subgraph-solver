@@ -95,13 +95,17 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             pattern_coset_invs.push_back(id);
         }
     }
-    if (params.pattern_rep_syms || params.target_rep_syms) {
+    if (params.partial_assignments_sym || params.orbit_sym) {
         mapping.resize(model.pattern_size, -1);
         permuted.resize(model.pattern_size, -1);
-    }
-    if (params.partial_assignments_sym || model.has_occur_less_thans()) {
         var_order.resize(model.pattern_size);
         std::iota(var_order.begin(), var_order.begin() + model.pattern_size, 0);
+        val_order.resize(model.target_size, model.target_size);
+        latest_value_index = -1;
+        if (!params.dynamic_target && !params.flexible_target) {
+            std::iota(val_order.begin(), val_order.begin() + model.target_size, 0);
+            latest_value_index = model.target_size;
+        }
     }
     sym_time = 0us;
 }
@@ -249,15 +253,18 @@ auto HomomorphismSearcher::restarting_search(
     bool use_lackey_for_propagation = false;
 
     // remember what the base was in case we're doing dynamic symmetries
-    std::vector<int> pattern_base_cpy, target_base_cpy, mapping_cpy;
+    std::vector<int> pattern_base_cpy, target_base_cpy, mapping_cpy, val_order_cpy;
+    int latest_value_index_cpy = model.target_size;
 
     if (params.dynamic_pattern) {
         pattern_base_cpy = pattern_base;
     }
     if (params.dynamic_target) {
         target_base_cpy = target_base;
+        val_order_cpy = val_order;
+        latest_value_index_cpy = latest_value_index;
     }
-    if (params.partial_assignments_sym) {
+    if (params.partial_assignments_sym || params.orbit_sym) {
         mapping_cpy = mapping;
     }
     bool did_filter = false;
@@ -286,18 +293,23 @@ auto HomomorphismSearcher::restarting_search(
         // modified in-place by appending, we can restore by shrinking
         auto assignments_size = assignments.values.size();
 
-        // make the assignment
-        assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
-        if (params.partial_assignments_sym) {
-            mapping = mapping_cpy;
-            mapping[branch_domain->v] = *f_v;
-        }
-
         // Make sure we don't search symmetrical sibling branches (if dynamically breaking value symmetries)
         if (params.dynamic_target) {
             auto sym_start_time = steady_clock::now();
             did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            val_order = val_order_cpy;
+            latest_value_index = latest_value_index_cpy;
+        }
+
+        // make the assignment
+        assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
+        if (params.partial_assignments_sym || params.orbit_sym) {
+            mapping = mapping_cpy;
+            mapping[branch_domain->v] = *f_v;
+            if (latest_value_index < model.target_size - 1) {
+                val_order[*f_v] = ++latest_value_index;
+            }
         }
 
         // set up new domains
@@ -526,7 +538,7 @@ auto HomomorphismSearcher::post_symmetrical_nogoods(const HomomorphismAssignment
     if (! might_have_watches(params))
         return;
 
-    // post_nogood(assignments); return;
+    post_nogood(assignments); return;
     
     HomomorphismAssignments sym_assignments;
 
@@ -1475,9 +1487,7 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
             added = (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
         }
 
-        if (added) {
-            adjust_variable_order();
-        }
+        adjust_variable_order();
     }
 
     return added;
@@ -1497,7 +1507,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
     if (params.pattern_rep_syms && params.target_rep_syms) {
         for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
             for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
-                // const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];          // Do we need the list of pattern auts at all?
+                const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];          // Do we need the list of pattern auts at all?
                 const std::vector<unsigned int> &t_aut = target_coset_reps[t];
                 const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
                 const std::vector<unsigned int> &t_inv = target_coset_invs[t];
@@ -1505,10 +1515,15 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                 for (const auto &a: assignments.values) {
                     permuted[p_inv[a.assignment.pattern_vertex]] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
                 }
+                // for (int i = 0; i < permuted.size(); i++) {
+                //     std::cout << var_order[i] << ":" << permuted[var_order[i]] << " ";
+                // }
+                // std::cout << "\n";
                 for (unsigned int y = 0; y < model.pattern_size; y++) {
                     int i = var_order[y];
                     if (mapping[i] != -1 && permuted[i] != -1) {
                         if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
+                            // std::cout << "fail\n";
                             return false;
                         }
                         else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
@@ -1521,10 +1536,11 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                     }
                     else if (mapping[i] != -1) {
                         for (auto &d : new_domains) {
-                            if (d.v == p_inv[i]) {               // Find the variable's domain
+                            if (d.v == p_aut[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                    if (occurs_before(t_inv[x], static_cast<unsigned int>(mapping[i])) && std::find(permuted.begin(), permuted.end(), t_inv[x]) == permuted.end()) {
+                                    if (occurs_before(x, static_cast<unsigned int>(mapping[i])) && std::find(permuted.begin(), permuted.end(), x) == permuted.end()) {
                                         d.values.reset(t_inv[x]);
+                                        // std::cout << "removed " << t_inv[x] << " from domain " << d.v << "\n";
                                         if (!d.values.any()) {
                                             return false;
                                         }
@@ -1686,28 +1702,29 @@ auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {
     if (a < 0 || b < 0) {
         return false;           // Order undecided
     }
-    if (!model.has_occur_less_thans()) {     // Default order is natural
-        return a < b;
-    }
-    if (params.dynamic_target) {
-        // for (int i = 0; i < mapping.size(); i++) {      // TODO Replace with for-each
-        //     if (mapping[var_order[i]] == b || mapping[var_order[i]] == -1) return false;     // definitely not or can't say for sure
-        //     if (mapping[var_order[i]] == a) return true;                                     // definitely is
-        // }
-        return false;                                                                        // can't say for sure
-    }
-    // TODO this can probably be made more efficient, proof of concept for the moment
-    auto index_b = std::find(target_base.begin(), target_base.end(), b);
-    auto index_a = std::find(target_base.begin(), index_b, a);
-    if (index_b != target_base.end()) {
-        return index_a < index_b;       // b is in the base, does a appear before it?
-    }
-    else {
-        if (index_a != index_b) {
-            return true;        // a is in the base, but b is not => a < b
-        }
-        return false;       // neither a nor b in the base => order undecided
-    }
+    return val_order[a] < val_order[b];
+    // if (!model.has_occur_less_thans()) {     // Default order is natural
+    //     return a < b;
+    // }
+    // if (params.dynamic_target) {
+    //     // for (int i = 0; i < mapping.size(); i++) {      // TODO Replace with for-each
+    //     //     if (mapping[var_order[i]] == b || mapping[var_order[i]] == -1) return false;     // definitely not or can't say for sure
+    //     //     if (mapping[var_order[i]] == a) return true;                                     // definitely is
+    //     // }
+    //     return false;                                                                        // can't say for sure
+    // }
+    // // TODO this can probably be made more efficient, proof of concept for the moment
+    // auto index_b = std::find(target_base.begin(), target_base.end(), b);
+    // auto index_a = std::find(target_base.begin(), index_b, a);
+    // if (index_b != target_base.end()) {
+    //     return index_a < index_b;       // b is in the base, does a appear before it?
+    // }
+    // else {
+    //     if (index_a != index_b) {
+    //         return true;        // a is in the base, but b is not => a < b
+    //     }
+    //     return false;       // neither a nor b in the base => order undecided
+    // }
 }
 
 /**

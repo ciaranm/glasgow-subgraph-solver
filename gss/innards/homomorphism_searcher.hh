@@ -96,7 +96,8 @@ namespace gss::innards
         std::vector<std::vector<unsigned int>> pattern_coset_invs, target_coset_invs;
         std::vector<std::vector<innards::SVOBitset>> seen_before;
         std::vector<int> target_base, pattern_base;
-        std::vector<int> var_order, suffix;
+        std::vector<int> var_order, suffix, val_order;
+        int latest_value_index;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
         loooong pattern_aut_grp_size = 1;
         bool first_sol = true;
