@@ -523,7 +523,7 @@ namespace
             cout << "killed";
         else if (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining))
             cout << "aborted";
-        else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
+        else if ((! result.mapping.empty()) || (params.count_solutions && (result.solution_count > 0 || result.rep_solution_count > 0)))
             cout << "true";
         else
             cout << "false";
