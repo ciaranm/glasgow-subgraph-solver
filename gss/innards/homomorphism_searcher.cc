@@ -423,7 +423,6 @@ auto HomomorphismSearcher::restarting_search(
         else {
             post_nogood(assignments);
         }
-        //TODO post symmetrical nogoods
         if (params.dynamic_pattern) {
             pattern_base.resize(0);
             if (!params.pattern_rep_syms) {
@@ -922,11 +921,24 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         return true;
     }
 
+    // for (auto m : mapping) {
+    //     std::cout << m << " ";
+    // }
+    // std::cout << "\n";
+    // for (auto l : val_order) {
+    //     std::cout << l << " ";
+    // }
+    // std::cout << "\n";
+
+    // TODO dynamic value ordering
+
     for (auto & [a, b] : constraints) {
         if (find_domain[a] == -1 || find_domain[b] == -1)
             continue;
         auto & a_domain = new_domains[find_domain[a]];
         auto & b_domain = new_domains[find_domain[b]];
+
+        // std::cout << a << "<" << b << "\n";
 
         // first value of b must be at least one after the first possible value of a according to the value order
         auto a_values_copy = a_domain.values;
@@ -942,14 +954,17 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
             return false;
         }      // didn't find a valid value for a
 
-        // if (first_a >= model.target_size - 1)                // TODO if a is the last element in the value order, fail
-        //     return false;
+        if (val_order[first_a] == model.target_size)
+            continue;           // the first possible value of a hasn't been placed yet
+        if (val_order[first_a] == model.target_size - 1)
+            return false;
 
         auto b_values_copy = b_domain.values;
         auto first_allowed_b = b_domain.values.find_first();
         for (auto v = first_allowed_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
             if (occurs_before(v, first_a) || v == first_a) {
                 b_domain.values.reset(v);
+                // std::cout << "reset " << v << " in b \n"; 
             }
             b_values_copy.reset(v);
         }
@@ -967,6 +982,8 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         if (find_domain[a] == -1 || find_domain[b] == -1)
             continue;
 
+        // std::cout << a << "<" << b << "\n";
+
         auto & a_domain = new_domains[find_domain[a]];
         auto & b_domain = new_domains[find_domain[b]];
 
@@ -980,7 +997,10 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
             }
         }
 
-        if ((target_base.size() > 0 && last_b == target_base[0]) || (target_base.size() == 0 && last_b == 0)) {
+        if (val_order[last_b] == model.target_size) {
+            continue;           // last_b hasn't been placed in the value order yet
+        }
+        if (val_order[last_b] == 0) {
             // std::cout << "type 3 on " << a << "<" << b << "\n";
             return false;
         }      // b is the first element in the value order
@@ -990,8 +1010,11 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
             a_values_copy.reset(v);
             if (occurs_before(last_b, v) || last_b == v) {
                 a_domain.values.reset(v);
+                // std::cout << "reset " << v << " in domain " << a << "\n";
             }
         }
+
+
 
         // a might have shrunk
         a_domain.count = a_domain.values.count();
@@ -1625,10 +1648,15 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
             for (const auto &a: assignments.values) {
                 permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
             }
+            for (int i = 0; i < permuted.size(); i++) {
+                std::cout << var_order[i] << ":" << permuted[var_order[i]] << " ";
+            }
+            std::cout << "\n";
             for (unsigned int y = 0; y < model.pattern_size; y++) {
                 int i = var_order[y];
                 if (mapping[i] != -1) {
                     if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is 'less than' the original
+                        std::cout << "reject\n";
                         return false;
                     }
                     else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
