@@ -107,7 +107,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         }
         val_order.resize(model.target_size, model.target_size);
         latest_value_index = -1;
-        if (!params.dynamic_target && !params.flexible_target) {
+        if (!params.dynamic_target && !params.flexible_target && !params.semi_flexible_target) {
             std::iota(val_order.begin(), val_order.begin() + model.target_size, 0);
             latest_value_index = model.target_size;
             if (params.degree_sym_pattern) {
@@ -264,7 +264,6 @@ auto HomomorphismSearcher::restarting_search(
 
     // remember what the base was in case we're doing dynamic symmetries
     std::vector<int> pattern_base_cpy, target_base_cpy, mapping_cpy, val_order_cpy;
-    int latest_value_index_cpy = model.target_size;
 
     if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
         pattern_base_cpy = pattern_base;
@@ -272,7 +271,6 @@ auto HomomorphismSearcher::restarting_search(
     if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
         target_base_cpy = target_base;
         val_order_cpy = val_order;
-        latest_value_index_cpy = latest_value_index;
     }
     if (params.partial_assignments_sym || params.orbit_sym) {
         mapping_cpy = mapping;
@@ -282,7 +280,7 @@ auto HomomorphismSearcher::restarting_search(
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
 
-        // std::cout << "assigning " << branch_domain->v << "->" << *f_v << "\n"; 
+        std::cout << "assigning " << branch_domain->v << "->" << *f_v << "\n"; 
 
         if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
             pattern_base = pattern_base_cpy;
@@ -295,6 +293,7 @@ auto HomomorphismSearcher::restarting_search(
             auto sym_start_time = steady_clock::now();
             make_useful_target_constraints(*f_v, useful_target_constraints, target_base);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            val_order = val_order_cpy;
         }
 
         if (proof)
@@ -303,23 +302,26 @@ auto HomomorphismSearcher::restarting_search(
         // modified in-place by appending, we can restore by shrinking
         auto assignments_size = assignments.values.size();
 
+        // make the assignment
+        assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
+        
         // Make sure we don't search symmetrical sibling branches (if dynamically breaking value symmetries)
+        if (params.partial_assignments_sym || params.orbit_sym) {
+            mapping = mapping_cpy;
+            mapping[branch_domain->v] = *f_v;
+            if (params.flexible_target) {
+                if ((latest_value_index < 0 || unsigned(latest_value_index) < model.target_size - 1) && val_order[*f_v] == model.target_size) {
+                    val_order[*f_v] = ++latest_value_index;
+                }
+            }
+            if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
+                val_order[*f_v] = var_order[branch_domain->v];
+            }
+        }
         if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
             auto sym_start_time = steady_clock::now();
             did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-            val_order = val_order_cpy;
-            latest_value_index = latest_value_index_cpy;
-        }
-
-        // make the assignment
-        assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
-        if (params.partial_assignments_sym || params.orbit_sym) {
-            mapping = mapping_cpy;
-            mapping[branch_domain->v] = *f_v;
-            if (latest_value_index < model.target_size - 1) {
-                val_order[*f_v] = ++latest_value_index;
-            }
         }
 
         // set up new domains
@@ -428,11 +430,12 @@ auto HomomorphismSearcher::restarting_search(
                 useful_pattern_constraints.resize(0);
             }
         }
-        if (params.dynamic_target) {
+        if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
             target_base.resize(0);
             if (!params.target_rep_syms) {
                 useful_target_constraints.resize(0);
             }
+            std::fill(val_order.begin(), val_order.end(), model.target_size);
         }
         std::fill(mapping.begin(), mapping.end(), -1);
         return SearchResult::Restart;
@@ -1513,6 +1516,9 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
     const HomomorphismAssignments & assignments,
     Domains & new_domains) -> bool
 {
+    if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
+        return true;                                                // Dynamic value order says that the current assignment is always lex-least
+    }
     // ** PATTERN AND TARGET **
     if (params.pattern_rep_syms && params.target_rep_syms) {
         for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
@@ -1533,7 +1539,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                     int i = var_order[y];
                     if (mapping[i] != -1 && permuted[i] != -1) {
                         if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
-                            // std::cout << "fail\n";
+                            // std::cout << "fail: " << permuted[i] << "<" << mapping[i] << "\n";
                             return false;
                         }
                         else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
@@ -1638,6 +1644,9 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                             }
                         }
                         break;                          // TODO we don't need to check this particular t_aut again until we backtrack
+                    }
+                    else {                  // Not enough information about the value order to infer at this point
+                        break;
                     }
                 }
                 else {
@@ -1830,9 +1839,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             // ok, make the assignment
             branch_domain->fixed = true;
             assignments.values.push_back({*current_assignment, false, -1, -1});
-            if (params.partial_assignments_sym) {
-                mapping[current_assignment->pattern_vertex] = current_assignment->target_vertex;
-            }
 
             if (proof)
                 proof->unit_propagating(
@@ -1880,6 +1886,18 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             if (model.do_dynamic_occur_less_thans()) {
                 if (make_useful_target_constraints(current_assignment->target_vertex, useful_target_constraints, target_base)) {
                     // added new constraints -- may want to log something
+                }
+            }
+
+            if (params.partial_assignments_sym || params.orbit_sym) {
+                mapping[current_assignment->pattern_vertex] = current_assignment->target_vertex;
+                if (params.flexible_target) {
+                    if ((latest_value_index < 0 || unsigned(latest_value_index) < model.target_size - 1) && val_order[current_assignment->target_vertex] == model.target_size) {
+                        val_order[current_assignment->target_vertex] = ++latest_value_index;
+                    }
+                }
+                if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
+                    val_order[current_assignment->target_vertex] = var_order[current_assignment->pattern_vertex];
                 }
             }
 
