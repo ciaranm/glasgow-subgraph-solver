@@ -280,8 +280,6 @@ auto HomomorphismSearcher::restarting_search(
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
 
-        std::cout << "assigning " << branch_domain->v << "->" << *f_v << "\n"; 
-
         if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
             pattern_base = pattern_base_cpy;
         }
@@ -1402,25 +1400,17 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignm
     }
 
     if (params.target_rep_syms) {
+        int counter = 0;
         for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+            if (counter == target_base.size()) break;
             const std::vector<unsigned int> &t_aut = target_coset_reps[t];
-            std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
-            bool sibling = true;
-            for (const auto &a: assignments.values) {               // TODO maybe we could just use the target base here instead of the assignments
-                permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
-                if (a.assignment.pattern_vertex != branch_v && permuted[a.assignment.pattern_vertex] != a.assignment.target_vertex) {
-                    sibling = false;        // This permutation maps to a branch further back in the tree
-                    break;
-                }
+            if (target_base[counter] == val && t_aut[val] != val) {          // This permutation goes to a sibling
+                domain->values.reset(t_aut[val]);
+                did_filter = true;
             }
-            if (!sibling) {
-                continue;
-            }
-            if (permuted[branch_v] != mapping[branch_v]) {
-                if (domain->values.test(permuted[branch_v])) {
-                    domain->values.reset(permuted[branch_v]);
-                    did_filter = true;
-                }
+            while (t_aut[target_base[counter]] == target_base[counter]) {      // base point is fixed
+                counter++;
+                if (counter == target_base.size()) break;
             }
         }
     }

@@ -105,26 +105,20 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
  * Calculate any non-trivial orbits with the new (partial) base given, and make constraints from them
  */
 auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<int> &orbit_sizes, dejavu::groups::random_schreier &rschreier, std::vector<std::pair<unsigned int, unsigned int>> &constraints) -> void {
-    // TODO rewrite with get_fixed_orbit
-    //TODO we only actually care about adding one extra layer of the chain here, maybe there is a way to limit depth of layer computation in Dejavu?
+    //TODO we usually only actually care about adding a few extra layers of the chain here, maybe there is a way to limit depth of layer computation in Dejavu?
     rschreier.set_base(base);           // Recompute the stabiliser chain with the provided (partial) base
 
-    std::vector<std::pair<unsigned int, unsigned int>> cons;
-    std::vector<std::vector<int>> orbs;
+    constraints.clear();
 
     dejavu::groups::orbit o{sz};      // Orbit structure of size sz
     for (unsigned int x = 0; x < base.size(); x++) {
-        rschreier.get_stabilizer_orbit(x, o);       // Retrieve stabiliser orbit at this point
+        std::vector<int> orb = rschreier.get_fixed_orbit(x);              // Get orbit
         int y = base.at(x);
-        orbit_sizes[y] = o.orbit_size(y);
-        for (int z = 0; z != sz; ++z) {     // For each vertex z in the graph
-            if (o.are_in_same_orbit(y,z) && y != z) {       // If y,z are symmetric (but not equal) at this stabiliser chain layer 
-                cons.push_back(std::make_pair(y,z));     // Add constraint y<z
-            }
+        orbit_sizes[y] = orb.size();
+        for (auto & z : orb) {
+            if (z != y) constraints.push_back(std::make_pair(y,z));
         }
     }
-
-    constraints = std::move(cons);
 }
 
 /**
