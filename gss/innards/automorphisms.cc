@@ -113,7 +113,6 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<i
     std::vector<std::vector<int>> orbs;
 
     dejavu::groups::orbit o{sz};      // Orbit structure of size sz
-    // int x = base.size() - 1;            // Only interested in the most recently added base point
     for (unsigned int x = 0; x < base.size(); x++) {
         rschreier.get_stabilizer_orbit(x, o);       // Retrieve stabiliser orbit at this point
         int y = base.at(x);
@@ -148,10 +147,6 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
             return -i.degree(a) < -i.degree(b);
         });
     }
-
-    // for (int v : vertex_order) {
-    //     base.push_back(v);
-    // }
 
     dejavu::hooks::schreier_hook hook(rschreier);
     dejavu::solver s;
@@ -209,16 +204,13 @@ auto gss::innards::dynamic_coset_reps(std::vector<int> & base, int sz, dejavu::g
     invs.erase(invs.begin() + 1, invs.end());
     std::vector<unsigned int> mapping(sz);
 
-    // int x = base.size() - 1;            // Only interested in the most recently added base point
     for (unsigned int x = 0; x < base.size(); x++) {
         vector<int> orb = rschreier.get_fixed_orbit(x);       // Retrieve stabiliser orbit at this point
         orbit_sizes[base.at(x)] = orb.size();
         for (auto v : orb) {
             if (v == base.at(x)) continue;
             if (rschreier.get_transversal_element(x,v,a)) {
-                // mapping.clear();
                 for (int y = 0; y < sz; y++) {
-                    // mapping.push_back(a.p()[y]);
                     mapping[y] = a.p()[y];
                 }
                 invs.push_back(mapping);
