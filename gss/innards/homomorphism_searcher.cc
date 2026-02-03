@@ -1247,10 +1247,10 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
         return true;                                                // Dynamic value order says that the current assignment is always lex-least
     }
     // ** PATTERN AND TARGET **
-    if (params.pattern_rep_syms && params.target_rep_syms) {
+    if (params.composite_symmetries && params.pattern_rep_syms && params.target_rep_syms) {
         for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
             for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
-                const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];          // Do we need the list of pattern auts at all?
+                const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];
                 const std::vector<unsigned int> &t_aut = target_coset_reps[t];
                 const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
                 const std::vector<unsigned int> &t_inv = target_coset_invs[t];
@@ -1273,7 +1273,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         }
                     }
                     else if (mapping[i] != -1) {
-                        for (auto &d : new_domains) {
+                        for (auto &d : new_domains) {       // TODO this filter is probably too slow to be worth doing in its current form
                             if (d.v == p_aut[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
                                     if (occurs_before(x, static_cast<unsigned int>(mapping[i])) && std::find(permuted.begin(), permuted.end(), x) == permuted.end()) {
@@ -1295,86 +1295,77 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
         }
     }
     // ** PATTERN ONLY **
-    else if (params.pattern_rep_syms) {
-        for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
-            const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
-            std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
-            for (const auto &a: assignments.values) {
-                permuted[p_inv[a.assignment.pattern_vertex]] = mapping[a.assignment.pattern_vertex];     // Construct permuted mapping
-            }
-            for (unsigned int y = 0; y < model.pattern_size; y++) {
-                int i = var_order[y];
-                if (mapping[i] != -1 && permuted[i] != -1) {
-                    if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
-                        return false;
+    else {
+        if (params.pattern_rep_syms) {
+            for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
+                const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
+                const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];
+                int i;
+                for (unsigned int y = 0; y < model.pattern_size; y++) {
+                    i = var_order[y];
+                    if (mapping[i] != -1 && mapping[p_aut[i]] != -1) {
+                        if (occurs_before(mapping[p_aut[i]],mapping[i])) {       // The permuted mapping is lex-less-than the original
+                            return false;
+                        }
+                        else if (p_aut[i] == i) {     // The mapping is the same so far
+                            continue;
+                        }
+                        else if (occurs_before(mapping[i], mapping[p_aut[i]])) {      // The original mapping is lex-less-than the permutation
+                            break;                          // TODO we don't need to check this particular p_aut again until we backtrack
+                        }
                     }
-                    else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
-                        continue;
+                    else if (mapping[i] != -1) {
+                        for (auto &d : new_domains) {
+                            if (d.v == p_inv[i]) {               // Find the variable's domain
+                                for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
+                                    if (occurs_before(x, mapping[i])) {
+                                        d.values.reset(x);
+                                        if (!d.values.any()) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        break;
                     }
-                    else if (occurs_before(mapping[i], permuted[i])) {      // The original mapping is lex-less-than the permutation
-                        break;                          // TODO we don't need to check this particular p_aut again until we backtrack
+                    else {
+                        break;
                     }
                 }
-                else if (mapping[i] != -1) {
-                    for (auto &d : new_domains) {
-                        if (d.v == p_inv[i]) {               // Find the variable's domain
-                            for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                if (occurs_before(x, mapping[i])) {
-                                    d.values.reset(x);
+            }
+        }
+        // ** TARGET ONLY **
+        if (params.target_rep_syms) {
+            for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+                const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+                for (unsigned int y = 0; y < model.pattern_size; y++) {
+                    int i = var_order[y];
+                    if (mapping[i] != -1) {
+                        if (occurs_before(t_aut[mapping[i]],mapping[i])) {       // The permuted mapping is 'less than' the original
+                            return false;
+                        }
+                        else if (t_aut[mapping[i]] == mapping[i]) {     // The mapping is the same so far
+                            continue;
+                        }
+                        else if (occurs_before(mapping[i],t_aut[mapping[i]])) {      // The original mapping is 'less than' the permutation
+                            for (auto &d : new_domains) {
+                                if (d.v == i) {
+                                    d.values.reset(t_aut[mapping[i]]);                // Don't bother searching permuted[i], we know it's symmetrical to mapping[i]
                                     if (!d.values.any()) {
                                         return false;
                                     }
                                 }
                             }
+                            break;                          // TODO we don't need to check this particular t_aut again until we backtrack
+                        }
+                        else {                  // Not enough information about the value order to infer at this point
+                            break;
                         }
                     }
-                    break;
-                }
-                else {
-                    break;
-                }
-            }
-        }
-    }
-    // ** TARGET ONLY **
-    else if (params.target_rep_syms) {
-        for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
-            const std::vector<unsigned int> &t_aut = target_coset_reps[t];
-            std::fill(permuted.begin(), permuted.end(), -1);        // Reset permuted
-            for (const auto &a: assignments.values) {
-                permuted[a.assignment.pattern_vertex] = t_aut[mapping[a.assignment.pattern_vertex]];     // Construct permuted mapping
-            }
-            for (int i = 0; i < permuted.size(); i++) {
-                std::cout << var_order[i] << ":" << permuted[var_order[i]] << " ";
-            }
-            std::cout << "\n";
-            for (unsigned int y = 0; y < model.pattern_size; y++) {
-                int i = var_order[y];
-                if (mapping[i] != -1) {
-                    if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is 'less than' the original
-                        std::cout << "reject\n";
-                        return false;
-                    }
-                    else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
-                        continue;
-                    }
-                    else if (occurs_before(mapping[i],permuted[i])) {      // The original mapping is 'less than' the permutation
-                        for (auto &d : new_domains) {
-                            if (d.v == i) {
-                                d.values.reset(permuted[i]);                // Don't bother searching permuted[i], we know it's symmetrical to mapping[i]
-                                if (!d.values.any()) {
-                                    return false;
-                                }
-                            }
-                        }
-                        break;                          // TODO we don't need to check this particular t_aut again until we backtrack
-                    }
-                    else {                  // Not enough information about the value order to infer at this point
+                    else {
                         break;
                     }
-                }
-                else {
-                    break;
                 }
             }
         }

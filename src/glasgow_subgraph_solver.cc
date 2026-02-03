@@ -525,6 +525,9 @@ namespace
             }
             params.partial_assignments_sym = true;
         }
+        if (options_vars.count("composite-symmetries")) {
+            params.composite_symmetries = true;
+        }
 
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
@@ -626,7 +629,8 @@ auto main(int argc, char * argv[]) -> int
                 cxxopts::value<string>())
             ("target-coset-symmetries",
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
-                cxxopts::value<string>());
+                cxxopts::value<string>())
+            ("composite-symmetries", "Compute combinations of automorphisms to break extra symmetries (requires Dejavu)");
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")

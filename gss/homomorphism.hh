@@ -123,6 +123,7 @@ namespace gss
         bool dynamic_pattern = false, dynamic_target = false;
         bool degree_sym_pattern = false, degree_sym_target = false;
         bool semi_flexible_pattern = false, semi_flexible_target = false;
+        bool composite_symmetries = false;
         long double pattern_aut_mantissa, target_aut_mantissa;
         int pattern_aut_exp, target_aut_exp;
 
