@@ -882,7 +882,8 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto first_a = a_domain.values.find_first();
         for (auto v = first_a; v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
             a_values_copy.reset(v);
-            if (occurs_before(v, first_a)) {
+            // if (occurs_before(v, first_a)) {
+            if (val_order[v] < val_order[first_a]) {
                 first_a = v;
             }
         }
@@ -898,7 +899,8 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto b_values_copy = b_domain.values;
         auto first_allowed_b = b_domain.values.find_first();
         for (auto v = first_allowed_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
-            if (occurs_before(v, first_a) || v == first_a) {
+            // if (occurs_before(v, first_a) || v == first_a) {
+            if (val_order[v] < val_order[first_a] || v == first_a) {
                 b_domain.values.reset(v);
             }
             b_values_copy.reset(v);
@@ -924,7 +926,8 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto last_b = b_domain.values.find_first();
         for (auto v = last_b; v != decltype(b_values_copy)::npos; v = b_values_copy.find_first()) {
             b_values_copy.reset(v);
-            if (occurs_before(last_b, v)) {
+            // if (occurs_before(last_b, v)) {
+            if (val_order[last_b] < val_order[v]) {
                 last_b = v;
             }
         }
@@ -939,7 +942,8 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
         auto a_values_copy = a_domain.values;
         for (auto v = a_values_copy.find_first(); v != decltype(a_values_copy)::npos; v = a_values_copy.find_first()) {
             a_values_copy.reset(v);
-            if (occurs_before(last_b, v) || last_b == v) {
+            // if (occurs_before(last_b, v) || last_b == v) {
+            if (val_order[last_b] < val_order[v] || last_b == v) {
                 a_domain.values.reset(v);
             }
         }
@@ -1261,13 +1265,15 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                 for (unsigned int y = 0; y < model.pattern_size; y++) {
                     int i = var_order[y];
                     if (mapping[i] != -1 && permuted[i] != -1) {
-                        if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
+                        // if (occurs_before(permuted[i],mapping[i])) {       // The permuted mapping is lex-less-than the original
+                        if (val_order[permuted[i]] < val_order[mapping[i]]) {       // The permuted mapping is lex-less-than the original
                             return false;
                         }
                         else if (permuted[i] == mapping[i]) {     // The mapping is the same so far
                             continue;
                         }
-                        else if (occurs_before(mapping[i], permuted[i])) {      // The original mapping is 'less than' the permutation
+                        // else if (occurs_before(mapping[i], permuted[i])) {      // The original mapping is 'less than' the permutation
+                        else if (val_order[mapping[i]] < val_order[permuted[i]]) {      // The original mapping is 'less than' the permutation
                             // TODO some domain inference here?
                             break;                          // TODO we don't need to check this particular p_aut,t_aut combination again until we backtrack
                         }
@@ -1276,7 +1282,8 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         for (auto &d : new_domains) {       // TODO this filter is probably too slow to be worth doing in its current form
                             if (d.v == p_aut[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                    if (occurs_before(x, static_cast<unsigned int>(mapping[i])) && std::find(permuted.begin(), permuted.end(), x) == permuted.end()) {
+                                    // if (occurs_before(x, static_cast<unsigned int>(mapping[i])) && std::find(permuted.begin(), permuted.end(), x) == permuted.end()) {
+                                    if (val_order[x] < val_order[mapping[i]] && std::find(permuted.begin(), permuted.end(), x) == permuted.end()) {
                                         d.values.reset(t_inv[x]);
                                         if (!d.values.any()) {
                                             return false;
@@ -1304,13 +1311,15 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                 for (unsigned int y = 0; y < model.pattern_size; y++) {
                     i = var_order[y];
                     if (mapping[i] != -1 && mapping[p_aut[i]] != -1) {
-                        if (occurs_before(mapping[p_aut[i]],mapping[i])) {       // The permuted mapping is lex-less-than the original
+                        // if (occurs_before(mapping[p_aut[i]],mapping[i])) {       // The permuted mapping is lex-less-than the original
+                        if (val_order[mapping[p_aut[i]]] < val_order[mapping[i]]) {       // The permuted mapping is lex-less-than the original
                             return false;
                         }
                         else if (p_aut[i] == i) {     // The mapping is the same so far
                             continue;
                         }
-                        else if (occurs_before(mapping[i], mapping[p_aut[i]])) {      // The original mapping is lex-less-than the permutation
+                        // else if (occurs_before(mapping[i], mapping[p_aut[i]])) {      // The original mapping is lex-less-than the permutation
+                        else if (val_order[mapping[i]] < val_order[mapping[p_aut[i]]]) {      // The original mapping is lex-less-than the permutation
                             break;                          // TODO we don't need to check this particular p_aut again until we backtrack
                         }
                     }
@@ -1318,7 +1327,8 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         for (auto &d : new_domains) {
                             if (d.v == p_inv[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
-                                    if (occurs_before(x, mapping[i])) {
+                                    // if (occurs_before(x, mapping[i])) {
+                                    if (val_order[x] < val_order[mapping[i]]) {
                                         d.values.reset(x);
                                         if (!d.values.any()) {
                                             return false;
@@ -1342,13 +1352,15 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                 for (unsigned int y = 0; y < model.pattern_size; y++) {
                     int i = var_order[y];
                     if (mapping[i] != -1) {
-                        if (occurs_before(t_aut[mapping[i]],mapping[i])) {       // The permuted mapping is 'less than' the original
+                        // if (occurs_before(t_aut[mapping[i]],mapping[i])) {       // The permuted mapping is 'less than' the original
+                        if (val_order[t_aut[mapping[i]]] < val_order[mapping[i]]) {       // The permuted mapping is 'less than' the original
                             return false;
                         }
                         else if (t_aut[mapping[i]] == mapping[i]) {     // The mapping is the same so far
                             continue;
                         }
-                        else if (occurs_before(mapping[i],t_aut[mapping[i]])) {      // The original mapping is 'less than' the permutation
+                        // else if (occurs_before(mapping[i],t_aut[mapping[i]])) {      // The original mapping is 'less than' the permutation
+                        else if (val_order[mapping[i]] < val_order[t_aut[mapping[i]]]) {      // The original mapping is 'less than' the permutation
                             for (auto &d : new_domains) {
                                 if (d.v == i) {
                                     d.values.reset(t_aut[mapping[i]]);                // Don't bother searching permuted[i], we know it's symmetrical to mapping[i]
