@@ -315,7 +315,7 @@ auto HomomorphismSearcher::restarting_search(
                 val_order[*f_v] = var_order[branch_domain->v];
             }
         }
-        if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
+        if (!params.symmetric_nogoods_only && (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0))) {
             auto sym_start_time = steady_clock::now();
             did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
@@ -355,7 +355,7 @@ auto HomomorphismSearcher::restarting_search(
                 // post nogoods for everything we've done so far
                 for (auto l = branch_v.begin(); l != f_v; ++l) {
                     assignments.values.push_back({{branch_domain->v, unsigned(*l)}, true, -2, -2});
-                    if (params.orbit_sym || params.partial_assignments_sym) {
+                    if (params.symmetric_nogoods) {
                         post_symmetrical_nogoods(assignments);
                     }
                     else {
@@ -414,7 +414,7 @@ auto HomomorphismSearcher::restarting_search(
     if (restarts_schedule.should_restart()) {
         if (proof)
             proof->back_up_to_top();
-        if (params.orbit_sym || params.partial_assignments_sym) {
+        if (params.symmetric_nogoods) {
             post_symmetrical_nogoods(assignments);
         }
         else {
@@ -546,8 +546,6 @@ auto HomomorphismSearcher::post_nogood(const HomomorphismAssignments & assignmen
 auto HomomorphismSearcher::post_symmetrical_nogoods(const HomomorphismAssignments & assignments) -> void {
     if (! might_have_watches(params))
         return;
-
-    post_nogood(assignments); return;
     
     HomomorphismAssignments sym_assignments;
 
@@ -591,37 +589,41 @@ auto HomomorphismSearcher::post_symmetrical_nogoods(const HomomorphismAssignment
         }
     }
     //TODO probably need to make sure we don't add duplicate nogoods
-    if (params.pattern_rep_syms && params.target_rep_syms) {
-        for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
-            for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
-                const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+    if (params.composite_symmetries) {
+        if (params.pattern_rep_syms && params.target_rep_syms) {
+            for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
+                for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+                    const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+                    const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
+                    sym_assignments.values.resize(0);
+                    for (const auto &a: assignments.values) {
+                        sym_assignments.values.push_back({{p_inv[a.assignment.pattern_vertex], t_aut[a.assignment.target_vertex]}, a.is_decision, a.discrepancy_count, a.choice_count});
+                    }
+                    post_nogood(sym_assignments);
+                }
+            }
+        }
+    }
+    else {
+        if (params.pattern_rep_syms) {
+            for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
                 const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
                 sym_assignments.values.resize(0);
                 for (const auto &a: assignments.values) {
-                    sym_assignments.values.push_back({{p_inv[a.assignment.pattern_vertex], t_aut[a.assignment.target_vertex]}, a.is_decision, a.discrepancy_count, a.choice_count});
+                    sym_assignments.values.push_back({{p_inv[a.assignment.pattern_vertex], a.assignment.target_vertex}, a.is_decision, a.discrepancy_count, a.choice_count});
                 }
                 post_nogood(sym_assignments);
             }
         }
-    }
-    else if (params.pattern_rep_syms) {
-        for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
-            const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
-            sym_assignments.values.resize(0);
-            for (const auto &a: assignments.values) {
-                sym_assignments.values.push_back({{p_inv[a.assignment.pattern_vertex], a.assignment.target_vertex}, a.is_decision, a.discrepancy_count, a.choice_count});
+        if (params.target_rep_syms) {
+            for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+                const std::vector<unsigned int> &t_aut = target_coset_reps[t];
+                sym_assignments.values.resize(0);
+                for (const auto &a: assignments.values) {
+                    sym_assignments.values.push_back({{a.assignment.pattern_vertex, t_aut[a.assignment.target_vertex]}, a.is_decision, a.discrepancy_count, a.choice_count});
+                }
+                post_nogood(sym_assignments);
             }
-            post_nogood(sym_assignments);
-        }
-    }
-    else if (params.target_rep_syms) {
-        for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
-            const std::vector<unsigned int> &t_aut = target_coset_reps[t];
-            sym_assignments.values.resize(0);
-            for (const auto &a: assignments.values) {
-                sym_assignments.values.push_back({{a.assignment.pattern_vertex, t_aut[a.assignment.target_vertex]}, a.is_decision, a.discrepancy_count, a.choice_count});
-            }
-            post_nogood(sym_assignments);
         }
     }
 }
@@ -1581,36 +1583,38 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 }
             }
 
-            // propagate orbit less thans
-            if (model.has_less_thans() && !params.pattern_rep_syms) {
-                if (model.do_dynamic_less_thans()) {
-                    if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
-                        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                        return false;
+            if (!params.symmetric_nogoods_only) {
+                // propagate orbit less thans
+                if (model.has_less_thans() && !params.pattern_rep_syms) {
+                    if (model.do_dynamic_less_thans()) {
+                        if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                            return false;
+                        }
+                    }
+                    else {
+                        if (!propagate_less_thans(new_domains)) {
+                            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                            return false;
+                        }
                     }
                 }
-                else {
-                    if (!propagate_less_thans(new_domains)) {
-                        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                        return false;
-                    }
-                }
-            }
 
-            // propagate orbit occurs less thans
-            if (model.has_occur_less_thans() && !params.target_rep_syms) {
-                if (params.flexible_target || (params.semi_flexible_target && rep_solution_count != 0)) {
-                    if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, current_assignment)) {
+                // propagate orbit occurs less thans
+                if (model.has_occur_less_thans() && !params.target_rep_syms) {
+                    if (params.flexible_target || (params.semi_flexible_target && rep_solution_count != 0)) {
+                        if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, current_assignment)) {
+                            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                            return false;
+                        }
+                    }
+                    else if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
+                        // Can we actually do anything here?
+                    }
+                    else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, current_assignment)) {
                         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
                         return false;
                     }
-                }
-                else if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
-                    // Can we actually do anything here?
-                }
-                else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, current_assignment)) {
-                    sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                    return false;
                 }
             }
 
@@ -1624,11 +1628,13 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         done_globals_at_least_once = true;
     }
 
-    auto sym_start_time = steady_clock::now();
-    // propagate permutation symmetries - extra assignments make this more effective
-    if (params.partial_assignments_sym && !break_coset_rep_symmetries(assignments, new_domains)) {
-        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-        return false;
+    if (!params.symmetric_nogoods_only) {
+        auto sym_start_time = steady_clock::now();
+        // propagate permutation symmetries - extra assignments make this more effective
+        if (params.partial_assignments_sym && !break_coset_rep_symmetries(assignments, new_domains)) {
+            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            return false;
+        }
     }
 
     // verify

@@ -528,6 +528,13 @@ namespace
         if (options_vars.count("composite-symmetries")) {
             params.composite_symmetries = true;
         }
+        if (options_vars.count("symmetric-nogoods")) {
+            params.symmetric_nogoods = true;
+        }
+        if (options_vars.count("symmetric-nogoods-only")) {
+            params.symmetric_nogoods = true;
+            params.symmetric_nogoods_only = true;
+        }
 
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
@@ -631,6 +638,8 @@ auto main(int argc, char * argv[]) -> int
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
                 cxxopts::value<string>())
             ("composite-symmetries", "Compute combinations of automorphisms to break extra symmetries (requires Dejavu)");
+            ("symmetric-nogoods", "Log symmetric branches as nogoods on restarts (requires Dejavu)");
+            ("symmetric-nogoods-only", "Log symmetric branches as nogoods on restarts, and don't propagate symmetries elsewhere (requires Dejavu)");
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")

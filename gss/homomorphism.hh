@@ -124,6 +124,7 @@ namespace gss
         bool degree_sym_pattern = false, degree_sym_target = false;
         bool semi_flexible_pattern = false, semi_flexible_target = false;
         bool composite_symmetries = false;
+        bool symmetric_nogoods = false, symmetric_nogoods_only = false;
         long double pattern_aut_mantissa, target_aut_mantissa;
         int pattern_aut_exp, target_aut_exp;
 
