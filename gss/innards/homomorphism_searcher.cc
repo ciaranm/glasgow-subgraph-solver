@@ -1285,7 +1285,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                             if (d.v == p_aut[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
                                     // if (occurs_before(x, static_cast<unsigned int>(mapping[i])) && std::find(permuted.begin(), permuted.end(), x) == permuted.end()) {
-                                    if (val_order[x] < val_order[mapping[i]] && std::find(permuted.begin(), permuted.end(), x) == permuted.end()) {
+                                    if (val_order[x] < val_order[mapping[i]] && std::find(permuted.begin(), permuted.end(), x) == permuted.end() && d.values.test(t_inv[x])) {
                                         d.values.reset(t_inv[x]);
                                         if (!d.values.any()) {
                                             return false;
@@ -1330,7 +1330,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                             if (d.v == p_inv[i]) {               // Find the variable's domain
                                 for (unsigned int x = 0; x < model.target_size; x++) {  // For each value...
                                     // if (occurs_before(x, mapping[i])) {
-                                    if (val_order[x] < val_order[mapping[i]]) {
+                                    if (val_order[x] < val_order[mapping[i]] && d.values.test(x)) {
                                         d.values.reset(x);
                                         if (!d.values.any()) {
                                             return false;
@@ -1364,7 +1364,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         // else if (occurs_before(mapping[i],t_aut[mapping[i]])) {      // The original mapping is 'less than' the permutation
                         else if (val_order[mapping[i]] < val_order[t_aut[mapping[i]]]) {      // The original mapping is 'less than' the permutation
                             for (auto &d : new_domains) {
-                                if (d.v == i) {
+                                if (d.v == i && d.values.test(t_aut[mapping[i]])) {
                                     d.values.reset(t_aut[mapping[i]]);                // Don't bother searching permuted[i], we know it's symmetrical to mapping[i]
                                     if (!d.values.any()) {
                                         return false;
@@ -1406,7 +1406,7 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignm
 
     if (params.target_rep_syms) {
         int counter = 0;
-        for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
+        for (unsigned int t = 1; t < target_coset_reps.size(); t++) {
             if (counter == target_base.size()) break;
             const std::vector<unsigned int> &t_aut = target_coset_reps[t];
             if (target_base[counter] == val && t_aut[val] != val) {          // This permutation goes to a sibling
