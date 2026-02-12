@@ -1409,13 +1409,13 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignm
         for (unsigned int t = 1; t < target_coset_reps.size(); t++) {
             if (counter == target_base.size()) break;
             const std::vector<unsigned int> &t_aut = target_coset_reps[t];
-            if (target_base[counter] == val && t_aut[val] != val) {          // This permutation goes to a sibling
-                domain->values.reset(t_aut[val]);
-                did_filter = true;
-            }
-            while (t_aut[target_base[counter]] == target_base[counter]) {      // base point is fixed
+            while (t_aut[target_base[counter]] == target_base[counter]) {      // Move through the base until we find a point that moves under this perm
                 counter++;
                 if (counter == target_base.size()) break;
+            }
+            if (target_base[counter] == val && t_aut[val] != val) {          // This perm goes to a sibling
+                domain->values.reset(t_aut[val]);
+                did_filter = true;
             }
         }
     }
