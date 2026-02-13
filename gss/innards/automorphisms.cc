@@ -21,6 +21,8 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
 
     rschreier.set_base(base);       // Empty base to begin with
 
+    orbit_sizes.resize(i.size(), 1);
+
     dejavu::hooks::schreier_hook hook(rschreier);
     dejavu::solver s;
     s.set_print(false);
@@ -51,6 +53,7 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
             if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
                 stab_trivial = false;
                 base.push_back(v);          // Add v to base
+                break;
             }
         }
 
@@ -67,7 +70,7 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
                 o_sz++;
             }
         }
-        orbit_sizes.push_back(o_sz);
+        orbit_sizes[v] = o_sz;
     }
 
     for (std::pair<int, int> p: unique_list) {
@@ -159,12 +162,30 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
     std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
     if (sz.mantissa == 1 && sz.exponent == 0) return mappings;
 
-    while (base.size() < i.size()) {
-        for (int v: vertex_order) {        // For each vertex
+    // while (base.size() < i.size()) {
+    //     for (int v: vertex_order) {        // For each vertex
+    //             base.push_back(v);          // Add v to base
+    //     }
+
+    //     rschreier.set_base(base);       // Update base
+    // }
+
+
+    bool stab_trivial = false;
+    dejavu::groups::orbit o{nv};      // Orbit structure of size nv
+    while (! stab_trivial) {        // While stabiliser is non-trivial
+        rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
+        stab_trivial = true;
+        for (auto & v : vertex_order) {        // For each vertex
+            if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
+                stab_trivial = false;
                 base.push_back(v);          // Add v to base
+                break;
+            }
         }
 
-        rschreier.set_base(base);       // Update base
+        if (! stab_trivial)
+            rschreier.set_base(base);       // Update base
     }
 
     for (int x = 0; x < base.size(); x++) {
@@ -172,8 +193,8 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
         orbit_sizes[base.at(x)] = orb.size();
         std::vector<unsigned int> mapping;
         for (auto v : orb) {
-            if (v == base.at(x)) continue;
             if (rschreier.get_transversal_element(x,v,a)) {
+                if (a.p()[base[x]] == base[x]) continue;
                 mapping.clear();
                 for (int y = 0; y < i.size(); y++) {
                     mapping.push_back(a.p()[y]);            // mapping[i] maps to p*i

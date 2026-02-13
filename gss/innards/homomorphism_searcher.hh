@@ -96,6 +96,7 @@ namespace gss::innards
         std::vector<std::vector<unsigned int>> pattern_coset_invs, target_coset_invs;
         std::vector<std::vector<innards::SVOBitset>> seen_before;
         std::vector<int> target_base, pattern_base;
+        std::vector<int> irredundant_target_base, irredundant_pattern_base;         // Seems like dejavu (very rarely) is incomplete otherwise
         std::vector<int> var_order, suffix, val_order;
         int latest_value_index;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
@@ -127,7 +128,7 @@ namespace gss::innards
         auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         auto make_useful_target_constraints(int target_vertex, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         auto make_useful_target_constraints(std::vector<int> target_vertices, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
-        auto make_useful_target_constraints(std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
+        auto make_useful_target_constraints(std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> void;
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 

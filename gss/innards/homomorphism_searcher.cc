@@ -263,13 +263,15 @@ auto HomomorphismSearcher::restarting_search(
     bool use_lackey_for_propagation = false;
 
     // remember what the base was in case we're doing dynamic symmetries
-    std::vector<int> pattern_base_cpy, target_base_cpy, mapping_cpy, val_order_cpy;
+    std::vector<int> pattern_base_cpy, ipb_cpy, target_base_cpy, itb_cpy, mapping_cpy, val_order_cpy;
 
     if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
         pattern_base_cpy = pattern_base;
+        ipb_cpy = irredundant_pattern_base;
     }
     if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
         target_base_cpy = target_base;
+        itb_cpy = irredundant_target_base;
         val_order_cpy = val_order;
     }
     if (params.partial_assignments_sym || params.orbit_sym) {
@@ -282,11 +284,13 @@ auto HomomorphismSearcher::restarting_search(
 
         if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
             pattern_base = pattern_base_cpy;
+            irredundant_pattern_base = ipb_cpy;
         }
 
         if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
             if (did_filter && !branch_domain->values.test(*f_v)) continue;
             target_base = target_base_cpy;
+            irredundant_target_base = itb_cpy;
             auto sym_start_time = steady_clock::now();
             make_useful_target_constraints(*f_v, useful_target_constraints, target_base);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
@@ -403,9 +407,11 @@ auto HomomorphismSearcher::restarting_search(
 
     if (params.dynamic_pattern) {
         pattern_base = pattern_base_cpy;
+        irredundant_pattern_base = ipb_cpy;
     }
     if (params.dynamic_target) {
         target_base = target_base_cpy;
+        irredundant_target_base = itb_cpy;
     }
 
     if (actually_hit_a_failure)
@@ -422,12 +428,14 @@ auto HomomorphismSearcher::restarting_search(
         }
         if (params.dynamic_pattern) {
             pattern_base.resize(0);
+            irredundant_pattern_base.resize(0);
             if (!params.pattern_rep_syms) {
                 useful_pattern_constraints.resize(0);
             }
         }
         if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
             target_base.resize(0);
+            irredundant_target_base.resize(0);
             if (!params.target_rep_syms) {
                 useful_target_constraints.resize(0);
             }
@@ -458,11 +466,17 @@ auto HomomorphismSearcher::count_solution(const HomomorphismAssignments & assign
         }
         else {
             int mult = 1;
-            for (int i = 0; i < assignments.values.size(); i++) { // The list of assignments sometimes contains duplicates so we have to account for that
-                if (i > 0 && assignments.values[i].assignment == assignments.values[i-1].assignment) {     // Assuming the duplicates will be next to each other
-                    continue;
+            for (auto &[a,b] : useful_target_constraints) {
+                for (int i = 0; i < mapping.size(); i++) {
+                    if (mapping[i] == a) break;
+                    if (mapping[i] == b) {
+                        std::cout << "Bad hit\n";
+                        return 0;
+                    }
                 }
-                mult *= target_orbit_sizes[assignments.values[i].assignment.target_vertex];
+            }
+            for (int i = 0; i < model.pattern_size; i++) {
+                mult *= target_orbit_sizes[mapping[i]];
             }
             return mult;
         }
@@ -950,8 +964,6 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains, const std
             }
         }
 
-
-
         // a might have shrunk
         a_domain.count = a_domain.values.count();
         if (0 == a_domain.count) {
@@ -1119,13 +1131,18 @@ auto HomomorphismSearcher::make_useful_target_constraints(
     std::vector<int> & base
 ) -> bool
 {
-
-    // std::cout << target_vertex << "\n";
-
     if (std::find(base.begin(), base.end(), target_vertex) == base.end()) {
         base.push_back(target_vertex);       // Add this vertex as a new base point
+        irredundant_target_base.push_back(target_vertex);
 
-        return make_useful_target_constraints(useful_constraints, base);
+        make_useful_target_constraints(useful_constraints, base);
+
+        if (target_orbit_sizes[target_vertex] == 1) {
+            irredundant_target_base.pop_back();
+        }
+        else {
+            return true;
+        }
     }
 
     return false;
@@ -1139,23 +1156,16 @@ auto HomomorphismSearcher::make_useful_target_constraints(
 auto HomomorphismSearcher::make_useful_target_constraints(
     std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
     std::vector<int> & base
-) -> bool
+) -> void
 {
     if (params.target_rep_syms) {
-            int size_before = target_coset_reps.size();
-
             int size = model.target_size + (model.directed() ? 2 * model.target_edge_num : 0);
 
-            innards::dynamic_coset_reps(target_base, size, t_rschreier, target_coset_reps, target_coset_invs, target_orbit_sizes);
-
-            return (target_coset_reps.size() - size_before) > 0;
+            innards::dynamic_coset_reps(irredundant_target_base, size, t_rschreier, target_coset_reps, target_coset_invs, target_orbit_sizes);
         }
     else {
-            unsigned int size_before = useful_constraints.size();
-
             int size = model.target_size + (model.directed() ? 2 * model.target_edge_num : 0);
-            innards::dynamic_order_constraints(size, base, target_orbit_sizes, t_rschreier, useful_constraints);    // Compute constraints at the new base point
-            return (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
+            innards::dynamic_order_constraints(size, irredundant_target_base, target_orbit_sizes, t_rschreier, useful_constraints);    // Compute constraints at the new base point
     }
 }
 
@@ -1211,26 +1221,26 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
 
     if (std::find(base.begin(), base.end(), p) == base.end()) {
         base.push_back(p);      // Add this vertex as a new base point
+        irredundant_pattern_base.push_back(p);
 
         if (params.pattern_rep_syms) {
-            int size_before = pattern_coset_reps.size();
-
             int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
-            innards::dynamic_coset_reps(pattern_base, size, p_rschreier, pattern_coset_reps, pattern_coset_invs, pattern_orbit_sizes);
+            innards::dynamic_coset_reps(irredundant_pattern_base, size, p_rschreier, pattern_coset_reps, pattern_coset_invs, pattern_orbit_sizes);
 
-            added = pattern_coset_reps.size() - size_before > 0;
         }
         else {
-            int size_before = useful_constraints.size();
-
             int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
-            innards::dynamic_order_constraints(size, base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
+            innards::dynamic_order_constraints(size, irredundant_pattern_base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
 
             // TODO are the domains of the symmetrical vertices equivalent? They should be.
 
-            added = (useful_constraints.size() - size_before) > 0;       // Return true if new constraints were added
+        }
+        added = pattern_orbit_sizes[p] != 1;       // Return true if new constraints were added
+
+        if (!added) {
+            irredundant_pattern_base.pop_back();
         }
 
         adjust_variable_order();
@@ -1571,7 +1581,8 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 }
             }
 
-            if (params.partial_assignments_sym || params.orbit_sym) {
+            if (params.partial_assignments_sym || params.orbit_sym) {       
+                // record this assignment and adjust var/val orders as necessary
                 mapping[current_assignment->pattern_vertex] = current_assignment->target_vertex;
                 if (params.flexible_target) {
                     if ((latest_value_index < 0 || unsigned(latest_value_index) < model.target_size - 1) && val_order[current_assignment->target_vertex] == model.target_size) {
