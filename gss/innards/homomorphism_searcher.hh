@@ -137,7 +137,7 @@ namespace gss::innards
 
         auto break_coset_rep_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
-        auto filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v, int val) -> bool;
+        auto filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v, int val, bool & did_filter, SVOBitset & searched) -> bool;
 
         auto occurs_before(int a, int b) -> bool;
 

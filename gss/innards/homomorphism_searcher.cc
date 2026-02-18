@@ -264,6 +264,7 @@ auto HomomorphismSearcher::restarting_search(
 
     // remember what the base was in case we're doing dynamic symmetries
     std::vector<int> pattern_base_cpy, ipb_cpy, target_base_cpy, itb_cpy, mapping_cpy, val_order_cpy;
+    SVOBitset searched(model.target_size, 0);
 
     if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
         pattern_base_cpy = pattern_base;
@@ -295,6 +296,7 @@ auto HomomorphismSearcher::restarting_search(
             make_useful_target_constraints(*f_v, useful_target_constraints, target_base);
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
             val_order = val_order_cpy;
+            searched.set(*f_v);
         }
 
         if (proof)
@@ -321,7 +323,10 @@ auto HomomorphismSearcher::restarting_search(
         }
         if (!params.symmetric_nogoods_only && (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0))) {
             auto sym_start_time = steady_clock::now();
-            did_filter |= filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v);
+            if (!filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v, did_filter, searched)) {
+                assignments.values.resize(assignments_size);
+                continue;
+            }
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         }
 
@@ -466,15 +471,6 @@ auto HomomorphismSearcher::count_solution(const HomomorphismAssignments & assign
         }
         else {
             int mult = 1;
-            for (auto &[a,b] : useful_target_constraints) {
-                for (int i = 0; i < mapping.size(); i++) {
-                    if (mapping[i] == a) break;
-                    if (mapping[i] == b) {
-                        std::cout << "Bad hit\n";
-                        return 0;
-                    }
-                }
-            }
             for (int i = 0; i < model.pattern_size; i++) {
                 mult *= target_orbit_sizes[mapping[i]];
             }
@@ -1083,42 +1079,42 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
     return true;
 }
 
-/**
- * Generate occurs-less-than symmetry constraints according to an additional base point
- *
- * @returns true if constraints were added
- */
-auto HomomorphismSearcher::make_useful_target_constraints(
-    const std::optional<HomomorphismAssignment> & current_assignment,
-    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
-    std::vector<int> & base
-) -> bool
-{
-    if(!current_assignment) return false;
-    unsigned int t = current_assignment->target_vertex;
+// /**
+//  * Generate occurs-less-than symmetry constraints according to an additional base point
+//  *
+//  * @returns true if constraints were added
+//  */
+// auto HomomorphismSearcher::make_useful_target_constraints(
+//     const std::optional<HomomorphismAssignment> & current_assignment,
+//     std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+//     std::vector<int> & base
+// ) -> bool
+// {
+//     if(!current_assignment) return false;
+//     unsigned int t = current_assignment->target_vertex;
 
-    return make_useful_target_constraints(t, useful_constraints, base);
-}
+//     return make_useful_target_constraints(t, useful_constraints, base);
+// }
 
-/**
- * Generate occurs-less-than symmetry constraints according to a given some additional base points
- *
- * @returns true if constraints were added
- */
-auto HomomorphismSearcher::make_useful_target_constraints(
-    std::vector<int> target_vertices,
-    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
-    std::vector<int> & base
-) -> bool
-{
-    bool added = false;
+// /**
+//  * Generate occurs-less-than symmetry constraints according to a given some additional base points
+//  *
+//  * @returns true if constraints were added
+//  */
+// auto HomomorphismSearcher::make_useful_target_constraints(
+//     std::vector<int> target_vertices,
+//     std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
+//     std::vector<int> & base
+// ) -> bool
+// {
+//     bool added = false;
 
-    for (auto &t : target_vertices) {
-        added |= make_useful_target_constraints(t, useful_constraints, base);
-    }
+//     for (auto &t : target_vertices) {
+//         added |= make_useful_target_constraints(t, useful_constraints, base);
+//     }
 
-    return added;
-}
+//     return added;
+// }
 
 /**
  * Generate occurs-less-than symmetry constraints according to an additional base point
@@ -1135,7 +1131,7 @@ auto HomomorphismSearcher::make_useful_target_constraints(
         base.push_back(target_vertex);       // Add this vertex as a new base point
         irredundant_target_base.push_back(target_vertex);
 
-        make_useful_target_constraints(useful_constraints, base);
+        make_useful_target_constraints(useful_constraints, irredundant_target_base);
 
         if (target_orbit_sizes[target_vertex] == 1) {
             irredundant_target_base.pop_back();
@@ -1403,8 +1399,8 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
  *
  * @returns true if a domain was filtered, false otherwise.
  */
-auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v, int val) -> bool {
-    bool did_filter = false;
+auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v, int val, bool & did_filter, SVOBitset & searched) -> bool {
+    // bool did_filter = false;
 
     HomomorphismDomain * domain = nullptr;
     for (auto & d : domains) {
@@ -1424,21 +1420,31 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignm
                 if (counter == target_base.size()) break;
             }
             if (target_base[counter] == val && t_aut[val] != val) {          // This perm goes to a sibling
-                domain->values.reset(t_aut[val]);
-                did_filter = true;
+                if (searched.test(t_aut[val])) {
+                    return false;           // We have already searched this branch (but dejavu gave incomplete results)
+                }
+                if (domain->values.test(t_aut[val])) {
+                    domain->values.reset(t_aut[val]);
+                    did_filter = true;
+                }
             }
         }
     }
     else {
         for (auto &[a,b] : useful_target_constraints) {
-            if (a == val && domain->values.test(b)) {
-                domain->values.reset(b);
-                did_filter = true;
+            if (a == val) {
+                if (searched.test(b)) {                 
+                    return false;           // We have already searched this branch (but dejavu gave incomplete results)
+                }
+                if (domain->values.test(b)) {
+                    domain->values.reset(b);
+                    did_filter = true;
+                }
             }
         }
     }
 
-    return did_filter;
+    return true;
 }
 
 /**

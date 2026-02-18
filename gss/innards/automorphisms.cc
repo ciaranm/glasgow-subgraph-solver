@@ -100,6 +100,9 @@ auto gss::innards::initialise_dynamic_structure(dejavu::groups::random_schreier 
     std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
     if (sz.mantissa == 1 && sz.exponent == 0) return false;
 
+    if (!s.get_deterministic_termination()) {
+        std::cout << "potentially incomplete symmetries with error bound 1/2^" << s.get_error_bound() << "\n";
+    }
 
     return true;
 }
@@ -116,7 +119,7 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<i
     dejavu::groups::orbit o{sz};      // Orbit structure of size sz
     for (unsigned int x = 0; x < base.size(); x++) {
         std::vector<int> orb = rschreier.get_fixed_orbit(x);              // Get orbit
-        int y = base.at(x);
+        int y = base[x];
         orbit_sizes[y] = orb.size();
         for (auto & z : orb) {
             if (z != y) constraints.push_back(std::make_pair(y,z));
@@ -161,15 +164,6 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
     dejavu::big_number sz = s.get_automorphism_group_size();
     std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
     if (sz.mantissa == 1 && sz.exponent == 0) return mappings;
-
-    // while (base.size() < i.size()) {
-    //     for (int v: vertex_order) {        // For each vertex
-    //             base.push_back(v);          // Add v to base
-    //     }
-
-    //     rschreier.set_base(base);       // Update base
-    // }
-
 
     bool stab_trivial = false;
     dejavu::groups::orbit o{nv};      // Orbit structure of size nv
