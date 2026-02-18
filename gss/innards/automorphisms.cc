@@ -182,7 +182,7 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
             rschreier.set_base(base);       // Update base
     }
 
-    for (int x = 0; x < base.size(); x++) {
+    for (unsigned int x = 0; x < base.size(); x++) {
         std::vector<int> orb = rschreier.get_fixed_orbit(x);              // Get orbit
         orbit_sizes[base.at(x)] = orb.size();
         std::vector<unsigned int> mapping;

@@ -97,7 +97,7 @@ namespace gss::innards
         std::vector<std::vector<innards::SVOBitset>> seen_before;
         std::vector<int> target_base, pattern_base;
         std::vector<int> irredundant_target_base, irredundant_pattern_base;         // Seems like dejavu (very rarely) is incomplete otherwise
-        std::vector<int> var_order, suffix, val_order;
+        std::vector<unsigned int> var_order, val_order;
         int latest_value_index;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
         loooong pattern_aut_grp_size = 1;
@@ -125,10 +125,8 @@ namespace gss::innards
 
         auto propagate_occur_less_thans(const HomomorphismAssignments &, Domains & new_domains, const std::vector<std::pair<unsigned int, unsigned int>> &, const std::optional<HomomorphismAssignment> &current_assignment) -> bool;
 
-        auto make_useful_target_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
         auto make_useful_target_constraints(int target_vertex, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
-        auto make_useful_target_constraints(std::vector<int> target_vertices, std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> bool;
-        auto make_useful_target_constraints(std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints, std::vector<int> &base) -> void;
+        auto make_useful_target_constraints(std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints) -> void;
         
         auto make_useful_pattern_constraints(const std::optional<HomomorphismAssignment> &current_assignment,std::vector<std::pair<unsigned int, unsigned int>> &useful_constraints,  std::vector<int> &base) -> bool;
 
@@ -137,7 +135,7 @@ namespace gss::innards
 
         auto break_coset_rep_symmetries(const HomomorphismAssignments & assignments, Domains & new_domains) -> bool;
 
-        auto filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v, int val, bool & did_filter, SVOBitset & searched) -> bool;
+        auto filter_symmetrical_siblings(Domains & domains, unsigned int branch_v, unsigned int val, bool & did_filter, SVOBitset & searched) -> bool;
 
         auto occurs_before(int a, int b) -> bool;
 
@@ -189,7 +187,7 @@ namespace gss::innards
         auto print_pattern_constraints() -> void;
         auto print_target_constraints() -> void;
 
-        auto count_solution(const HomomorphismAssignments & assignments) -> loooong;
+        auto count_solution() -> loooong;
 
         std::chrono::microseconds sym_time;
         loooong rep_solution_count = 0;

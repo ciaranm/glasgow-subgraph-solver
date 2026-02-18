@@ -207,7 +207,7 @@ auto HomomorphismSearcher::restarting_search(
         if (params.count_solutions) {
             // we could be finding duplicate solutions, in threaded search
             if (_duplicate_solution_filterer(assignments)) {
-                solution_count += count_solution(assignments);
+                solution_count += count_solution();
                 if (params.enumerate_callback) {
                     VertexToVertexMapping mapping;
                     expand_to_full_result(assignments, mapping);
@@ -263,7 +263,8 @@ auto HomomorphismSearcher::restarting_search(
     bool use_lackey_for_propagation = false;
 
     // remember what the base was in case we're doing dynamic symmetries
-    std::vector<int> pattern_base_cpy, ipb_cpy, target_base_cpy, itb_cpy, mapping_cpy, val_order_cpy;
+    std::vector<int> pattern_base_cpy, ipb_cpy, target_base_cpy, itb_cpy, mapping_cpy;
+    std::vector<unsigned int> val_order_cpy;
     SVOBitset searched(model.target_size, 0);
 
     if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
@@ -323,7 +324,7 @@ auto HomomorphismSearcher::restarting_search(
         }
         if (!params.symmetric_nogoods_only && (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0))) {
             auto sym_start_time = steady_clock::now();
-            if (!filter_symmetrical_siblings(assignments, domains, branch_domain->v, *f_v, did_filter, searched)) {
+            if (!filter_symmetrical_siblings(domains, branch_domain->v, *f_v, did_filter, searched)) {
                 assignments.values.resize(assignments_size);
                 continue;
             }
@@ -453,7 +454,7 @@ auto HomomorphismSearcher::restarting_search(
         return use_lackey_for_propagation ? SearchResult::UnsatisfiableAndBackjumpUsingLackey : SearchResult::Unsatisfiable;
 }
 
-auto HomomorphismSearcher::count_solution(const HomomorphismAssignments & assignments) -> loooong {
+auto HomomorphismSearcher::count_solution() -> loooong {
     ++rep_solution_count;
     if (model.has_less_thans() && !model.has_occur_less_thans()) {
         if (model.do_dynamic_less_thans() && first_sol) {
@@ -471,7 +472,7 @@ auto HomomorphismSearcher::count_solution(const HomomorphismAssignments & assign
         }
         else {
             int mult = 1;
-            for (int i = 0; i < model.pattern_size; i++) {
+            for (unsigned int i = 0; i < model.pattern_size; i++) {
                 mult *= target_orbit_sizes[mapping[i]];
             }
             return mult;
@@ -1079,43 +1080,6 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
     return true;
 }
 
-// /**
-//  * Generate occurs-less-than symmetry constraints according to an additional base point
-//  *
-//  * @returns true if constraints were added
-//  */
-// auto HomomorphismSearcher::make_useful_target_constraints(
-//     const std::optional<HomomorphismAssignment> & current_assignment,
-//     std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
-//     std::vector<int> & base
-// ) -> bool
-// {
-//     if(!current_assignment) return false;
-//     unsigned int t = current_assignment->target_vertex;
-
-//     return make_useful_target_constraints(t, useful_constraints, base);
-// }
-
-// /**
-//  * Generate occurs-less-than symmetry constraints according to a given some additional base points
-//  *
-//  * @returns true if constraints were added
-//  */
-// auto HomomorphismSearcher::make_useful_target_constraints(
-//     std::vector<int> target_vertices,
-//     std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
-//     std::vector<int> & base
-// ) -> bool
-// {
-//     bool added = false;
-
-//     for (auto &t : target_vertices) {
-//         added |= make_useful_target_constraints(t, useful_constraints, base);
-//     }
-
-//     return added;
-// }
-
 /**
  * Generate occurs-less-than symmetry constraints according to an additional base point
  *
@@ -1131,7 +1095,7 @@ auto HomomorphismSearcher::make_useful_target_constraints(
         base.push_back(target_vertex);       // Add this vertex as a new base point
         irredundant_target_base.push_back(target_vertex);
 
-        make_useful_target_constraints(useful_constraints, irredundant_target_base);
+        make_useful_target_constraints(useful_constraints);
 
         if (target_orbit_sizes[target_vertex] == 1) {
             irredundant_target_base.pop_back();
@@ -1150,8 +1114,7 @@ auto HomomorphismSearcher::make_useful_target_constraints(
  * @returns true if constraints were added
  */
 auto HomomorphismSearcher::make_useful_target_constraints(
-    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints,
-    std::vector<int> & base
+    std::vector<std::pair<unsigned int, unsigned int>> & useful_constraints
 ) -> void
 {
     if (params.target_rep_syms) {
@@ -1315,7 +1278,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
             for (unsigned int p = 0; p < pattern_coset_reps.size(); p++) {
                 const std::vector<unsigned int> &p_inv = pattern_coset_invs[p];
                 const std::vector<unsigned int> &p_aut = pattern_coset_reps[p];
-                int i;
+                unsigned int i;
                 for (unsigned int y = 0; y < model.pattern_size; y++) {
                     i = var_order[y];
                     if (mapping[i] != -1 && mapping[p_aut[i]] != -1) {
@@ -1358,13 +1321,13 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
             for (unsigned int t = 0; t < target_coset_reps.size(); t++) {
                 const std::vector<unsigned int> &t_aut = target_coset_reps[t];
                 for (unsigned int y = 0; y < model.pattern_size; y++) {
-                    int i = var_order[y];
+                    unsigned int i = var_order[y];
                     if (mapping[i] != -1) {
                         // if (occurs_before(t_aut[mapping[i]],mapping[i])) {       // The permuted mapping is 'less than' the original
                         if (val_order[t_aut[mapping[i]]] < val_order[mapping[i]]) {       // The permuted mapping is 'less than' the original
                             return false;
                         }
-                        else if (t_aut[mapping[i]] == mapping[i]) {     // The mapping is the same so far
+                        else if (t_aut[mapping[i]] == unsigned(mapping[i])) {     // The mapping is the same so far
                             continue;
                         }
                         // else if (occurs_before(mapping[i],t_aut[mapping[i]])) {      // The original mapping is 'less than' the permutation
@@ -1399,7 +1362,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
  *
  * @returns true if a domain was filtered, false otherwise.
  */
-auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignments & assignments, Domains & domains, int branch_v, int val, bool & did_filter, SVOBitset & searched) -> bool {
+auto HomomorphismSearcher::filter_symmetrical_siblings(Domains & domains, unsigned int branch_v, unsigned int val, bool & did_filter, SVOBitset & searched) -> bool {
     // bool did_filter = false;
 
     HomomorphismDomain * domain = nullptr;
@@ -1411,15 +1374,15 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(const HomomorphismAssignm
     }
 
     if (params.target_rep_syms) {
-        int counter = 0;
+        unsigned int counter = 0;
         for (unsigned int t = 1; t < target_coset_reps.size(); t++) {
             if (counter == target_base.size()) break;
             const std::vector<unsigned int> &t_aut = target_coset_reps[t];
-            while (t_aut[target_base[counter]] == target_base[counter]) {      // Move through the base until we find a point that moves under this perm
+            while (t_aut[target_base[counter]] == unsigned(target_base[counter])) {      // Move through the base until we find a point that moves under this perm
                 counter++;
                 if (counter == target_base.size()) break;
             }
-            if (target_base[counter] == val && t_aut[val] != val) {          // This perm goes to a sibling
+            if (unsigned(target_base[counter]) == val && t_aut[val] != val) {          // This perm goes to a sibling
                 if (searched.test(t_aut[val])) {
                     return false;           // We have already searched this branch (but dejavu gave incomplete results)
                 }
@@ -1470,7 +1433,7 @@ auto HomomorphismSearcher::adjust_variable_order() -> void {
     for (auto &b : pattern_base) {
         var_order.push_back(b);
     }
-    for (int i = 0; i < model.pattern_size; i++) {
+    for (unsigned int i = 0; i < model.pattern_size; i++) {
         if (std::find(var_order.begin(), var_order.end(), i) == var_order.end()) {
             var_order.push_back(i);
         }
@@ -1703,7 +1666,7 @@ auto HomomorphismSearcher::print_pattern_constraints() -> void {
     if (params.partial_assignments_sym) {
         std::cout << "[";
         for (auto p : pattern_coset_reps) {
-            for (int i = 0; i < model.pattern_size; i++) {      // The first representative is the identity
+            for (unsigned int i = 0; i < model.pattern_size; i++) {      // The first representative is the identity
                 if (i != p[i]) {
                     std::cout << i << "->" << p[i] << " ";
                 }
@@ -1725,7 +1688,7 @@ auto HomomorphismSearcher::print_target_constraints() -> void {
     if (params.partial_assignments_sym) {
         std::cout << "[";
         for (auto t : target_coset_reps) {
-            for (int i = 0; i < model.target_size; i++) {      // The first representative is the identity
+            for (unsigned int i = 0; i < model.target_size; i++) {      // The first representative is the identity
                 if (i != t[i]) {
                     std::cout << i << "->" << t[i] << " ";
                 }
