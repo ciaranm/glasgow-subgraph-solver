@@ -362,9 +362,14 @@ auto Proof::incompatible_by_nds(
 }
 
 auto Proof::incompatible_by_loops(
-    const NamedVertex &,
-    const NamedVertex &) -> void
+    const NamedVertex & p,
+    const NamedVertex & t) -> void
 {
+    // if (_imp->recover_encoding) {
+        *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
+        *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+        ++_imp->proof_line;
+    // }
 }
 
 auto Proof::initial_domain_is_empty(int p, const string & where) -> void
