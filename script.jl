@@ -17,17 +17,17 @@ struct Options
 end
 function parseargs(args)
     ins = ""
-    # bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
-    bench = "/users/grad/arthur/newSIPbenchmarks"
+    bench = "/home/arthur_gla/veriPB/newSIPbenchmarks"
+    # bench = "/users/grad/arthur/newSIPbenchmarks"
     # pbopath = "/home/arthur_gla/veriPB/subgraphsolver/veripb-dev"
     pbopath = "/users/grad/arthur/pboxide-dev"
-    # solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
-    solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
-    # proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
+    solveurpath = "/home/arthur_gla/veriPB/subgraphsolver/glasgow-subgraph-solver/build"    
+    # solveurpath = "/users/grad/arthur/glasgow-subgraph-solver/build"
+    proofs = "/home/arthur_gla/veriPB/subgraphsolver/proofs"
     # proofs = "/home/arthur_gla/veriPB/subgraphsolver/nolabelsproofs3"
     # proofs = "/scratch/arthur/proofs_test_veriPBtrim_mem_out"
     # proofs = "/users/grad/arthur/proofs"
-    proofs = "/users/grad/arthur/proofs2"
+    # proofs = "/users/grad/arthur/proofs2"
     veripb = false
     trace = false
     prof = false
@@ -357,4 +357,40 @@ bio105014
 
 ./glasgow_subgraph_solver --prove /home/arthur_gla/veriPB/subgraphsolver/proofs/bio170075 --no-clique-detection --format directedlad /home/arthur_gla/veriPB/newSIPbenchmarks/biochemicalReactions/170.txt /home/arthur_gla/veriPB/newSIPbenchmarks/biochemicalReactions/075.txt
 ./glasgow_subgraph_solver --prove /home/arthur_gla/veriPB/subgraphsolver/proofs/LVg6g12 --no-clique-detection --format directedlad /home/arthur_gla/veriPB/newSIPbenchmarks/LV/g6 /home/arthur_gla/veriPB/newSIPbenchmarks/LV/g12
+
+
+5G LVg19g42 & 224.9 MB & 44.47 MB &          & 0    & 11.8 & 0    (0    0    0    0   ) \\\hline
+
+LVg4g99 273.1 MB
+30G terminated
+40G terminated
+50G terminated
+96G LVg4g99 & 273.1 MB & 1.186 GB &          & 0    & 258 & 0    (0    0    0    0   ) \\\hline
+veripb 
+2G LVg4g99 & 273.1 MB &          &          & 167.0& 0    & 0    (0    0    0    0   ) \\\hline
+LVg4g99 & 273.1 MB &          &          & 386.0& 0    & 0    (0    0    0    0   ) \\\hline
+
+trois virgule cinq millons de contraintes dans LVg4g99
+
+
+
+heuristic branch
+100G LVg4g99 & 273.1 MB & 1.186 GB &          & 0    & 199 & 0    (0    0    0    0   ) \\\hline
+30G LVg69g99 & 493.2 MB & 1.637 GB &          & 0    & 47.4 & 0    (0    0    0    0   ) \\\hline
+30G LVg10g98 & 635.5 MB &          &          & 0Terminated &      (                   ) \\\hline
+100 LVg10g98 & 635.5 MB & 4.161 GB &          & 0    & 245 & 0    (0    0    0    0   ) \\\hline
+30G LVg15g31 & 1.03 GB  & 208.4 MB &          & 0    & 95.4 & 0    (0    0    0    0   ) \\\hline
+30G LVg19g55 & 1.241 GB &          &          & 0Terminated &      (                   ) \\\hline
+100 LVg19g55 & 1.241 GB & 6.022 GB &          & 0    & 290.0& 0    (0    0    0    0   ) \\\hline
+30G LVg10g75 & 1.258 GB & 40.25 MB &          & 0    & 65.0 & 0    (0    0    0    0   ) \\\hline
+30G LVg35g96 & 1.696 GB &          &          & 0Terminated &      (                   ) \\\hline
+30G LVg8g91 & 1.918 GB &          &          & 0Terminated &      (                   ) \\\hline
+
+
+LVg11g103 
+["LVg18g34", "LVg9g42", "LVg19g42", "LVg4g99", "LVg69g99", "LVg10g98", "LVg15g31", "LVg19g55", "LVg10g75", "LVg35g96", "LVg8g91"]
+
+
+
+line warp alt z
 =#
