@@ -9,7 +9,7 @@ using std::advance;
 using std::distance;
 using std::round;
 
-using std::chrono::milliseconds;
+using std::chrono::microseconds;
 using std::chrono::steady_clock;
 
 auto NoRestartsSchedule::did_a_backtrack() -> void
@@ -139,7 +139,7 @@ auto SyncedRestartSchedule::clone() -> SyncedRestartSchedule *
     return new SyncedRestartSchedule(*this);
 }
 
-TimedRestartsSchedule::TimedRestartsSchedule(milliseconds d, unsigned long long m) :
+TimedRestartsSchedule::TimedRestartsSchedule(microseconds d, unsigned long long m) :
     _number_of_backtracks(0),
     _minimum_backtracks(m),
     _duration(d),

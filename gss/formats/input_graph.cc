@@ -68,6 +68,8 @@ InputGraph::~InputGraph() = default;
 
 InputGraph::InputGraph(InputGraph && other) = default;
 
+auto InputGraph::operator=(InputGraph && other) -> InputGraph & = default;
+
 auto InputGraph::resize(int size) -> void
 {
     _imp->size = size;

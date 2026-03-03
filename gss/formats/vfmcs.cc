@@ -4,14 +4,14 @@
 #include <fstream>
 #include <string>
 
-using std::ifstream;
+using std::istream;
 using std::move;
 using std::string;
 using std::to_string;
 
 namespace
 {
-    auto read_word(ifstream & infile) -> unsigned
+    auto read_word(istream & infile) -> unsigned
     {
         unsigned char a, b;
         a = static_cast<unsigned char>(infile.get());
@@ -19,7 +19,7 @@ namespace
         return unsigned(a) | (unsigned(b) << 8);
     }
 
-    auto read_vfmcs(ifstream && infile, const string & filename, bool vertex_labels, bool directed) -> InputGraph
+    auto read_vfmcs(istream && infile, const string & filename, bool vertex_labels, bool directed) -> InputGraph
     {
         int size = read_word(infile);
         if (! infile)
@@ -72,17 +72,17 @@ namespace
     }
 }
 
-auto read_unlabelled_undirected_vfmcs(ifstream && infile, const string & filename) -> InputGraph
+auto read_unlabelled_undirected_vfmcs(istream && infile, const string & filename) -> InputGraph
 {
     return read_vfmcs(move(infile), filename, false, false);
 }
 
-auto read_vertex_labelled_undirected_vfmcs(ifstream && infile, const string & filename) -> InputGraph
+auto read_vertex_labelled_undirected_vfmcs(istream && infile, const string & filename) -> InputGraph
 {
     return read_vfmcs(move(infile), filename, true, false);
 }
 
-auto read_vertex_labelled_directed_vfmcs(std::ifstream && infile, const std::string & filename) -> InputGraph
+auto read_vertex_labelled_directed_vfmcs(istream && infile, const std::string & filename) -> InputGraph
 {
     return read_vfmcs(move(infile), filename, true, true);
 }

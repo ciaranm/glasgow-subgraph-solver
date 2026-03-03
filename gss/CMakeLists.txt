@@ -9,6 +9,8 @@ if (NOT GMP_INCLUDE_DIR OR NOT GMP_LIBRARY OR NOT GMPXX_LIBRARY)
     message(FATAL_ERROR "Could not find GMP/GMPXX libraries. Please install GMP and try again.")
 endif()
 
+include_directories(${dejavu_SOURCE_DIR})
+
 add_library(glasgow_subgraphs
         clique.cc
         common_subgraph.cc
@@ -16,7 +18,9 @@ add_library(glasgow_subgraphs
         homomorphism.cc
         restarts.cc
         sip_decomposer.cc
+        time.cc
         timeout.cc
+        innards/automorphisms.cc
         innards/cheap_all_different.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc
@@ -32,6 +36,7 @@ add_library(glasgow_subgraphs
         innards/watches.cc
         formats/csv.cc
         formats/dimacs.cc
+        formats/flat.cc
         formats/graph_file_error.cc
         formats/input_graph.cc
         formats/lad.cc

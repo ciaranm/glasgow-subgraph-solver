@@ -11,7 +11,7 @@
  *
  * \throw GraphFileError
  */
-auto detect_file_format(std::ifstream & infile, const std::string & filename) -> std::string;
+auto detect_file_format(std::istream & infile, const std::string & filename) -> std::string;
 
 /**
  * Read in a file in the specified format ("auto" to try to auto-detect).
@@ -19,5 +19,12 @@ auto detect_file_format(std::ifstream & infile, const std::string & filename) ->
  * \throw GraphFileError
  */
 auto read_file_format(const std::string & format, const std::string & filename) -> InputGraph;
+
+/**
+ * Read in an already-open file in the specified format ("auto" requires seekable stream).
+ *
+ * \throw GraphFileError
+ */
+auto read_file_format(const std::string & format, const std::string & filename, std::istream & stream) -> InputGraph;
 
 #endif

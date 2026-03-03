@@ -1,5 +1,6 @@
 #include <gss/common_subgraph.hh>
 #include <gss/formats/read_file_format.hh>
+#include <gss/time.hh>
 
 #include <cxxopts.hpp>
 
@@ -31,7 +32,7 @@ using std::string;
 using std::string_view;
 
 using std::chrono::duration_cast;
-using std::chrono::milliseconds;
+using std::chrono::microseconds;
 using std::chrono::operator""s;
 using std::chrono::seconds;
 using std::chrono::steady_clock;
@@ -165,7 +166,7 @@ auto main(int argc, char * argv[]) -> int
         auto result = solve_common_subgraph_problem(first, second, params);
 
         /* Stop the clock. */
-        auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
+        auto overall_time = duration_cast<microseconds>(steady_clock::now() - params.start_time);
 
         params.timeout->stop();
 
@@ -191,7 +192,7 @@ auto main(int argc, char * argv[]) -> int
             cout << endl;
         }
 
-        cout << "runtime = " << overall_time.count() << endl;
+        cout << "runtime = " << microseconds_to_string(overall_time) << endl;
 
         for (const auto & s : result.extra_stats)
             cout << s << endl;

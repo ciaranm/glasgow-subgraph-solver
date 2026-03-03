@@ -17,9 +17,12 @@ namespace gss
         ~Timeout();
 
         auto should_abort() const -> bool;
+        auto killed() const -> bool;
         auto aborted() const -> bool;
         auto stop() -> void;
         auto trigger_early_abort() -> void;
+
+        auto monitor_int_or_term_flag(std::atomic<bool> * int_or_term_flag) -> void;
     };
 }
 
