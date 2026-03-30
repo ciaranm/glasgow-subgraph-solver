@@ -77,7 +77,7 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
-            ("learn-variable-ordering-weights", "Try to learn better weights for variable ordering")
+            ("variable-ordering", "Specify variable-ordering heurist (domthendeg / domthenwdeg / domoverdeg / domoverwdeg)", cxxopts::value<string>())
             ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")
             ("target-symmetries", "Eliminate target symmetries (requires Gap)");
 
@@ -233,8 +233,21 @@ auto main(int argc, char * argv[]) -> int
             }
         }
 
-        if (options_vars.count("learn-variable-ordering-weights"))
-            params.learn_variable_ordering_weights = true;
+        if (options_vars.count("variable-ordering")) {
+            string variable_ordering_heuristic = options_vars["variable-ordering"].as<string>();
+            if (variable_ordering_heuristic == "domthendeg")
+                params.variable_ordering_heuristic = VariableOrdering::DomThenDeg;
+            else if (variable_ordering_heuristic == "domthenwdeg")
+                params.variable_ordering_heuristic = VariableOrdering::DomThenWDeg;
+            else if (variable_ordering_heuristic == "domoverdeg")
+                params.variable_ordering_heuristic = VariableOrdering::DomOverDeg;
+            else if (variable_ordering_heuristic == "domoverwdeg")
+                params.variable_ordering_heuristic = VariableOrdering::DomOverWDeg;
+            else {
+                cerr << "Unknown variable-ordering heuristic '" << variable_ordering_heuristic << "'" << endl;
+                return EXIT_FAILURE;
+            }
+        }
 
         params.clique_detection = ! options_vars.count("no-clique-detection");
         params.distance3 = options_vars.count("distance3");

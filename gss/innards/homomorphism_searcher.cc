@@ -205,7 +205,7 @@ auto HomomorphismSearcher::restarting_search(
             assignments.values.resize(assignments_size);
             actually_hit_a_failure = true;
 
-            if (params.learn_variable_ordering_weights) {
+            if (params.variable_ordering_heuristic == VariableOrdering::DomOverWDeg || params.variable_ordering_heuristic == VariableOrdering::DomThenWDeg) {
                 if (failing_vertex->pattern_vertex_1) {
                     auto & v = _branch_scores.at(*failing_vertex->pattern_vertex_1);
                     if (++v > (1 << 24)) {
@@ -288,7 +288,7 @@ auto HomomorphismSearcher::restarting_search(
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
     if (actually_hit_a_failure) {
-        if (params.learn_variable_ordering_weights) {
+        if (params.variable_ordering_heuristic == VariableOrdering::DomOverWDeg || params.variable_ordering_heuristic == VariableOrdering::DomThenWDeg) {
             auto & v = _branch_scores.at(branch_domain->v);
             if (++v > (1 << 24)) {
                 for (auto & w : _branch_scores)
@@ -401,12 +401,29 @@ auto HomomorphismSearcher::copy_nonfixed_domains_and_make_assignment(
 auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const HomomorphismDomain *
 {
     const HomomorphismDomain * result = nullptr;
-    for (auto & d : domains)
-        if (! d.fixed)
-            if ((! result) ||
-                (d.count < result->count) ||
-                (d.count == result->count && branch_score(d.v) > branch_score(result->v)))
-                result = &d;
+
+    switch (params.variable_ordering_heuristic) {
+    case VariableOrdering::DomThenDeg:
+    case VariableOrdering::DomThenWDeg:
+        for (auto & d : domains)
+            if (! d.fixed)
+                if ((! result) ||
+                    (d.count < result->count) ||
+                    (d.count == result->count && branch_score(d.v) > branch_score(result->v)))
+                    result = &d;
+        break;
+
+    case VariableOrdering::DomOverDeg:
+    case VariableOrdering::DomOverWDeg:
+        for (auto & d : domains)
+            if (! d.fixed)
+                if ((! result) ||
+                    (d.count < result->count) ||
+                    (d.count / (1.0 + branch_score(d.v)) < (result->count / (1.0 + branch_score(result->v)))))
+                    result = &d;
+        break;
+    }
+
     return result;
 }
 
