@@ -13,6 +13,7 @@ using std::make_optional;
 using std::max;
 using std::move;
 using std::mt19937;
+using std::nullopt;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
@@ -34,6 +35,9 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.target_size = model.target_size;
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
+
+    for (unsigned v = 0 ; v < m.pattern_size ; ++v)
+        _branch_scores.push_back(m.pattern_degree(0, v));
 }
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
@@ -192,13 +196,22 @@ auto HomomorphismSearcher::restarting_search(
 
         // propagate
         ++propagations;
-        if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
+        optional<FailingVertex> failing_vertex;
+        if (nullopt != (failing_vertex = propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always)))) {
             // failure? restore assignments and go on to the next thing
             if (proof)
                 proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
 
             assignments.values.resize(assignments_size);
             actually_hit_a_failure = true;
+
+            if (params.learn_variable_ordering_weights && failing_vertex->pattern_vertex) {
+                auto & v = _branch_scores.at(*failing_vertex->pattern_vertex);
+                if (++v > (1 << 24)) {
+                    for (auto & w : _branch_scores)
+                        w /= 2;
+                }
+            }
 
             continue;
         }
@@ -265,8 +278,17 @@ auto HomomorphismSearcher::restarting_search(
     if (proof)
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
-    if (actually_hit_a_failure)
+    if (actually_hit_a_failure) {
+        if (params.learn_variable_ordering_weights) {
+            auto & v = _branch_scores.at(branch_domain->v);
+            if (++v > (1 << 24)) {
+                for (auto & w : _branch_scores)
+                    w /= 2;
+            }
+        }
+
         restarts_schedule.did_a_backtrack();
+    }
 
     if (restarts_schedule.should_restart()) {
         if (proof)
@@ -374,7 +396,7 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const 
         if (! d.fixed)
             if ((! result) ||
                 (d.count < result->count) ||
-                (d.count == result->count && model.pattern_degree(0, d.v) > model.pattern_degree(0, result->v)))
+                (d.count == result->count && branch_score(d.v) > branch_score(result->v)))
                 result = &d;
     return result;
 }
@@ -490,7 +512,7 @@ auto HomomorphismSearcher::both_in_the_neighbourhood_of_some_vertex(unsigned v, 
     return i.any();
 }
 
-auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> bool
+auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> optional<FailingVertex>
 {
     // propagate for each remaining domain...
     for (auto & d : new_domains) {
@@ -560,13 +582,13 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         // we might have removed values
         d.count = d.values.count();
         if (0 == d.count)
-            return false;
+            return FailingVertex{d.v};
     }
 
-    return true;
+    return nullopt;
 }
 
-auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
+auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> optional<FailingVertex>
 {
     vector<int> find_domain(model.pattern_size, -1);
 
@@ -582,11 +604,11 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
         // first value of b must be at least one after the first possible value of a
         auto first_a = a_domain.values.find_first();
         if (first_a == decltype(a_domain.values)::npos)
-            return false;
+            return FailingVertex{b_domain.v};
         auto first_allowed_b = first_a + 1;
 
         if (first_allowed_b >= model.target_size)
-            return false;
+            return FailingVertex{b_domain.v};
 
         for (auto v = b_domain.values.find_first(); v != decltype(b_domain.values)::npos; v = b_domain.values.find_first()) {
             if (v >= first_allowed_b)
@@ -597,7 +619,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
         // b might have shrunk (and detect empty before the next bit to make life easier)
         b_domain.count = b_domain.values.count();
         if (0 == b_domain.count)
-            return false;
+            return FailingVertex{b_domain.v};
     }
 
     for (auto & [a, b] : model.pattern_less_thans_in_convenient_order) {
@@ -615,7 +637,7 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
         }
 
         if (last_b == 0)
-            return false;
+            return FailingVertex{a_domain.v};
         auto last_allowed_a = last_b - 1;
 
         auto a_values_copy = a_domain.values;
@@ -628,16 +650,16 @@ auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool
         // a might have shrunk
         a_domain.count = a_domain.values.count();
         if (0 == a_domain.count)
-            return false;
+            return FailingVertex{a_domain.v};
     }
 
-    return true;
+    return nullopt;
 }
 
 auto HomomorphismSearcher::propagate_occur_less_thans(
     const optional<HomomorphismAssignment> & current_assignment,
     const HomomorphismAssignments & assignments,
-    Domains & new_domains) -> bool
+    Domains & new_domains) -> optional<FailingVertex>
 {
     vector<optional<SVOBitset>> occurs(model.target_size);
 
@@ -670,7 +692,7 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
                 if (d.values.test(b)) {
                     d.values.reset(b);
                     if (0 == --d.count)
-                        return false;
+                        return FailingVertex{d.v};
                 }
         }
         else {
@@ -680,7 +702,7 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
                     occurs[b]->reset(d.v);
                     d.values.reset(b);
                     if (0 == --d.count)
-                        return false;
+                        return FailingVertex{d.v};
                 }
             }
         }
@@ -706,7 +728,7 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
                         occurs[a]->reset(d.v);
                         d.values.reset(a);
                         if (0 == --d.count)
-                            return false;
+                            return FailingVertex{d.v};
                     }
                 }
             }
@@ -716,21 +738,22 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
                     saw_an_a = true;
 
             if (! saw_an_a)
-                return false;
+                return FailingVertex{current_assignment->pattern_vertex};
         }
     }
 
-    return true;
+    return nullopt;
 }
 
-auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
+auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> optional<FailingVertex>
 {
+    optional<FailingVertex> wipeout = nullopt;
+
     // nogoods might be watching things in initial assignments. this is possibly not the
     // best place to put this...
     if (initial && might_have_watches(params)) {
         for (auto & a : assignments.values) {
             HomomorphismAssignment current_assignment = {a.assignment.pattern_vertex, a.assignment.target_vertex};
-            bool wipeout = false;
             watches.propagate(
                 current_assignment,
                 [&](const HomomorphismAssignment & a) { return ! assignments.contains(a); },
@@ -740,7 +763,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                             if (d.values.test(a.target_vertex)) {
                                 d.values.reset(a.target_vertex);
                                 if (0 == --d.count)
-                                    wipeout = true;
+                                    wipeout = FailingVertex{d.v};
                             }
                             break;
                         }
@@ -748,7 +771,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 });
 
             if (wipeout)
-                return false;
+                return wipeout;
         }
     }
 
@@ -780,7 +803,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
 
             // propagate watches
             if (might_have_watches(params)) {
-                bool wipeout = false;
                 watches.propagate(
                     *current_assignment,
                     [&](const HomomorphismAssignment & a) { return ! assignments.contains(a); },
@@ -793,7 +815,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                                 if (d.values.test(a.target_vertex)) {
                                     d.values.reset(a.target_vertex);
                                     if (0 == --d.count)
-                                        wipeout = true;
+                                        wipeout = FailingVertex{d.v};
                                 }
                                 break;
                             }
@@ -801,24 +823,34 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                     });
 
                 if (wipeout)
-                    return false;
+                    return wipeout;
             }
 
             // propagate simple all different and adjacency
-            if (! propagate_simple_constraints(new_domains, *current_assignment))
-                return false;
+            wipeout = propagate_simple_constraints(new_domains, *current_assignment);
+            if (wipeout)
+                return wipeout;
         }
 
         // propagate less thans
-        if (model.has_less_thans() && ! propagate_less_thans(new_domains))
-            return false;
-        if (model.has_occur_less_thans() && ! propagate_occur_less_thans(current_assignment, assignments, new_domains))
-            return false;
+        if (model.has_less_thans()) {
+            wipeout = propagate_less_thans(new_domains);
+            if (wipeout)
+                return wipeout;
+        }
+
+        if (model.has_occur_less_thans()) {
+            wipeout = propagate_occur_less_thans(current_assignment, assignments, new_domains);
+            if (wipeout)
+                return wipeout;
+        }
 
         // propagate all different
-        if (params.injectivity == Injectivity::Injective)
-            if (! cheap_all_different(model.target_size, new_domains, proof, &model))
-                return false;
+        if (params.injectivity == Injectivity::Injective) {
+            wipeout = cheap_all_different(model.target_size, new_domains, proof, &model);
+            if (wipeout)
+                return wipeout;
+        }
         done_globals_at_least_once = true;
     }
 
@@ -828,11 +860,11 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         expand_to_full_result(assignments, mapping);
 
         if (! propagate_using_lackey) {
-            if (! params.lackey->check_solution(mapping, true, false, Lackey::DeletionFunction{}))
-                return false;
+            wipeout = params.lackey->check_solution(mapping, true, false, Lackey::DeletionFunction{});
+            if (wipeout)
+                return wipeout;
         }
         else {
-            bool wipeout = false;
             vector<int> find_domain(model.pattern_size, -1);
             for (unsigned i = 0; i < new_domains.size(); ++i)
                 find_domain[new_domains[i].v] = i;
@@ -844,7 +876,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                             ++dcount;
                             new_domains[d].values.reset(t);
                             if (0 == --new_domains[d].count)
-                                wipeout = true;
+                                wipeout = FailingVertex{new_domains[d].v};
                             return true;
                         }
                     }
@@ -852,15 +884,22 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 return false;
             };
 
-            if (! params.lackey->check_solution(mapping, true, false, deletion) || wipeout)
-                return false;
+            wipeout = params.lackey->check_solution(mapping, true, false, deletion);
+
+            if (wipeout)
+                return wipeout;
         }
     }
 
-    return true;
+    return wipeout;
 }
 
 auto HomomorphismSearcher::set_seed(int t) -> void
 {
     global_rand.seed(t);
+}
+
+auto HomomorphismSearcher::branch_score(unsigned branch_v) -> int
+{
+    return _branch_scores.at(branch_v);
 }

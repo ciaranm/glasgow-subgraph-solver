@@ -77,6 +77,7 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
+            ("learn-variable-ordering-weights", "Try to learn better weights for variable ordering")
             ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")
             ("target-symmetries", "Eliminate target symmetries (requires Gap)");
 
@@ -231,6 +232,9 @@ auto main(int argc, char * argv[]) -> int
                 return EXIT_FAILURE;
             }
         }
+
+        if (options_vars.count("learn-variable-ordering-weights"))
+            params.learn_variable_ordering_weights = true;
 
         params.clique_detection = ! options_vars.count("no-clique-detection");
         params.distance3 = options_vars.count("distance3");

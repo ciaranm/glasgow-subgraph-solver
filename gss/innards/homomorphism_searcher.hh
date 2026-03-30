@@ -12,6 +12,27 @@
 
 namespace gss::innards
 {
+    struct NoIdentifiableCause
+    {
+    };
+
+    struct FailingVertex
+    {
+        std::optional<unsigned> pattern_vertex;
+
+        explicit FailingVertex(unsigned v) :
+            pattern_vertex(v)
+        {
+        }
+
+        explicit FailingVertex(const NoIdentifiableCause &) :
+            pattern_vertex(std::nullopt)
+        {
+        }
+
+        FailingVertex(const FailingVertex & other) = default;
+    };
+
     enum class SearchResult
     {
         Aborted,
@@ -81,6 +102,7 @@ namespace gss::innards
         const HomomorphismModel & model;
         const HomomorphismParams & params;
         const DuplicateSolutionFilterer _duplicate_solution_filterer;
+        std::vector<int> _branch_scores;
 
         const std::shared_ptr<Proof> proof;
 
@@ -95,11 +117,11 @@ namespace gss::innards
 
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool;
 
-        auto propagate_simple_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> bool;
+        auto propagate_simple_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> std::optional<FailingVertex>;
 
-        auto propagate_less_thans(Domains & new_domains) -> bool;
+        auto propagate_less_thans(Domains & new_domains) -> std::optional<FailingVertex>;
 
-        auto propagate_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> bool;
+        auto propagate_occur_less_thans(const std::optional<HomomorphismAssignment> &, const HomomorphismAssignments &, Domains & new_domains) -> std::optional<FailingVertex>;
 
         auto find_branch_domain(const Domains & domains) -> const HomomorphismDomain *;
 
@@ -120,13 +142,16 @@ namespace gss::innards
             unsigned branch_v_end,
             bool reverse) -> void;
 
+        auto branch_score(
+                unsigned branch_v) -> int;
+
     public:
         HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
             const DuplicateSolutionFilterer &, const std::shared_ptr<Proof> &);
 
         auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 
-        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
+        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> std::optional<FailingVertex>;
 
         auto restarting_search(
             HomomorphismAssignments & assignments,

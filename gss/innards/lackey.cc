@@ -1,4 +1,5 @@
 #include <gss/innards/lackey.hh>
+#include <gss/innards/homomorphism_searcher.hh>
 
 #include <fstream>
 #include <map>
@@ -11,8 +12,11 @@ using std::endl;
 using std::function;
 using std::ifstream;
 using std::map;
+using std::make_optional;
 using std::mutex;
+using std::nullopt;
 using std::ofstream;
+using std::optional;
 using std::string;
 using std::to_string;
 using std::unique_lock;
@@ -58,7 +62,7 @@ auto Lackey::check_solution(
     const VertexToVertexMapping & m,
     bool partial,
     bool all_solutions,
-    const function<auto(int, int)->bool> & deletion) -> bool
+    const function<auto(int, int)->bool> & deletion) -> optional<FailingVertex>
 {
     unique_lock<mutex> lock{_imp->external_solver_mutex};
     ++_imp->number_of_calls;
@@ -138,7 +142,7 @@ auto Lackey::check_solution(
         }
     }
 
-    return result;
+    return result ? make_optional<FailingVertex>(NoIdentifiableCause{}) : nullopt;
 }
 
 auto Lackey::reduce_initial_bounds(

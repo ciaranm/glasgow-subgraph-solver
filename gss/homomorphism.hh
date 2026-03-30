@@ -54,6 +54,9 @@ namespace gss
         /// Print solutions, for enumerating
         std::function<auto(const VertexToVertexMapping &)->bool> enumerate_callback;
 
+        /// Use weights for variable ordering?
+        bool learn_variable_ordering_weights = false;
+
         /// Which value-ordering heuristic?
         ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
 

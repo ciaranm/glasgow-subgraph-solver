@@ -35,6 +35,7 @@ using std::make_unique;
 using std::map;
 using std::move;
 using std::mutex;
+using std::nullopt;
 using std::optional;
 using std::pair;
 using std::shared_ptr;
@@ -125,7 +126,7 @@ namespace
                 searcher.watches.clear_new_nogoods();
 
                 ++result.propagations;
-                if (searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
+                if (nullopt == searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
@@ -312,7 +313,7 @@ namespace
                     }
 
                     ++thread_result.propagations;
-                    if (searchers[t]->propagate(true, domains, thread_assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
+                    if (nullopt == searchers[t]->propagate(true, domains, thread_assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
                         auto assignments_copy = thread_assignments;
 
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,

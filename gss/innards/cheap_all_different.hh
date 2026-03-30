@@ -3,14 +3,16 @@
 
 #include <gss/innards/homomorphism_domain.hh>
 #include <gss/innards/homomorphism_model.hh>
+#include <gss/innards/homomorphism_searcher.hh>
 #include <gss/innards/proof.hh>
 
+#include <optional>
 #include <vector>
 
 namespace gss::innards
 {
     auto cheap_all_different(unsigned target_size, std::vector<HomomorphismDomain> & domains, const std::shared_ptr<Proof> & proof,
-        const HomomorphismModel * const) -> bool;
+        const HomomorphismModel * const) -> std::optional<FailingVertex>;
 }
 
 #endif

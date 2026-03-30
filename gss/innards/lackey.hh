@@ -7,10 +7,13 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace gss::innards
 {
+    struct FailingVertex;
+
     class DisobedientLackeyError : public std::exception
     {
     private:
@@ -46,7 +49,7 @@ namespace gss::innards
             const VertexToVertexMapping &,
             bool partial,
             bool all_solutions,
-            const DeletionFunction & deletions) -> bool;
+            const DeletionFunction & deletions) -> std::optional<FailingVertex>;
 
         auto reduce_initial_bounds(
             const RestrictRangeFunction & restrict_range) -> bool;

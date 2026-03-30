@@ -7,6 +7,8 @@ using namespace gss;
 using namespace gss::innards;
 
 using std::conditional_t;
+using std::nullopt;
+using std::optional;
 using std::shared_ptr;
 using std::tuple;
 using std::vector;
@@ -18,7 +20,7 @@ namespace
         unsigned target_size,
         vector<HomomorphismDomain> & domains,
         const shared_ptr<Proof> & proof,
-        const HomomorphismModel * const model) -> bool
+        const HomomorphismModel * const model) -> optional<FailingVertex>
     {
         // Pick domains smallest first; ties are broken by smallest .v first.
         // For each count p we have a linked list, whose first member is
@@ -70,7 +72,7 @@ namespace
                     }
 
                 if (0 == d.count)
-                    return false;
+                    return FailingVertex{d.v};
 
                 domains_so_far |= d.values;
                 ++neighbours_so_far;
@@ -88,7 +90,7 @@ namespace
                         }
                         proof->emit_hall_set_or_violator(lhs, rhs);
                     }
-                    return false;
+                    return FailingVertex{d.v};
                 }
                 else if (domains_so_far_popcount == neighbours_so_far) {
                     // equivalent to hall=domains_so_far
@@ -109,12 +111,12 @@ namespace
             }
         }
 
-        return true;
+        return nullopt;
     }
 }
 
 auto gss::innards::cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof,
-    const HomomorphismModel * const model) -> bool
+    const HomomorphismModel * const model) -> optional<FailingVertex>
 {
     if (! proof.get())
         return cheap_all_different_with_optional_proofs<false>(target_size, domains, proof, model);
