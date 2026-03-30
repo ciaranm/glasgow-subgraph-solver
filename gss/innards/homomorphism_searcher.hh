@@ -18,15 +18,23 @@ namespace gss::innards
 
     struct FailingVertex
     {
-        std::optional<unsigned> pattern_vertex;
+        std::optional<unsigned> pattern_vertex_1, pattern_vertex_2;
 
         explicit FailingVertex(unsigned v) :
-            pattern_vertex(v)
+            pattern_vertex_1(v),
+            pattern_vertex_2(std::nullopt)
+        {
+        }
+
+        explicit FailingVertex(unsigned v, unsigned w) :
+            pattern_vertex_1(v),
+            pattern_vertex_2(w)
         {
         }
 
         explicit FailingVertex(const NoIdentifiableCause &) :
-            pattern_vertex(std::nullopt)
+            pattern_vertex_1(std::nullopt),
+            pattern_vertex_2(std::nullopt)
         {
         }
 
