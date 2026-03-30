@@ -12,37 +12,97 @@ using namespace gss::innards;
 /**
  * Uses orbits
 */
-auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std::vector<int> & base, std::vector<int> &orbit_sizes, const bool degree_sequence) -> OrderConstraints
+// auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std::vector<int> & base, std::vector<int> &orbit_sizes, const bool degree_sequence) -> OrderConstraints
+// {
+//     dejavu::static_graph g = build_static_graph(i);
+//     int nv = g.get_sgraph()->v_size;
+
+//     dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
+
+//     rschreier.set_base(base);       // Empty base to begin with
+
+//     orbit_sizes.resize(i.size(), 1);
+
+//     dejavu::hooks::schreier_hook hook(rschreier);
+//     dejavu::solver s;
+//     s.set_print(false);
+//     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
+
+//     OrderConstraints result;        // List of constraint pairs
+//     std::set<std::pair<int,int>> unique_list;
+
+//     dejavu::big_number sz = s.get_automorphism_group_size();
+//     std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
+//     if (sz.mantissa == 1 && sz.exponent == 0) return result;
+
+
+//     std::vector<int> vertex_order(i.size());
+//     std::iota(vertex_order.begin(), vertex_order.end(), 0);
+//     if (degree_sequence) {
+//         stable_sort(vertex_order.begin(), vertex_order.end(), [&](int a, int b) -> bool {
+//             return -i.degree(a) < -i.degree(b);
+//         });
+//     }
+
+//     bool stab_trivial = false;
+//     dejavu::groups::orbit o{nv};      // Orbit structure of size nv
+//     while (! stab_trivial) {        // While stabiliser is non-trivial
+//         rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
+//         stab_trivial = true;
+//         for (auto & v : vertex_order) {        // For each vertex
+//             if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
+//                 stab_trivial = false;
+//                 base.push_back(v);          // Add v to base
+//                 break;
+//             }
+//         }
+
+//         if (! stab_trivial)
+//             rschreier.set_base(base);       // Update base
+//     }
+
+//     for (unsigned x = 0; x < base.size(); ++x) {        // For each base element
+//         const int v = base.at(x);
+//         int o_sz = 1;
+//         for (auto & o : rschreier.get_fixed_orbit(x)) {     // For each orbit point of v
+//             if (o != v) {     // If v is mapped to somewhere else
+//                 unique_list.emplace(v, o);        // Enforce v<o
+//                 o_sz++;
+//             }
+//         }
+//         orbit_sizes[v] = o_sz;
+//     }
+
+//     for (std::pair<int, int> p: unique_list) {
+//         result.emplace_back(i.vertex_name(p.first), i.vertex_name(p.second));
+//     }
+
+//     return result;
+// }
+
+auto gss::innards::automorphisms_as_order_constraints(std::vector<SVOBitset> m, std::vector<int> & base, std::vector<int> &orbit_sizes, const vector<unsigned int> & vertex_order) -> std::vector<std::pair<unsigned, unsigned>>
 {
-    dejavu::static_graph g = build_static_graph(i);
+    // TODO directed graphs
+    dejavu::static_graph g = build_static_graph(m, false);
     int nv = g.get_sgraph()->v_size;
 
     dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
 
     rschreier.set_base(base);       // Empty base to begin with
 
-    orbit_sizes.resize(i.size(), 1);
+    orbit_sizes.resize(m.size(), 1);
 
     dejavu::hooks::schreier_hook hook(rschreier);
     dejavu::solver s;
     s.set_print(false);
     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
 
-    OrderConstraints result;        // List of constraint pairs
+    std::vector<std::pair<unsigned int, unsigned int>> result;        // List of constraint pairs
     std::set<std::pair<int,int>> unique_list;
 
     dejavu::big_number sz = s.get_automorphism_group_size();
     std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
     if (sz.mantissa == 1 && sz.exponent == 0) return result;
-
-
-    std::vector<int> vertex_order(i.size());
-    std::iota(vertex_order.begin(), vertex_order.end(), 0);
-    if (degree_sequence) {
-        stable_sort(vertex_order.begin(), vertex_order.end(), [&](int a, int b) -> bool {
-            return -i.degree(a) < -i.degree(b);
-        });
-    }
 
     bool stab_trivial = false;
     dejavu::groups::orbit o{nv};      // Orbit structure of size nv
@@ -64,17 +124,15 @@ auto gss::innards::automorphisms_as_order_constraints(const InputGraph & i, std:
     for (unsigned x = 0; x < base.size(); ++x) {        // For each base element
         const int v = base.at(x);
         int o_sz = 1;
-        for (auto & o : rschreier.get_fixed_orbit(x)) {     // For each orbit point of v
-            if (o != v) {     // If v is mapped to somewhere else
-                unique_list.emplace(v, o);        // Enforce v<o
+        // for (auto & o : rschreier.get_fixed_orbit(x)) {     // For each orbit point of v
+        for (int io = 0; io < vertex_order.size(); io++) {     // For each orbit point of v
+            int o = vertex_order[io];
+            if (rschreier.is_in_fixed_orbit(x,o) && o != v) {     // If v is mapped to somewhere else
+                result.push_back(std::make_pair(v, o));        // Enforce v<o
                 o_sz++;
             }
         }
         orbit_sizes[v] = o_sz;
-    }
-
-    for (std::pair<int, int> p: unique_list) {
-        result.emplace_back(i.vertex_name(p.first), i.vertex_name(p.second));
     }
 
     return result;
@@ -130,23 +188,91 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<i
 /**
  * Calulcate the generating set for the automorphism group of an input graph (given a [partial] base)
  */
-auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_sizes, std::vector<int> & base, const bool degree_sequence) -> std::vector<std::vector<unsigned int>> {
-    dejavu::static_graph g = build_static_graph(i);
+// auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_sizes, std::vector<int> & base, const bool degree_sequence) -> std::vector<std::vector<unsigned int>> {
+//     dejavu::static_graph g = build_static_graph(i);
+//     int nv = g.get_sgraph()->v_size;
+
+//     orbit_sizes.resize(i.size(), 1);
+
+//     dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
+
+//     rschreier.set_base(base);       // Empty base to begin with
+
+//     std::vector<int> vertex_order(i.size());                // Decide on a fixed vertex order
+//     std::iota(vertex_order.begin(), vertex_order.end(), 0);
+//     if (degree_sequence) {
+//         stable_sort(vertex_order.begin(), vertex_order.end(), [&](int a, int b) -> bool {
+//             return -i.degree(a) < -i.degree(b);
+//         });
+//     }
+
+//     dejavu::hooks::schreier_hook hook(rschreier);
+//     dejavu::solver s;
+//     s.set_print(false);
+//     s.automorphisms(&g, hook.get_hook());       // Compute automorphisms of g
+
+//     dejavu::groups::automorphism_workspace a(nv);
+//     std::vector<std::vector<unsigned int>> mappings;            // Store generators (and identity) in a sensible notation
+//     std::vector<unsigned int> identity;                      // We need an identity since we're composing elements from two sets
+//     for (int y = 0; y < i.size(); y++) {
+//         identity.push_back(y);                      // Every element maps to itself
+//     }
+//     mappings.push_back(identity);
+
+//     dejavu::big_number sz = s.get_automorphism_group_size();
+//     std::cout << "aut_grp_size = " << sz.mantissa << " * 10^" << sz.exponent << "\n";
+//     if (sz.mantissa == 1 && sz.exponent == 0) return mappings;
+
+//     bool stab_trivial = false;
+//     dejavu::groups::orbit o{nv};      // Orbit structure of size nv
+//     while (! stab_trivial) {        // While stabiliser is non-trivial
+//         rschreier.get_stabilizer_orbit(base.size(), o);     // Get orbit partition
+//         stab_trivial = true;
+//         for (auto & v : vertex_order) {        // For each vertex
+//             if (o.orbit_size(v) > 1) {      // If stabiliser orbit(v) is non-trivial
+//                 stab_trivial = false;
+//                 base.push_back(v);          // Add v to base
+//                 break;
+//             }
+//         }
+
+//         if (! stab_trivial)
+//             rschreier.set_base(base);       // Update base
+//     }
+
+//     for (unsigned int x = 0; x < base.size(); x++) {
+//         std::vector<int> orb = rschreier.get_fixed_orbit(x);              // Get orbit
+//         orbit_sizes[base.at(x)] = orb.size();
+//         std::vector<unsigned int> mapping;
+//         for (auto v : orb) {
+//             if (rschreier.get_transversal_element(x,v,a)) {
+//                 if (a.p()[base[x]] == base[x]) continue;
+//                 mapping.clear();
+//                 for (int y = 0; y < i.size(); y++) {
+//                     mapping.push_back(a.p()[y]);            // mapping[i] maps to p*i
+//                 }
+//                 mappings.push_back(mapping);
+//             }
+//             else {
+//                 // warn
+//             }
+//         }
+
+//     }
+
+//     return mappings;
+// }
+auto gss::innards::coset_reps(std::vector<SVOBitset> m, std::vector<int> & orbit_sizes, std::vector<int> & base, const std::vector<unsigned int> vertex_order) -> std::vector<std::vector<unsigned int>> {
+    
+    // TODO directed graphs
+    dejavu::static_graph g = build_static_graph(m, false);
     int nv = g.get_sgraph()->v_size;
 
-    orbit_sizes.resize(i.size(), 1);
+    orbit_sizes.resize(m.size(), 1);
 
     dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
 
     rschreier.set_base(base);       // Empty base to begin with
-
-    std::vector<int> vertex_order(i.size());                // Decide on a fixed vertex order
-    std::iota(vertex_order.begin(), vertex_order.end(), 0);
-    if (degree_sequence) {
-        stable_sort(vertex_order.begin(), vertex_order.end(), [&](int a, int b) -> bool {
-            return -i.degree(a) < -i.degree(b);
-        });
-    }
 
     dejavu::hooks::schreier_hook hook(rschreier);
     dejavu::solver s;
@@ -156,7 +282,7 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
     dejavu::groups::automorphism_workspace a(nv);
     std::vector<std::vector<unsigned int>> mappings;            // Store generators (and identity) in a sensible notation
     std::vector<unsigned int> identity;                      // We need an identity since we're composing elements from two sets
-    for (int y = 0; y < i.size(); y++) {
+    for (int y = 0; y < m.size(); y++) {
         identity.push_back(y);                      // Every element maps to itself
     }
     mappings.push_back(identity);
@@ -184,13 +310,16 @@ auto gss::innards::coset_reps(const InputGraph &i, std::vector<int> & orbit_size
 
     for (unsigned int x = 0; x < base.size(); x++) {
         std::vector<int> orb = rschreier.get_fixed_orbit(x);              // Get orbit
+        std::stable_sort(orb.begin(), orb.end(), [&](int a, int b) -> bool {        // Add the constraints in the right order // TODO improve
+            return std::find(vertex_order.begin(), vertex_order.end(), a) < std::find(vertex_order.begin(), vertex_order.end(), b);
+        });
         orbit_sizes[base.at(x)] = orb.size();
         std::vector<unsigned int> mapping;
         for (auto v : orb) {
             if (rschreier.get_transversal_element(x,v,a)) {
                 if (a.p()[base[x]] == base[x]) continue;
                 mapping.clear();
-                for (int y = 0; y < i.size(); y++) {
+                for (int y = 0; y < m.size(); y++) {
                     mapping.push_back(a.p()[y]);            // mapping[i] maps to p*i
                 }
                 mappings.push_back(mapping);

@@ -6,6 +6,7 @@
 #include <gss/innards/svo_bitset.hh>
 
 #include <list>
+#include <vector>
 #include <string>
 #include <utility>
 
@@ -16,9 +17,11 @@ namespace gss::innards
     using OrderConstraints = std::list<std::pair<std::string, std::string>>;
 
     auto automorphisms_as_order_constraints(const InputGraph &, std::vector<int> & base, std::vector<int> & orbit_sizes, const bool degree_sequence) -> OrderConstraints;
+    auto automorphisms_as_order_constraints(std::vector<innards::SVOBitset> m, std::vector<int> & base, std::vector<int> & orbit_sizes, const std::vector<unsigned int> & vertex_order) -> std::vector<std::pair<unsigned, unsigned>>;
     auto initialise_dynamic_structure(dejavu::groups::random_schreier &, std::vector<innards::SVOBitset> m, const bool directed) -> bool;
     auto dynamic_order_constraints(int sz, std::vector<int> & base, std::vector<int> & orbit_sizes, dejavu::groups::random_schreier &, std::vector<std::pair<unsigned int, unsigned int>> &) -> void;
     auto coset_reps(const InputGraph &i, std::vector<int> & orbit_sizes, std::vector<int> & base, const bool degree_sequence) -> std::vector<std::vector<unsigned int>>;
+    auto coset_reps(std::vector<innards::SVOBitset> m, std::vector<int> & orbit_sizes, std::vector<int> & base, const std::vector<unsigned int> vertex_order) -> std::vector<std::vector<unsigned int>>;
     auto dynamic_coset_reps(std::vector<int> & base, int sz, dejavu::groups::random_schreier & rschreier, std::vector<std::vector<unsigned int>> & reps, std::vector<std::vector<unsigned int>> & invs, std::vector<int> & orbit_sizes) -> void;
     auto invert_automorphism(std::vector<unsigned int> aut) -> std::vector<unsigned int>;
     auto invert_list(std::vector<std::vector<unsigned int>> ls) -> std::vector<std::vector<unsigned int>>;

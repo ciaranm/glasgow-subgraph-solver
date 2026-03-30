@@ -340,27 +340,28 @@ namespace
         else if (options_vars.count("pattern-orb-symmetries")) {
             string mode = options_vars["pattern-orb-symmetries"].as<string>();
             if (mode == "natural") {
-                auto dejavu_start_time = steady_clock::now();
-                std::cout << "pattern_";
-                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(*pattern, params.pattern_base, params.pattern_orbit_sizes, false);
-                // was_given_pattern_automorphism_group = true;
-                cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
-                cout << "pattern_less_constraints =";
-                for (auto & [a, b] : params.pattern_less_constraints)
-                    cout << " " << a << "<" << b;
-                cout << endl;
+                // auto dejavu_start_time = steady_clock::now();
+                // std::cout << "pattern_";
+                // params.pattern_less_constraints = innards::automorphisms_as_order_constraints(*pattern, params.pattern_base, params.pattern_orbit_sizes, false);
+                // // was_given_pattern_automorphism_group = true;
+                // cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
+                // cout << "pattern_less_constraints =";
+                // for (auto & [a, b] : params.pattern_less_constraints)
+                //     cout << " " << a << "<" << b;
+                // cout << endl;
+                params.natural_pattern = true;
             }
             else if (mode == "degree") {
-                auto dejavu_start_time = steady_clock::now();
-                std::cout << "pattern_";
-                params.pattern_less_constraints = innards::automorphisms_as_order_constraints(*pattern, params.pattern_base, params.pattern_orbit_sizes, true);
+                // auto dejavu_start_time = steady_clock::now();
+                // std::cout << "pattern_";
+                // params.pattern_less_constraints = innards::automorphisms_as_order_constraints(*pattern, params.pattern_base, params.pattern_orbit_sizes, true);
                 params.degree_sym_pattern = true;
-                // was_given_pattern_automorphism_group = true;
-                cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
-                cout << "pattern_less_constraints =";
-                for (auto & [a, b] : params.pattern_less_constraints)
-                    cout << " " << a << "<" << b;
-                cout << endl;
+                // // was_given_pattern_automorphism_group = true;
+                // cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
+                // cout << "pattern_less_constraints =";
+                // for (auto & [a, b] : params.pattern_less_constraints)
+                //     cout << " " << a << "<" << b;
+                // cout << endl;
             }
             else if (mode == "flexible") {
                 params.flexible_pattern = true;
@@ -394,27 +395,28 @@ namespace
         else if (options_vars.count("target-orb-symmetries")) {
             string mode = options_vars["target-orb-symmetries"].as<string>();
             if (mode == "natural") {
-                auto dejavu_start_time = steady_clock::now();
-                std::cout << "target_";
-                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(*target, params.target_base, params.target_orbit_sizes, false);
-                // was_given_target_automorphism_group = true;
-                cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
-                cout << "target_occur_less_constraints =";
-                for (auto & [a, b] : params.target_occur_less_constraints)
-                    cout << " " << a << "<" << b;
-                cout << endl;
+                params.natural_target = true;
+                // auto dejavu_start_time = steady_clock::now();
+                // std::cout << "target_";
+                // params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(*target, params.target_base, params.target_orbit_sizes, false);
+                // // was_given_target_automorphism_group = true;
+                // cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
+                // cout << "target_occur_less_constraints =";
+                // for (auto & [a, b] : params.target_occur_less_constraints)
+                //     cout << " " << a << "<" << b;
+                // cout << endl;
             }
             else if (mode == "degree") {
-                auto dejavu_start_time = steady_clock::now();
-                std::cout << "target_";
-                params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(*target, params.target_base, params.target_orbit_sizes, true);
+                // auto dejavu_start_time = steady_clock::now();
+                // std::cout << "target_";
+                // params.target_occur_less_constraints = innards::automorphisms_as_order_constraints(*target, params.target_base, params.target_orbit_sizes, true);
                 params.degree_sym_target = true;
-                // was_given_target_automorphism_group = true;
-                cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
-                cout << "target_occur_less_constraints =";
-                for (auto & [a, b] : params.target_occur_less_constraints)
-                    cout << " " << a << "<" << b;
-                cout << endl;
+                // // was_given_target_automorphism_group = true;
+                // cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << endl;
+                // cout << "target_occur_less_constraints =";
+                // for (auto & [a, b] : params.target_occur_less_constraints)
+                //     cout << " " << a << "<" << b;
+                // cout << endl;
             }
             else if (mode == "flexible") {
                 params.flexible_target = true;
@@ -431,35 +433,36 @@ namespace
             string method = options_vars["pattern-coset-symmetries"].as<string>();
             params.pattern_rep_syms = true;
             if (method == "natural") {
-                std::cout << "pattern_";
-                params.pattern_aut_inverses = innards::coset_reps(*pattern, params.pattern_orbit_sizes, params.pattern_base, false);
-                params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
-                std::cout << "pattern_constraints = [";
-                for (auto p : params.pattern_aut_reps) {
-                    for (int i = 0; i < p.size(); i++) {
-                        if (i != p[i]) {
-                            std::cout << i << "->" << p[i] << " ";
-                        }
-                    }
-                    std::cout << "\n";
-                }
-                std::cout << "]\n";
+                params.natural_pattern = true;
+                // std::cout << "pattern_";
+                // params.pattern_aut_inverses = innards::coset_reps(*pattern, params.pattern_orbit_sizes, params.pattern_base, false);
+                // params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
+                // std::cout << "pattern_constraints = [";
+                // for (auto p : params.pattern_aut_reps) {
+                //     for (int i = 0; i < p.size(); i++) {
+                //         if (i != p[i]) {
+                //             std::cout << i << "->" << p[i] << " ";
+                //         }
+                //     }
+                //     std::cout << "\n";
+                // }
+                // std::cout << "]\n";
             }
             else if (method == "degree") {
-                std::cout << "pattern_";
-                params.pattern_aut_inverses = innards::coset_reps(*pattern, params.pattern_orbit_sizes, params.pattern_base, true);
-                params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
+                // std::cout << "pattern_";
+                // params.pattern_aut_inverses = innards::coset_reps(*pattern, params.pattern_orbit_sizes, params.pattern_base, true);
+                // params.pattern_aut_reps = innards::invert_list(params.pattern_aut_inverses);
                 params.degree_sym_pattern = true;
-                std::cout << "pattern_constraints = [";
-                for (auto p : params.pattern_aut_reps) {
-                    for (int i = 0; i < p.size(); i++) {
-                        if (i != p[i]) {
-                            std::cout << i << "->" << p[i] << " ";
-                        }
-                    }
-                    std::cout << "\n";
-                }
-                std::cout << "]\n";
+                // std::cout << "pattern_constraints = [";
+                // for (auto p : params.pattern_aut_reps) {
+                //     for (int i = 0; i < p.size(); i++) {
+                //         if (i != p[i]) {
+                //             std::cout << i << "->" << p[i] << " ";
+                //         }
+                //     }
+                //     std::cout << "\n";
+                // }
+                // std::cout << "]\n";
             }
             else if (method == "flexible") {
                 params.flexible_pattern = true;
@@ -480,35 +483,36 @@ namespace
             string method = options_vars["target-coset-symmetries"].as<string>();
             params.target_rep_syms = true;
             if (method == "natural") {
-                std::cout << "target_";
-                params.target_aut_inverses = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, false);
-                params.target_aut_reps = innards::invert_list(params.target_aut_inverses);
-                std::cout << "target_constraints = [";
-                for (auto t : params.target_aut_reps) {
-                    for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
-                        if (i != t[i]) {
-                            std::cout << i << "->" << t[i] << " ";
-                        }
-                    }
-                    std::cout << "\n";
-                }
-                std::cout << "]\n";
+                params.natural_target = true;
+                // std::cout << "target_";
+                // params.target_aut_inverses = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, false);
+                // params.target_aut_reps = innards::invert_list(params.target_aut_inverses);
+                // std::cout << "target_constraints = [";
+                // for (auto t : params.target_aut_reps) {
+                //     for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
+                //         if (i != t[i]) {
+                //             std::cout << i << "->" << t[i] << " ";
+                //         }
+                //     }
+                //     std::cout << "\n";
+                // }
+                // std::cout << "]\n";
             }
             else if (method == "degree") {
-                std::cout << "target_";
-                params.target_aut_inverses = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, true);
-                params.target_aut_reps = innards::invert_list(params.target_aut_inverses);
+                // std::cout << "target_";
+                // params.target_aut_inverses = innards::coset_reps(*target, params.target_orbit_sizes, params.target_base, true);
+                // params.target_aut_reps = innards::invert_list(params.target_aut_inverses);
                 params.degree_sym_target = true;
-                std::cout << "target_constraints = [";
-                for (auto t : params.target_aut_reps) {
-                    for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
-                        if (i != t[i]) {
-                            std::cout << i << "->" << t[i] << " ";
-                        }
-                    }
-                    std::cout << "\n";
-                }
-                std::cout << "]\n";
+                // std::cout << "target_constraints = [";
+                // for (auto t : params.target_aut_reps) {
+                //     for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
+                //         if (i != t[i]) {
+                //             std::cout << i << "->" << t[i] << " ";
+                //         }
+                //     }
+                //     std::cout << "\n";
+                // }
+                // std::cout << "]\n";
             }
             else if (method == "flexible") {
                 params.flexible_target = true;

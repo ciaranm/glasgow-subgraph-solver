@@ -274,7 +274,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         return *n;
     };
 
-    // pattern less than constraints
+    // pattern less than constraints (manual insertion/GAP)
     if (! _imp->params.pattern_less_constraints.empty() || ! params.pattern_aut_reps.empty()) {
         _imp->has_less_thans = true;
         list<pair<unsigned, unsigned>> pattern_less_thans_in_wrong_order;
@@ -304,11 +304,11 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         }
     }
 
-    if (params.dynamic_pattern || params.flexible_pattern || params.semi_flexible_pattern) {
+    if (params.dynamic_pattern || params.flexible_pattern || params.semi_flexible_pattern || params.natural_pattern || params.degree_sym_pattern) {
         _imp->has_less_thans = true;
     }
 
-    // target less than constraints
+    // target less than constraints (manual insertion/GAP)
     if (! _imp->params.target_occur_less_constraints.empty() || ! params.target_aut_reps.empty()) {
         _imp->has_occur_less_thans = true;
         list<pair<unsigned, unsigned>> target_occur_less_thans_in_wrong_order;
@@ -338,6 +338,10 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         }
     }
 
+    if (params.dynamic_target || params.flexible_target || params.semi_flexible_target || params.natural_target || params.degree_sym_target) {
+        _imp->has_occur_less_thans = true;
+    }
+
     // make space for clique constraints
     if (params.clique_size_constraints) {
         for (unsigned g = 0; g < _imp->max_graphs_for_clique_size_constraints; ++g) {
@@ -349,9 +353,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
         _imp->largest_pattern_clique.resize(_imp->max_graphs_for_clique_size_constraints);
     }
 
-    if (params.dynamic_target || params.flexible_target || params.semi_flexible_target) {
-        _imp->has_occur_less_thans = true;
-    }
 }
 
 HomomorphismModel::~HomomorphismModel() = default;

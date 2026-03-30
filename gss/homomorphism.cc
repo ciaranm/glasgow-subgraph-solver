@@ -429,7 +429,7 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
         if (params.lackey)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with a lackey"};
-        if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
+        if (params.orbit_sym || params.partial_assignments_sym)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
         if (params.injectivity != Injectivity::Injective && params.injectivity != Injectivity::NonInjective)
             throw UnsupportedConfiguration{"Proof logging can currently only be used with injectivity or non-injectivity"};

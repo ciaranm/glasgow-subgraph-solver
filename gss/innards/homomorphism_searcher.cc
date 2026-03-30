@@ -5,6 +5,7 @@
 #include <tuple>
 #include <type_traits>
 #include "homomorphism_searcher.hh"
+#include <gss/time.hh>
 
 using namespace gss;
 using namespace gss::innards;
@@ -44,22 +45,97 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.target_size = model.target_size;
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
-    if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
-        if (params.pattern_rep_syms) {
-            pattern_coset_reps = params.pattern_aut_reps;
-            pattern_coset_invs = params.pattern_aut_inverses;
+    if (params.partial_assignments_sym || params.orbit_sym) {
+        mapping.resize(model.pattern_size, -1);
+        permuted.resize(model.pattern_size, -1);
+        var_order.resize(model.pattern_size);
+        std::iota(var_order.begin(), var_order.begin() + model.pattern_size, 0);
+        if (params.degree_sym_pattern) {
+            stable_sort(var_order.begin(), var_order.end(), [&](int a, int b) -> bool {
+                return -model.pattern_degree(0,a) < -model.pattern_degree(0,b);
+            });
         }
-        for (int o: params.pattern_orbit_sizes) {
+        val_order.resize(model.target_size, model.target_size);
+        latest_value_index = -1;
+        if (!params.dynamic_target && !params.flexible_target && !params.semi_flexible_target) {
+            std::iota(val_order.begin(), val_order.begin() + model.target_size, 0);
+            latest_value_index = model.target_size;
+            if (params.degree_sym_target) {
+                stable_sort(val_order.begin(), val_order.end(), [&](int a, int b) -> bool {
+                    return -model.target_degree(0,a) < -model.target_degree(0,b);
+                });
+            }
+        }
+    }
+    if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
+        pattern_orbit_sizes.resize(model.pattern_size, 1);
+        std::vector<innards::SVOBitset> adjacency_matrix;
+        for (size_t i = 0; i < model.pattern_size; i++) {
+            adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
+        }
+        if (params.orbit_sym) {
+            auto dejavu_start_time = steady_clock::now();
+            std::cout << "pattern_";
+            useful_pattern_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, pattern_base, pattern_orbit_sizes, var_order);
+            std::cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << std::endl;
+            std::cout << "pattern_less_constraints =";
+        }
+        if (params.pattern_rep_syms) {
+            // pattern_coset_reps = params.pattern_aut_reps;
+            // pattern_coset_invs = params.pattern_aut_inverses;
+            std::cout << "pattern_";
+            pattern_coset_invs = innards::coset_reps(adjacency_matrix, pattern_orbit_sizes, pattern_base, var_order);
+            pattern_coset_reps = innards::invert_list(pattern_coset_invs);
+            std::cout << "pattern_constraints = [";
+            for (auto p : pattern_coset_reps) {
+                for (int i = 0; i < p.size(); i++) {
+                    if (i != p[i]) {
+                        std::cout << i << "->" << p[i] << " ";
+                    }
+                }
+                std::cout << "\n";
+            }
+            std::cout << "]\n";
+        }
+        for (int o: pattern_orbit_sizes) {
             pattern_aut_grp_size *= o;
         }
     }
     if (model.has_occur_less_thans() && !model.do_dynamic_occur_less_thans()) {
-        if (params.target_rep_syms) {
-            target_coset_reps = params.target_aut_reps;
-            target_coset_invs = params.target_aut_inverses;
+        target_orbit_sizes.resize(model.target_size, 1);
+        std::vector<innards::SVOBitset> adjacency_matrix;
+        for (size_t i = 0; i < model.target_size; i++) {
+            adjacency_matrix.emplace_back(model.target_graph_row(0,i));
         }
-        target_base = params.target_base;
-        target_orbit_sizes = params.target_orbit_sizes;
+        if (params.orbit_sym) {
+            auto dejavu_start_time = steady_clock::now();
+            std::cout << "target_";
+            useful_target_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, target_base, target_orbit_sizes, val_order);
+            std::cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << std::endl;
+            std::cout << "target_occur_less_constraints =";
+            for (auto & [a, b] : useful_target_constraints)
+                std::cout << " " << a << "<" << b;
+            std::cout << std::endl;
+        }
+        if (params.target_rep_syms) {
+            // target_coset_reps = params.target_aut_reps;
+            // target_coset_invs = params.target_aut_inverses;
+            std::cout << "target_";
+            target_coset_invs = innards::coset_reps(adjacency_matrix, target_orbit_sizes, target_base, val_order);
+            target_coset_reps = innards::invert_list(target_coset_invs);
+            std::cout << "target_constraints = [";
+            for (auto t : target_coset_reps) {
+                for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
+                    if (i != t[i]) {
+                        std::cout << i << "->" << t[i] << " ";
+                    }
+                }
+                std::cout << "\n";
+            }
+            std::cout << "]\n";
+        }
+        // target_base = params.target_base;
+        // target_orbit_sizes = params.target_orbit_sizes;
     }
     if (model.do_dynamic_occur_less_thans()) {
         target_orbit_sizes.resize(model.target_size, 1);
@@ -93,28 +169,6 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             std::iota(id.begin(), id.end(), 0);
             pattern_coset_reps.push_back(id);
             pattern_coset_invs.push_back(id);
-        }
-    }
-    if (params.partial_assignments_sym || params.orbit_sym) {
-        mapping.resize(model.pattern_size, -1);
-        permuted.resize(model.pattern_size, -1);
-        var_order.resize(model.pattern_size);
-        std::iota(var_order.begin(), var_order.begin() + model.pattern_size, 0);
-        if (params.degree_sym_pattern) {
-            stable_sort(var_order.begin(), var_order.end(), [&](int a, int b) -> bool {
-                return -model.pattern_degree(0,a) < -model.pattern_degree(0,b);
-            });
-        }
-        val_order.resize(model.target_size, model.target_size);
-        latest_value_index = -1;
-        if (!params.dynamic_target && !params.flexible_target && !params.semi_flexible_target) {
-            std::iota(val_order.begin(), val_order.begin() + model.target_size, 0);
-            latest_value_index = model.target_size;
-            if (params.degree_sym_pattern) {
-                stable_sort(val_order.begin(), val_order.end(), [&](int a, int b) -> bool {
-                    return -model.target_degree(0,a) < -model.target_degree(0,b);
-                });
-            }
         }
     }
     sym_time = 0us;
@@ -283,6 +337,8 @@ auto HomomorphismSearcher::restarting_search(
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
+
+        // std::cout << branch_domain->v << " " << *f_v << "\n";
 
         if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
             pattern_base = pattern_base_cpy;
@@ -859,12 +915,12 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
     return true;
 }
 
-/**
- * Propagate less-than symmetry constraints found before search
- */
-auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool {
-    return propagate_less_thans(new_domains, model.pattern_less_thans_in_convenient_order);
-}
+// /**
+//  * Propagate less-than symmetry constraints found before search
+//  */
+// auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool {
+//     return propagate_less_thans(new_domains, model.pattern_less_thans_in_convenient_order);
+// }
 
 /**
  * Propagate a given list of less-than symmetry constraints
@@ -1306,6 +1362,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                                         }
                                     }
                                 }
+                                d.count = d.values.count();
                             }
                         }
                         break;
@@ -1338,6 +1395,7 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                                     if (!d.values.any()) {
                                         return false;
                                     }
+                                    d.count--;
                                 }
                             }
                             break;                          // TODO we don't need to check this particular t_aut again until we backtrack
@@ -1384,11 +1442,20 @@ auto HomomorphismSearcher::filter_symmetrical_siblings(Domains & domains, unsign
             }
             if (unsigned(target_base[counter]) == val && t_aut[val] != val) {          // This perm goes to a sibling
                 if (searched.test(t_aut[val])) {
-                    return false;           // We have already searched this branch (but dejavu gave incomplete results)
+                    target_orbit_sizes[val] -= 1;           // We have already searched this branch (but dejavu gave incomplete results)
+                    if (target_orbit_sizes[val] == 1) {
+                        irredundant_target_base.pop_back();
+                    }
                 }
                 if (domain->values.test(t_aut[val])) {
                     domain->values.reset(t_aut[val]);
                     did_filter = true;
+                }
+                else {
+                    target_orbit_sizes[val] -= 1;           // This symmetric value isn't a sibling, which means we missed this symmetry earlier
+                    if (target_orbit_sizes[val] == 1) {
+                        irredundant_target_base.pop_back();
+                    }
                 }
             }
         }
@@ -1566,23 +1633,27 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             if (!params.symmetric_nogoods_only) {
                 // propagate orbit less thans
                 if (model.has_less_thans() && !params.pattern_rep_syms) {
-                    if (model.do_dynamic_less_thans()) {
-                        if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
-                            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                            return false;
-                        }
-                    }
-                    else {
-                        if (!propagate_less_thans(new_domains)) {
-                            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                            return false;
-                        }
+                    // if (model.do_dynamic_less_thans()) {
+                    //     if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                    //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                    //         return false;
+                    //     }
+                    // }
+                    // else {
+                    //     if (!propagate_less_thans(new_domains)) {
+                    //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                    //         return false;
+                    //     }
+                    // }
+                    if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                        return false;
                     }
                 }
 
                 // propagate orbit occurs less thans
                 if (model.has_occur_less_thans() && !params.target_rep_syms) {
-                    if (params.flexible_target || (params.semi_flexible_target && rep_solution_count != 0)) {
+                    if (params.natural_target || params.degree_sym_target || params.flexible_target || (params.semi_flexible_target && rep_solution_count != 0)) {
                         if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, current_assignment)) {
                             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
                             return false;
@@ -1591,13 +1662,13 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                     else if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
                         // Can we actually do anything here?
                     }
-                    else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, current_assignment)) {
-                        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                        return false;
-                    }
+                    // else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, current_assignment)) {
+                    //     sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                    //     return false;
+                    // }
                 }
             }
-
+            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         }
 
         // propagate all different
@@ -1613,6 +1684,10 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         // propagate permutation symmetries - extra assignments make this more effective
         if (params.partial_assignments_sym && !break_coset_rep_symmetries(assignments, new_domains)) {
             sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            return false;
+        }
+        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+        if (params.injectivity == Injectivity::Injective && ! cheap_all_different(model.target_size, new_domains, proof, &model)) {
             return false;
         }
     }

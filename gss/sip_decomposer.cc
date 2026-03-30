@@ -22,7 +22,7 @@ namespace
         const HomomorphismParams & params,
         set<int> & isolated_pattern_vertices) -> void
     {
-        if (params.induced || (! params.pattern_less_constraints.empty()) || (! params.target_occur_less_constraints.empty()) || params.lackey || pattern.has_vertex_labels() || (params.count_solutions && params.enumerate_callback) || pattern.directed())
+        if (params.induced || (! params.orbit_sym) || (params.partial_assignments_sym) || params.lackey || pattern.has_vertex_labels() || (params.count_solutions && params.enumerate_callback) || pattern.directed())
             return;
 
         for (int i = 0; i < pattern.size(); ++i)
