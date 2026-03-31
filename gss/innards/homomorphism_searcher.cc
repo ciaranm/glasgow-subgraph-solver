@@ -287,17 +287,8 @@ auto HomomorphismSearcher::restarting_search(
     if (proof)
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
-    if (actually_hit_a_failure) {
-        if (params.variable_ordering_heuristic == VariableOrdering::DomOverWDeg || params.variable_ordering_heuristic == VariableOrdering::DomThenWDeg) {
-            auto & v = _branch_scores.at(branch_domain->v);
-            if (++v > (1 << 24)) {
-                for (auto & w : _branch_scores)
-                    w /= 2;
-            }
-        }
-
+    if (actually_hit_a_failure)
         restarts_schedule.did_a_backtrack();
-    }
 
     if (restarts_schedule.should_restart()) {
         if (proof)
