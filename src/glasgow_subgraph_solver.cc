@@ -77,6 +77,7 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
+            ("phase-saving", "Use phase saving")
             ("variable-ordering", "Specify variable-ordering heurist (domthendeg / domthenwdeg / domoverdeg / domoverwdeg)", cxxopts::value<string>())
             ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")
             ("target-symmetries", "Eliminate target symmetries (requires Gap)");
@@ -232,6 +233,9 @@ auto main(int argc, char * argv[]) -> int
                 return EXIT_FAILURE;
             }
         }
+
+        if (options_vars.count("phase-saving"))
+            params.phase_saving = true;
 
         if (options_vars.count("variable-ordering")) {
             string variable_ordering_heuristic = options_vars["variable-ordering"].as<string>();

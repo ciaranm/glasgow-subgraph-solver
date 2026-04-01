@@ -111,6 +111,8 @@ namespace gss::innards
         const HomomorphismParams & params;
         const DuplicateSolutionFilterer _duplicate_solution_filterer;
         std::vector<int> _branch_scores;
+        std::vector<std::optional<int>> _phases;
+        unsigned _phase_size;
 
         const std::shared_ptr<Proof> proof;
 
@@ -143,10 +145,12 @@ namespace gss::innards
 
         auto softmax_shuffle(
             std::vector<int> & branch_v,
+            unsigned branch_v_start,
             unsigned branch_v_end) -> void;
 
         auto degree_sort(
             std::vector<int> & branch_v,
+            unsigned branch_v_start,
             unsigned branch_v_end,
             bool reverse) -> void;
 

@@ -29,6 +29,7 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
     model(m),
     params(p),
     _duplicate_solution_filterer(d),
+    _phase_size(0),
     proof(f)
 {
     if (might_have_watches(params)) {
@@ -38,6 +39,9 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
 
     for (unsigned v = 0 ; v < m.pattern_size ; ++v)
         _branch_scores.push_back(m.pattern_degree(0, v));
+
+    if (params.phase_saving)
+        _phases.resize(model.pattern_size);
 }
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
@@ -147,10 +151,16 @@ auto HomomorphismSearcher::restarting_search(
 
     vector<int> branch_v(model.target_size);
 
-    unsigned branch_v_end = 0;
+    unsigned branch_v_start = 0, branch_v_end = 0;
+    optional<unsigned> save = params.phase_saving ? _phases.at(branch_domain->v) : nullopt;
     for (auto f_v = remaining.find_first(); f_v != decltype(remaining)::npos; f_v = remaining.find_first()) {
         remaining.reset(f_v);
-        branch_v[branch_v_end++] = f_v;
+        branch_v[branch_v_end] = f_v;
+        if (save && *save == f_v) {
+            swap(branch_v[branch_v_start], branch_v[branch_v_end]);
+            ++branch_v_start;
+        }
+        ++branch_v_end;
     }
 
     switch (params.value_ordering_heuristic) {
@@ -158,19 +168,19 @@ auto HomomorphismSearcher::restarting_search(
         break;
 
     case ValueOrdering::Degree:
-        degree_sort(branch_v, branch_v_end, false);
+        degree_sort(branch_v, branch_v_start, branch_v_end, false);
         break;
 
     case ValueOrdering::AntiDegree:
-        degree_sort(branch_v, branch_v_end, true);
+        degree_sort(branch_v, branch_v_start, branch_v_end, true);
         break;
 
     case ValueOrdering::Biased:
-        softmax_shuffle(branch_v, branch_v_end);
+        softmax_shuffle(branch_v, branch_v_start, branch_v_end);
         break;
 
     case ValueOrdering::Random:
-        shuffle(branch_v.begin(), branch_v.begin() + branch_v_end, global_rand);
+        shuffle(branch_v.begin() + branch_v_start, branch_v.begin() + branch_v_end, global_rand);
         break;
     }
 
@@ -190,6 +200,17 @@ auto HomomorphismSearcher::restarting_search(
 
         // make the assignment
         assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
+
+        // phase saving?
+        if (params.phase_saving) {
+            auto how_many = count_if(assignments.values.begin(), assignments.values.end(), [&](const auto & a) { return ! a.is_decision; });
+            if (how_many > _phase_size) {
+                _phase_size = how_many;
+                fill(_phases.begin(), _phases.end(), nullopt);
+                for (const auto & a : assignments.values)
+                    _phases.at(a.assignment.pattern_vertex) = a.assignment.target_vertex;
+            }
+        }
 
         // set up new domains
         Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
@@ -302,10 +323,11 @@ auto HomomorphismSearcher::restarting_search(
 
 auto HomomorphismSearcher::degree_sort(
     vector<int> & branch_v,
+    unsigned branch_v_start,
     unsigned branch_v_end,
     bool reverse) -> void
 {
-    stable_sort(branch_v.begin(), branch_v.begin() + branch_v_end, [&](int a, int b) -> bool {
+    stable_sort(branch_v.begin() + branch_v_start, branch_v.begin() + branch_v_end, [&](int a, int b) -> bool {
         return reverse
             ? model.target_degree(0, a) < model.target_degree(0, b)
             : -model.target_degree(0, a) < -model.target_degree(0, b);
@@ -314,6 +336,7 @@ auto HomomorphismSearcher::degree_sort(
 
 auto HomomorphismSearcher::softmax_shuffle(
     vector<int> & branch_v,
+    unsigned branch_v_start,
     unsigned branch_v_end) -> void
 {
     // repeatedly pick a softmax-biased vertex, move it to the front of branch_v,

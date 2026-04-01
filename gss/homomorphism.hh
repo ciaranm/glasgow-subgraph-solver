@@ -68,6 +68,9 @@ namespace gss
         /// Which value-ordering heuristic?
         ValueOrdering value_ordering_heuristic = ValueOrdering::Biased;
 
+        /// Use phase-saving?
+        bool phase_saving = false;
+
         /// Restarts schedule
         std::unique_ptr<RestartsSchedule> restarts_schedule;
 
