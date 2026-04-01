@@ -152,7 +152,7 @@ auto HomomorphismSearcher::restarting_search(
     vector<int> branch_v(model.target_size);
 
     unsigned branch_v_start = 0, branch_v_end = 0;
-    optional<unsigned> save = params.phase_saving ? _phases.at(branch_domain->v) : nullopt;
+    optional<unsigned> save = (params.phase_saving && depth > 5) ? _phases.at(branch_domain->v) : nullopt;
     for (auto f_v = remaining.find_first(); f_v != decltype(remaining)::npos; f_v = remaining.find_first()) {
         remaining.reset(f_v);
         branch_v[branch_v_end] = f_v;
