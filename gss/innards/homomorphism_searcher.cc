@@ -227,14 +227,16 @@ auto HomomorphismSearcher::restarting_search(
             actually_hit_a_failure = true;
 
             if (params.variable_ordering_heuristic == VariableOrdering::DomOverWDeg || params.variable_ordering_heuristic == VariableOrdering::DomThenWDeg) {
-                if (failing_vertex->pattern_vertex_1) {
+                if (failing_vertex->pattern_vertex_1 && assignments.values.end() == find_if(
+                            assignments.values.begin(), assignments.values.end(), [&] (const auto & a) { return a.assignment.pattern_vertex == *failing_vertex->pattern_vertex_1; })) {
                     auto & v = _branch_scores.at(*failing_vertex->pattern_vertex_1);
                     if (++v > (1 << 24)) {
                         for (auto & w : _branch_scores)
                             w /= 2;
                     }
                 }
-                if (failing_vertex->pattern_vertex_2) {
+                if (failing_vertex->pattern_vertex_2 && assignments.values.end() == find_if(
+                            assignments.values.begin(), assignments.values.end(), [&] (const auto & a) { return a.assignment.pattern_vertex == *failing_vertex->pattern_vertex_2; })) {
                     auto & v = _branch_scores.at(*failing_vertex->pattern_vertex_2);
                     if (++v > (1 << 24)) {
                         for (auto & w : _branch_scores)
@@ -355,7 +357,7 @@ auto HomomorphismSearcher::softmax_shuffle(
     for (unsigned v = 0; v < branch_v_end; ++v)
         total += expish(model.target_degree(0, branch_v[v]));
 
-    for (unsigned start = 0; start < branch_v_end; ++start) {
+    for (unsigned start = branch_v_start; start < branch_v_end; ++start) {
         // pick a random number between 1 and total inclusive
         uniform_int_distribution<long long> dist(1, total);
         long long select_score = dist(global_rand);
