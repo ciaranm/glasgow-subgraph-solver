@@ -148,8 +148,9 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size,
 
 auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
 {
+    auto & var_name = _imp->variable_mappings[pair{p, t}];
     _imp->model_stream << "* forbidden assignment\n";
-    _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
+    _imp->model_stream << "@forb" << var_name << " 1 ~x" << var_name << " >= 1 ;\n";
     ++_imp->nb_constraints;
     _imp->eliminations.emplace(pair{p, t}, _imp->nb_constraints);
 }
@@ -162,7 +163,7 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
     const vector<int> & uu, const vector<int> & cancel, bool) -> void
 {
-    auto adj_label = "@adj" + p.second + "_" + t.second + "_" + q.second;
+    auto adj_label = "@g0adj" + p.second + "_" + t.second + "_" + q.second;
 
     _imp->model_stream << adj_label << " ";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
@@ -257,8 +258,9 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
 auto Proof::need_elimination(int p, int t) -> void
 {
     if (! _imp->eliminations.contains(pair{p, t})) {
+        auto & var_name = _imp->variable_mappings[pair{p, t}];
         *_imp->proof_stream << "setlvl 0;\n";
-        *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
+        *_imp->proof_stream << "@elim" << var_name << " rup 1 ~x" << var_name << " >= 1 ;\n";
         _imp->eliminations[pair{p, t}] = ++_imp->proof_line;
         *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
     }
@@ -678,7 +680,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
 {
     *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in G^3 so by adjacency, " << q.second << " maps to one of...\n";
 
-    auto adj_label = "@d3adj" + p.second + "_" + t.second + "_" + q.second;
+    auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
     *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
@@ -722,7 +724,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
 
     *_imp->proof_stream << "setlvl 0;\n";
 
-    auto adj_label = "@d3adj" + p.second + "_" + t.second + "_" + q.second;
+    auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
     *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
@@ -773,7 +775,7 @@ auto Proof::create_distance3_graphs(
 
     *_imp->proof_stream << "setlvl 0;\n";
 
-    auto adj_label = "@d3adj" + p.second + "_" + t.second + "_" + q.second;
+    auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
     *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
