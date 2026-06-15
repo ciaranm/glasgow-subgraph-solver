@@ -260,7 +260,7 @@ auto Proof::need_elimination(int p, int t) -> void
     if (! _imp->eliminations.contains(pair{p, t})) {
         auto & var_name = _imp->variable_mappings[pair{p, t}];
         *_imp->proof_stream << "setlvl 0;\n";
-        *_imp->proof_stream << "@elim" << var_name << " rup 1 ~x" << var_name << " >= 1 ;\n";
+        *_imp->proof_stream << "@elimnds" << var_name << " rup 1 ~x" << var_name << " >= 1 ;\n";
         _imp->eliminations[pair{p, t}] = ++_imp->proof_line;
         *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
     }
@@ -296,7 +296,16 @@ auto Proof::incompatible_by_degrees(
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
 
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 : " << _imp->proof_line << " ;\n";
+    auto & var_deg = _imp->variable_mappings[pair{p.first, t.first}];
+    // Label only the first derivation: this function can be called multiple times for the same
+    // (p,t) pair (once per supplemental graph level g that detects degree incompatibility).
+    // emplace() below also ignores subsequent calls, so eliminations[(p,t)] always points to
+    // this first IA step — the only one ever referenced downstream. Later unlabeled IA steps
+    // for the same pair are dead (never referenced, never in the cone), so the label is never
+    // duplicated in the proof and the cone analysis always finds the labeled step.
+    if (! _imp->eliminations.contains(pair{p.first, t.first}))
+        *_imp->proof_stream << "@elimdeg" << var_deg << " ";
+    *_imp->proof_stream << "ia 1 ~x" << var_deg << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
     _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
 
@@ -357,7 +366,13 @@ auto Proof::incompatible_by_nds(
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
 
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 : " << _imp->proof_line << " ;\n";
+    auto & var_nds = _imp->variable_mappings[pair{p.first, t.first}];
+    // Guard mirrors incompatible_by_degrees: if (p,t) was already eliminated (e.g. by a prior
+    // degree call), this IA step is dead — eliminations[(p,t)] already points elsewhere and
+    // nothing will reference this line. Skip the label to avoid a duplicate label name.
+    if (! _imp->eliminations.contains(pair{p.first, t.first}))
+        *_imp->proof_stream << "@elimnds" << var_nds << " ";
+    *_imp->proof_stream << "ia 1 ~x" << var_nds << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
     *_imp->proof_stream << "del id " << _imp->proof_line - 1 << " ;\n";
@@ -368,8 +383,9 @@ auto Proof::incompatible_by_loops(
     const NamedVertex & t) -> void
 {
     // if (_imp->recover_encoding) {
+        auto & var_loop = _imp->variable_mappings[pair{p.first, t.first}];
         *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
-        *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+        *_imp->proof_stream << "@loop" << var_loop << " rup 1 ~x" << var_loop << " >= 1 ;\n";
         ++_imp->proof_line;
     // }
 }
