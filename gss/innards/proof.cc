@@ -85,7 +85,7 @@ struct Proof::Imp
 };
 
 Proof::Proof(const ProofOptions & options) :
-    _imp(new Imp)
+    _imp(make_unique<Imp>())
 {
     _imp->opb_filename = options.opb_file;
     _imp->log_filename = options.log_file;

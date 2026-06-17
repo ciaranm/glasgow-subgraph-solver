@@ -22,7 +22,7 @@ DisobedientLackeyError::DisobedientLackeyError(const std::string & m) noexcept :
 {
 }
 
-auto DisobedientLackeyError::what() const throw() -> const char *
+auto DisobedientLackeyError::what() const noexcept -> const char *
 {
     return _what.c_str();
 }

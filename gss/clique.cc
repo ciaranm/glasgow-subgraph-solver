@@ -86,15 +86,14 @@ namespace
 
         mt19937 global_rand;
 
-        int * space;
+        std::unique_ptr<int[]> space;
 
         CliqueRunner(const InputGraph & g, const CliqueParams & p) :
             params(p),
             size(g.size()),
             adj(g.size(), SVOBitset{unsigned(size), 0}),
             order(size),
-            invorder(size),
-            space(nullptr)
+            invorder(size)
         {
             if (p.proof_options)
                 proof = make_shared<Proof>(*p.proof_options);
@@ -115,7 +114,7 @@ namespace
                 proof->finalise_model();
             }
 
-            space = new int[size * (size + 1) * 2];
+            space = std::make_unique<int[]>(size * (size + 1) * 2);
 
             if (params.restarts_schedule->might_restart())
                 watches.table.data.resize(g.size());
@@ -143,11 +142,6 @@ namespace
                 for (int v = 0; v < size; ++v)
                     connected_table[v] = params.connected(order.at(v), [&](int x) { return invorder.at(x); });
             }
-        }
-
-        ~CliqueRunner()
-        {
-            delete[] space;
         }
 
         auto colour_class_order(
