@@ -120,9 +120,9 @@ auto main(int argc, char * argv[]) -> int
             ("decomposition", "Use decomposition")
             ("cliques", "Use clique size constraints")
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")
-            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>())
-            ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>())
-            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>());
+            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>(shapes))
+            ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts))
+            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives));
 
         options.add_options()
             ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
