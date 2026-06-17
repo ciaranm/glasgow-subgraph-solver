@@ -163,7 +163,7 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
     const vector<int> & uu, const vector<int> & cancel, bool) -> void
 {
-    auto adj_label = "@g0adj" + p.second + "_" + t.second + "_" + q.second;
+    auto adj_label = "@adj" + p.second + "_" + t.second + "_" + q.second;
 
     _imp->model_stream << adj_label << " ";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
@@ -237,7 +237,7 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
     *_imp->proof_stream << "% failure due to the pattern being bigger than the target\n";
 
     // we get a hall violator by adding up all of the things
-    *_imp->proof_stream << "pol";
+    *_imp->proof_stream << "@ptbig pol";
     bool first = true;
 
     for (auto & [_, label] : _imp->at_least_one_value_constraints) {
@@ -275,6 +275,10 @@ auto Proof::incompatible_by_degrees(
 {
     *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << '\n';
 
+    auto & var_deg = _imp->variable_mappings[pair{p.first, t.first}];
+    bool first_time_deg = ! _imp->eliminations.contains(pair{p.first, t.first});
+    if (first_time_deg)
+        *_imp->proof_stream << "@elimdegpol" << var_deg << " ";
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & n : n_p) {
@@ -296,14 +300,7 @@ auto Proof::incompatible_by_degrees(
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
 
-    auto & var_deg = _imp->variable_mappings[pair{p.first, t.first}];
-    // Label only the first derivation: this function can be called multiple times for the same
-    // (p,t) pair (once per supplemental graph level g that detects degree incompatibility).
-    // emplace() below also ignores subsequent calls, so eliminations[(p,t)] always points to
-    // this first IA step — the only one ever referenced downstream. Later unlabeled IA steps
-    // for the same pair are dead (never referenced, never in the cone), so the label is never
-    // duplicated in the proof and the cone analysis always finds the labeled step.
-    if (! _imp->eliminations.contains(pair{p.first, t.first}))
+    if (first_time_deg)
         *_imp->proof_stream << "@elimdeg" << var_deg << " ";
     *_imp->proof_stream << "ia 1 ~x" << var_deg << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
@@ -328,6 +325,10 @@ auto Proof::incompatible_by_nds(
     for (auto & n : p_subsequence)
         need_elimination(n, t_subsequence.back());
 
+    auto & var_nds = _imp->variable_mappings[pair{p.first, t.first}];
+    bool first_time_nds = ! _imp->eliminations.contains(pair{p.first, t.first});
+    if (first_time_nds)
+        *_imp->proof_stream << "@elimndspol" << var_nds << " ";
     // summing up horizontally
     *_imp->proof_stream << "pol";
     bool first = true;
@@ -366,12 +367,8 @@ auto Proof::incompatible_by_nds(
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
 
-    auto & var_nds = _imp->variable_mappings[pair{p.first, t.first}];
-    // Guard mirrors incompatible_by_degrees: if (p,t) was already eliminated (e.g. by a prior
-    // degree call), this IA step is dead — eliminations[(p,t)] already points elsewhere and
-    // nothing will reference this line. Skip the label to avoid a duplicate label name.
-    if (! _imp->eliminations.contains(pair{p.first, t.first}))
-        *_imp->proof_stream << "@elimnds" << var_nds << " ";
+    if (first_time_nds)
+        *_imp->proof_stream << "@elimndsconc" << var_nds << " ";
     *_imp->proof_stream << "ia 1 ~x" << var_nds << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
@@ -405,7 +402,7 @@ auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vec
         *_imp->proof_stream << " " << r.second;
     *_imp->proof_stream << " }\n";
 
-    *_imp->proof_stream << "pol";
+    *_imp->proof_stream << "@hall" << (_imp->proof_line + 1) << " pol";
     bool first = true;
     for (auto & l : lhs) {
         if (first) {
@@ -434,7 +431,7 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
 auto Proof::propagation_failure(const vector<pair<int, int>> & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
     *_imp->proof_stream << "% [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << '\n';
-    *_imp->proof_stream << "rup ";
+    *_imp->proof_stream << "@prop" << (_imp->proof_line + 1) << " rup";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
     *_imp->proof_stream << " >= 1 ;\n";
@@ -448,7 +445,7 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
     else
         *_imp->proof_stream << "% [" << decisions.size() << "] backtracking\n";
 
-    *_imp->proof_stream << "rup";
+    *_imp->proof_stream << "@guess" << (_imp->proof_line + 1) << " rup";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
     *_imp->proof_stream << " >= 1 ;\n";
@@ -493,7 +490,7 @@ auto Proof::back_up_to_top() -> void
 auto Proof::post_restart_nogood(const vector<pair<int, int>> & decisions) -> void
 {
     *_imp->proof_stream << "% [" << decisions.size() << "] restart nogood\n";
-    *_imp->proof_stream << "rup";
+    *_imp->proof_stream << "@nogood" << (_imp->proof_line + 1) << " rup";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
     *_imp->proof_stream << " >= 1 ;\n";
@@ -571,7 +568,7 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in G^[" << g << "x2] so " << q.second << " maps to one of...\n";
 
     *_imp->proof_stream << "setlvl 1;\n";
-    *_imp->proof_stream << "pol";
+    *_imp->proof_stream << "@pathg" << g << "_" << p.second << "_" << t.second << "_" << q.second << "_s1 pol";
 
     // if p maps to t then things in between_p_and_q have to go to one of these...
     bool first = true;
@@ -596,18 +593,18 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
 
     // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "@pathg" << g << "_" << p.second << "_" << t.second << "_" << q.second << "_ia1 ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : two_away_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first.first}];
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
     // if p maps to t then q does not map to t
-    *_imp->proof_stream << "pol " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + s ;\n";
+    *_imp->proof_stream << "@pathg" << g << "_" << p.second << "_" << t.second << "_" << q.second << "_s2 pol " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + s ;\n";
     ++_imp->proof_line;
 
     // and cancel out stray extras from injectivity
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "@pathg" << g << "_" << p.second << "_" << t.second << "_" << q.second << "_ia2 ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : two_away_from_t)
         if (u.first != t)
             *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first.first}];
@@ -622,7 +619,7 @@ auto Proof::create_exact_path_graphs(
         if ((u.first == t) || (d_n_t.end() != find(d_n_t.begin(), d_n_t.end(), u.first)))
             continue;
 
-        *_imp->proof_stream << "pol";
+        *_imp->proof_stream << "@pathg" << g << "_" << p.second << "_" << t.second << "_" << q.second << "_eu" << u.first.second << "_s pol";
         bool first = true;
         for (auto & b : between_p_and_q) {
             *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, p.first, b.first, t.first});
@@ -640,7 +637,7 @@ auto Proof::create_exact_path_graphs(
         ++_imp->proof_line;
 
         // want: ~x_p_t + ~x_q_u >= 1
-        *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}]
+        *_imp->proof_stream << "@pathg" << g << "_" << p.second << "_" << t.second << "_" << q.second << "_eu" << u.first.second << "_ia ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}]
                             << " 1 ~x" << _imp->variable_mappings[pair{q.first, u.first.first}] << " >= 1 : "
                             << _imp->proof_line << " ;\n";
         things_to_add_up.push_back(++_imp->proof_line);
@@ -649,7 +646,7 @@ auto Proof::create_exact_path_graphs(
     // do the getting rid of
     if (things_to_add_up.size() > 1) {
         bool first = true;
-        *_imp->proof_stream << "pol";
+        *_imp->proof_stream << "@pathg" << g << "_" << p.second << "_" << t.second << "_" << q.second << "_sfin pol";
         for (auto & t : things_to_add_up) {
             *_imp->proof_stream << " " << t;
             if (! first)
@@ -720,7 +717,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
 
     *_imp->proof_stream << "setlvl 1;\n";
 
-    *_imp->proof_stream << "pol";
+    *_imp->proof_stream << "@d2g" << g << "_" << p.second << "_" << q.second << "_" << t.second << "_s1 pol";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
     *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, p.first, path_from_p_to_q.first, t.first});
@@ -732,7 +729,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     ++_imp->proof_line;
 
     // tidy up
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "@d2g" << g << "_" << p.second << "_" << q.second << "_" << t.second << "_ia1 ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
@@ -765,7 +762,7 @@ auto Proof::create_distance3_graphs(
 
     *_imp->proof_stream << "setlvl 1;\n";
 
-    *_imp->proof_stream << "pol";
+    *_imp->proof_stream << "@d3g" << g << "_" << p.second << "_" << q.second << "_" << t.second << "_s1 pol";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
     *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, p.first, path_from_p_to_q_1.first, t.first});
@@ -777,13 +774,13 @@ auto Proof::create_distance3_graphs(
     ++_imp->proof_line;
 
     // tidy up
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    *_imp->proof_stream << "@d3g" << g << "_" << p.second << "_" << q.second << "_" << t.second << "_ia1 ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{path_from_p_to_q_2.first, u.first}];
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
-    *_imp->proof_stream << "pol " << _imp->proof_line;
+    *_imp->proof_stream << "@d3g" << g << "_" << p.second << "_" << q.second << "_" << t.second << "_s2 pol " << _imp->proof_line;
     for (auto & u : d2_from_t)
         *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, path_from_p_to_q_2.first, q.first, u.first}) << " s +";
     *_imp->proof_stream << " ;\n";
@@ -861,7 +858,7 @@ auto Proof::create_null_decision_bound(int p, int t, optional<int> d) -> void
 auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
 {
     if (! _imp->doing_hom_colour_proof) {
-        *_imp->proof_stream << "rup";
+        *_imp->proof_stream << "@binback" << (_imp->proof_line + 1) << " rup";
         for (auto & w : v)
             *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[w];
         *_imp->proof_stream << " >= 1 ;\n";
@@ -872,7 +869,7 @@ auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
         function<auto(unsigned, const vector<pair<int, int>> &)->void> f;
         f = [&](unsigned d, const vector<pair<int, int>> & trail) -> void {
             if (d == v.size()) {
-                *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{_imp->hom_colour_proof_p.first, _imp->hom_colour_proof_t.first}];
+                *_imp->proof_stream << "@binback" << (_imp->proof_line + 1) << " rup 1 ~x" << _imp->variable_mappings[pair{_imp->hom_colour_proof_p.first, _imp->hom_colour_proof_t.first}];
                 for (auto & t : trail)
                     *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[t];
                 *_imp->proof_stream << " >= 1 ;\n";
@@ -921,7 +918,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
         }
     };
 
-    *_imp->proof_stream << "pol ";
+    *_imp->proof_stream << "@colpol" << (_imp->proof_line + 1) << " pol ";
 
     for (auto & cc : ccs) {
         if (cc.size() == 1)
@@ -965,14 +962,14 @@ auto Proof::start_hom_clique_proof(const NamedVertex & p, vector<NamedVertex> &&
     *_imp->proof_stream << "% hom clique objective\n";
     vector<long> to_sum;
     for (auto & q : _imp->p_clique) {
-        *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+        *_imp->proof_stream << "@hombd" << q.second << "_" << t.second << "_" << (_imp->proof_line + 1) << " rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
         for (auto & u : _imp->t_clique_neighbourhood)
             *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.second.first}];
         *_imp->proof_stream << " >= 1 ;\n";
         to_sum.push_back(++_imp->proof_line);
     }
 
-    *_imp->proof_stream << "pol";
+    *_imp->proof_stream << "@hompol" << (_imp->proof_line + 1) << " pol";
     bool first = true;
     for (auto & t : to_sum) {
         *_imp->proof_stream << " " << t;
@@ -989,7 +986,7 @@ auto Proof::start_hom_clique_proof(const NamedVertex & p, vector<NamedVertex> &&
         for (auto & q : _imp->p_clique)
             if (p != q) {
                 for (auto & [_, t] : _imp->t_clique_neighbourhood) {
-                    *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " 1 ~x" << _imp->variable_mappings[pair{q.first, t.first}] << " >= 1 ;\n";
+                    *_imp->proof_stream << "@hominj" << p.second << "_" << q.second << "_" << t.second << "_" << (_imp->proof_line + 1) << " rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " 1 ~x" << _imp->variable_mappings[pair{q.first, t.first}] << " >= 1 ;\n";
                     ++_imp->proof_line;
                     _imp->clique_for_hom_non_edge_constraints.emplace(pair{pair{p, t}, pair{q, t}}, _imp->proof_line);
                     _imp->clique_for_hom_non_edge_constraints.emplace(pair{pair{q, t}, pair{p, t}}, _imp->proof_line);
@@ -1002,7 +999,7 @@ auto Proof::start_hom_clique_proof(const NamedVertex & p, vector<NamedVertex> &&
         for (auto & [_, t] : _imp->t_clique_neighbourhood) {
             for (auto & [_, u] : _imp->t_clique_neighbourhood) {
                 if (t != u) {
-                    *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " 1 ~x" << _imp->variable_mappings[pair{p.first, u.first}] << " >= 1 ;\n";
+                    *_imp->proof_stream << "@homdom" << p.second << "_" << t.second << "_" << u.second << "_" << (_imp->proof_line + 1) << " rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " 1 ~x" << _imp->variable_mappings[pair{p.first, u.first}] << " >= 1 ;\n";
                     ++_imp->proof_line;
                     _imp->clique_for_hom_non_edge_constraints.emplace(pair{pair{p, t}, pair{p, u}}, _imp->proof_line);
                     _imp->clique_for_hom_non_edge_constraints.emplace(pair{pair{p, u}, pair{p, t}}, _imp->proof_line);
@@ -1015,7 +1012,7 @@ auto Proof::finish_hom_clique_proof(const NamedVertex & p, const NamedVertex & t
 {
     *_imp->proof_stream << "% end clique of size " << size << " around neighbourhood of " << p.second << " but not " << t.second << '\n';
     *_imp->proof_stream << "setlvl 0;\n";
-    *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+    *_imp->proof_stream << "@homfin" << p.second << "_" << t.second << " rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
     *_imp->proof_stream << "wiplvl 1;\n";
     ++_imp->proof_line;
     _imp->doing_hom_colour_proof = false;
@@ -1033,7 +1030,7 @@ auto Proof::add_hom_clique_non_edge(
     for (auto & p : p_clique) {
         for (auto & q : p_clique) {
             if (p != q) {
-                *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{pp.first, tt.first}]
+                *_imp->proof_stream << "@homcross" << (_imp->proof_line + 1) << " rup 1 ~x" << _imp->variable_mappings[pair{pp.first, tt.first}]
                                     << " 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}]
                                     << " 1 ~x" << _imp->variable_mappings[pair{q.first, u.first}] << " >= 1 ;\n";
                 ++_imp->proof_line;
@@ -1054,7 +1051,7 @@ auto Proof::mcs_bound(
         if (r.size() >= l.size())
             continue;
 
-        *_imp->proof_stream << "pol";
+        *_imp->proof_stream << "@mcspart" << (_imp->proof_line + 1) << " pol";
         bool first = true;
         for (auto & v : l) {
             *_imp->proof_stream << " " << _imp->at_least_one_value_constraints[v];
@@ -1071,7 +1068,7 @@ auto Proof::mcs_bound(
     }
 
     if (! to_sum.empty()) {
-        *_imp->proof_stream << "pol " << _imp->objective_line;
+        *_imp->proof_stream << "@mcsfin" << (_imp->proof_line + 1) << " pol " << _imp->objective_line;
         for (auto & t : to_sum)
             *_imp->proof_stream << " " << t << " +";
         *_imp->proof_stream << ";\n";
@@ -1170,7 +1167,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
 
 auto Proof::not_connected_in_underlying_graph(const vector<int> & x, int y) -> void
 {
-    *_imp->proof_stream << "rup 1 ~x" << _imp->binary_variable_mappings[y];
+    *_imp->proof_stream << "@notconn" << y << "_" << (_imp->proof_line + 1) << " rup 1 ~x" << _imp->binary_variable_mappings[y];
     for (auto & v : x)
         *_imp->proof_stream << " 1 ~x" << _imp->binary_variable_mappings[v];
     *_imp->proof_stream << " >= 1 ;\n";
@@ -1196,7 +1193,7 @@ auto Proof::create_clique_encoding(
 
 auto Proof::create_clique_nonedge(int v, int w) -> void
 {
-    *_imp->proof_stream << "rup 1 ~x" << _imp->binary_variable_mappings[v]
+    *_imp->proof_stream << "@cliqedge" << min(v, w) << "_" << max(v, w) << " rup 1 ~x" << _imp->binary_variable_mappings[v]
                         << " 1 ~x" << _imp->binary_variable_mappings[w] << " >= 1 ;\n";
     ++_imp->proof_line;
     _imp->non_edge_constraints.emplace(pair{v, w}, to_string(_imp->proof_line));
