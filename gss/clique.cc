@@ -125,7 +125,7 @@ namespace
             // pre-calculate degrees
             vector<int> degrees;
             degrees.resize(size);
-            g.for_each_edge([&](int f, int, string_view) { ++degrees[f]; });
+            g.for_each_edge([&](int f, int t, string_view) { if (f != t) ++degrees[f]; });
 
             // sort on degree
             if (! params.input_order)
@@ -135,7 +135,11 @@ namespace
             for (unsigned i = 0; i < order.size(); ++i)
                 invorder[order[i]] = i;
 
-            g.for_each_edge([&](int f, int t, string_view) { adj[invorder[f]].set(invorder[t]); });
+            // Loops are irrelevant to cliques (a vertex is never its own clique
+            // neighbour). Including them would leave a vertex's own bit set in its
+            // adjacency, letting it be re-selected during search and recursing past
+            // the workspace bound — a crash on looped inputs (issue #38).
+            g.for_each_edge([&](int f, int t, string_view) { if (f != t) adj[invorder[f]].set(invorder[t]); });
 
             if (params.connected) {
                 connected_table.resize(size);

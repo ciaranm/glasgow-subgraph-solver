@@ -1,5 +1,6 @@
 #include <gss/clique.hh>
 #include <gss/formats/input_graph.hh>
+#include <gss/formats/lad.hh>
 #include <gss/restarts.hh>
 #include <gss/timeout.hh>
 
@@ -8,12 +9,14 @@
 #include <chrono>
 #include <memory>
 #include <set>
+#include <sstream>
 
 using namespace gss;
 
 using std::make_shared;
 using std::make_unique;
 using std::set;
+using std::stringstream;
 
 using std::chrono::operator""s;
 using std::chrono::steady_clock;
@@ -157,4 +160,83 @@ TEST_CASE("the colour orderings and vertex order all find the same maximum")
             CHECK(is_clique(g, result.clique));
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Loops (irrelevant to cliques; previously a crash, see issue #38)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("loops do not change the maximum clique")
+{
+    SECTION("a loop on a clique vertex is ignored")
+    {
+        auto g = complete_graph(3);
+        g.add_edge(0, 0); // loop on a triangle vertex
+        auto result = solve_clique_problem(g, make_params());
+        CHECK(result.clique == set<int>{0, 1, 2});
+        CHECK(is_clique(g, result.clique));
+    }
+
+    SECTION("isolated looped vertices still have a maximum clique of one")
+    {
+        InputGraph g{3, false, false};
+        g.add_edge(0, 0);
+        g.add_edge(1, 1);
+        g.add_edge(2, 2);
+        auto result = solve_clique_problem(g, make_params());
+        CHECK(result.clique.size() == 1);
+    }
+}
+
+TEST_CASE("decision mode is unaffected by loops")
+{
+    // Three isolated looped vertices have no edge, hence no clique of size two.
+    InputGraph g{3, false, false};
+    g.add_edge(0, 0);
+    g.add_edge(1, 1);
+    g.add_edge(2, 2);
+    auto params = make_params();
+    params.decide = 2;
+    CHECK(solve_clique_problem(g, params).clique.empty());
+}
+
+TEST_CASE("a graph with loops does not crash the clique solver (issue #38)")
+{
+    // The reported instance: a LAD graph in which several vertices list themselves
+    // as a neighbour (a loop). Before loops were skipped, a looped vertex
+    // could be re-selected during search, recursing past the workspace bound and
+    // crashing.
+    auto g = read_lad(stringstream{R"(26
+2 0 3
+2 1 25
+5 2 8 20 22 24
+2 3 0
+2 4 20
+2 5 11
+2 6 24
+2 7 14
+2 8 2
+2 9 20
+2 10 24
+5 11 5 24 15 20
+2 12 25
+2 13 20
+5 14 7 25 17 24
+5 15 23 24 11 25
+2 16 24
+5 17 18 25 14 20
+2 18 17
+2 19 25
+8 2 22 4 9 13 11 17 20
+2 21 22
+5 22 21 20 2 25
+2 23 15
+8 15 11 6 10 16 14 2 24
+8 17 14 1 12 19 22 15 25
+)"},
+        "issue38");
+
+    auto result = solve_clique_problem(g, make_params());
+    CHECK(result.clique.size() == 3);
+    CHECK(is_clique(g, result.clique));
 }
