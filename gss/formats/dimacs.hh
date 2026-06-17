@@ -12,6 +12,6 @@
  *
  * \throw GraphFileError
  */
-auto read_dimacs(std::ifstream && infile, const std::string & filename) -> InputGraph;
+auto read_dimacs(std::istream && infile, const std::string & filename) -> InputGraph;
 
 #endif
