@@ -70,3 +70,7 @@ add_test(NAME svo_bitset_test COMMAND $<TARGET_FILE:svo_bitset_test>)
 add_executable(formats_test formats/formats_test.cc)
 target_link_libraries(formats_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME formats_test COMMAND $<TARGET_FILE:formats_test>)
+
+add_executable(clique_test clique_test.cc)
+target_link_libraries(clique_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME clique_test COMMAND $<TARGET_FILE:clique_test>)
