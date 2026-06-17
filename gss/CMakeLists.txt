@@ -78,3 +78,7 @@ add_test(NAME clique_test COMMAND $<TARGET_FILE:clique_test>)
 add_executable(common_subgraph_test common_subgraph_test.cc)
 target_link_libraries(common_subgraph_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME common_subgraph_test COMMAND $<TARGET_FILE:common_subgraph_test>)
+
+add_executable(homomorphism_matrix_test homomorphism_matrix_test.cc)
+target_link_libraries(homomorphism_matrix_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME homomorphism_matrix_test COMMAND $<TARGET_FILE:homomorphism_matrix_test>)
