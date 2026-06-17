@@ -25,13 +25,15 @@ namespace
         return params;
     }
 
-    // A mapping is a common *induced* subgraph iff it preserves both edges and
-    // non-edges between every pair of mapped vertices.
+    // A mapping is a common *induced* subgraph iff, for every ordered pair of mapped
+    // vertices, adjacency agrees on both sides. Taking the pair (a, a) into account
+    // (rather than skipping it) also enforces the loop rule: a vertex may be mapped
+    // to another only if either both have a loop or neither does.
     auto is_common_induced(const InputGraph & f, const InputGraph & s, const VertexToVertexMapping & m) -> bool
     {
         for (auto & [a1, b1] : m)
             for (auto & [a2, b2] : m)
-                if (a1 != a2 && f.adjacent(a1, a2) != s.adjacent(b1, b2))
+                if (f.adjacent(a1, a2) != s.adjacent(b1, b2))
                     return false;
         return true;
     }
@@ -171,4 +173,124 @@ TEST_CASE("counting common subgraphs of a given size")
     params.count_solutions = true;
     auto result = solve_common_subgraph_problem(f, s, params);
     CHECK(result.solution_count == 2);
+}
+
+// ---------------------------------------------------------------------------
+// Loops
+// ---------------------------------------------------------------------------
+
+TEST_CASE("a looped vertex may only be associated with a looped vertex")
+{
+    InputGraph looped{1, false, false};
+    looped.add_edge(0, 0);
+    InputGraph plain{1, false, false};
+
+    auto result = solve_common_subgraph_problem(looped, plain, make_params());
+    CHECK(result.mapping.empty()); // loop vs non-loop -> nothing in common
+}
+
+TEST_CASE("the maximum common subgraph respects loops")
+{
+    // first: edge 0-1 with a loop on 0; second: edge 0-1 with a loop on 1.
+    InputGraph f{2, false, false};
+    f.add_edge(0, 1);
+    f.add_edge(0, 0);
+    InputGraph s{2, false, false};
+    s.add_edge(0, 1);
+    s.add_edge(1, 1);
+
+    auto result = solve_common_subgraph_problem(f, s, make_params());
+    CHECK(result.mapping.size() == 2);
+    CHECK(is_common_induced(f, s, result.mapping));
+    // the only loop-respecting mapping pairs the two loopy vertices.
+    CHECK(result.mapping.at(0) == 1);
+    CHECK(result.mapping.at(1) == 0);
+}
+
+TEST_CASE("is_common_induced rejects a loop-rule violation")
+{
+    // Guards the checker itself: mapping a looped vertex onto a non-looped one
+    // is not a common induced subgraph.
+    InputGraph looped{1, false, false};
+    looped.add_edge(0, 0);
+    InputGraph plain{1, false, false};
+    CHECK_FALSE(is_common_induced(looped, plain, VertexToVertexMapping{{0, 0}}));
+}
+
+// ---------------------------------------------------------------------------
+// Labels
+// ---------------------------------------------------------------------------
+
+TEST_CASE("vertex labels constrain the association")
+{
+    SECTION("matching labels allow a full mapping")
+    {
+        InputGraph f{2, true, false};
+        f.set_vertex_label(0, "x");
+        f.set_vertex_label(1, "y");
+        InputGraph s{2, true, false};
+        s.set_vertex_label(0, "x");
+        s.set_vertex_label(1, "y");
+
+        auto result = solve_common_subgraph_problem(f, s, make_params());
+        CHECK(result.mapping.size() == 2);
+        CHECK(f.vertex_label(0) == s.vertex_label(result.mapping.at(0)));
+    }
+
+    SECTION("a missing label reduces the mapping")
+    {
+        InputGraph f{2, true, false};
+        f.set_vertex_label(0, "x");
+        f.set_vertex_label(1, "y");
+        InputGraph s{2, true, false};
+        s.set_vertex_label(0, "x");
+        s.set_vertex_label(1, "x"); // no "y" available
+
+        auto result = solve_common_subgraph_problem(f, s, make_params());
+        CHECK(result.mapping.size() == 1); // only the "x" vertex can be placed
+    }
+}
+
+TEST_CASE("edge labels constrain the association")
+{
+    SECTION("matching edge labels allow the edge to be mapped")
+    {
+        InputGraph f{2, false, true};
+        f.add_directed_edge(0, 1, "a");
+        f.add_directed_edge(1, 0, "a");
+        InputGraph s{2, false, true};
+        s.add_directed_edge(0, 1, "a");
+        s.add_directed_edge(1, 0, "a");
+
+        auto result = solve_common_subgraph_problem(f, s, make_params());
+        CHECK(result.mapping.size() == 2);
+    }
+
+    SECTION("differing edge labels prevent the edge being mapped")
+    {
+        InputGraph f{2, false, true};
+        f.add_directed_edge(0, 1, "a");
+        f.add_directed_edge(1, 0, "a");
+        InputGraph s{2, false, true};
+        s.add_directed_edge(0, 1, "b");
+        s.add_directed_edge(1, 0, "b");
+
+        auto result = solve_common_subgraph_problem(f, s, make_params());
+        CHECK(result.mapping.size() == 1); // the "a" edge has no "a" edge to map to
+    }
+}
+
+TEST_CASE("the clique reduction also respects vertex labels")
+{
+    InputGraph f{2, true, false};
+    f.set_vertex_label(0, "x");
+    f.set_vertex_label(1, "y");
+    InputGraph s{2, true, false};
+    s.set_vertex_label(0, "x");
+    s.set_vertex_label(1, "x");
+
+    auto params = make_params();
+    params.clique = true;
+    auto result = solve_common_subgraph_problem(f, s, params);
+    CHECK(result.mapping.size() == 1); // same as the non-clique path
 }
