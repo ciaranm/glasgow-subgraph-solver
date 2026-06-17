@@ -1,4 +1,6 @@
 build
+build-debug
+build-sanitize
 perf.data
 perf.data.old
 
