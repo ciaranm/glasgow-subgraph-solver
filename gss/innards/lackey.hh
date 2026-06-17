@@ -19,7 +19,7 @@ namespace gss::innards
     public:
         explicit DisobedientLackeyError(const std::string & message) noexcept;
 
-        auto what() const throw() -> const char *;
+        auto what() const noexcept -> const char *;
     };
 
     class Lackey

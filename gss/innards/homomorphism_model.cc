@@ -148,7 +148,7 @@ struct HomomorphismModel::Imp
 
 HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
     const std::shared_ptr<Proof> & proof) :
-    _imp(new Imp(params, proof)),
+    _imp(make_unique<Imp>(params, proof)),
     max_graphs(calculate_n_shape_graphs(params)),
     pattern_size(pattern.size()),
     target_size(target.size())
