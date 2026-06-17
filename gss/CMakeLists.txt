@@ -74,3 +74,7 @@ add_test(NAME formats_test COMMAND $<TARGET_FILE:formats_test>)
 add_executable(clique_test clique_test.cc)
 target_link_libraries(clique_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME clique_test COMMAND $<TARGET_FILE:clique_test>)
+
+add_executable(common_subgraph_test common_subgraph_test.cc)
+target_link_libraries(common_subgraph_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME common_subgraph_test COMMAND $<TARGET_FILE:common_subgraph_test>)
