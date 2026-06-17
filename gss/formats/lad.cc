@@ -1,11 +1,11 @@
 #include <gss/formats/input_graph.hh>
 #include <gss/formats/lad.hh>
 
-#include <fstream>
+#include <istream>
 #include <map>
 #include <string>
 
-using std::ifstream;
+using std::istream;
 using std::map;
 using std::pair;
 using std::stoi;
@@ -14,14 +14,14 @@ using std::to_string;
 
 namespace
 {
-    auto read_word(ifstream & infile) -> int
+    auto read_word(istream & infile) -> int
     {
         int x;
         infile >> x;
         return x;
     }
 
-    auto read_any_lad(ifstream && infile, const string & filename,
+    auto read_any_lad(istream && infile, const string & filename,
         bool directed,
         bool vertex_labels,
         bool edge_labels) -> InputGraph
@@ -84,22 +84,22 @@ namespace
     }
 }
 
-auto read_lad(ifstream && infile, const string & filename) -> InputGraph
+auto read_lad(istream && infile, const string & filename) -> InputGraph
 {
     return read_any_lad(move(infile), filename, false, false, false);
 }
 
-auto read_directed_lad(ifstream && infile, const string & filename) -> InputGraph
+auto read_directed_lad(istream && infile, const string & filename) -> InputGraph
 {
     return read_any_lad(move(infile), filename, true, false, false);
 }
 
-auto read_labelled_lad(ifstream && infile, const string & filename) -> InputGraph
+auto read_labelled_lad(istream && infile, const string & filename) -> InputGraph
 {
     return read_any_lad(move(infile), filename, true, true, true);
 }
 
-auto read_vertex_labelled_lad(ifstream && infile, const string & filename) -> InputGraph
+auto read_vertex_labelled_lad(istream && infile, const string & filename) -> InputGraph
 {
     return read_any_lad(move(infile), filename, false, true, false);
 }

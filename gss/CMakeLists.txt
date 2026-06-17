@@ -66,3 +66,7 @@ add_test(NAME loooong_test COMMAND $<TARGET_FILE:loooong_test>)
 add_executable(svo_bitset_test innards/svo_bitset_test.cc)
 target_link_libraries(svo_bitset_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME svo_bitset_test COMMAND $<TARGET_FILE:svo_bitset_test>)
+
+add_executable(formats_test formats/formats_test.cc)
+target_link_libraries(formats_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME formats_test COMMAND $<TARGET_FILE:formats_test>)
