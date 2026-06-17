@@ -6,28 +6,27 @@ on:
   pull_request:
     branches: [ "master" ]
 
-env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
-
 jobs:
-  job:
+  build:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, ubuntu-24.04, macos-14, macos-latest ] # macos-14 and macos-15 as of 10/25
+        os: [ ubuntu-24.04, ubuntu-26.04, macos-15, macos-26 ]
 
     steps:
-    - name: Telling you what the matrix is
-      run: echo "matrix.os is [$MATRIX_OS]"
-      env:
-          MATRIX_OS: ${{ matrix.os }}
-
     - name: Checkout
       uses: actions/checkout@v4
+
+    - name: Install GMP (Linux)
+      if: startsWith(matrix.os, 'ubuntu')
+      run: sudo apt-get update && sudo apt-get install -y libgmp-dev
+
+    - name: Install GMP (macOS)
+      if: startsWith(matrix.os, 'macos')
+      run: brew install gmp
 
     - name: Fetch VeriPB
       run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
@@ -36,16 +35,36 @@ jobs:
       run: cargo install --path ./VeriPB
 
     - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake --preset release
 
     - name: Build
-      # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -j4
+      run: cmake --build --preset release
 
     - name: Test
-      working-directory: ${{github.workspace}}/build
-      # Execute tests defined by the CMake configuration.
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest -C ${{env.BUILD_TYPE}} -j4
+      run: ctest --preset release -j $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) --rerun-failed --output-on-failure
+
+  sanitize:
+    name: Sanitize (ubuntu-26.04)
+    runs-on: ubuntu-26.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install GMP
+      run: sudo apt-get update && sudo apt-get install -y libgmp-dev
+
+    - name: Fetch VeriPB
+      run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
+
+    - name: Install VeriPB using cargo
+      run: cargo install --path ./VeriPB
+
+    - name: Configure CMake (Sanitize)
+      run: cmake --preset sanitize
+
+    - name: Build (Sanitize)
+      run: cmake --build --preset sanitize
+
+    - name: Test (Sanitize)
+      run: ctest --preset sanitize -j $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) --rerun-failed --output-on-failure
