@@ -111,13 +111,16 @@ program:
 And then you can produce and verify a log like this:
 
 ```shell session
-$ ./build/glasgow_subgraph_solver --no-supplementals --no-clique-detection --no-nds \
-    --prove myproof --proof-solutions pattern-file target-file
+$ ./build/glasgow_subgraph_solver --induced --no-supplementals --no-clique-detection --no-nds \
+    --prove myproof --format lad pattern-file target-file
 $ veripb myproof.opb myproof.pbp
 ```
 
-Note that most features are not yet supported with proof logging. This is a "not yet implemented"
-problem, not a fundamental restriction.
+This writes the pseudo-Boolean model to `myproof.opb` and the proof to `myproof.pbp`. Refutation
+(unsatisfiable) proofs verify; solution proofs are a work in progress. Most other features are not
+yet supported with proof logging — this is a "not yet implemented" problem, not a fundamental
+restriction. See [dev_docs/proof-logging.md](dev_docs/proof-logging.md) for the supported option
+combinations and the current status.
 
 Clique Solving
 --------------
