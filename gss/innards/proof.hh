@@ -69,11 +69,6 @@ namespace gss::innards
         // after all create_cp_variable calls but before finalise_model.
         auto emit_preserved_assignment_variables() -> void;
 
-        // Enable checked deletion of solution-blocking constraints on backtrack,
-        // keeping enumeration proofs to a size linear in the search depth rather
-        // than the number of solutions. Only sound (and only needed) when counting.
-        auto delete_blocking_constraints_on_backtrack() -> void;
-
         auto finalise_model() -> void;
 
         // when we're done
