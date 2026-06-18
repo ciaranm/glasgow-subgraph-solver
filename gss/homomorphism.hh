@@ -2,7 +2,6 @@
 #define GLASGOW_SUBGRAPH_SOLVER_HOMOMORPHISM_HH 1
 
 #include <gss/formats/input_graph.hh>
-#include <gss/innards/lackey.hh>
 #include <gss/innards/proof-fwd.hh>
 #include <gss/loooong.hh>
 #include <gss/proof_options.hh>
@@ -24,14 +23,6 @@ namespace gss
         Injective,
         LocallyInjective,
         NonInjective
-    };
-
-    enum class PropagateUsingLackey
-    {
-        Never,
-        Root,
-        Always,
-        RootAndBackjump
     };
 
     struct HomomorphismParams
@@ -105,15 +96,6 @@ namespace gss
 
         /// Occurs less target constraints
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
-
-        /// Optional lackey, for external side constraints
-        std::unique_ptr<innards::Lackey> lackey;
-
-        /// Send partial solutions to the lackey?
-        bool send_partials_to_lackey = false;
-
-        /// Propagate using the lackey?
-        PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
 
         /// Optional proof options
         std::optional<ProofOptions> proof_options;

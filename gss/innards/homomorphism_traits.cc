@@ -51,5 +51,5 @@ auto gss::innards::global_degree_is_preserved(const HomomorphismParams & params)
 
 auto gss::innards::can_use_clique(const HomomorphismParams & params) -> bool
 {
-    return (! params.count_solutions) && (! params.lackey) && params.clique_detection && (! params.proof_options);
+    return (! params.count_solutions) && params.clique_detection && (! params.proof_options);
 }

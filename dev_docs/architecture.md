@@ -36,7 +36,7 @@ call the matching `solve_*` function, and print the `*Result`.
   │ Implementation detail  (gss/innards/*)                                                    │
   │   homomorphism_model · homomorphism_searcher · homomorphism_domain · homomorphism_traits  │
   │   cheap_all_different · graph_traits · watches (nogoods) · svo_bitset                      │
-  │   proof (VeriPB logging) · verify · lackey (external solver) · symmetries (GAP) · threads  │
+  │   proof (VeriPB logging) · verify · symmetries (GAP) · threads                             │
   └───────────────────────────────────────────────────────────────────────────────────────┘
                           │ uses
                           ▼
@@ -49,8 +49,8 @@ call the matching `solve_*` function, and print the `*Result`.
 
 The convention is that everything under `gss/innards/` is private to the library — callers should
 only need the headers directly under `gss/`. A few innards types do currently leak through the public
-API (the `Lackey` handle and `ProofOptions` on the `*Params` structs, and `SVOBitset` in a
-`CliqueParams` callback); these are deliberate extension points rather than accidents.
+API (`ProofOptions` on the `*Params` structs, and `SVOBitset` in a `CliqueParams` callback); these
+are deliberate extension points rather than accidents.
 
 ## The homomorphism solver in more detail
 
@@ -66,7 +66,7 @@ homomorphism variants are all configurations of it.
   `SVOBitset` of still-possible target vertices plus bookkeeping.
 - **`HomomorphismSearcher`** (`innards/homomorphism_searcher.{hh,cc}`) is the backtracking engine:
   variable/value ordering, constraint propagation (adjacency, all-different via
-  `cheap_all_different`, less-than / occurs-less symmetry constraints, optional lackey propagation),
+  `cheap_all_different`, less-than / occurs-less symmetry constraints),
   restarts, and nogood recording via `Watches`. The propagation hot path is templated on
   `<directed, has_edge_labels, induced, verbose_proofs>` so the per-node inner loop has no runtime
   branches on those flags — a deliberate performance choice.
@@ -105,7 +105,6 @@ pattern into biconnected components.
 - **`RestartsSchedule`** (`gss/restarts.hh`) and **`Timeout`** (`gss/timeout.hh`) are the search
   control knobs. Restart policies: none, Luby, geometric, timed, and a thread-synchronised variant.
 - **`Proof`** (`innards/proof.{hh,cc}`) emits the VeriPB model (`.opb`) and proof log (`.pbp`).
-- **`Lackey`** (`innards/lackey.{hh,cc}`) talks to an external constraint solver over named pipes.
 - **`find_symmetries`** (`innards/symmetries.{hh,cc}`) shells out to the GAP computer algebra system
   to find pattern/target symmetries.
 

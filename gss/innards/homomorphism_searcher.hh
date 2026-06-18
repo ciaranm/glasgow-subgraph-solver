@@ -16,7 +16,6 @@ namespace gss::innards
     {
         Aborted,
         Unsatisfiable,
-        UnsatisfiableAndBackjumpUsingLackey,
         Satisfiable,
         SatisfiableButKeepGoing,
         Restart
@@ -126,7 +125,7 @@ namespace gss::innards
 
         auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 
-        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
+        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments) -> bool;
 
         auto restarting_search(
             HomomorphismAssignments & assignments,

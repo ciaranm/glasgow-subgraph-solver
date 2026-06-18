@@ -1,6 +1,5 @@
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
-#include <gss/innards/lackey.hh>
 #include <gss/innards/symmetries.hh>
 #include <gss/innards/verify.hh>
 #include <gss/restarts.hh>
@@ -98,12 +97,6 @@ auto main(int argc, char * argv[]) -> int
             ("target-occurs-less-than", "Specify a target occurs less than constraint, in the form v<w",
                 cxxopts::value<vector<string>>(target_occur_less_thans))
             ("target-automorphism-group-size", "Specify the size of the target graph automorphism group", cxxopts::value<string>());
-
-        options.add_options("External constraint solver options")
-            ("send-to-lackey", "Send candidate solutions to an external solver over this named pipe", cxxopts::value<string>())
-            ("receive-from-lackey", "Receive responses from external solver over this named pipe", cxxopts::value<string>())
-            ("send-partials-to-lackey", "Send partial solutions to the lackey")
-            ("propagate-using-lackey", "Propagate using lackey (never / root / root-and-backjump / always)", cxxopts::value<string>());
 
         options.add_options("Proof logging options")
             ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
@@ -283,11 +276,6 @@ auto main(int argc, char * argv[]) -> int
             params.target_occur_less_constraints.emplace_back(a, b);
         }
 
-        if (options_vars.count("send-to-lackey") ^ options_vars.count("receive-from-lackey")) {
-            cerr << "Must specify both of --send-to-lackey and --receive-from-lackey" << endl;
-            return EXIT_FAILURE;
-        }
-
 #if ! defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
@@ -310,34 +298,6 @@ auto main(int argc, char * argv[]) -> int
 
         cout << "pattern_file = " << options_vars["pattern-file"].as<string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
-
-        if (options_vars.count("send-to-lackey") && options_vars.count("receive-from-lackey")) {
-            auto lackey_started_at = steady_clock::now();
-            params.lackey = make_unique<innards::Lackey>(
-                options_vars["send-to-lackey"].as<string>(),
-                options_vars["receive-from-lackey"].as<string>(),
-                pattern, target);
-            auto lackey_time = duration_cast<milliseconds>(steady_clock::now() - lackey_started_at);
-            cout << "lackey_init_time = " << lackey_time.count() << endl;
-        }
-        params.send_partials_to_lackey = options_vars.count("send-partials-to-lackey");
-        if (options_vars.count("propagate-using-lackey")) {
-            string propagate_using_lackey = options_vars["propagate-using-lackey"].as<string>();
-            if (propagate_using_lackey == "always")
-                params.propagate_using_lackey = PropagateUsingLackey::Always;
-            else if (propagate_using_lackey == "root")
-                params.propagate_using_lackey = PropagateUsingLackey::Root;
-            else if (propagate_using_lackey == "root-and-backjump")
-                params.propagate_using_lackey = PropagateUsingLackey::RootAndBackjump;
-            else if (propagate_using_lackey == "never")
-                params.propagate_using_lackey = PropagateUsingLackey::Never;
-            else {
-                cerr << "Unknown propagate-using-lackey option '" << propagate_using_lackey << "'" << endl;
-                return EXIT_FAILURE;
-            }
-        }
-        else
-            params.propagate_using_lackey = PropagateUsingLackey::Never;
 
         optional<unsigned long long> solutions_remaining;
         if (options_vars.contains("solution-limit"))
@@ -454,13 +414,6 @@ auto main(int argc, char * argv[]) -> int
 
         for (const auto & s : result.extra_stats)
             cout << s << endl;
-
-        if (params.lackey) {
-            cout << "lackey_calls = " << params.lackey->number_of_calls() << endl;
-            cout << "lackey_checks = " << params.lackey->number_of_checks() << endl;
-            cout << "lackey_deletions = " << params.lackey->number_of_deletions() << endl;
-            cout << "lackey_propagations = " << params.lackey->number_of_propagations() << endl;
-        }
 
         innards::verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective,
             params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);

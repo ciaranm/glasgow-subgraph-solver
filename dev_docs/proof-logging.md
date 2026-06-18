@@ -42,7 +42,6 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | --- | --- |
 | a single thread (no `--parallel`, `--threads 1`) | proof logging is not thread-safe yet |
 | `--no-clique-detection` | the clique-detection shortcut is not yet logged |
-| no lackey (`--send-to-lackey` / `--receive-from-lackey`) | external propagation is not logged |
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | injective or non-injective only (not `--locally-injective`) | only these two are encoded |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
