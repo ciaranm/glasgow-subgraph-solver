@@ -62,7 +62,7 @@ auto main(int argc, char * argv[]) -> int
             ("induced", "Find an induced mapping")
             ("count-solutions", "Count the number of solutions")
             ("print-all-solutions", "Print out every solution, rather than one")
-            ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>());
+            ("solution-limit", "Stop after finding this many solutions (implies counting)", cxxopts::value<unsigned long long>());
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
@@ -158,7 +158,7 @@ auto main(int argc, char * argv[]) -> int
             params.injectivity = Injectivity::Injective;
 
         params.induced = options_vars.count("induced");
-        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions");
+        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions") || options_vars.count("solution-limit");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
@@ -343,12 +343,15 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.contains("solution-limit"))
             solutions_remaining = options_vars["solution-limit"].as<unsigned long long>();
 
-        if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
-                cout << "mapping = ";
-                for (auto v : mapping)
-                    cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
-                cout << endl;
+        if (options_vars.count("print-all-solutions") || options_vars.contains("solution-limit")) {
+            bool print_solutions = options_vars.count("print-all-solutions");
+            params.enumerate_callback = [&, print_solutions](const VertexToVertexMapping & mapping) -> bool {
+                if (print_solutions) {
+                    cout << "mapping = ";
+                    for (auto v : mapping)
+                        cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
+                    cout << endl;
+                }
 
                 return (! solutions_remaining) || (0 != --*solutions_remaining);
             };

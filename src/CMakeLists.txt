@@ -52,6 +52,9 @@ if(VERIPB_EXECUTABLE)
     # partial enumeration: stopped at a solution limit, concluded ENUMERATION_PARTIAL n.
     gss_add_proof_test(proof_partial_loopless
         --print-all-solutions --solution-limit 5 ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    # solution limit also applies to plain counting (no per-solution printing).
+    gss_add_proof_test(proof_partial_count
+        --count-solutions --solution-limit 5 ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
 
     # loop->loop mappings: the target self-loop term is kept in the adjacency
     # constraint (issue #49), so loop-preserving solutions verify.
