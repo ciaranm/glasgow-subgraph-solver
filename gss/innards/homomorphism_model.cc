@@ -734,6 +734,20 @@ auto HomomorphismModel::prepare() -> bool
 
     _imp->supplemental_graph_names.push_back("original");
 
+    // Emit every loop-based incompatibility up front, as a unit clause. The target graph
+    // rows have self-loops stripped, so the adjacency, supplemental-graph and degree
+    // derivations all carry stray "maps to a loopy vertex" terms; having ~x_p_t available
+    // as a unit lets unit propagation (and the search-failure rups) discharge them. This
+    // also covers the induced loop-mismatch case, which otherwise prunes p->t silently
+    // without a proof line (issue #56).
+    if (_imp->proof) {
+        for (unsigned p = 0; p < pattern_size; ++p)
+            for (unsigned t = 0; t < target_size; ++t)
+                if ((pattern_has_loop(p) && ! target_has_loop(t)) ||
+                    (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t))))
+                    _imp->proof->incompatible_by_loops(pattern_vertex_for_proof(p), target_vertex_for_proof(t));
+    }
+
     // pattern and target degrees, for the main graph
     _imp->patterns_degrees.at(0).resize(pattern_size);
     _imp->targets_degrees.at(0).resize(target_size);

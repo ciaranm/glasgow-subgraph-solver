@@ -46,14 +46,23 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | injective or non-injective only (not `--locally-injective`) | only these two are encoded |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
-| no supplemental graphs **on loopy instances** (`--no-supplementals`) | the supplemental-graph derivations don't yet handle the self-loop term ([issue #56]) |
+
+Supplemental graphs, distance-3 (`--distance3`), neighbourhood degree sequences, and clique-size
+constraints (`--cliques`) are supported with proof logging, on both loopless and loopy instances.
+
+Loops used to be incompatible with supplemental graphs ([issue #56], now fixed). The adjacency
+constraint keeps the target's self-loop term (so a loop→loop mapping satisfies the model, see
+[issue #49]), but that term is a stray when the constraint is summed into a pseudo-Boolean
+derivation. So before any such derivation, `Proof::loop_fix_adjacencies` derives the loop-cancelled
+form of each loop-bearing adjacency constraint — `~x_p_t` together with the neighbours of `t` other
+than `t` itself, which follows from the constraint plus injectivity on `t` — and the degree,
+supplemental-graph and distance-3 pols sum *that* in its place. The induced encoding additionally
+forbids a non-loopy pattern vertex from mapping to a loopy target (the `q == p` case of induced
+non-edge preservation), which the model previously left out.
 
 [issue #56]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/56
 
-Supplemental graphs, distance-3 (`--distance3`), neighbourhood degree sequences, and clique-size
-constraints (`--cliques`) *are* supported with proof logging on loopless instances. The one
-exception is supplemental graphs together with loops, which is guarded off (issue #56) and is a
-priority to fix. A minimal worked example:
+A minimal worked example:
 
 ```shell session
 $ ./build/glasgow_subgraph_solver --induced --no-supplementals --no-clique-detection --no-nds \

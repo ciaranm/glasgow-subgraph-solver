@@ -429,11 +429,6 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
-        if ((pattern.loopy() || target.loopy()) && ! params.no_supplementals)
-            // the supplemental-graph proof derivations sum adjacency constraints assuming a
-            // loopless encoding, so they do not verify once a self-loop term is present
-            // (issue #56); refuse rather than emit an invalid proof
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used on graphs with loops together with supplemental graphs, use --no-supplementals"};
 
         proof = make_shared<Proof>(*params.proof_options);
 
@@ -490,6 +485,25 @@ auto gss::solve_homomorphism_problem(
                                 NamedVertex{t, target.vertex_name(t)},
                                 permitted, true);
                         }
+
+                    // the q == p case of non-edge preservation: a non-loopy pattern
+                    // vertex cannot map to a loopy target, since induced isomorphism
+                    // requires loop(p) == loop(t). The loop above skips q == p, and the
+                    // edge loop only constrains a loopy p, so without this the model
+                    // admits invalid induced mappings (issue #56). p -> t then forces p
+                    // onto a non-neighbour of t; with t a neighbour of itself and
+                    // at-most-one-value, that is a contradiction.
+                    if (! pattern.adjacent(p, p) && target.adjacent(t, t)) {
+                        vector<int> permitted;
+                        for (int u = 0; u < target.size(); ++u)
+                            if (! target.adjacent(t, u))
+                                permitted.push_back(u);
+                        proof->create_adjacency_constraint(
+                            NamedVertex{p, pattern.vertex_name(p)},
+                            NamedVertex{p, pattern.vertex_name(p)},
+                            NamedVertex{t, target.vertex_name(t)},
+                            permitted, true);
+                    }
                 }
             }
         }
@@ -500,6 +514,11 @@ auto gss::solve_homomorphism_problem(
 
         // output the model file
         proof->finalise_model();
+
+        // derive the loop-cancelled form of each loopy adjacency constraint, so the
+        // degree, supplemental-graph and distance-3 derivations can sum them into pols
+        // without a stray "maps to the loopy target" term (issue #56).
+        proof->loop_fix_adjacencies();
     }
 
     // first sanity check: if we're finding an injective mapping, and there

@@ -62,14 +62,26 @@ if(VERIPB_EXECUTABLE)
         --count-solutions --solution-limit 5 ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
 
     # loop->loop mappings verify under plain VeriPB now the self-loop term is kept in
-    # the adjacency constraint (issue #49). (Supplemental graphs with loops are issue
-    # #56, hence --no-supplementals here.)
+    # the adjacency constraint (issue #49).
     gss_add_proof_test(proof_sat_loopy_decision ${SUB_MIN}
         --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
     gss_add_proof_test(proof_count_loopy ${SUB_MIN}
         --count-solutions --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
-    # --- Preprocessing / supplemental-graph proofs (loopless; loops are issue #56) ---
+    # Loops together with supplemental graphs (issue #56): the loop-bearing adjacency
+    # constraints are reduced to their loop-cancelled form before being summed into the
+    # supplemental-graph / degree / distance-3 pols (Proof::loop_fix_adjacencies), and
+    # the induced self-loop constraint completes the model. These exercise that path.
+    gss_add_proof_test(proof_supplementals_loopy ${SUB} --no-nds
+        --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+    gss_add_proof_test(proof_supplementals_loopy_induced ${SUB} --no-nds
+        --induced --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+    gss_add_proof_test(proof_count_loopy_supplementals ${SUB} --no-nds
+        --count-solutions --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+    gss_add_proof_test(proof_distance3_loopy ${SUB} --no-nds --distance3
+        --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+
+    # --- Preprocessing / supplemental-graph proofs (loopless) ---
     # supplemental (exact-path) graphs: create_exact_path_graphs derivations.
     gss_add_proof_test(proof_supplementals ${SUB} --no-nds
         ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
@@ -131,8 +143,11 @@ if(VERIPB_EXECUTABLE)
         # complete enumeration of zero solutions (no triangle in a path)
         gss_add_cake_test(cake_unsat triangle.lad path4.lad --count-solutions)
         # loop->loop mapping, checked end to end by the verified pipeline
-        # (--no-supplementals: supplemental graphs with loops are issue #56)
         gss_add_cake_test(cake_loop_decision loop_vertex.lad loop_target.lad --no-supplementals)
         gss_add_cake_test(cake_loop_count loop_vertex.lad loop_target.lad --no-supplementals --count-solutions)
+        # loops together with supplemental graphs (issue #56): the loop-cancelled
+        # adjacency derivations are checked against cake's own OPB encoding too.
+        gss_add_cake_test(cake_loop_supplementals small large --no-nds)
+        gss_add_cake_test(cake_loop_supplementals_count small large --no-nds --count-solutions)
     endif()
 endif()

@@ -63,6 +63,12 @@ namespace gss::innards
         auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
             const std::vector<int> & u, bool induced) -> void;
 
+        // For every adjacency constraint over a loopy target, derive its loop-cancelled
+        // form (the pre-#49 encoding) once, so that derivations can sum it into a pol
+        // without dragging in the stray "maps to the loopy target" term. Must be called
+        // after finalise_model and before any derivation that sums adjacency constraints.
+        auto loop_fix_adjacencies() -> void;
+
         // Declare a projected (preserved) set, listing exactly the assignment
         // variables, so the proof's solution count is in terms of the high-level
         // mapping rather than any auxiliary encoding variables. Must be called
