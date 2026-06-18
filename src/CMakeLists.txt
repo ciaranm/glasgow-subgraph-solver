@@ -79,9 +79,16 @@ if(VERIPB_EXECUTABLE)
     # neighbourhood degree sequences: incompatible_by_nds derivations.
     gss_add_proof_test(proof_nds ${SUB} --no-supplementals
         ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
-    # clique-size constraints.
+    # clique-size constraints, then the clique-size argument that eliminates an
+    # assignment (K4 has a triangle in each neighbourhood; K3,3 is triangle-free, so
+    # degree passes but the clique bound fires): the hom-clique proof.
     gss_add_proof_test(proof_cliques ${SUB} --no-supplementals --no-nds --cliques
         ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    gss_add_proof_test(proof_hom_clique ${SUB} --no-supplementals --no-nds --cliques
+        --format lad ${GSS_INSTANCES}/k4.lad ${GSS_INSTANCES}/k33.lad)
+    # a pattern vertex whose degree exceeds every target's: domain empties at init.
+    gss_add_proof_test(proof_empty_domain ${SUB_MIN}
+        --format lad ${GSS_INSTANCES}/star5.lad ${GSS_INSTANCES}/path5.lad)
     # verbose proof comments (show_domains / propagated).
     gss_add_proof_test(proof_verbose ${SUB_MIN} --verbose-proofs
         ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
