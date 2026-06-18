@@ -132,7 +132,9 @@ namespace
                         result.solution_count, 0, *params.restarts_schedule)) {
                     case SearchResult::Satisfiable:
                         searcher.save_result(assignments_copy, result);
-                        result.complete = true;
+                        // when counting, reaching here means the enumerate callback asked
+                        // us to stop (e.g. a solution limit), so the search is not complete
+                        result.complete = ! params.count_solutions;
                         done = true;
                         break;
 
@@ -425,6 +427,8 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging can currently only be used with injectivity or non-injectivity"};
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
+        if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
 
         proof = make_shared<Proof>(*params.proof_options);
 
@@ -451,19 +455,19 @@ auto gss::solve_homomorphism_problem(
                 // if p can be mapped to t, then each neighbour of p...
                 for (int q = 0; q < pattern.size(); ++q)
                     if (pattern.adjacent(p, q)) {
-                        // ... must be mapped to a neighbour of t
-                        vector<int> permitted, cancel_out;
+                        // ... must be mapped to a neighbour of t. A target self-loop
+                        // (u == t) is kept in the sum, so a loop-preserving mapping
+                        // satisfies the constraint (this matches the verified CakePB
+                        // encoding; see issue #49).
+                        vector<int> permitted;
                         for (int u = 0; u < target.size(); ++u)
-                            if (target.adjacent(t, u)) {
+                            if (target.adjacent(t, u))
                                 permitted.push_back(u);
-                                if (t == u)
-                                    cancel_out.push_back(t);
-                            }
                         proof->create_adjacency_constraint(
                             NamedVertex{p, pattern.vertex_name(p)},
                             NamedVertex{q, pattern.vertex_name(q)},
                             NamedVertex{t, target.vertex_name(t)},
-                            permitted, cancel_out, false);
+                            permitted, false);
                     }
 
                 // same for non-adjacency for induced
@@ -479,11 +483,20 @@ auto gss::solve_homomorphism_problem(
                                 NamedVertex{p, pattern.vertex_name(p)},
                                 NamedVertex{q, pattern.vertex_name(q)},
                                 NamedVertex{t, target.vertex_name(t)},
-                                permitted, vector<int>{}, true);
+                                permitted, true);
                         }
                 }
             }
         }
+
+        // declare the projected set (the assignment variables) so the proof's
+        // solution count is in terms of the high-level mapping
+        proof->emit_preserved_assignment_variables();
+
+        // when counting, delete each solution-blocking constraint once we backtrack
+        // past it, so the proof stays linear in the search depth not the solution count
+        if (params.count_solutions)
+            proof->delete_blocking_constraints_on_backtrack();
 
         // output the model file
         proof->finalise_model();
@@ -494,7 +507,10 @@ auto gss::solve_homomorphism_problem(
     if (is_nonshrinking(params) && (pattern.size() > target.size())) {
         if (proof) {
             proof->failure_due_to_pattern_bigger_than_target();
-            proof->finish_unsat_proof();
+            if (params.count_solutions)
+                proof->finish_enumeration_proof(0, true);
+            else
+                proof->finish_unsat_proof();
         }
 
         return HomomorphismResult{};
@@ -553,8 +569,12 @@ auto gss::solve_homomorphism_problem(
             HomomorphismResult result;
             result.extra_stats.emplace_back("model_consistent = false");
             result.complete = true;
-            if (proof)
-                proof->finish_unsat_proof();
+            if (proof) {
+                if (params.count_solutions)
+                    proof->finish_enumeration_proof(0, true);
+                else
+                    proof->finish_unsat_proof();
+            }
             return result;
         }
 
@@ -573,7 +593,11 @@ auto gss::solve_homomorphism_problem(
         }
 
         if (proof) {
-            if (result.complete && result.mapping.empty())
+            if (params.count_solutions)
+                // counting / enumeration: a complete search yields ENUMERATION_COMPLETE,
+                // otherwise (timeout or solution limit) ENUMERATION_PARTIAL
+                proof->finish_enumeration_proof(result.solution_count, result.complete);
+            else if (result.complete && result.mapping.empty())
                 proof->finish_unsat_proof();
             else if (! result.mapping.empty())
                 proof->finish_sat_proof();

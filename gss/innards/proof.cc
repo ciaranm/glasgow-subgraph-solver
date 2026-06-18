@@ -72,6 +72,15 @@ struct Proof::Imp
     int largest_level_set = 0;
     int active_level = 0;
 
+    // For counting / enumeration: solution-blocking constraints (and the backtrack
+    // nogoods that justify deleting them) accumulate, which is exponentially
+    // expensive when there are many solutions. When this is set, we move each
+    // backtrack nogood into the core and, on backtracking out of a level, checked-
+    // delete the blocking constraints and now-subsumed core nogoods recorded at that
+    // level. Keyed by the proof level the line was created at.
+    bool manage_blocking_constraints = false;
+    map<int, vector<long>> deletable_core_lines_by_level;
+
     bool clique_encoding = false;
     bool doing_mcs_by_clique = false;
 
@@ -160,18 +169,34 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 }
 
 auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
-    const vector<int> & uu, const vector<int> & cancel, bool) -> void
+    const vector<int> & uu, bool) -> void
 {
     auto adj_label = "@adj" + p.second + "_" + t.second + "_" + q.second;
 
     _imp->model_stream << adj_label << " ";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : uu)
-        if (cancel.end() == find(cancel.begin(), cancel.end(), u))
-            _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u}];
+        _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u}];
     _imp->model_stream << " >= 1 ;\n";
     ++_imp->nb_constraints;
     _imp->adjacency_lines.emplace(tuple{0, p.first, q.first, t.first}, adj_label);
+}
+
+auto Proof::emit_preserved_assignment_variables() -> void
+{
+    // List exactly the assignment variables as the projected (preserved) set,
+    // so VeriPB counts solutions in terms of the high-level mapping. The line
+    // goes into the prelude, which finalise_model writes immediately after the
+    // header and before any constraint.
+    _imp->model_prelude_stream << "preserved:";
+    for (auto & [_, name] : _imp->variable_mappings)
+        _imp->model_prelude_stream << " x" << name;
+    _imp->model_prelude_stream << " ;\n";
+}
+
+auto Proof::delete_blocking_constraints_on_backtrack() -> void
+{
+    _imp->manage_blocking_constraints = true;
 }
 
 auto Proof::finalise_model() -> void
@@ -214,6 +239,28 @@ auto Proof::finish_sat_proof() -> void
     *_imp->proof_stream << "output NONE;\n"
         << "conclusion SAT;\n"
         << "end pseudo-Boolean proof;\n";
+}
+
+auto Proof::finish_enumeration_proof(const loooong & number_of_solutions, bool complete) -> void
+{
+    if (complete) {
+        // Every solution has been logged with solx and excluded, so the
+        // remaining problem is unsatisfiable: assert the contradiction and
+        // conclude a complete enumeration of exactly this many solutions.
+        *_imp->proof_stream << "% asserting that we've enumerated every solution\n";
+        *_imp->proof_stream << "rup >= 1 ;\n";
+        ++_imp->proof_line;
+        *_imp->proof_stream << "output NONE;\n"
+                            << "conclusion ENUMERATION_COMPLETE " << number_of_solutions << " : -1;\n"
+                            << "end pseudo-Boolean proof;\n";
+    }
+    else {
+        // We stopped early (timeout or solution limit): we have witnessed this
+        // many solutions but make no claim that there are no others.
+        *_imp->proof_stream << "output NONE;\n"
+                            << "conclusion ENUMERATION_PARTIAL " << number_of_solutions << ";\n"
+                            << "end pseudo-Boolean proof;\n";
+    }
 }
 
 auto Proof::finish_unknown_proof() -> void
@@ -365,11 +412,9 @@ auto Proof::incompatible_by_loops(
     const NamedVertex & p,
     const NamedVertex & t) -> void
 {
-    // if (_imp->recover_encoding) {
-        *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
-        *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
-        ++_imp->proof_line;
-    // }
+    *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
+    *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+    ++_imp->proof_line;
 }
 
 auto Proof::initial_domain_is_empty(int p, const string & where) -> void
@@ -435,6 +480,14 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
     *_imp->proof_stream << " >= 1 ;\n";
     ++_imp->proof_line;
+
+    // when managing blocking constraints, this backtrack nogood justifies deleting
+    // the blocking constraints (and deeper, now-subsumed, nogoods) below it, so it
+    // has to live in the core; it is itself deleted when we backtrack past its level
+    if (_imp->manage_blocking_constraints) {
+        *_imp->proof_stream << "core id " << _imp->proof_line << " ;\n";
+        _imp->deletable_core_lines_by_level[_imp->active_level].push_back(_imp->proof_line);
+    }
 }
 
 auto Proof::out_of_guesses(const vector<pair<int, int>> &) -> void
@@ -462,6 +515,22 @@ auto Proof::back_up_to_level(int l) -> void
 
 auto Proof::forget_level(int l) -> void
 {
+    // checked-delete the blocking constraints and core nogoods recorded at this
+    // level or deeper: the backtrack nogood just emitted (one level up, now in the
+    // core) subsumes them, so each deletion re-derives by RUP. This is what keeps
+    // a counting proof linear in the search depth rather than the solution count.
+    if (_imp->manage_blocking_constraints) {
+        for (auto it = _imp->deletable_core_lines_by_level.begin(); it != _imp->deletable_core_lines_by_level.end();) {
+            if (it->first >= l) {
+                for (auto & id : it->second)
+                    *_imp->proof_stream << "del id " << id << " ;\n";
+                it = _imp->deletable_core_lines_by_level.erase(it);
+            }
+            else
+                ++it;
+        }
+    }
+
     if (_imp->largest_level_set >= l)
         *_imp->proof_stream << "wiplvl " << l << ";\n";
 }
@@ -489,11 +558,27 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
         *_imp->proof_stream << " " << var.second << "=" << val.second;
     *_imp->proof_stream << ";\n";
 
+    // Emit the solution-excluding (solx) rule at the top proof level. The
+    // blocking constraint it introduces must persist for the rest of the proof
+    // (so the solution count stays sound); if we logged it at the current deep
+    // search level, the wiplvl that cleans up this subtree on backtrack would
+    // delete it, weakening the guarantee.
+    if (0 != _imp->active_level)
+        *_imp->proof_stream << "setlvl 0;\n";
+
     *_imp->proof_stream << "solx";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " x" << _imp->variable_mappings[pair{var.first, val.first}];
     *_imp->proof_stream << ";\n";
     ++_imp->proof_line;
+
+    // remember to checked-delete this blocking constraint once we backtrack out
+    // of the level it was found at (it is then subsumed by a backtrack nogood)
+    if (_imp->manage_blocking_constraints)
+        _imp->deletable_core_lines_by_level[_imp->active_level].push_back(_imp->proof_line);
+
+    if (0 != _imp->active_level)
+        *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
 }
 
 auto Proof::post_solution(const vector<int> & solution) -> void

@@ -22,10 +22,14 @@ You then check the pair with VeriPB:
 $ veripb NAME.opb NAME.pbp
 ```
 
+For an enumeration or counting run (`--count-solutions`, `--enumerate`, or
+`--print-all-solutions`), the model also declares a `preserved:` set — the assignment
+variables — so the proof's solution count is in terms of the high-level mapping rather
+than any auxiliary encoding variables.
+
 Useful companion flags:
 
 - `--verbose-proofs` writes extra `*` comment lines into the log, for tracing.
-- `--recover-proof-encoding` emits the encoding in the form expected by verified (CakeML) encoders.
 
 ## Supported option combinations (homomorphism / subgraph isomorphism)
 
@@ -56,30 +60,61 @@ Clique and maximum-common-subgraph proof logging also exist (`CliqueParams::proo
 `CommonSubgraphParams::proof_options`), and the common-subgraph reduction extends a clique proof
 internally.
 
+## Conclusions
+
+The proof ends with one of the following conclusions, depending on what the solver was asked and
+whether the search completed:
+
+| Run | Outcome | Conclusion |
+| --- | --- | --- |
+| decision | a mapping found | `SAT` (the mapping is logged with one `solx`) |
+| decision | no mapping, search exhausted | `UNSAT` |
+| counting / enumeration | search exhausted | `ENUMERATION_COMPLETE <n>` |
+| counting / enumeration | stopped early (timeout or `--solution-limit`) | `ENUMERATION_PARTIAL <n>` |
+
+Each solution is logged with the `solx` rule at the *top* proof level, so the blocking constraint it
+introduces survives the deletions that clean up the search subtree on backtrack — this is what keeps
+the solution count sound. VeriPB checks the claimed count `<n>` against the number of `solx` rules.
+
 ## Current status and known limitations
 
 - **Refutation (UNSAT) proofs verify.** Proving that *no* mapping exists works end to end with
-  VeriPB 3.0.2. The example above (an unsatisfiable induced instance) verifies
-  `s VERIFIED UNSATISFIABLE`.
-- **Solution (SAT) proofs do not currently verify.** There are two independent open bugs, both
-  tracked in the [GitHub issues](https://github.com/ciaranm/glasgow-subgraph-solver/issues):
-  1. The solver logs solutions with the VeriPB `solx` rule, which is the *enumeration* rule and
-     requires the OPB to declare a `preserved:` set of variables — which is not emitted. A plain
-     decision proof should use `sol` instead.
-  2. The adjacency-constraint encoding drops the loop→loop term, so a valid
-     loop-preserving solution falsifies the model.
+  VeriPB 3.0.2 (`s VERIFIED UNSATISFIABLE`).
+- **Solution, counting and enumeration proofs verify**, including loop-preserving mappings. Decision
+  proofs conclude `s VERIFIED SATISFIABLE`; counting/enumeration proofs conclude
+  `s VERIFIED {COMPLETE,PARTIAL} ENUMERATION OF n SOLUTIONS`. The adjacency constraint keeps the
+  target self-loop term in its neighbour sum, so a loop→loop solution satisfies the model (this was
+  [issue #49], now fixed).
 
-  These are "not yet implemented / to be fixed" issues, not fundamental restrictions, and are being
-  reworked in coordination with the verified CakeML encoder so the two encodings agree on loops and
-  solution logging.
+[issue #49]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/49
+
+## Verifying with the CakePB checker
+
+The proof can also be checked end to end by the formally verified CakePB checker, `cake_pb_iso`.
+VeriPB *elaborates* the user-friendly proof down to a kernel subset, checking it against cake's own
+OPB encoding (which it derives directly from the LAD files); `cake_pb_iso` then checks that
+elaborated proof:
+
+```shell session
+$ ./build/glasgow_subgraph_solver --format lad --no-clique-detection --prove myproof pattern target
+$ cake_pb_iso pattern target > myproof.cakeopb
+$ veripb myproof.cakeopb myproof.pbp --elaborate myproof.core.pbp
+$ cake_pb_iso pattern target myproof.core.pbp
+```
+
+This checks the solver's proof against cake's own (independently, formally verified) OPB encoding
+rather than the solver's, giving an end-to-end formally verified result.
 
 ## Tests
 
-The `ctest` suite includes proof-verification tests (registered only when `veripb` is on the `PATH`):
-they run the solver with `--prove` on small instances and check the proof with VeriPB. The currently
-broken solution proofs are registered as `WILL_FAIL` tripwires, so the suite stays green while the
-bugs exist and will flag the moment they are fixed. See `src/CMakeLists.txt` and
-`test-instances/verify_proof.bash`.
+The `ctest` suite includes proof-verification tests (registered only when `veripb` is on the
+`PATH`): they run the solver with `--prove` on small instances and check the proof with VeriPB,
+covering refutation, decision, complete enumeration and partial enumeration, for both loopless and
+loop-preserving instances. See `src/CMakeLists.txt` and `test-instances/verify_proof.bash`.
+
+If `cake_pb_iso` is found (point CMake at it with `-DCAKE_PB_ISO_EXECUTABLE=/path/to/cake_pb_iso`),
+the suite additionally registers `cake_*` tests that run the whole verified pipeline above, including
+loop cases. See `test-instances/verify_cake_pipeline.bash`.
 
 ```shell session
 $ ctest --preset release -R proof

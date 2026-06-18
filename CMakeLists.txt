@@ -107,6 +107,14 @@ SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
 # VeriPB still builds and runs the rest of the suite.
 find_program(VERIPB_EXECUTABLE veripb)
 
+# cake_pb_iso (the formally verified CakePB checker for subgraph isomorphism), if
+# present, is used by the end-to-end verified-pipeline tests: VeriPB elaborates the
+# proof against cake's OPB, then cake_pb_iso checks the elaborated core proof. It is
+# not on the PATH by default, so point CMake at it with
+#   -DCAKE_PB_ISO_EXECUTABLE=/path/to/cake_pb_iso
+# when you want these tests; otherwise they are silently skipped.
+find_program(CAKE_PB_ISO_EXECUTABLE cake_pb_iso)
+
 include_directories(.)
 add_subdirectory(gss)
 add_subdirectory(src)

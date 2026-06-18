@@ -27,7 +27,10 @@ jobs:
 
     - name: Install dependencies (Linux)
       if: startsWith(matrix.os, 'ubuntu')
-      run: sudo apt-get update && sudo apt-get install -y libgmp-dev
+      # `|| true`: don't fail the build if an unrelated third-party repo
+      # preinstalled on the runner image is broken (e.g. packages.microsoft.com
+      # returning 403); we only need libgmp-dev, which the install step still gates.
+      run: sudo apt-get update || true; sudo apt-get install -y libgmp-dev
 
     # On macOS, install Catch2 too: Homebrew ships a prebuilt bottle, so it does not
     # have to be compiled from source (see find_package(Catch2) in CMakeLists.txt).
@@ -67,7 +70,10 @@ jobs:
         key: sanitize
 
     - name: Install GMP
-      run: sudo apt-get update && sudo apt-get install -y libgmp-dev
+      # `|| true`: don't fail the build if an unrelated third-party repo
+      # preinstalled on the runner image is broken (e.g. packages.microsoft.com
+      # returning 403); we only need libgmp-dev, which the install step still gates.
+      run: sudo apt-get update || true; sudo apt-get install -y libgmp-dev
 
     - name: Fetch VeriPB
       run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
