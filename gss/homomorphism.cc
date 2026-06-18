@@ -493,6 +493,11 @@ auto gss::solve_homomorphism_problem(
         // solution count is in terms of the high-level mapping
         proof->emit_preserved_assignment_variables();
 
+        // when counting, delete each solution-blocking constraint once we backtrack
+        // past it, so the proof stays linear in the search depth not the solution count
+        if (params.count_solutions)
+            proof->delete_blocking_constraints_on_backtrack();
+
         // output the model file
         proof->finalise_model();
     }
