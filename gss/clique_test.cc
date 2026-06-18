@@ -162,6 +162,22 @@ TEST_CASE("the colour orderings and vertex order all find the same maximum")
     }
 }
 
+TEST_CASE("a large sparse graph does not overflow the workspace (issue #39)")
+{
+    // Beyond ~32768 vertices the old size*(size+1)*2 workspace size overflowed a
+    // signed int. This graph has a single 5-clique and is otherwise empty, so the
+    // search is trivial -- the point is that the solver is set up at all, with the
+    // workspace now bounded by the largest degree rather than the vertex count.
+    const int n = 33000;
+    InputGraph g{n, false, false};
+    for (int i = 0; i < 5; ++i)
+        for (int j = i + 1; j < 5; ++j)
+            g.add_edge(i, j);
+
+    auto result = solve_clique_problem(g, make_params());
+    CHECK(result.clique == set<int>{0, 1, 2, 3, 4});
+}
+
 // ---------------------------------------------------------------------------
 // Loops (irrelevant to cliques; previously a crash, see issue #38)
 // ---------------------------------------------------------------------------

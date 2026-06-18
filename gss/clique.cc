@@ -24,6 +24,7 @@ using std::is_same;
 using std::list;
 using std::make_shared;
 using std::make_tuple;
+using std::max_element;
 using std::move;
 using std::mt19937;
 using std::pair;
@@ -114,8 +115,6 @@ namespace
                 proof->finalise_model();
             }
 
-            space = std::make_unique<int[]>(size * (size + 1) * 2);
-
             if (params.restarts_schedule->might_restart())
                 watches.table.data.resize(g.size());
 
@@ -126,6 +125,15 @@ namespace
             vector<int> degrees;
             degrees.resize(size);
             g.for_each_edge([&](int f, int t, string_view) { if (f != t) ++degrees[f]; });
+
+            // Workspace for the search: two int[size] arrays per recursion level. The
+            // search never recurses deeper than the largest clique, which is at most
+            // one more than the largest degree, so size the workspace to that rather
+            // than to the number of vertices (which would be quadratic in memory, and
+            // overflows an int product beyond ~32k vertices -- issue #39). size_t
+            // arithmetic keeps it correct for dense graphs where the degree is large.
+            int max_degree = degrees.empty() ? 0 : *max_element(degrees.begin(), degrees.end());
+            space = std::make_unique<int[]>(std::size_t(2) * size * (max_degree + 2));
 
             // sort on degree
             if (! params.input_order)
