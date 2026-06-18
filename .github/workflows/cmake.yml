@@ -20,13 +20,20 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Install GMP (Linux)
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ matrix.os }}-release
+
+    - name: Install dependencies (Linux)
       if: startsWith(matrix.os, 'ubuntu')
       run: sudo apt-get update && sudo apt-get install -y libgmp-dev
 
-    - name: Install GMP (macOS)
+    # On macOS, install Catch2 too: Homebrew ships a prebuilt bottle, so it does not
+    # have to be compiled from source (see find_package(Catch2) in CMakeLists.txt).
+    - name: Install dependencies (macOS)
       if: startsWith(matrix.os, 'macos')
-      run: brew install gmp
+      run: brew install gmp catch2
 
     - name: Fetch VeriPB
       run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
@@ -35,7 +42,10 @@ jobs:
       run: cargo install --path ./VeriPB
 
     - name: Configure CMake
-      run: cmake --preset release
+      run: |
+        EXTRA="-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+        if [[ "${{ matrix.os }}" == macos* ]]; then EXTRA="$EXTRA -DCMAKE_PREFIX_PATH=$(brew --prefix)"; fi
+        cmake --preset release $EXTRA
 
     - name: Build
       run: cmake --build --preset release
@@ -51,6 +61,11 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: sanitize
+
     - name: Install GMP
       run: sudo apt-get update && sudo apt-get install -y libgmp-dev
 
@@ -61,7 +76,7 @@ jobs:
       run: cargo install --path ./VeriPB
 
     - name: Configure CMake (Sanitize)
-      run: cmake --preset sanitize
+      run: cmake --preset sanitize -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     - name: Build (Sanitize)
       run: cmake --build --preset sanitize

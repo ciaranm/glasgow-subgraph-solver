@@ -78,18 +78,26 @@ enable_testing()
 
 Include(FetchContent)
 Set(FETCHCONTENT_QUIET FALSE)
-FetchContent_Declare(
-        Catch2
-        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG 6e79e682b726f524310d55dec8ddac4e9c52fb5f # v3.4.0
-)
+
+# Prefer a prebuilt Catch2 (e.g. from Homebrew or apt) so it isn't compiled from
+# source on every build; fall back to fetching a pinned version otherwise. Catch2
+# v3 is a compiled library, so this is a worthwhile build-time saving (especially
+# on CI). Any v3 is fine -- the test macros are stable across minor versions.
+find_package(Catch2 3 QUIET)
+if(NOT Catch2_FOUND)
+    FetchContent_Declare(
+            Catch2
+            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+            GIT_TAG 6e79e682b726f524310d55dec8ddac4e9c52fb5f # v3.4.0
+    )
+    FetchContent_MakeAvailable(Catch2)
+endif()
+
 FetchContent_Declare(
         cxxopts
         GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
         GIT_TAG 44380e5a44706ab7347f400698c703eb2a196202 # v3.3.1
 )
-
-FetchContent_MakeAvailable(Catch2)
 FetchContent_MakeAvailable(cxxopts)
 
 SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
