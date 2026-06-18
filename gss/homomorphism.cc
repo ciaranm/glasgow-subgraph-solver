@@ -429,6 +429,11 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
+        if ((pattern.loopy() || target.loopy()) && ! params.no_supplementals)
+            // the supplemental-graph proof derivations sum adjacency constraints assuming a
+            // loopless encoding, so they do not verify once a self-loop term is present
+            // (issue #56); refuse rather than emit an invalid proof
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used on graphs with loops together with supplemental graphs, use --no-supplementals"};
 
         proof = make_shared<Proof>(*params.proof_options);
 

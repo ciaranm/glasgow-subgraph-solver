@@ -89,3 +89,48 @@ jobs:
 
     - name: Test (Sanitize)
       run: ctest --preset sanitize -j $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) --rerun-failed --output-on-failure
+
+  coverage:
+    name: Proof coverage (ubuntu-26.04)
+    runs-on: ubuntu-26.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: coverage
+
+    - name: Install GMP and gcovr
+      run: sudo apt-get update || true; sudo apt-get install -y libgmp-dev gcovr
+
+    - name: Fetch VeriPB
+      run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
+
+    - name: Install VeriPB using cargo
+      run: cargo install --path ./VeriPB
+
+    - name: Configure CMake (Coverage)
+      run: cmake --preset coverage -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build (Coverage)
+      run: cmake --build --preset coverage
+
+    - name: Test (Coverage)
+      run: ctest --preset coverage -j $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) --output-on-failure
+
+    # Ratchet: fail if the proof-writing code's coverage regresses, so a new
+    # conditional proof feature has to arrive with a test that triggers it.
+    # (cake_pb_iso isn't installed here, so the cake_* tests are skipped; they add
+    # no proof.cc coverage beyond the VeriPB tests.)
+    - name: Check proof.cc coverage
+      # --exclude / --gcov-ignore-errors: the FetchContent-built Catch2 is also
+      # instrumented, and gcovr can't resolve its source paths; we only care about
+      # proof.cc, so skip the rest rather than fail on it.
+      run: |
+        gcovr --root . build-coverage --filter 'gss/innards/proof\.cc' \
+          --exclude '.*/_deps/.*' --gcov-ignore-errors=no_working_dir_found \
+          --decisions --print-summary \
+          --fail-under-line 80 --fail-under-decision 70

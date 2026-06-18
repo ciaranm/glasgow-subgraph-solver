@@ -29,6 +29,14 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Sanitize"
             }
+        },
+        {
+            "name": "coverage",
+            "displayName": "Coverage (gcov)",
+            "binaryDir": "${sourceDir}/build-coverage",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Coverage"
+            }
         }
     ],
     "buildPresets": [
@@ -45,6 +53,11 @@
         {
             "name": "sanitize",
             "configurePreset": "sanitize",
+            "jobs": 0
+        },
+        {
+            "name": "coverage",
+            "configurePreset": "coverage",
             "jobs": 0
         }
     ],
@@ -67,6 +80,11 @@
                 "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
                 "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
             }
+        },
+        {
+            "name": "coverage",
+            "configurePreset": "coverage",
+            "output": { "outputOnFailure": true }
         }
     ]
 }

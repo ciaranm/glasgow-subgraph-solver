@@ -11,12 +11,12 @@ project(
         LANGUAGES CXX)
 
 # Build type configuration.
-# Three types are supported: Release (default), Debug, and Sanitize.
+# Four types are supported: Release (default), Debug, Sanitize, and Coverage.
 # See CMakePresets.json and the README for usage.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
-set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Release Debug Sanitize)
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Release Debug Sanitize Coverage)
 
 # Per-type flags, applied automatically by CMake for the active build type on top
 # of the always-on flags set below.
@@ -29,12 +29,25 @@ set(CMAKE_CXX_FLAGS_DEBUG "-O0"
     CACHE STRING "Flags for debug builds")
 # Sanitize: light optimisation keeps stack traces readable while ASan + UBSan catch
 #   memory errors and undefined behaviour.
+# Coverage: no optimisation + gcov instrumentation, for measuring which proof-writing
+#   branches the test suite actually triggers (see the `coverage` target below).
+#
+# FORCE is required: CMake pre-creates CMAKE_<LANG>_FLAGS_<CONFIG> as empty cache
+# entries for the active build type during compiler detection (which runs in the
+# project() call above), so a plain `set(... CACHE ...)` would be a silent no-op and
+# the build type would get none of its flags.
 set(CMAKE_CXX_FLAGS_SANITIZE "-O1 -fsanitize=address,undefined -fno-omit-frame-pointer"
-    CACHE STRING "Flags for sanitizer builds (ASan + UBSan)")
+    CACHE STRING "Flags for sanitizer builds (ASan + UBSan)" FORCE)
 set(CMAKE_EXE_LINKER_FLAGS_SANITIZE "-fsanitize=address,undefined"
-    CACHE STRING "Linker flags for sanitizer builds")
+    CACHE STRING "Linker flags for sanitizer builds" FORCE)
 set(CMAKE_SHARED_LINKER_FLAGS_SANITIZE "-fsanitize=address,undefined"
-    CACHE STRING "Linker flags for sanitizer builds")
+    CACHE STRING "Linker flags for sanitizer builds" FORCE)
+set(CMAKE_CXX_FLAGS_COVERAGE "-O0 --coverage -fprofile-update=atomic"
+    CACHE STRING "Flags for coverage builds" FORCE)
+set(CMAKE_EXE_LINKER_FLAGS_COVERAGE "--coverage"
+    CACHE STRING "Linker flags for coverage builds" FORCE)
+set(CMAKE_SHARED_LINKER_FLAGS_COVERAGE "--coverage"
+    CACHE STRING "Linker flags for coverage builds" FORCE)
 
 # Compiler flag checks always run so results are available below.
 include(CheckCXXCompilerFlag)
@@ -118,3 +131,26 @@ find_program(CAKE_PB_ISO_EXECUTABLE cake_pb_iso)
 include_directories(.)
 add_subdirectory(gss)
 add_subdirectory(src)
+
+# Coverage reporting. With a Coverage build, `cmake --build <dir> --target coverage`
+# runs the test suite and reports branch coverage of the proof-writing code, so we
+# can see which conditional proof features no test triggers. Requires gcovr.
+if(CMAKE_BUILD_TYPE STREQUAL "Coverage")
+    find_program(GCOVR_EXECUTABLE gcovr)
+    if(GCOVR_EXECUTABLE)
+        add_custom_target(coverage
+            COMMAND ${CMAKE_COMMAND} -E echo "Running tests under coverage instrumentation..."
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure || ${CMAKE_COMMAND} -E true
+            COMMAND ${GCOVR_EXECUTABLE} --root ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}
+                    --filter "${CMAKE_SOURCE_DIR}/gss/innards/proof.cc"
+                    --exclude ".*/_deps/.*" --gcov-ignore-errors=no_working_dir_found
+                    --branches --decisions --txt --print-summary
+                    --txt "${CMAKE_BINARY_DIR}/proof-coverage.txt"
+                    --html-details "${CMAKE_BINARY_DIR}/proof-coverage.html"
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Generating proof.cc branch-coverage report"
+            USES_TERMINAL VERBATIM)
+    else()
+        message(WARNING "gcovr not found: the `coverage` target will be unavailable")
+    endif()
+endif()
