@@ -57,7 +57,7 @@ if(VERIPB_EXECUTABLE)
     # (2) enumeration: 'solx' requires a 'preserved:' set that GSS never emits.
     gss_add_known_broken_proof_test(proof_sat_loopless_count_KNOWN_BROKEN
         --count-solutions ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
-    # (3) loop encoding: the self-loop->self-loop term is dropped from the adjacency
+    # (3) loop encoding: the loop->loop term is dropped from the adjacency
     #     constraint, so a valid loop-preserving solution falsifies the model.
     gss_add_known_broken_proof_test(proof_sat_loopy_decision_KNOWN_BROKEN
         --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
