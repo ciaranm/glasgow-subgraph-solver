@@ -1,18 +1,14 @@
 #!/bin/bash
-# Run the subgraph solver with proof logging on an instance, then check the proof
-# with VeriPB. Used by the ctest proof-verification suite (see src/CMakeLists.txt).
+# Run a solver with proof logging on an instance, then check the proof with VeriPB.
+# Used by the ctest proof-verification suite (see src/CMakeLists.txt).
 #
 # Usage:
 #   verify_proof.bash <solver> <veripb> <workdir> <tag> -- <solver-args...>
 #
-# Exits 0 iff VeriPB prints "VERIFIED". The solver is always run with the proof-
-# logging-compatible flags (--no-supplementals --no-clique-detection --no-nds);
-# any further arguments (e.g. --induced, --count-solutions, the instance files)
-# come after the "--".
-#
-# Known-broken cases (currently SAT / solution proofs, see dev_docs/cleanup-plan.md)
-# are registered in CMake with the WILL_FAIL property, so this script stays simple:
-# it just reports whether the proof verifies.
+# Exits 0 iff VeriPB prints "VERIFIED". No solver flags are added here: every flag
+# (e.g. --no-clique-detection, --no-supplementals, --induced, the instance files)
+# is passed explicitly after the "--", so each test declares exactly the feature
+# combination it exercises.
 
 set -u
 
@@ -33,7 +29,7 @@ fi
 
 proof="${workdir}/proof_${tag}"
 
-"${solver}" --no-supplementals --no-clique-detection --no-nds --prove "${proof}" "$@" > "${proof}.solver.log" 2>&1
+"${solver}" --prove "${proof}" "$@" > "${proof}.solver.log" 2>&1
 solver_status=$?
 if [ "${solver_status}" -ne 0 ]; then
     echo "solver exited with status ${solver_status}:" 1>&2
