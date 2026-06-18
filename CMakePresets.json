@@ -29,6 +29,14 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Sanitize"
             }
+        },
+        {
+            "name": "coverage",
+            "displayName": "Coverage (gcov)",
+            "binaryDir": "${sourceDir}/build-coverage",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Coverage"
+            }
         }
     ],
     "buildPresets": [
@@ -45,6 +53,11 @@
         {
             "name": "sanitize",
             "configurePreset": "sanitize",
+            "jobs": 0
+        },
+        {
+            "name": "coverage",
+            "configurePreset": "coverage",
             "jobs": 0
         }
     ],
