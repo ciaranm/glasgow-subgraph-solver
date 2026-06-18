@@ -2,6 +2,7 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_PROOF_HH 1
 
 #include <gss/innards/proof-fwd.hh>
+#include <gss/loooong.hh>
 #include <gss/proof_options.hh>
 
 #include <exception>
@@ -62,6 +63,12 @@ namespace gss::innards
         auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
             const std::vector<int> & u, const std::vector<int> & cancel_out, bool induced) -> void;
 
+        // Declare a projected (preserved) set, listing exactly the assignment
+        // variables, so the proof's solution count is in terms of the high-level
+        // mapping rather than any auxiliary encoding variables. Must be called
+        // after all create_cp_variable calls but before finalise_model.
+        auto emit_preserved_assignment_variables() -> void;
+
         auto finalise_model() -> void;
 
         // when we're done
@@ -69,6 +76,10 @@ namespace gss::innards
         auto finish_sat_proof() -> void;
         auto finish_unknown_proof() -> void;
         auto finish_optimisation_proof(int size) -> void;
+
+        // Conclude a counting / enumeration proof: ENUMERATION_COMPLETE if the
+        // whole search space was exhausted, otherwise ENUMERATION_PARTIAL.
+        auto finish_enumeration_proof(const loooong & number_of_solutions, bool complete) -> void;
 
         // top of search failures
         auto failure_due_to_pattern_bigger_than_target() -> void;

@@ -174,6 +174,18 @@ auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex
     _imp->adjacency_lines.emplace(tuple{0, p.first, q.first, t.first}, adj_label);
 }
 
+auto Proof::emit_preserved_assignment_variables() -> void
+{
+    // List exactly the assignment variables as the projected (preserved) set,
+    // so VeriPB counts solutions in terms of the high-level mapping. The line
+    // goes into the prelude, which finalise_model writes immediately after the
+    // header and before any constraint.
+    _imp->model_prelude_stream << "preserved:";
+    for (auto & [_, name] : _imp->variable_mappings)
+        _imp->model_prelude_stream << " x" << name;
+    _imp->model_prelude_stream << " ;\n";
+}
+
 auto Proof::finalise_model() -> void
 {
     unique_ptr<ostream> f = make_unique<ofstream>(_imp->opb_filename);
@@ -214,6 +226,28 @@ auto Proof::finish_sat_proof() -> void
     *_imp->proof_stream << "output NONE;\n"
         << "conclusion SAT;\n"
         << "end pseudo-Boolean proof;\n";
+}
+
+auto Proof::finish_enumeration_proof(const loooong & number_of_solutions, bool complete) -> void
+{
+    if (complete) {
+        // Every solution has been logged with solx and excluded, so the
+        // remaining problem is unsatisfiable: assert the contradiction and
+        // conclude a complete enumeration of exactly this many solutions.
+        *_imp->proof_stream << "% asserting that we've enumerated every solution\n";
+        *_imp->proof_stream << "rup >= 1 ;\n";
+        ++_imp->proof_line;
+        *_imp->proof_stream << "output NONE;\n"
+                            << "conclusion ENUMERATION_COMPLETE " << number_of_solutions << " : -1;\n"
+                            << "end pseudo-Boolean proof;\n";
+    }
+    else {
+        // We stopped early (timeout or solution limit): we have witnessed this
+        // many solutions but make no claim that there are no others.
+        *_imp->proof_stream << "output NONE;\n"
+                            << "conclusion ENUMERATION_PARTIAL " << number_of_solutions << ";\n"
+                            << "end pseudo-Boolean proof;\n";
+    }
 }
 
 auto Proof::finish_unknown_proof() -> void
@@ -365,11 +399,9 @@ auto Proof::incompatible_by_loops(
     const NamedVertex & p,
     const NamedVertex & t) -> void
 {
-    // if (_imp->recover_encoding) {
-        *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
-        *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
-        ++_imp->proof_line;
-    // }
+    *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
+    *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
+    ++_imp->proof_line;
 }
 
 auto Proof::initial_domain_is_empty(int p, const string & where) -> void
@@ -489,11 +521,22 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
         *_imp->proof_stream << " " << var.second << "=" << val.second;
     *_imp->proof_stream << ";\n";
 
+    // Emit the solution-excluding (solx) rule at the top proof level. The
+    // blocking constraint it introduces must persist for the rest of the proof
+    // (so the solution count stays sound); if we logged it at the current deep
+    // search level, the wiplvl that cleans up this subtree on backtrack would
+    // delete it, weakening the guarantee.
+    if (0 != _imp->active_level)
+        *_imp->proof_stream << "setlvl 0;\n";
+
     *_imp->proof_stream << "solx";
     for (auto & [var, val] : decisions)
         *_imp->proof_stream << " x" << _imp->variable_mappings[pair{var.first, val.first}];
     *_imp->proof_stream << ";\n";
     ++_imp->proof_line;
+
+    if (0 != _imp->active_level)
+        *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
 }
 
 auto Proof::post_solution(const vector<int> & solution) -> void
