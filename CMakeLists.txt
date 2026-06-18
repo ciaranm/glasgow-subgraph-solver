@@ -143,6 +143,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Coverage")
             COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure || ${CMAKE_COMMAND} -E true
             COMMAND ${GCOVR_EXECUTABLE} --root ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}
                     --filter "${CMAKE_SOURCE_DIR}/gss/innards/proof.cc"
+                    --exclude ".*/_deps/.*" --gcov-ignore-errors=no_working_dir_found
                     --branches --decisions --txt --print-summary
                     --txt "${CMAKE_BINARY_DIR}/proof-coverage.txt"
                     --html-details "${CMAKE_BINARY_DIR}/proof-coverage.html"

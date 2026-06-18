@@ -126,7 +126,11 @@ jobs:
     # (cake_pb_iso isn't installed here, so the cake_* tests are skipped; they add
     # no proof.cc coverage beyond the VeriPB tests.)
     - name: Check proof.cc coverage
+      # --exclude / --gcov-ignore-errors: the FetchContent-built Catch2 is also
+      # instrumented, and gcovr can't resolve its source paths; we only care about
+      # proof.cc, so skip the rest rather than fail on it.
       run: |
         gcovr --root . build-coverage --filter 'gss/innards/proof\.cc' \
+          --exclude '.*/_deps/.*' --gcov-ignore-errors=no_working_dir_found \
           --decisions --print-summary \
           --fail-under-line 80 --fail-under-decision 70
