@@ -46,9 +46,14 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | injective or non-injective only (not `--locally-injective`) | only these two are encoded |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
+| no supplemental graphs **on loopy instances** (`--no-supplementals`) | the supplemental-graph derivations don't yet handle the self-loop term ([issue #56]) |
 
-The README's worked example also passes `--no-supplementals` and `--no-nds`; that is the
-known-good combination this project tests against:
+[issue #56]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/56
+
+Supplemental graphs, distance-3 (`--distance3`), neighbourhood degree sequences, and clique-size
+constraints (`--cliques`) *are* supported with proof logging on loopless instances. The one
+exception is supplemental graphs together with loops, which is guarded off (issue #56) and is a
+priority to fix. A minimal worked example:
 
 ```shell session
 $ ./build/glasgow_subgraph_solver --induced --no-supplementals --no-clique-detection --no-nds \
@@ -108,9 +113,12 @@ rather than the solver's, giving an end-to-end formally verified result.
 ## Tests
 
 The `ctest` suite includes proof-verification tests (registered only when `veripb` is on the
-`PATH`): they run the solver with `--prove` on small instances and check the proof with VeriPB,
-covering refutation, decision, complete enumeration and partial enumeration, for both loopless and
-loop-preserving instances. See `src/CMakeLists.txt` and `test-instances/verify_proof.bash`.
+`PATH`): they run a solver with `--prove` on small instances and check the proof with VeriPB. Each
+test states the exact feature combination it exercises (the harness adds no flags of its own), so
+between them they trigger every conditional proof-writing path: refutation, decision, complete and
+partial enumeration; the supplemental-graph, distance-3, neighbourhood-degree-sequence and
+clique-size derivations; the clique and common-subgraph solvers; and loop-preserving instances. See
+`src/CMakeLists.txt` and `test-instances/verify_proof.bash`.
 
 If `cake_pb_iso` is found (point CMake at it with `-DCAKE_PB_ISO_EXECUTABLE=/path/to/cake_pb_iso`),
 the suite additionally registers `cake_*` tests that run the whole verified pipeline above, including
@@ -119,3 +127,18 @@ loop cases. See `test-instances/verify_cake_pipeline.bash`.
 ```shell session
 $ ctest --preset release -R proof
 ```
+
+### Coverage
+
+To check that the tests actually trigger each conditional path in the proof-writing code, build with
+the `coverage` preset and run the `coverage` target, which runs the suite under `gcov` instrumentation
+and reports branch/decision coverage of `gss/innards/proof.cc` (requires `gcovr`):
+
+```shell session
+$ cmake --preset coverage && cmake --build --preset coverage
+$ cmake --build build-coverage --target coverage   # writes build-coverage/proof-coverage.{txt,html}
+```
+
+CI runs this and fails if the coverage regresses, so a new conditional proof feature has to arrive
+with a test that triggers it. (The one path no test currently reaches is the connected-clique
+connectivity backtrack, `backtrack_from_binary_variables`.)
