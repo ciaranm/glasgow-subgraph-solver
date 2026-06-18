@@ -160,15 +160,14 @@ auto Proof::start_adjacency_constraints_for(int p, int t) -> void
 }
 
 auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
-    const vector<int> & uu, const vector<int> & cancel, bool) -> void
+    const vector<int> & uu, bool) -> void
 {
     auto adj_label = "@adj" + p.second + "_" + t.second + "_" + q.second;
 
     _imp->model_stream << adj_label << " ";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : uu)
-        if (cancel.end() == find(cancel.begin(), cancel.end(), u))
-            _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u}];
+        _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u}];
     _imp->model_stream << " >= 1 ;\n";
     ++_imp->nb_constraints;
     _imp->adjacency_lines.emplace(tuple{0, p.first, q.first, t.first}, adj_label);

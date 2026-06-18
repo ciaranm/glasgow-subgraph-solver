@@ -34,16 +34,6 @@ if(VERIPB_EXECUTABLE)
                 ${CMAKE_CURRENT_BINARY_DIR} ${name} -- ${ARGN})
     endfunction()
 
-    # Register a proof test that is currently BROKEN (tracked, not yet fixed). It is
-    # marked WILL_FAIL, so the suite stays green while the proof fails to verify;
-    # once the underlying bug is fixed the test will start passing and ctest will
-    # report it as a failure, prompting removal of the WILL_FAIL marker.
-    # Root causes are documented in issues #49 and #50.
-    function(gss_add_known_broken_proof_test name)
-        gss_add_proof_test(${name} ${ARGN})
-        set_tests_properties(${name} PROPERTIES WILL_FAIL TRUE)
-    endfunction()
-
     # --- Refutation (UNSAT) proofs ---
     gss_add_proof_test(proof_unsat_loopy_induced
         --induced --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
@@ -63,20 +53,17 @@ if(VERIPB_EXECUTABLE)
     gss_add_proof_test(proof_partial_loopless
         --print-all-solutions --solution-limit 5 ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
 
-    # --- Still broken under plain VeriPB: loop->loop solution encoding (issue #49) ---
-    # The loop->loop term is dropped from the OPB adjacency constraint, so a valid
-    # loop-preserving solution falsifies the model. This is independent of the
-    # solution-logging machinery above (which is now fixed). The verified CakePB
-    # pipeline sidesteps it by elaborating against cake's loop-correct OPB; see the
-    # cake_pb_iso tests below and dev_docs/proof-logging.md.
-    gss_add_known_broken_proof_test(proof_sat_loopy_decision_KNOWN_BROKEN
+    # loop->loop mappings: the target self-loop term is kept in the adjacency
+    # constraint (issue #49), so loop-preserving solutions verify.
+    gss_add_proof_test(proof_sat_loopy_decision
         --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+    gss_add_proof_test(proof_count_loopy
+        --count-solutions --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
     # End-to-end verified-pipeline tests through the CakePB checker. Only registered
     # when cake_pb_iso was found (see CAKE_PB_ISO_EXECUTABLE in the top-level
-    # CMakeLists); a checkout without it just skips these. The pipeline elaborates the
-    # solver's proof against cake's own OPB, so loop->loop mappings verify here even
-    # though they do not under plain VeriPB against the solver's OPB (issue #49).
+    # CMakeLists); a checkout without it just skips these. The pipeline checks the
+    # solver's proof against cake's own (formally verified) OPB encoding.
     if(CAKE_PB_ISO_EXECUTABLE)
         set(GSS_CAKE_RUNNER ${CMAKE_SOURCE_DIR}/test-instances/verify_cake_pipeline.bash)
         function(gss_add_cake_test name pat tgt)
@@ -92,7 +79,7 @@ if(VERIPB_EXECUTABLE)
         gss_add_cake_test(cake_count triangle.lad triangle.lad --count-solutions)
         # complete enumeration of zero solutions (no triangle in a path)
         gss_add_cake_test(cake_unsat triangle.lad path4.lad --count-solutions)
-        # loop->loop mapping: fails plain VeriPB (issue #49) but verifies via cake
+        # loop->loop mapping, checked end to end by the verified pipeline
         gss_add_cake_test(cake_loop_decision loop_vertex.lad loop_target.lad)
         gss_add_cake_test(cake_loop_count loop_vertex.lad loop_target.lad --count-solutions)
     endif()

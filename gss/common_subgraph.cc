@@ -394,7 +394,7 @@ auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGra
                             proof->create_adjacency_constraint(
                                 NamedVertex{p, first.vertex_name(p)},
                                 NamedVertex{q, first.vertex_name(q)},
-                                NamedVertex{t, second.vertex_name(t)}, permitted, vector<int>{}, false);
+                                NamedVertex{t, second.vertex_name(t)}, permitted, false);
                         }
                 }
             }

@@ -80,14 +80,11 @@ the solution count sound. VeriPB checks the claimed count `<n>` against the numb
 
 - **Refutation (UNSAT) proofs verify.** Proving that *no* mapping exists works end to end with
   VeriPB 3.0.2 (`s VERIFIED UNSATISFIABLE`).
-- **Loopless solution, counting and enumeration proofs verify.** Decision proofs conclude
-  `s VERIFIED SATISFIABLE`; counting/enumeration proofs conclude
-  `s VERIFIED {COMPLETE,PARTIAL} ENUMERATION OF n SOLUTIONS`.
-- **Loop→loop solution proofs do not verify under plain VeriPB** ([issue #49]). The
-  adjacency-constraint encoding drops the loop→loop term, so a valid loop-preserving solution
-  falsifies the solver's own OPB. This is independent of the solution-logging machinery above. It is
-  sidestepped by the verified CakePB pipeline below, which checks against cake's own loop-correct
-  OPB rather than the solver's.
+- **Solution, counting and enumeration proofs verify**, including loop-preserving mappings. Decision
+  proofs conclude `s VERIFIED SATISFIABLE`; counting/enumeration proofs conclude
+  `s VERIFIED {COMPLETE,PARTIAL} ENUMERATION OF n SOLUTIONS`. The adjacency constraint keeps the
+  target self-loop term in its neighbour sum, so a loop→loop solution satisfies the model (this was
+  [issue #49], now fixed).
 
 [issue #49]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/49
 
@@ -105,17 +102,15 @@ $ veripb myproof.cakeopb myproof.pbp --elaborate myproof.core.pbp
 $ cake_pb_iso pattern target myproof.core.pbp
 ```
 
-Because the proof is elaborated against cake's OPB, this path verifies loop→loop mappings that fail
-under plain VeriPB (issue #49 above).
+This checks the solver's proof against cake's own (independently, formally verified) OPB encoding
+rather than the solver's, giving an end-to-end formally verified result.
 
 ## Tests
 
 The `ctest` suite includes proof-verification tests (registered only when `veripb` is on the
 `PATH`): they run the solver with `--prove` on small instances and check the proof with VeriPB,
-covering refutation, decision, complete enumeration and partial enumeration. The loop→loop decision
-proof is registered as a `WILL_FAIL` tripwire (issue #49), so the suite stays green while that bug
-exists and will flag the moment it is fixed. See `src/CMakeLists.txt` and
-`test-instances/verify_proof.bash`.
+covering refutation, decision, complete enumeration and partial enumeration, for both loopless and
+loop-preserving instances. See `src/CMakeLists.txt` and `test-instances/verify_proof.bash`.
 
 If `cake_pb_iso` is found (point CMake at it with `-DCAKE_PB_ISO_EXECUTABLE=/path/to/cake_pb_iso`),
 the suite additionally registers `cake_*` tests that run the whole verified pipeline above, including

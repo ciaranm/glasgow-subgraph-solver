@@ -455,19 +455,19 @@ auto gss::solve_homomorphism_problem(
                 // if p can be mapped to t, then each neighbour of p...
                 for (int q = 0; q < pattern.size(); ++q)
                     if (pattern.adjacent(p, q)) {
-                        // ... must be mapped to a neighbour of t
-                        vector<int> permitted, cancel_out;
+                        // ... must be mapped to a neighbour of t. A target self-loop
+                        // (u == t) is kept in the sum, so a loop-preserving mapping
+                        // satisfies the constraint (this matches the verified CakePB
+                        // encoding; see issue #49).
+                        vector<int> permitted;
                         for (int u = 0; u < target.size(); ++u)
-                            if (target.adjacent(t, u)) {
+                            if (target.adjacent(t, u))
                                 permitted.push_back(u);
-                                if (t == u)
-                                    cancel_out.push_back(t);
-                            }
                         proof->create_adjacency_constraint(
                             NamedVertex{p, pattern.vertex_name(p)},
                             NamedVertex{q, pattern.vertex_name(q)},
                             NamedVertex{t, target.vertex_name(t)},
-                            permitted, cancel_out, false);
+                            permitted, false);
                     }
 
                 // same for non-adjacency for induced
@@ -483,7 +483,7 @@ auto gss::solve_homomorphism_problem(
                                 NamedVertex{p, pattern.vertex_name(p)},
                                 NamedVertex{q, pattern.vertex_name(q)},
                                 NamedVertex{t, target.vertex_name(t)},
-                                permitted, vector<int>{}, true);
+                                permitted, true);
                         }
                 }
             }

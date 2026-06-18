@@ -61,7 +61,7 @@ namespace gss::innards
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
         auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
-            const std::vector<int> & u, const std::vector<int> & cancel_out, bool induced) -> void;
+            const std::vector<int> & u, bool induced) -> void;
 
         // Declare a projected (preserved) set, listing exactly the assignment
         // variables, so the proof's solution count is in terms of the high-level
