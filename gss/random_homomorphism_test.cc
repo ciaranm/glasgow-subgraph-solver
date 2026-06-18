@@ -99,12 +99,12 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
         auto target = random_graph(nt, target_density, loop_probability, rng);
 
         bool induced = (rng() % 2);
-        // Injective and non-injective only: locally-injective enumeration is currently
-        // wrong (over-prunes), tracked as issue #58 -- re-enable that arm once it's fixed.
-        int injectivity_choice = rng() % 2;
-        auto injectivity = injectivity_choice == 0 ? Injectivity::Injective : Injectivity::NonInjective;
+        int injectivity_choice = rng() % 3;
+        auto injectivity = injectivity_choice == 0 ? Injectivity::Injective
+            : injectivity_choice == 1 ? Injectivity::NonInjective
+                                      : Injectivity::LocallyInjective;
         bool injective = (injectivity == Injectivity::Injective);
-        bool locally_injective = false;
+        bool locally_injective = (injectivity == Injectivity::LocallyInjective);
 
         auto expected = brute_force_solutions(pattern, target, injective, locally_injective, induced);
 
