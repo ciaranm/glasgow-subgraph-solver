@@ -23,7 +23,6 @@ add_library(glasgow_subgraphs
         innards/homomorphism_model.cc
         innards/homomorphism_searcher.cc
         innards/homomorphism_traits.cc
-        innards/lackey.cc
         innards/proof.cc
         innards/svo_bitset.cc
         innards/symmetries.cc

@@ -125,7 +125,7 @@ namespace
                 searcher.watches.clear_new_nogoods();
 
                 ++result.propagations;
-                if (searcher.propagate(true, domains, assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
+                if (searcher.propagate(true, domains, assignments)) {
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
@@ -143,7 +143,6 @@ namespace
                         done = true;
                         break;
 
-                    case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
                     case SearchResult::Unsatisfiable:
                         result.complete = true;
                         done = true;
@@ -314,7 +313,7 @@ namespace
                     }
 
                     ++thread_result.propagations;
-                    if (searchers[t]->propagate(true, domains, thread_assignments, params.propagate_using_lackey != PropagateUsingLackey::Never)) {
+                    if (searchers[t]->propagate(true, domains, thread_assignments)) {
                         auto assignments_copy = thread_assignments;
 
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
@@ -333,7 +332,6 @@ namespace
                             break;
 
                         case SearchResult::Unsatisfiable:
-                        case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
                             thread_result.complete = true;
                             params.timeout->trigger_early_abort();
                             searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{});
@@ -419,8 +417,6 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with threads"};
         if (params.clique_detection)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
-        if (params.lackey)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with a lackey"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
         if (params.injectivity != Injectivity::Injective && params.injectivity != Injectivity::NonInjective)
