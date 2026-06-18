@@ -102,6 +102,15 @@ if(VERIPB_EXECUTABLE)
     gss_add_proof_test(proof_mcs_clique glasgow_common_subgraph_solver --clique
         ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
+    # Randomised proof sweep: generate random instances and check the proof verifies
+    # on each, across decision/induced/counting combinations. Catches proof-logging
+    # bugs that fixed instances miss; complements the in-process correctness oracle in
+    # random_homomorphism_test.
+    add_test(NAME proof_random_sweep
+        COMMAND ${CMAKE_SOURCE_DIR}/test-instances/random_proof_sweep.bash
+            $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
+            $<TARGET_FILE:create_random_graph> ${CMAKE_CURRENT_BINARY_DIR})
+
     # End-to-end verified-pipeline tests through the CakePB checker. Only registered
     # when cake_pb_iso was found (see CAKE_PB_ISO_EXECUTABLE in the top-level
     # CMakeLists); a checkout without it just skips these. The pipeline checks the
