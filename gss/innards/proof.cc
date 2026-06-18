@@ -60,6 +60,7 @@ struct Proof::Imp
     map<tuple<long, long, long, long>, string> connected_variable_mappings_aux;
     map<long, string> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<tuple<long, long, long, long>, string> adjacency_lines;
+    map<tuple<long, long, long, long>, vector<long>> adjacency_permitted;
     map<pair<long, long>, long> eliminations;
     map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
@@ -171,6 +172,43 @@ auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex
     _imp->model_stream << " >= 1 ;\n";
     ++_imp->nb_constraints;
     _imp->adjacency_lines.emplace(tuple{0, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency_permitted.emplace(tuple{0, p.first, q.first, t.first}, vector<long>(uu.begin(), uu.end()));
+}
+
+auto Proof::loop_fix_adjacencies() -> void
+{
+    // Before issue #49 the adjacency constraint left the target's self-loop term out, so
+    // it could be summed into a pol cleanly. We now keep that term (so a loop->loop
+    // mapping satisfies the model), but it then appears as a stray "q maps to the loopy
+    // target" term in every pol. For each adjacency constraint over a loopy target t,
+    // rewrite its @adj label here to the loop-cancelled version -- ~x_p_t together with
+    // the neighbours of t other than t -- which follows from the constraint plus
+    // injectivity on t (mapping p to t forbids q from also mapping to t). VeriPB lets a
+    // proof line reassign an existing label, so every later reference to @adj in a pol
+    // picks up the loop-cancelled form automatically; the original loop-bearing
+    // constraint stays in the database (by number) so solutions still satisfy the model.
+    for (auto & [key, label] : _imp->adjacency_lines) {
+        auto & [g, p, q, t] = key;
+        // a pattern self-loop edge (p == q) has its loop term pinned by at-most-one rather
+        // than injectivity, and is not summed into the supplemental/degree pols; skip it.
+        if (p == q)
+            continue;
+        auto pit = _imp->adjacency_permitted.find(key);
+        if (pit == _imp->adjacency_permitted.end())
+            continue;
+        if (find(pit->second.begin(), pit->second.end(), t) == pit->second.end())
+            continue; // t is not a neighbour of itself: no loop term to cancel
+        *_imp->proof_stream << label << " rup 1 ~x" << _imp->variable_mappings[pair{p, t}];
+        for (auto & u : pit->second)
+            if (u != t)
+                *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q, u}];
+        *_imp->proof_stream << " >= 1 ;\n";
+        ++_imp->proof_line;
+        // (The original loop-bearing constraint is now redundant, but it is left in place:
+        // deleting it needs `del id <number>`, and that number does not correspond to the
+        // same constraint in CakePB's independently-numbered OPB, so the deletion breaks
+        // the verified-pipeline elaboration. The extra constraint is cheap.)
+    }
 }
 
 auto Proof::emit_preserved_assignment_variables() -> void
@@ -398,9 +436,13 @@ auto Proof::incompatible_by_loops(
     const NamedVertex & p,
     const NamedVertex & t) -> void
 {
+    // may be requested both up front (so the unit is available to later derivations and
+    // search propagations) and again during domain initialisation: only emit it once.
+    if (_imp->eliminations.contains(pair{p.first, t.first}))
+        return;
     *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
     *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
-    ++_imp->proof_line;
+    _imp->eliminations.emplace(pair{p.first, t.first}, ++_imp->proof_line);
 }
 
 auto Proof::initial_domain_is_empty(int p, const string & where) -> void
@@ -610,16 +652,17 @@ auto Proof::create_exact_path_graphs(
     for (auto & b : between_p_and_q) {
         for (auto & w : n_t) {
             // due to loops or labels, it might not be possible to map to w
-            auto i = _imp->adjacency_lines.find(tuple{0, b.first, q.first, w.first});
-            if (i != _imp->adjacency_lines.end())
-                *_imp->proof_stream << " " << i->second << " +";
+            if (_imp->adjacency_lines.contains(tuple{0, b.first, q.first, w.first}))
+                *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, b.first, q.first, w.first}) << " +";
         }
     }
 
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
 
-    // first tidy-up step: if p maps to t then q maps to something a two-walk away from t
+    // first tidy-up step: if p maps to t then q maps to something a two-walk away from t.
+    // The adjacency constraints summed above are the loop-cancelled forms, so there is no
+    // stray loop term and plain implication addition closes it.
     *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : two_away_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first.first}];
