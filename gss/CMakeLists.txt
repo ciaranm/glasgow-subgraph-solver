@@ -83,6 +83,10 @@ add_executable(homomorphism_matrix_test homomorphism_matrix_test.cc)
 target_link_libraries(homomorphism_matrix_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME homomorphism_matrix_test COMMAND $<TARGET_FILE:homomorphism_matrix_test>)
 
+add_executable(random_homomorphism_test random_homomorphism_test.cc)
+target_link_libraries(random_homomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME random_homomorphism_test COMMAND $<TARGET_FILE:random_homomorphism_test>)
+
 add_executable(extra_shapes_test extra_shapes_test.cc)
 target_link_libraries(extra_shapes_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME extra_shapes_test COMMAND $<TARGET_FILE:extra_shapes_test>)

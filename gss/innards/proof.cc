@@ -72,15 +72,6 @@ struct Proof::Imp
     int largest_level_set = 0;
     int active_level = 0;
 
-    // For counting / enumeration: solution-blocking constraints (and the backtrack
-    // nogoods that justify deleting them) accumulate, which is exponentially
-    // expensive when there are many solutions. When this is set, we move each
-    // backtrack nogood into the core and, on backtracking out of a level, checked-
-    // delete the blocking constraints and now-subsumed core nogoods recorded at that
-    // level. Keyed by the proof level the line was created at.
-    bool manage_blocking_constraints = false;
-    map<int, vector<long>> deletable_core_lines_by_level;
-
     bool clique_encoding = false;
     bool doing_mcs_by_clique = false;
 
@@ -192,11 +183,6 @@ auto Proof::emit_preserved_assignment_variables() -> void
     for (auto & [_, name] : _imp->variable_mappings)
         _imp->model_prelude_stream << " x" << name;
     _imp->model_prelude_stream << " ;\n";
-}
-
-auto Proof::delete_blocking_constraints_on_backtrack() -> void
-{
-    _imp->manage_blocking_constraints = true;
 }
 
 auto Proof::finalise_model() -> void
@@ -480,14 +466,6 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
         *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
     *_imp->proof_stream << " >= 1 ;\n";
     ++_imp->proof_line;
-
-    // when managing blocking constraints, this backtrack nogood justifies deleting
-    // the blocking constraints (and deeper, now-subsumed, nogoods) below it, so it
-    // has to live in the core; it is itself deleted when we backtrack past its level
-    if (_imp->manage_blocking_constraints) {
-        *_imp->proof_stream << "core id " << _imp->proof_line << " ;\n";
-        _imp->deletable_core_lines_by_level[_imp->active_level].push_back(_imp->proof_line);
-    }
 }
 
 auto Proof::out_of_guesses(const vector<pair<int, int>> &) -> void
@@ -515,22 +493,6 @@ auto Proof::back_up_to_level(int l) -> void
 
 auto Proof::forget_level(int l) -> void
 {
-    // checked-delete the blocking constraints and core nogoods recorded at this
-    // level or deeper: the backtrack nogood just emitted (one level up, now in the
-    // core) subsumes them, so each deletion re-derives by RUP. This is what keeps
-    // a counting proof linear in the search depth rather than the solution count.
-    if (_imp->manage_blocking_constraints) {
-        for (auto it = _imp->deletable_core_lines_by_level.begin(); it != _imp->deletable_core_lines_by_level.end();) {
-            if (it->first >= l) {
-                for (auto & id : it->second)
-                    *_imp->proof_stream << "del id " << id << " ;\n";
-                it = _imp->deletable_core_lines_by_level.erase(it);
-            }
-            else
-                ++it;
-        }
-    }
-
     if (_imp->largest_level_set >= l)
         *_imp->proof_stream << "wiplvl " << l << ";\n";
 }
@@ -571,11 +533,6 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
         *_imp->proof_stream << " x" << _imp->variable_mappings[pair{var.first, val.first}];
     *_imp->proof_stream << ";\n";
     ++_imp->proof_line;
-
-    // remember to checked-delete this blocking constraint once we backtrack out
-    // of the level it was found at (it is then subsumed by a backtrack nogood)
-    if (_imp->manage_blocking_constraints)
-        _imp->deletable_core_lines_by_level[_imp->active_level].push_back(_imp->proof_line);
 
     if (0 != _imp->active_level)
         *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";

@@ -90,8 +90,14 @@ the solution count sound. VeriPB checks the claimed count `<n>` against the numb
   `s VERIFIED {COMPLETE,PARTIAL} ENUMERATION OF n SOLUTIONS`. The adjacency constraint keeps the
   target self-loop term in its neighbour sum, so a loop→loop solution satisfies the model (this was
   [issue #49], now fixed).
+- **Enumeration proof size is linear in the number of solutions.** Each solution's `solx` blocking
+  constraint is kept at the top proof level for the rest of the proof. Deleting them on backtrack to
+  keep the proof linear in the search depth (by moving the subsuming backtrack nogoods into the core)
+  was tried, but `core id`-ing those nogoods triggered an upstream VeriPB bug that made later steps
+  fail to verify, so it was reverted. See [issue #59] for the tracking issue and how to re-enable it.
 
 [issue #49]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/49
+[issue #59]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/59
 
 ## Verifying with the CakePB checker
 
