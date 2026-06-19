@@ -81,8 +81,8 @@ if(VERIPB_EXECUTABLE)
     gss_add_proof_test(proof_distance3_loopy ${SUB} --no-nds --distance3
         --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
-    # Local injectivity: the neighbourhood-injectivity encoding + the degree pigeonhole
-    # using it. Currently requires --no-supplementals --no-nds (the NDS and supplemental
+    # Local injectivity: the neighbourhood-injectivity encoding + the degree and NDS
+    # pigeonholes using it. Currently requires --no-supplementals (the supplemental-graph
     # derivations still need locally-injective variants). Loopless and loopy (small/large
     # have a self-loop, exercising the closed-neighbourhood form).
     gss_add_proof_test(proof_locally_injective_unsat ${SUB_MIN}
@@ -91,6 +91,12 @@ if(VERIPB_EXECUTABLE)
         --locally-injective --count-solutions ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
     gss_add_proof_test(proof_locally_injective_loopy ${SUB_MIN}
         --locally-injective --count-solutions --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+    # NDS pigeonhole under local injectivity: --no-supplementals keeps NDS on, so the
+    # "injectivity in the square" step sums the neighbourhood-injectivity (@linj)
+    # constraints in place of the global ones (trident -> longtrident fires it for the
+    # degree-2 vertex).
+    gss_add_proof_test(proof_locally_injective_nds ${SUB} --no-supplementals
+        --locally-injective --count-solutions ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
 
     # --- Preprocessing / supplemental-graph proofs (loopless) ---
     # supplemental (exact-path) graphs: create_exact_path_graphs derivations.

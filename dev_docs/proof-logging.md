@@ -43,7 +43,7 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | a single thread (no `--parallel`, `--threads 1`) | proof logging is not thread-safe yet |
 | `--no-clique-detection` | the clique-detection shortcut is not yet logged |
 | no less-than / occurs-less symmetry constraints | not yet logged |
-| `--locally-injective` needs `--no-supplementals --no-nds` | only the degree filter has a locally-injective derivation so far |
+| `--locally-injective` needs `--no-supplementals` | the supplemental-graph derivations have no locally-injective variant yet (the degree and NDS filters do) |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
 
 Injective and non-injective proofs support supplemental graphs, distance-3 (`--distance3`),
@@ -52,10 +52,12 @@ loopy instances.
 
 Local injectivity (`--locally-injective`) is encoded by *neighbourhood*-injectivity constraints
 (`@linj`): for each pattern vertex `v` and target `t`, at most one of `v`'s neighbours maps to `t`
-(its closed neighbourhood if `v` has a self-loop). The degree pigeonhole uses these in place of the
-global injectivity constraints. The NDS and supplemental-graph derivations still need
-locally-injective variants, so for now local injectivity additionally requires
-`--no-supplementals --no-nds`.
+(its closed neighbourhood if `v` has a self-loop). The degree and NDS pigeonholes use these in place
+of the global injectivity constraints — wherever those derivations would sum "at most one pattern
+vertex maps to this target", local injectivity instead sums "at most one of `v`'s neighbours maps to
+this target", which is exactly what the argument needs (the neighbours of `v` are all it constrains).
+The supplemental-graph derivations still need locally-injective variants, so for now local
+injectivity additionally requires `--no-supplementals`.
 
 Loops used to be incompatible with supplemental graphs ([issue #56], now fixed). The adjacency
 constraint keeps the target's self-loop term (so a loop→loop mapping satisfies the model, see

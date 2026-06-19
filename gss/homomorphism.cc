@@ -424,11 +424,11 @@ auto gss::solve_homomorphism_problem(
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
         // Local-injectivity proofs are supported with the neighbourhood-injectivity
-        // encoding plus the degree elimination; the NDS and supplemental-graph derivations
+        // encoding plus the degree and NDS eliminations; the supplemental-graph derivations
         // still need locally-injective variants (the global-injectivity ones don't apply),
         // so for now require those off.
-        if (params.injectivity == Injectivity::LocallyInjective && (! params.no_supplementals || ! params.no_nds))
-            throw UnsupportedConfiguration{"Proof logging with local injectivity currently requires --no-supplementals and --no-nds"};
+        if (params.injectivity == Injectivity::LocallyInjective && ! params.no_supplementals)
+            throw UnsupportedConfiguration{"Proof logging with local injectivity currently requires --no-supplementals"};
 
         proof = make_shared<Proof>(*params.proof_options);
 

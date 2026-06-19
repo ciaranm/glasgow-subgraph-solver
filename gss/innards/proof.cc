@@ -448,10 +448,13 @@ auto Proof::incompatible_by_nds(
         }
     }
 
-    // injectivity in the square
+    // injectivity in the square: each column of the square holds at most one of p's
+    // neighbours. Under full injectivity that is the global injectivity on the value;
+    // under local injectivity it is the neighbourhood-injectivity of p (at most one
+    // neighbour of p maps to t), exactly as in the degree pigeonhole above.
     for (auto & t : t_subsequence) {
         if (t != t_subsequence.back())
-            *_imp->proof_stream << " " << _imp->injectivity_constraints.at(t) << " +";
+            *_imp->proof_stream << " " << (_imp->locally_injective ? _imp->locally_injective_constraints.at(pair{p.first, t}) : _imp->injectivity_constraints.at(t)) << " +";
     }
 
     // block to the right of the failing square
