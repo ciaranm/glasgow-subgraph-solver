@@ -423,13 +423,6 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
-        // Local-injectivity proofs are supported with the neighbourhood-injectivity
-        // encoding plus the degree and NDS eliminations; the supplemental-graph derivations
-        // still need locally-injective variants (the global-injectivity ones don't apply),
-        // so for now require those off.
-        if (params.injectivity == Injectivity::LocallyInjective && ! params.no_supplementals)
-            throw UnsupportedConfiguration{"Proof logging with local injectivity currently requires --no-supplementals"};
-
         proof = make_shared<Proof>(*params.proof_options);
 
         // set up our model file, with a set of OPB variables for each CP variable
@@ -482,10 +475,18 @@ auto gss::solve_homomorphism_problem(
                 if (params.induced) {
                     for (int q = 0; q < pattern.size(); ++q)
                         if (q != p && ! pattern.adjacent(p, q)) {
-                            // ... must be mapped to a neighbour of t
+                            // ... must be mapped to a non-neighbour of t. t itself counts as
+                            // a non-neighbour exactly when it has no self-loop, so the
+                            // permitted set is just the non-neighbours of t (the same test
+                            // the q == p case below uses). Under full injectivity q cannot
+                            // share t with p anyway, so whether t is in the set is moot; but
+                            // under local injectivity p and q may both map to a loopless t,
+                            // and that is a legitimate induced non-edge (t is not adjacent to
+                            // itself), so t must stay in the set or the model wrongly rejects
+                            // it.
                             vector<int> permitted;
                             for (int u = 0; u < target.size(); ++u)
-                                if (t != u && ! target.adjacent(t, u))
+                                if (! target.adjacent(t, u))
                                     permitted.push_back(u);
                             proof->create_adjacency_constraint(
                                 NamedVertex{p, pattern.vertex_name(p)},
