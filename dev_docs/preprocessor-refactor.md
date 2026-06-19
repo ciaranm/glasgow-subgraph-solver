@@ -138,10 +138,18 @@ Each phase is an independently mergeable PR.
 - **Phase 3 — Co-locate proof emission (S1, S4).** Move each inline proof loop out of
   `prepare()` into its step, behind a narrow proof interface. Byte-identical. After this,
   a new graph or filter is genuinely one new file.
-- **Phase 4 — Inert / duplicate supplemental elimination (S2a).** Turn on the discard
-  path: skip empty-`Pˢ` / complete-`Gˢ` / duplicate `(Pˢ, Gˢ)`; optionally follow with
-  constraint-level subsumption. Guardrail: identical solution counts (correctness sweep);
-  smaller proofs that still verify (proof sweep); Phase 0 metrics quantify the win.
+- **Phase 4 — Supplemental constraint-level subsumption (S2a).** *Done (commit cc72e5f).* The
+  originally-planned graph-level inert/duplicate elimination was **shelved**: measurement showed the
+  supplemental adjacency derivations are ~92–100% never *explicitly* cited but remain RUP-load-bearing in
+  search, so dropping whole graphs (or eliding by apparent deadness) is unsound — only a post-hoc proof
+  trimmer can safely act on dynamic deadness. What *is* sound and instance-independent is **constraint-level
+  subsumption**: the adjacency constraints nest (`distance3 ⊇ exact-path-1 ⊇ exact-path-2 …`, same head), so
+  emit only the set-minimal (strongest) constraint per head; a degree/NDS pigeonhole that needs an elided
+  per-graph constraint re-derives it on demand as a one-step weakening of the kept one (`ia <wider> : @kept`)
+  and deletes it again. Hidden `--no-proof-supplemental-subsumption` (default on) restores the full emission
+  for studying the effect (e.g. on a proof trimmer). Guardrail: identical solution counts (correctness sweep);
+  smaller proofs that still verify (proof sweep, 128/128); ~25–39% PBP shrink on preprocessing-heavy configs.
+  (Graph rows / `max_graphs` / search-side filtering are deliberately untouched.)
 - **Phase 5 — Cost ordering + reorderable strategy (S2b; S3 ordering).** Steps declare a
   cost; cheap concluding steps run before expensive builders, so easy-unsat instances
   conclude before any supplemental derivations are emitted. The order is a property of the
@@ -158,7 +166,7 @@ Each phase is an independently mergeable PR.
 | Strand | Delivered by |
 | --- | --- |
 | S1 (extensibility) | Phases 1–3 |
-| S2a (don't emit unused) | Phase 4 (needs Phase 2's discard) |
+| S2a (don't emit unused) | Phase 4 (constraint subsumption; graph-level elision shelved as unsound) |
 | S2b (shortcut obvious unsat) | Phase 5 |
 | S3 (reorder + stage) | Phase 5 (reorder) + Phase 6 (stage) |
 | S4 (sequencing clarity) | Phases 1, 3 |
