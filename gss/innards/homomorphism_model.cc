@@ -632,8 +632,15 @@ auto HomomorphismModel::prepare() -> bool
         case ShapeGraphSpec::Kind::ExactPath:
             build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);
             build_exact_path_graphs(_imp->graphs, target_size, next_target_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, false);
-            if (_imp->proof)
-                _imp->proofs->prove_exact_path_graphs(_imp->graphs, max_graphs, _imp->params.number_of_exact_path_graphs);
+            if (_imp->proof) {
+                // exact-path graph g (1..number_of_exact_path_graphs) was built into slot
+                // base + g - 1; pair each index with its slot for the derivation.
+                unsigned base = next_pattern_supplemental - _imp->params.number_of_exact_path_graphs;
+                vector<pair<int, unsigned>> exact_path_index_and_slot;
+                for (int g = 1; g <= _imp->params.number_of_exact_path_graphs; ++g)
+                    exact_path_index_and_slot.emplace_back(g, base + g - 1);
+                _imp->proofs->prove_exact_path_graphs(_imp->graphs, max_graphs, exact_path_index_and_slot, base);
+            }
             break;
 
         case ShapeGraphSpec::Kind::Distance2:

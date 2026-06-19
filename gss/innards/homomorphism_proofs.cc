@@ -50,15 +50,18 @@ auto HomomorphismProofs::target_vertex(int v) const -> NamedVertex
     return pair{v, _target_names[v]};
 }
 
-auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, int number_of_exact_path_graphs) -> void
+auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs,
+    const std::vector<std::pair<int, unsigned>> & exact_path_index_and_slot, unsigned exact_path_1_slot) -> void
 {
     const unsigned pattern_size = _pattern_names.size();
     const unsigned target_size = _target_names.size();
 
-    for (int g = 1; g <= number_of_exact_path_graphs; ++g) {
+    // g is the exact-path index (the path-count threshold); slot is where that graph
+    // lives (after inert-graph elimination may have renumbered the supplementals).
+    for (auto & [g, slot] : exact_path_index_and_slot) {
         for (unsigned p = 0; p < pattern_size; ++p) {
             for (unsigned q = 0; q < pattern_size; ++q) {
-                if (p == q || ! graphs.pattern_graph_rows[p * max_graphs + g].test(q))
+                if (p == q || ! graphs.pattern_graph_rows[p * max_graphs + slot].test(q))
                     continue;
 
                 auto named_p = pattern_vertex(p);
@@ -85,13 +88,13 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
                         named_n_t.push_back(target_vertex(w));
                     }
 
-                    auto nd_t = graphs.target_graph_rows[t * max_graphs + g];
+                    auto nd_t = graphs.target_graph_rows[t * max_graphs + slot];
                     for (auto w = nd_t.find_first(); w != decltype(nd_t)::npos; w = nd_t.find_first()) {
                         nd_t.reset(w);
                         named_d_n_t.push_back(target_vertex(w));
                     }
 
-                    auto n2_t = graphs.target_graph_rows[t * max_graphs + 1];
+                    auto n2_t = graphs.target_graph_rows[t * max_graphs + exact_path_1_slot];
                     for (auto w = n2_t.find_first(); w != decltype(n2_t)::npos; w = n2_t.find_first()) {
                         n2_t.reset(w);
                         auto n_t_w = graphs.target_graph_rows[w * max_graphs + 0];
@@ -104,7 +107,7 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
                         named_two_away_from_t.emplace_back(target_vertex(w), named_n_t_w);
                     }
 
-                    _proof->create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
+                    _proof->create_exact_path_graphs(slot, named_p, named_q, between_p_and_q,
                         named_t, named_n_t, named_two_away_from_t, named_d_n_t);
                 }
             }

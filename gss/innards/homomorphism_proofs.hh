@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gss::innards
@@ -44,7 +45,12 @@ namespace gss::innards
         // Prove the supplemental graphs that have just been built into the
         // ProcessedGraphsData. max_graphs is the bitset stride; number_of_exact_path_graphs
         // / slot identify which graph(s) within the data the derivation is about.
-        auto prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, int number_of_exact_path_graphs) -> void;
+        // exact_path_index_and_slot pairs each surviving exact-path graph's index (the
+        // path-count threshold) with the slot it occupies; exact_path_1_slot is where the
+        // "at least one 2-path" graph lives (needed to justify all of them). Decoupling
+        // the index from the slot lets inert-graph elimination renumber the supplementals.
+        auto prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs,
+            const std::vector<std::pair<int, unsigned>> & exact_path_index_and_slot, unsigned exact_path_1_slot) -> void;
         auto prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void;
         auto prove_extra_shape(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void;
 
