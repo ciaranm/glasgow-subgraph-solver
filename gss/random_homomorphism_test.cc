@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <random>
@@ -120,6 +121,23 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
             got.insert(mapping);
             return true;
         };
+
+        // TEMPORARY DIAGNOSTIC (debug/li-sigill-24.04): flush the instance descriptor
+        // before solving, so a fatal signal in solve identifies the exact instance.
+        {
+            auto dbg_edges = [](const InputGraph & g) {
+                std::string s;
+                for (int a = 0; a < g.size(); ++a)
+                    for (int b = 0; b < g.size(); ++b)
+                        if (g.adjacent(a, b))
+                            s += " " + std::to_string(a) + "-" + std::to_string(b);
+                return s;
+            };
+            std::cerr << "ITER " << iter << " np=" << np << " nt=" << nt
+                      << " induced=" << induced << " inj=" << injectivity_choice
+                      << " P[" << dbg_edges(pattern) << " ] T[" << dbg_edges(target) << " ]"
+                      << std::endl;
+        }
 
         auto result = solve_homomorphism_problem(pattern, target, params);
 
