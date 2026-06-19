@@ -42,13 +42,13 @@ for loops in "" "--loops 0.3"; do
         # shellcheck disable=SC2086
         "${crg}" --seed "$((seed + 100))" ${loops} 8 0.45 > "${tgt}"
 
-        # Local injectivity uses the neighbourhood-injectivity encoding and the degree
-        # and NDS eliminations built on it; it does not yet support supplemental graphs in
-        # proofs, so its arms carry --no-supplementals. (On loopy instances the degree/NDS
-        # filters are disabled anyway, issue #58, so those arms mainly exercise the encoding
-        # and counting.)
+        # Local injectivity uses the neighbourhood-injectivity encoding and the degree, NDS
+        # and exact-path (distance-2 supplemental) derivations built on it. On loopless
+        # instances all of these fire (the exact-path arms exercise create_exact_path_graphs
+        # with @linj); on loopy instances the degree/NDS/supplemental filters are disabled
+        # (issue #58), so those arms mainly exercise the encoding and counting.
         for opts in "" "--induced" "--count-solutions" "--induced --count-solutions" "--distance3" \
-                "--locally-injective --no-supplementals" "--locally-injective --no-supplementals --count-solutions"; do
+                "--locally-injective" "--locally-injective --count-solutions" "--locally-injective --induced --count-solutions"; do
             checked=$((checked + 1))
             proof="${workdir}/rps_proof_${seed}_${checked}"
 

@@ -717,8 +717,14 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
-    // if p maps to t then q does not map to t
-    *_imp->proof_stream << "pol " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + s ;\n";
+    // if p maps to t then q does not map to t. Under full injectivity that is the global
+    // injectivity on t; under local injectivity p and q are not globally distinct, but they
+    // share a common neighbour b (that is what between_p_and_q holds), so both are in N(b),
+    // and the neighbourhood-injectivity of b forbids them both mapping to t. Either way the
+    // constraint cancels the "q maps to t" term, leaving the same tidy-up.
+    *_imp->proof_stream << "pol " << _imp->proof_line << " "
+                        << (_imp->locally_injective ? _imp->locally_injective_constraints.at(pair{between_p_and_q.front().first, t.first}) : _imp->injectivity_constraints[t.first])
+                        << " + s ;\n";
     ++_imp->proof_line;
 
     // and cancel out stray extras from injectivity
@@ -748,8 +754,13 @@ auto Proof::create_exact_path_graphs(
             *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[b.first] << " +";
         }
 
+        // the between-vertices must map to distinct common neighbours of t and u (the z's).
+        // Under full injectivity that distinctness is global injectivity on each z; under
+        // local injectivity the between-vertices are all neighbours of p, so the
+        // neighbourhood-injectivity of p (at most one of N(p) maps to z) gives the same
+        // pigeonhole -- there are g between-vertices but fewer than g of the z's.
         for (auto & z : u.second)
-            *_imp->proof_stream << " " << _imp->injectivity_constraints[z.first] << " +";
+            *_imp->proof_stream << " " << (_imp->locally_injective ? _imp->locally_injective_constraints.at(pair{p.first, z.first}) : _imp->injectivity_constraints[z.first]) << " +";
 
         *_imp->proof_stream << " s ;\n";
         ++_imp->proof_line;
