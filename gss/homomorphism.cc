@@ -4,6 +4,7 @@
 #include <gss/innards/graph_traits.hh>
 #include <gss/innards/homomorphism_domain.hh>
 #include <gss/innards/homomorphism_model.hh>
+#include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_searcher.hh>
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/proof.hh>
@@ -424,6 +425,7 @@ namespace
         const InputGraph & target;
         const HomomorphismParams & params;
         const shared_ptr<Proof> & proof;
+        HomomorphismProofs * hom_proofs = nullptr;
         HomomorphismResult result;
     };
 
@@ -431,6 +433,20 @@ namespace
     {
         virtual ~SolveStep() = default;
         virtual auto run(SolveContext & ctx) -> StepOutcome = 0;
+    };
+
+    // Emit the OPB model through the solver-proofs layer (variables, (local-)injectivity,
+    // adjacency / induced non-edges, the preserved set, then finalise + loop-fix). Runs
+    // first so the later steps' proof conclusions can reference the model. No-op when
+    // proof logging is off.
+    struct EmitProofModelStep : SolveStep
+    {
+        auto run(SolveContext & ctx) -> StepOutcome override
+        {
+            if (ctx.hom_proofs)
+                ctx.hom_proofs->emit_model(ctx.pattern, ctx.target, ctx.params);
+            return StepOutcome::Continue;
+        }
     };
 
     // If we are finding a non-shrinking mapping and the pattern has more vertices than
@@ -537,7 +553,7 @@ namespace
             const auto & params = ctx.params;
             const auto & proof = ctx.proof;
 
-            HomomorphismModel model(target, pattern, params, proof);
+            HomomorphismModel model(target, pattern, params, proof, ctx.hom_proofs);
 
             if (! model.prepare()) {
                 HomomorphismResult result;
@@ -607,120 +623,23 @@ auto gss::solve_homomorphism_problem(
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
         proof = make_shared<Proof>(*params.proof_options);
-
-        // set up our model file, with a set of OPB variables for each CP variable
-        for (int n = 0; n < pattern.size(); ++n) {
-            proof->create_cp_variable(
-                n, target.size(),
-                [&](int v) { return pattern.vertex_name(v); },
-                [&](int v) { return target.vertex_name(v); });
-        }
-
-        // generate constraints for injectivity
-        if (params.injectivity == Injectivity::Injective)
-            proof->create_injectivity_constraints(pattern.size(), target.size(),
-                [&](int v) { return target.vertex_name(v); });
-        else if (params.injectivity == Injectivity::LocallyInjective)
-            // local injectivity: for each pattern vertex and each target, at most one of
-            // that vertex's neighbours may map there (so phi restricted to a neighbourhood
-            // is injective). The neighbourhood analogue of the injectivity constraints.
-            proof->create_locally_injective_constraints(pattern.size(), target.size(),
-                [&](int a, int b) { return pattern.adjacent(a, b); },
-                [&](int v) { return pattern.vertex_name(v); },
-                [&](int v) { return target.vertex_name(v); });
-
-        // generate edge constraints, and also handle loops here
-        for (int p = 0; p < pattern.size(); ++p) {
-            for (int t = 0; t < target.size(); ++t) {
-                // it's simpler to always have the adjacency constraints, even
-                // if the assignment is forbidden
-                proof->start_adjacency_constraints_for(p, t);
-
-                // if p can be mapped to t, then each neighbour of p...
-                for (int q = 0; q < pattern.size(); ++q)
-                    if (pattern.adjacent(p, q)) {
-                        // ... must be mapped to a neighbour of t. A target self-loop
-                        // (u == t) is kept in the sum, so a loop-preserving mapping
-                        // satisfies the constraint (this matches the verified CakePB
-                        // encoding; see issue #49).
-                        vector<int> permitted;
-                        for (int u = 0; u < target.size(); ++u)
-                            if (target.adjacent(t, u))
-                                permitted.push_back(u);
-                        proof->create_adjacency_constraint(
-                            NamedVertex{p, pattern.vertex_name(p)},
-                            NamedVertex{q, pattern.vertex_name(q)},
-                            NamedVertex{t, target.vertex_name(t)},
-                            permitted, false);
-                    }
-
-                // same for non-adjacency for induced
-                if (params.induced) {
-                    for (int q = 0; q < pattern.size(); ++q)
-                        if (q != p && ! pattern.adjacent(p, q)) {
-                            // ... must be mapped to a non-neighbour of t. t itself counts as
-                            // a non-neighbour exactly when it has no self-loop, so the
-                            // permitted set is just the non-neighbours of t (the same test
-                            // the q == p case below uses). Under full injectivity q cannot
-                            // share t with p anyway, so whether t is in the set is moot; but
-                            // under local injectivity p and q may both map to a loopless t,
-                            // and that is a legitimate induced non-edge (t is not adjacent to
-                            // itself), so t must stay in the set or the model wrongly rejects
-                            // it.
-                            vector<int> permitted;
-                            for (int u = 0; u < target.size(); ++u)
-                                if (! target.adjacent(t, u))
-                                    permitted.push_back(u);
-                            proof->create_adjacency_constraint(
-                                NamedVertex{p, pattern.vertex_name(p)},
-                                NamedVertex{q, pattern.vertex_name(q)},
-                                NamedVertex{t, target.vertex_name(t)},
-                                permitted, true);
-                        }
-
-                    // the q == p case of non-edge preservation: a non-loopy pattern
-                    // vertex cannot map to a loopy target, since induced isomorphism
-                    // requires loop(p) == loop(t). The loop above skips q == p, and the
-                    // edge loop only constrains a loopy p, so without this the model
-                    // admits invalid induced mappings (issue #56). p -> t then forces p
-                    // onto a non-neighbour of t; with t a neighbour of itself and
-                    // at-most-one-value, that is a contradiction.
-                    if (! pattern.adjacent(p, p) && target.adjacent(t, t)) {
-                        vector<int> permitted;
-                        for (int u = 0; u < target.size(); ++u)
-                            if (! target.adjacent(t, u))
-                                permitted.push_back(u);
-                        proof->create_adjacency_constraint(
-                            NamedVertex{p, pattern.vertex_name(p)},
-                            NamedVertex{p, pattern.vertex_name(p)},
-                            NamedVertex{t, target.vertex_name(t)},
-                            permitted, true);
-                    }
-                }
-            }
-        }
-
-        // declare the projected set (the assignment variables) so the proof's
-        // solution count is in terms of the high-level mapping
-        proof->emit_preserved_assignment_variables();
-
-        // output the model file
-        proof->finalise_model();
-
-        // derive the loop-cancelled form of each loopy adjacency constraint, so the
-        // degree, supplemental-graph and distance-3 derivations can sum them into pols
-        // without a stray "maps to the loopy target" term (issue #56).
-        proof->loop_fix_adjacencies();
     }
 
-    // The rest of the solve runs as a pipeline of steps over a shared context, in
-    // registration order, stopping at the first step that concludes the problem; the
-    // search is the terminal step. (Emitting the OPB model above will itself become a
-    // step once proof emission is co-located per step; see
-    // dev_docs/preprocessor-refactor.md.)
-    SolveContext ctx{pattern, target, params, proof};
+    // The solver-proofs middle layer (owns vertex naming + the homomorphism-specific
+    // derivations). Created here so it spans the whole solve: the OPB model emission
+    // step below and the model's later supplemental / filter proofs share this one
+    // instance. Null when proof logging is off.
+    unique_ptr<HomomorphismProofs> hom_proofs;
+    if (proof)
+        hom_proofs = make_unique<HomomorphismProofs>(proof, pattern, target);
+
+    // The solve runs as a pipeline of steps over a shared context, in registration
+    // order, stopping at the first step that concludes the problem; the search is the
+    // terminal step (see dev_docs/preprocessor-refactor.md).
+    SolveContext ctx{pattern, target, params, proof, hom_proofs.get()};
 
     vector<unique_ptr<SolveStep>> steps;
+    steps.push_back(make_unique<EmitProofModelStep>());          // emit the OPB model
     steps.push_back(make_unique<PatternBiggerThanTargetStep>()); // trivial size refutation
     steps.push_back(make_unique<TargetLoopShortcutStep>());      // non-injective target-loop shortcut
     steps.push_back(make_unique<CliqueShortcutStep>());          // clique-pattern reduction

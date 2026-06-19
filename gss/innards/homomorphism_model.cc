@@ -164,9 +164,10 @@ struct HomomorphismModel::Imp
 
     bool has_less_thans = false, has_occur_less_thans = false;
 
-    // The solver-proofs middle layer (owns vertex naming + hom-specific derivations);
-    // only created when proof logging is on.
-    std::unique_ptr<HomomorphismProofs> proofs;
+    // The solver-proofs middle layer (owns vertex naming + hom-specific derivations).
+    // Non-owning: it is created and owned by the solve pipeline (so it can emit the model
+    // before the model is built) and outlives this object. Null when proof logging is off.
+    HomomorphismProofs * proofs = nullptr;
 
     mutable bool has_pattern_cliques_sizes = false;
     mutable vector<vector<int>> pattern_cliques_sizes, target_cliques_sizes, pattern_cliques_best_knowns, target_cliques_best_knowns;
@@ -176,16 +177,17 @@ struct HomomorphismModel::Imp
     mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
     mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
 
-    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r) :
+    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr) :
         params(p),
-        proof(r)
+        proof(r),
+        proofs(pr)
     {
     }
 };
 
 HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-    const std::shared_ptr<Proof> & proof) :
-    _imp(make_unique<Imp>(params, proof)),
+    const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs) :
+    _imp(make_unique<Imp>(params, proof, proofs)),
     max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy())),
     pattern_size(pattern.size()),
     target_size(target.size())
@@ -200,9 +202,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
-
-    if (_imp->proof)
-        _imp->proofs = make_unique<HomomorphismProofs>(*_imp->proof, pattern, target);
 
     if (pattern.directed())
         _imp->graphs.directed = true;

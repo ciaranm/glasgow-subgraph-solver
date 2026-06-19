@@ -1,5 +1,6 @@
 #include <gss/innards/homomorphism_proofs.hh>
 
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -13,10 +14,11 @@ using std::nullopt;
 using std::optional;
 using std::pair;
 using std::set;
+using std::shared_ptr;
 using std::string;
 using std::vector;
 
-HomomorphismProofs::HomomorphismProofs(Proof & proof, const InputGraph & pattern, const InputGraph & target) :
+HomomorphismProofs::HomomorphismProofs(const shared_ptr<Proof> & proof, const InputGraph & pattern, const InputGraph & target) :
     _proof(proof)
 {
     for (int v = 0; v < pattern.size(); ++v)
@@ -93,7 +95,7 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
                         named_two_away_from_t.emplace_back(target_vertex(w), named_n_t_w);
                     }
 
-                    _proof.create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
+                    _proof->create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
                         named_t, named_n_t, named_two_away_from_t, named_d_n_t);
                 }
             }
@@ -187,12 +189,12 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
                 d3_from_t.assign(d3_from_t_set.begin(), d3_from_t_set.end());
 
                 if (actually_adjacent)
-                    _proof.create_distance3_graphs_but_actually_distance_1(slot, named_p, named_q, named_t, d3_from_t);
+                    _proof->create_distance3_graphs_but_actually_distance_1(slot, named_p, named_q, named_t, d3_from_t);
                 else if (path_from_p_to_q_2)
-                    _proof.create_distance3_graphs(slot, named_p, named_q, *path_from_p_to_q_1,
+                    _proof->create_distance3_graphs(slot, named_p, named_q, *path_from_p_to_q_1,
                         *path_from_p_to_q_2, named_t, d1_from_t, d2_from_t, d3_from_t);
                 else
-                    _proof.create_distance3_graphs_but_actually_distance_2(slot, named_p, named_q, *path_from_p_to_q_1,
+                    _proof->create_distance3_graphs_but_actually_distance_2(slot, named_p, named_q, *path_from_p_to_q_1,
                         named_t, d1_from_t, d2_from_t, d3_from_t);
             }
         }
@@ -221,8 +223,115 @@ auto HomomorphismProofs::prove_extra_shape(const ProcessedGraphsData & graphs, u
                     n_t.reset(v);
                     named_n_t.push_back(target_vertex(v));
                 }
-                _proof.hack_in_shape_graph(slot, named_p, named_q, named_t, named_n_t);
+                _proof->hack_in_shape_graph(slot, named_p, named_q, named_t, named_n_t);
             }
         }
     }
+}
+
+auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void
+{
+    // set up our model file, with a set of OPB variables for each CP variable
+    for (int n = 0; n < pattern.size(); ++n) {
+        _proof->create_cp_variable(
+            n, target.size(),
+            [&](int v) { return pattern.vertex_name(v); },
+            [&](int v) { return target.vertex_name(v); });
+    }
+
+    // generate constraints for injectivity
+    if (params.injectivity == Injectivity::Injective)
+        _proof->create_injectivity_constraints(pattern.size(), target.size(),
+            [&](int v) { return target.vertex_name(v); });
+    else if (params.injectivity == Injectivity::LocallyInjective)
+        // local injectivity: for each pattern vertex and each target, at most one of
+        // that vertex's neighbours may map there (so phi restricted to a neighbourhood
+        // is injective). The neighbourhood analogue of the injectivity constraints.
+        _proof->create_locally_injective_constraints(pattern.size(), target.size(),
+            [&](int a, int b) { return pattern.adjacent(a, b); },
+            [&](int v) { return pattern.vertex_name(v); },
+            [&](int v) { return target.vertex_name(v); });
+
+    // generate edge constraints, and also handle loops here
+    for (int p = 0; p < pattern.size(); ++p) {
+        for (int t = 0; t < target.size(); ++t) {
+            // it's simpler to always have the adjacency constraints, even
+            // if the assignment is forbidden
+            _proof->start_adjacency_constraints_for(p, t);
+
+            // if p can be mapped to t, then each neighbour of p...
+            for (int q = 0; q < pattern.size(); ++q)
+                if (pattern.adjacent(p, q)) {
+                    // ... must be mapped to a neighbour of t. A target self-loop
+                    // (u == t) is kept in the sum, so a loop-preserving mapping
+                    // satisfies the constraint (this matches the verified CakePB
+                    // encoding; see issue #49).
+                    vector<int> permitted;
+                    for (int u = 0; u < target.size(); ++u)
+                        if (target.adjacent(t, u))
+                            permitted.push_back(u);
+                    _proof->create_adjacency_constraint(
+                        NamedVertex{p, pattern.vertex_name(p)},
+                        NamedVertex{q, pattern.vertex_name(q)},
+                        NamedVertex{t, target.vertex_name(t)},
+                        permitted, false);
+                }
+
+            // same for non-adjacency for induced
+            if (params.induced) {
+                for (int q = 0; q < pattern.size(); ++q)
+                    if (q != p && ! pattern.adjacent(p, q)) {
+                        // ... must be mapped to a non-neighbour of t. t itself counts as
+                        // a non-neighbour exactly when it has no self-loop, so the
+                        // permitted set is just the non-neighbours of t (the same test
+                        // the q == p case below uses). Under full injectivity q cannot
+                        // share t with p anyway, so whether t is in the set is moot; but
+                        // under local injectivity p and q may both map to a loopless t,
+                        // and that is a legitimate induced non-edge (t is not adjacent to
+                        // itself), so t must stay in the set or the model wrongly rejects
+                        // it.
+                        vector<int> permitted;
+                        for (int u = 0; u < target.size(); ++u)
+                            if (! target.adjacent(t, u))
+                                permitted.push_back(u);
+                        _proof->create_adjacency_constraint(
+                            NamedVertex{p, pattern.vertex_name(p)},
+                            NamedVertex{q, pattern.vertex_name(q)},
+                            NamedVertex{t, target.vertex_name(t)},
+                            permitted, true);
+                    }
+
+                // the q == p case of non-edge preservation: a non-loopy pattern
+                // vertex cannot map to a loopy target, since induced isomorphism
+                // requires loop(p) == loop(t). The loop above skips q == p, and the
+                // edge loop only constrains a loopy p, so without this the model
+                // admits invalid induced mappings (issue #56). p -> t then forces p
+                // onto a non-neighbour of t; with t a neighbour of itself and
+                // at-most-one-value, that is a contradiction.
+                if (! pattern.adjacent(p, p) && target.adjacent(t, t)) {
+                    vector<int> permitted;
+                    for (int u = 0; u < target.size(); ++u)
+                        if (! target.adjacent(t, u))
+                            permitted.push_back(u);
+                    _proof->create_adjacency_constraint(
+                        NamedVertex{p, pattern.vertex_name(p)},
+                        NamedVertex{p, pattern.vertex_name(p)},
+                        NamedVertex{t, target.vertex_name(t)},
+                        permitted, true);
+                }
+            }
+        }
+    }
+
+    // declare the projected set (the assignment variables) so the proof's
+    // solution count is in terms of the high-level mapping
+    _proof->emit_preserved_assignment_variables();
+
+    // output the model file
+    _proof->finalise_model();
+
+    // derive the loop-cancelled form of each loopy adjacency constraint, so the
+    // degree, supplemental-graph and distance-3 derivations can sum them into pols
+    // without a stray "maps to the loopy target" term (issue #56).
+    _proof->loop_fix_adjacencies();
 }

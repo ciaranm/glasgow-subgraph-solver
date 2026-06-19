@@ -2,9 +2,11 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_PROOFS_HH 1
 
 #include <gss/formats/input_graph.hh>
+#include <gss/homomorphism.hh>
 #include <gss/innards/processed_graphs_data.hh>
 #include <gss/innards/proof.hh>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,14 +25,21 @@ namespace gss::innards
     class HomomorphismProofs
     {
     private:
-        Proof & _proof;
+        std::shared_ptr<Proof> _proof;
         std::vector<std::string> _pattern_names, _target_names;
 
     public:
-        HomomorphismProofs(Proof & proof, const InputGraph & pattern, const InputGraph & target);
+        HomomorphismProofs(const std::shared_ptr<Proof> & proof, const InputGraph & pattern, const InputGraph & target);
 
         [[nodiscard]] auto pattern_vertex(int v) const -> NamedVertex;
         [[nodiscard]] auto target_vertex(int v) const -> NamedVertex;
+
+        // Emit the OPB model: a set of variables per CP variable, the (local-)injectivity
+        // constraints, the adjacency constraints (and, for induced, the non-adjacency
+        // constraints), the preserved set, then finalise and derive the loop-cancelled
+        // adjacency forms. Operates on the raw input graphs (it runs before the model is
+        // built), so it is the solver's first proof step.
+        auto emit_model(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void;
 
         // Prove the supplemental graphs that have just been built into the
         // ProcessedGraphsData. max_graphs is the bitset stride; number_of_exact_path_graphs

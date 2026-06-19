@@ -11,6 +11,8 @@
 
 namespace gss::innards
 {
+    class HomomorphismProofs;
+
     class HomomorphismModel
     {
     private:
@@ -48,7 +50,7 @@ namespace gss::innards
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-            const std::shared_ptr<Proof> & proof);
+            const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs);
         ~HomomorphismModel();
 
         auto pattern_vertex_for_proof(int v) const -> NamedVertex;
