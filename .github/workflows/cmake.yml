@@ -20,10 +20,29 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    # Release builds bake the build CPU's ISA into the objects (-march=native, see
+    # CMakeLists.txt). The runner CPU varies between jobs, so a cached object compiled on
+    # a runner with a richer ISA must not be reused on one that lacks those instructions:
+    # it would execute an illegal instruction (SIGILL). Fold the CPU's feature set into
+    # the ccache key so only ISA-compatible runners share objects. (The sanitize and
+    # coverage jobs don't use -march=native, so their caches stay CPU-agnostic.)
+    - name: Compute CPU signature for ccache key
+      id: cpu
+      shell: bash
+      run: |
+        if [ -r /proc/cpuinfo ]; then
+          sig=$(grep -m1 -E '^(flags|Features)[[:space:]]*:' /proc/cpuinfo)
+        else
+          sig="$(sysctl -n machdep.cpu.brand_string 2>/dev/null) $(uname -m)"
+        fi
+        h=$(printf '%s' "$sig" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16)
+        echo "hash=$h" >> "$GITHUB_OUTPUT"
+        echo "CPU signature -> $h"
+
     - name: ccache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ matrix.os }}-release
+        key: ${{ matrix.os }}-release-${{ steps.cpu.outputs.hash }}
 
     - name: Install dependencies (Linux)
       if: startsWith(matrix.os, 'ubuntu')
