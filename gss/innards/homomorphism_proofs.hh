@@ -47,6 +47,12 @@ namespace gss::innards
         auto prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, int number_of_exact_path_graphs) -> void;
         auto prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void;
         auto prove_extra_shape(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void;
+
+        // Prove that pattern vertex p cannot map to target tt, because p sits in a bigger
+        // clique (in graph pair g) than tt does. Runs the clique solver with proof
+        // extension over tt's neighbourhood to certify the bound.
+        auto prove_no_clique(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned pattern_size,
+            unsigned target_size, const HomomorphismParams & params, unsigned g, int p, int tt) -> void;
     };
 }
 

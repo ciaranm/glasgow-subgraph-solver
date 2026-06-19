@@ -18,6 +18,7 @@ add_library(glasgow_subgraphs
         sip_decomposer.cc
         timeout.cc
         innards/cheap_all_different.cc
+        innards/clique_size_constraints.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc
         innards/homomorphism_model.cc

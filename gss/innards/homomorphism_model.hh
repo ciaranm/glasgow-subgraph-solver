@@ -33,12 +33,6 @@ namespace gss::innards
 
         auto _check_clique_compatibility(int p, int t) const -> bool;
 
-        auto _build_pattern_clique_sizes() const -> void;
-
-        auto _build_target_clique_size(int v) const -> void;
-
-        auto _prove_no_clique(unsigned g, int p, int t) const -> void;
-
     public:
         using PatternAdjacencyBitsType = uint8_t;
 

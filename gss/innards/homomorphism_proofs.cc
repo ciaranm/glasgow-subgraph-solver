@@ -1,5 +1,8 @@
+#include <gss/clique.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 
+#include <chrono>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -10,6 +13,10 @@
 using namespace gss;
 using namespace gss::innards;
 
+using std::make_optional;
+using std::make_unique;
+using std::map;
+using std::move;
 using std::nullopt;
 using std::optional;
 using std::pair;
@@ -17,6 +24,8 @@ using std::set;
 using std::shared_ptr;
 using std::string;
 using std::vector;
+
+using std::chrono::steady_clock;
 
 HomomorphismProofs::HomomorphismProofs(const shared_ptr<Proof> & proof, const InputGraph & pattern, const InputGraph & target) :
     _proof(proof)
@@ -334,4 +343,82 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
     // degree, supplemental-graph and distance-3 derivations can sum them into pols
     // without a stray "maps to the loopy target" term (issue #56).
     _proof->loop_fix_adjacencies();
+}
+
+auto HomomorphismProofs::prove_no_clique(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned pattern_size,
+    unsigned target_size, const HomomorphismParams & params, unsigned g, int p, int tt) -> void
+{
+    vector<NamedVertex> p_clique;
+    map<int, NamedVertex> t_clique_neighbourhood;
+    unsigned decide_size;
+
+    {
+        vector<int> include(pattern_size, -1), invinclude(pattern_size, 0);
+        int count = 0;
+        for (int w = 0; w < int(pattern_size); ++w)
+            if (w != p && graphs.pattern_graph_rows[w * max_graphs + g].test(p)) {
+                include[w] = count;
+                invinclude[count] = w;
+                ++count;
+            }
+
+        InputGraph gv(count, false, false);
+        for (unsigned f = 0; f < pattern_size; ++f)
+            if (include[f] != -1)
+                for (unsigned t = 0; t < pattern_size; ++t)
+                    if (f != t && include[t] != -1 && graphs.pattern_graph_rows[f * max_graphs + g].test(t))
+                        gv.add_edge(include[f], include[t]);
+
+        CliqueParams clique_params;
+        clique_params.timeout = params.timeout;
+        clique_params.start_time = steady_clock::now();
+        clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        auto result = solve_clique_problem(gv, clique_params);
+        for (auto & v : result.clique)
+            p_clique.push_back(pattern_vertex(invinclude[v]));
+        decide_size = result.clique.size();
+    }
+
+    {
+        vector<int> include(target_size, -1), invinclude(target_size, 0);
+        int count = 0;
+        for (int w = 0; w < int(target_size); ++w)
+            if (w != tt && graphs.target_graph_rows[w * max_graphs + g].test(tt)) {
+                t_clique_neighbourhood.emplace(count, target_vertex(w));
+                include[w] = count;
+                invinclude[count] = w;
+                ++count;
+            }
+
+        _proof->prepare_hom_clique_proof(pattern_vertex(p), target_vertex(tt), decide_size);
+
+        InputGraph gv(count, false, false);
+        for (unsigned f = 0; f < target_size; ++f)
+            if (include[f] != -1)
+                for (unsigned t = 0; t < target_size; ++t) {
+                    if (f != t && include[t] != -1) {
+                        if (graphs.target_graph_rows[f * max_graphs + g].test(t))
+                            gv.add_edge(include[f], include[t]);
+                        else if (f < t)
+                            _proof->add_hom_clique_non_edge(
+                                pattern_vertex(p), target_vertex(tt),
+                                p_clique, target_vertex(f), target_vertex(t));
+                    }
+                }
+
+        _proof->start_hom_clique_proof(pattern_vertex(p), move(p_clique), target_vertex(tt), move(t_clique_neighbourhood));
+
+        CliqueParams clique_params;
+        clique_params.timeout = params.timeout;
+        clique_params.start_time = steady_clock::now();
+        clique_params.decide = make_optional(decide_size);
+        clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        clique_params.extend_proof = _proof;
+        clique_params.proof_is_for_hom = true;
+
+        auto result = solve_clique_problem(gv, clique_params);
+        if (result.complete && ! result.clique.empty())
+            throw ProofError{"Oops, found a clique that shound't exist"};
+        _proof->finish_hom_clique_proof(pattern_vertex(p), target_vertex(tt), decide_size);
+    }
 }
