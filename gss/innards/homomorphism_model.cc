@@ -2,6 +2,7 @@
 #include <gss/configuration.hh>
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_traits.hh>
+#include <gss/innards/processed_graphs_data.hh>
 
 #include <chrono>
 #include <functional>
@@ -156,17 +157,10 @@ struct HomomorphismModel::Imp
     const HomomorphismParams & params;
     shared_ptr<Proof> proof;
 
-    vector<PatternAdjacencyBitsType> pattern_adjacencies_bits;
-    vector<SVOBitset> pattern_graph_rows;
-    vector<SVOBitset> target_graph_rows, forward_target_graph_rows, reverse_target_graph_rows;
+    // The recoded graphs and everything derived from them (see processed_graphs_data.hh).
+    ProcessedGraphsData graphs;
 
-    vector<vector<int>> patterns_degrees, targets_degrees;
-    int largest_target_degree = 0;
-    bool has_less_thans = false, has_occur_less_thans = false, directed = false;
-
-    vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
-    vector<int> pattern_loops, target_loops;
-    bool has_loops = false;
+    bool has_less_thans = false, has_occur_less_thans = false;
 
     vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
 
@@ -177,8 +171,6 @@ struct HomomorphismModel::Imp
     unsigned max_graphs_for_clique_size_constraints = 0;
     mutable list<string> pattern_cliques_build_times, pattern_cliques_solve_times, pattern_cliques_solve_find_nodes, pattern_cliques_solve_prove_nodes;
     mutable list<string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
-
-    mutable list<string> supplemental_graph_names;
 
     Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r) :
         params(p),
@@ -194,13 +186,13 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     pattern_size(pattern.size()),
     target_size(target.size())
 {
-    _imp->has_loops = pattern.loopy() || target.loopy();
+    _imp->graphs.has_loops = pattern.loopy() || target.loopy();
 
     if (_imp->params.clique_size_constraints)
         _imp->max_graphs_for_clique_size_constraints = (_imp->params.clique_size_constraints_on_supplementals ? max_graphs : 1);
 
-    _imp->patterns_degrees.resize(max_graphs);
-    _imp->targets_degrees.resize(max_graphs);
+    _imp->graphs.patterns_degrees.resize(max_graphs);
+    _imp->graphs.targets_degrees.resize(max_graphs);
 
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
@@ -213,18 +205,18 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     }
 
     if (pattern.directed())
-        _imp->directed = true;
+        _imp->graphs.directed = true;
 
     // recode pattern to a bit graph, and strip out loops
-    _imp->pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
-    _imp->pattern_loops.resize(pattern_size);
+    _imp->graphs.pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
+    _imp->graphs.pattern_loops.resize(pattern_size);
     for (unsigned i = 0; i < pattern_size; ++i) {
         for (unsigned j = 0; j < pattern_size; ++j) {
             if (pattern.adjacent(i, j)) {
                 if (i == j)
-                    _imp->pattern_loops[i] = 1;
+                    _imp->graphs.pattern_loops[i] = 1;
                 else
-                    _imp->pattern_graph_rows[i * max_graphs + 0].set(j);
+                    _imp->graphs.pattern_graph_rows[i * max_graphs + 0].set(j);
             }
         }
     }
@@ -238,44 +230,44 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
                 ++next_vertex_label;
         }
 
-        _imp->pattern_vertex_labels.resize(pattern_size);
+        _imp->graphs.pattern_vertex_labels.resize(pattern_size);
         for (unsigned i = 0; i < pattern_size; ++i)
-            _imp->pattern_vertex_labels[i] = vertex_labels_map.find(string{pattern.vertex_label(i)})->second;
+            _imp->graphs.pattern_vertex_labels[i] = vertex_labels_map.find(string{pattern.vertex_label(i)})->second;
     }
 
     // re-encode and store edge labels
     map<string, int> edge_labels_map;
     int next_edge_label = 1;
     if (pattern.has_edge_labels()) {
-        _imp->pattern_edge_labels.resize(pattern_size * pattern_size);
+        _imp->graphs.pattern_edge_labels.resize(pattern_size * pattern_size);
         for (unsigned i = 0; i < pattern_size; ++i)
             for (unsigned j = 0; j < pattern_size; ++j)
                 if (pattern.adjacent(i, j)) {
                     auto r = edge_labels_map.emplace(pattern.edge_label(i, j), next_edge_label);
                     if (r.second)
                         ++next_edge_label;
-                    _imp->pattern_edge_labels[i * pattern_size + j] = r.first->second;
+                    _imp->graphs.pattern_edge_labels[i * pattern_size + j] = r.first->second;
                 }
     }
 
     // recode target to a bit graph, and take out loops
-    _imp->target_graph_rows.resize(target_size * max_graphs, SVOBitset{target_size, 0});
-    _imp->target_loops.resize(target_size);
+    _imp->graphs.target_graph_rows.resize(target_size * max_graphs, SVOBitset{target_size, 0});
+    _imp->graphs.target_loops.resize(target_size);
     target.for_each_edge([&](int f, int t, string_view) {
         if (f == t)
-            _imp->target_loops[f] = 1;
+            _imp->graphs.target_loops[f] = 1;
         else
-            _imp->target_graph_rows[f * max_graphs + 0].set(t);
+            _imp->graphs.target_graph_rows[f * max_graphs + 0].set(t);
     });
 
     // if directed, do both directions
     if (pattern.directed()) {
-        _imp->forward_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
-        _imp->reverse_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
+        _imp->graphs.forward_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
+        _imp->graphs.reverse_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
         target.for_each_edge([&](int f, int t, string_view l) {
             if (f != t && l != "unlabelled") {
-                _imp->forward_target_graph_rows[f].set(t);
-                _imp->reverse_target_graph_rows[t].set(f);
+                _imp->graphs.forward_target_graph_rows[f].set(t);
+                _imp->graphs.reverse_target_graph_rows[t].set(f);
             }
         });
     }
@@ -287,20 +279,20 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
                 ++next_vertex_label;
         }
 
-        _imp->target_vertex_labels.resize(target_size);
+        _imp->graphs.target_vertex_labels.resize(target_size);
         for (unsigned i = 0; i < target_size; ++i)
-            _imp->target_vertex_labels[i] = vertex_labels_map.find(string{target.vertex_label(i)})->second;
+            _imp->graphs.target_vertex_labels[i] = vertex_labels_map.find(string{target.vertex_label(i)})->second;
     }
 
     // target edge labels
     if (pattern.has_edge_labels()) {
-        _imp->target_edge_labels.resize(target_size * target_size);
+        _imp->graphs.target_edge_labels.resize(target_size * target_size);
         target.for_each_edge([&](int f, int t, string_view l) {
             auto r = edge_labels_map.emplace(l, next_edge_label);
             if (r.second)
                 ++next_edge_label;
 
-            _imp->target_edge_labels[f * target_size + t] = r.first->second;
+            _imp->graphs.target_edge_labels[f * target_size + t] = r.first->second;
         });
     }
 
@@ -410,7 +402,7 @@ auto HomomorphismModel::_build_pattern_clique_sizes() const -> void
 {
     for (unsigned g = 0; g < _imp->max_graphs_for_clique_size_constraints; ++g) {
         for (unsigned v = 0; v < pattern_size; ++v) {
-            auto c = find_clique(_imp->params.timeout, pattern_size, _imp->pattern_graph_rows, g, max_graphs, v, nullopt,
+            auto c = find_clique(_imp->params.timeout, pattern_size, _imp->graphs.pattern_graph_rows, g, max_graphs, v, nullopt,
                 _imp->pattern_cliques_best_knowns[g], _imp->pattern_cliques_build_times, _imp->pattern_cliques_solve_times,
                 _imp->pattern_cliques_solve_find_nodes, _imp->pattern_cliques_solve_prove_nodes);
             _imp->pattern_cliques_sizes[g][v] = c;
@@ -424,7 +416,7 @@ auto HomomorphismModel::_build_target_clique_size(int v) const -> void
 {
     if (0 == _imp->target_cliques_sizes[0][v])
         for (unsigned g = 0; g < _imp->max_graphs_for_clique_size_constraints; ++g) {
-            _imp->target_cliques_sizes[g][v] = find_clique(_imp->params.timeout, target_size, _imp->target_graph_rows, g, max_graphs, v,
+            _imp->target_cliques_sizes[g][v] = find_clique(_imp->params.timeout, target_size, _imp->graphs.target_graph_rows, g, max_graphs, v,
                 _imp->largest_pattern_clique[g], _imp->target_cliques_best_knowns[0], _imp->target_cliques_build_times,
                 _imp->target_cliques_solve_times, _imp->target_cliques_solve_find_nodes, _imp->target_cliques_solve_prove_nodes);
         }
@@ -464,7 +456,7 @@ auto HomomorphismModel::_prove_no_clique(
         vector<int> include(pattern_size, -1), invinclude(pattern_size, 0);
         int count = 0;
         for (int w = 0; w < int(pattern_size); ++w)
-            if (w != p && _imp->pattern_graph_rows[w * max_graphs + g].test(p)) {
+            if (w != p && _imp->graphs.pattern_graph_rows[w * max_graphs + g].test(p)) {
                 include[w] = count;
                 invinclude[count] = w;
                 ++count;
@@ -474,7 +466,7 @@ auto HomomorphismModel::_prove_no_clique(
         for (unsigned f = 0; f < pattern_size; ++f)
             if (include[f] != -1)
                 for (unsigned t = 0; t < pattern_size; ++t)
-                    if (f != t && include[t] != -1 && _imp->pattern_graph_rows[f * max_graphs + g].test(t))
+                    if (f != t && include[t] != -1 && _imp->graphs.pattern_graph_rows[f * max_graphs + g].test(t))
                         gv.add_edge(include[f], include[t]);
 
         CliqueParams params;
@@ -491,7 +483,7 @@ auto HomomorphismModel::_prove_no_clique(
         vector<int> include(target_size, -1), invinclude(target_size, 0);
         int count = 0;
         for (int w = 0; w < int(target_size); ++w)
-            if (w != tt && _imp->target_graph_rows[w * max_graphs + g].test(tt)) {
+            if (w != tt && _imp->graphs.target_graph_rows[w * max_graphs + g].test(tt)) {
                 t_clique_neighbourhood.emplace(count, target_vertex_for_proof(w));
                 include[w] = count;
                 invinclude[count] = w;
@@ -505,7 +497,7 @@ auto HomomorphismModel::_prove_no_clique(
             if (include[f] != -1)
                 for (unsigned t = 0; t < target_size; ++t) {
                     if (f != t && include[t] != -1) {
-                        if (_imp->target_graph_rows[f * max_graphs + g].test(t))
+                        if (_imp->graphs.target_graph_rows[f * max_graphs + g].test(t))
                             gv.add_edge(include[f], include[t]);
                         else if (f < t)
                             _imp->proof->add_hom_clique_non_edge(
@@ -539,7 +531,7 @@ auto HomomorphismModel::_check_degree_compatibility(
     vector<vector<optional<vector<int>>>> & targets_ndss,
     bool do_not_do_nds_yet) const -> bool
 {
-    if (! degree_and_nds_are_preserved(_imp->params, _imp->has_loops))
+    if (! degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops))
         return true;
 
     for (unsigned g = 0; g < graphs_to_consider; ++g) {
@@ -638,7 +630,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
     vector<vector<vector<int>>> patterns_ndss(max_graphs_for_degree_things);
     vector<vector<optional<vector<int>>>> targets_ndss(max_graphs_for_degree_things);
 
-    if (degree_and_nds_are_preserved(_imp->params, _imp->has_loops) && ! _imp->params.no_nds) {
+    if (degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
         for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
             patterns_ndss.at(g).resize(pattern_size);
             targets_ndss.at(g).resize(target_size);
@@ -685,7 +677,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
     }
 
     // for proof logging, we need degree information before we can output nds proofs
-    if (_imp->proof && degree_and_nds_are_preserved(_imp->params, _imp->has_loops) && ! _imp->params.no_nds) {
+    if (_imp->proof && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
         for (unsigned i = 0; i < pattern_size; ++i) {
             for (unsigned j = 0; j < target_size; ++j) {
                 if (domains.at(i).values.test(j) &&
@@ -754,7 +746,7 @@ auto HomomorphismModel::prepare() -> bool
     if (is_nonshrinking(_imp->params) && (pattern_size > target_size))
         return false;
 
-    _imp->supplemental_graph_names.push_back("original");
+    _imp->graphs.supplemental_graph_names.push_back("original");
 
     // Emit every loop-based incompatibility up front, as a unit clause. The target graph
     // rows have self-loops stripped, so the adjacency, supplemental-graph and degree
@@ -771,21 +763,21 @@ auto HomomorphismModel::prepare() -> bool
     }
 
     // pattern and target degrees, for the main graph
-    _imp->patterns_degrees.at(0).resize(pattern_size);
-    _imp->targets_degrees.at(0).resize(target_size);
+    _imp->graphs.patterns_degrees.at(0).resize(pattern_size);
+    _imp->graphs.targets_degrees.at(0).resize(target_size);
 
     for (unsigned i = 0; i < pattern_size; ++i)
-        _imp->patterns_degrees.at(0).at(i) = _imp->pattern_graph_rows[i * max_graphs + 0].count();
+        _imp->graphs.patterns_degrees.at(0).at(i) = _imp->graphs.pattern_graph_rows[i * max_graphs + 0].count();
 
     for (unsigned i = 0; i < target_size; ++i)
-        _imp->targets_degrees.at(0).at(i) = _imp->target_graph_rows[i * max_graphs + 0].count();
+        _imp->graphs.targets_degrees.at(0).at(i) = _imp->graphs.target_graph_rows[i * max_graphs + 0].count();
 
     if (global_degree_is_preserved(_imp->params)) {
         vector<pair<int, int>> p_gds, t_gds;
         for (unsigned i = 0; i < pattern_size; ++i)
-            p_gds.emplace_back(i, _imp->patterns_degrees.at(0).at(i));
+            p_gds.emplace_back(i, _imp->graphs.patterns_degrees.at(0).at(i));
         for (unsigned i = 0; i < target_size; ++i)
-            t_gds.emplace_back(i, _imp->targets_degrees.at(0).at(i));
+            t_gds.emplace_back(i, _imp->graphs.targets_degrees.at(0).at(i));
 
         sort(p_gds.begin(), p_gds.end(), [](const pair<int, int> & a, const pair<int, int> & b) { return a.second > b.second; });
         sort(t_gds.begin(), t_gds.end(), [](const pair<int, int> & a, const pair<int, int> & b) { return a.second > b.second; });
@@ -795,14 +787,14 @@ auto HomomorphismModel::prepare() -> bool
                 if (_imp->proof) {
                     for (unsigned p = 0; p <= i; ++p) {
                         vector<int> n_p;
-                        auto np = _imp->pattern_graph_rows[p_gds.at(p).first * max_graphs + 0];
+                        auto np = _imp->graphs.pattern_graph_rows[p_gds.at(p).first * max_graphs + 0];
                         for (unsigned j = 0; j < pattern_size; ++j)
                             if (np.test(j))
                                 n_p.push_back(j);
 
                         for (unsigned t = i; t < t_gds.size(); ++t) {
                             vector<int> n_t;
-                            auto nt = _imp->target_graph_rows[t_gds.at(t).first * max_graphs + 0];
+                            auto nt = _imp->graphs.target_graph_rows[t_gds.at(t).first * max_graphs + 0];
                             for (auto j = nt.find_first(); j != decltype(nt)::npos; j = nt.find_first()) {
                                 nt.reset(j);
                                 n_t.push_back(j);
@@ -832,24 +824,24 @@ auto HomomorphismModel::prepare() -> bool
     // next free slot(s). The plan also fixes max_graphs, so the bump counters land
     // exactly on max_graphs at the end (checked below). The proof emission for each
     // graph is still inline here; co-locating it with its build is a later phase.
-    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->has_loops)) {
+    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops)) {
         switch (spec.kind) {
         case ShapeGraphSpec::Kind::ExactPath:
-            _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false, true);
-            _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->directed, false, false);
+            _build_exact_path_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);
+            _build_exact_path_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, false);
 
             if (_imp->proof) {
                 for (int g = 1; g <= _imp->params.number_of_exact_path_graphs; ++g) {
                     for (unsigned p = 0; p < pattern_size; ++p) {
                         for (unsigned q = 0; q < pattern_size; ++q) {
-                            if (p == q || ! _imp->pattern_graph_rows[p * max_graphs + g].test(q))
+                            if (p == q || ! _imp->graphs.pattern_graph_rows[p * max_graphs + g].test(q))
                                 continue;
 
                             auto named_p = pattern_vertex_for_proof(p);
                             auto named_q = pattern_vertex_for_proof(q);
 
-                            auto n_p_q = _imp->pattern_graph_rows[p * max_graphs + 0];
-                            n_p_q &= _imp->pattern_graph_rows[q * max_graphs + 0];
+                            auto n_p_q = _imp->graphs.pattern_graph_rows[p * max_graphs + 0];
+                            n_p_q &= _imp->graphs.pattern_graph_rows[q * max_graphs + 0];
                             vector<NamedVertex> between_p_and_q;
                             for (auto v = n_p_q.find_first(); v != decltype(n_p_q)::npos; v = n_p_q.find_first()) {
                                 n_p_q.reset(v);
@@ -863,23 +855,23 @@ auto HomomorphismModel::prepare() -> bool
 
                                 vector<NamedVertex> named_n_t, named_d_n_t;
                                 vector<pair<NamedVertex, vector<NamedVertex>>> named_two_away_from_t;
-                                auto n_t = _imp->target_graph_rows[t * max_graphs + 0];
+                                auto n_t = _imp->graphs.target_graph_rows[t * max_graphs + 0];
                                 for (auto w = n_t.find_first(); w != decltype(n_t)::npos; w = n_t.find_first()) {
                                     n_t.reset(w);
                                     named_n_t.push_back(target_vertex_for_proof(w));
                                 }
 
-                                auto nd_t = _imp->target_graph_rows[t * max_graphs + g];
+                                auto nd_t = _imp->graphs.target_graph_rows[t * max_graphs + g];
                                 for (auto w = nd_t.find_first(); w != decltype(nd_t)::npos; w = nd_t.find_first()) {
                                     nd_t.reset(w);
                                     named_d_n_t.push_back(target_vertex_for_proof(w));
                                 }
 
-                                auto n2_t = _imp->target_graph_rows[t * max_graphs + 1];
+                                auto n2_t = _imp->graphs.target_graph_rows[t * max_graphs + 1];
                                 for (auto w = n2_t.find_first(); w != decltype(n2_t)::npos; w = n2_t.find_first()) {
                                     n2_t.reset(w);
-                                    auto n_t_w = _imp->target_graph_rows[w * max_graphs + 0];
-                                    n_t_w &= _imp->target_graph_rows[t * max_graphs + 0];
+                                    auto n_t_w = _imp->graphs.target_graph_rows[w * max_graphs + 0];
+                                    n_t_w &= _imp->graphs.target_graph_rows[t * max_graphs + 0];
                                     vector<NamedVertex> named_n_t_w;
                                     for (auto x = n_t_w.find_first(); x != decltype(n_t_w)::npos; x = n_t_w.find_first()) {
                                         n_t_w.reset(x);
@@ -898,13 +890,13 @@ auto HomomorphismModel::prepare() -> bool
             break;
 
         case ShapeGraphSpec::Kind::Distance2:
-            _build_exact_path_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, 1, _imp->directed, true, true);
-            _build_exact_path_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, 1, _imp->directed, true, false);
+            _build_exact_path_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, 1, _imp->graphs.directed, true, true);
+            _build_exact_path_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, 1, _imp->graphs.directed, true, false);
             break;
 
         case ShapeGraphSpec::Kind::Distance3:
-            _build_distance3_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
-            _build_distance3_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, false);
+            _build_distance3_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
+            _build_distance3_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, false);
 
             if (_imp->proof) {
                 for (unsigned p = 0; p < pattern_size; ++p) {
@@ -913,19 +905,19 @@ auto HomomorphismModel::prepare() -> bool
                         auto named_q = pattern_vertex_for_proof(q);
 
                         // only do this if they're actually adjacent
-                        if (p == q || ! _imp->pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
+                        if (p == q || ! _imp->graphs.pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
                             continue;
 
                         bool actually_adjacent = false;
                         optional<NamedVertex> path_from_p_to_q_1 = nullopt, path_from_p_to_q_2 = nullopt;
 
-                        auto n_p = _imp->pattern_graph_rows[p * max_graphs + 0];
+                        auto n_p = _imp->graphs.pattern_graph_rows[p * max_graphs + 0];
 
                         // are they actually distance 1 apart?
                         if (n_p.test(q))
                             actually_adjacent = true;
                         else {
-                            auto n_q = _imp->pattern_graph_rows[q * max_graphs + 0];
+                            auto n_q = _imp->graphs.pattern_graph_rows[q * max_graphs + 0];
 
                             auto n_p_q = n_p;
                             n_p_q &= n_q;
@@ -942,13 +934,13 @@ auto HomomorphismModel::prepare() -> bool
                                 n_p.reset(q);
                                 for (auto v = n_p.find_first(); v != decltype(n_p)::npos && ! path_from_p_to_q_1; v = n_p.find_first()) {
                                     n_p.reset(v);
-                                    auto n_v = _imp->pattern_graph_rows[v * max_graphs + 0];
+                                    auto n_v = _imp->graphs.pattern_graph_rows[v * max_graphs + 0];
                                     n_v.reset(v);
                                     n_v.reset(p);
                                     n_v.reset(q);
                                     for (auto w = n_v.find_first(); w != decltype(n_v)::npos && ! path_from_p_to_q_1; w = n_v.find_first()) {
                                         n_v.reset(w);
-                                        if (_imp->pattern_graph_rows[w * max_graphs + 0].test(q)) {
+                                        if (_imp->graphs.pattern_graph_rows[w * max_graphs + 0].test(q)) {
                                             path_from_p_to_q_1 = pattern_vertex_for_proof(v);
                                             path_from_p_to_q_2 = pattern_vertex_for_proof(w);
                                         }
@@ -965,17 +957,17 @@ auto HomomorphismModel::prepare() -> bool
 
                             vector<NamedVertex> d1_from_t, d2_from_t, d3_from_t;
                             set<NamedVertex> d2_from_t_set, d3_from_t_set;
-                            auto n_t = _imp->target_graph_rows[t * max_graphs + 0];
+                            auto n_t = _imp->graphs.target_graph_rows[t * max_graphs + 0];
                             n_t.set(t);
                             for (auto v = n_t.find_first(); v != decltype(n_t)::npos; v = n_t.find_first()) {
                                 n_t.reset(v);
                                 d1_from_t.push_back(target_vertex_for_proof(v));
-                                auto n_v = _imp->target_graph_rows[v * max_graphs + 0];
+                                auto n_v = _imp->graphs.target_graph_rows[v * max_graphs + 0];
                                 n_v.set(v);
                                 for (auto w = n_v.find_first(); w != decltype(n_v)::npos; w = n_v.find_first()) {
                                     n_v.reset(w);
                                     d2_from_t_set.insert(target_vertex_for_proof(w));
-                                    auto n_w = _imp->target_graph_rows[w * max_graphs + 0];
+                                    auto n_w = _imp->graphs.target_graph_rows[w * max_graphs + 0];
                                     n_w.set(w);
                                     for (auto x = n_w.find_first(); x != decltype(n_w)::npos; x = n_w.find_first()) {
                                         n_w.reset(x);
@@ -1002,14 +994,14 @@ auto HomomorphismModel::prepare() -> bool
             break;
 
         case ShapeGraphSpec::Kind::K4:
-            _build_k4_graphs(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
-            _build_k4_graphs(_imp->target_graph_rows, target_size, next_target_supplemental, false);
+            _build_k4_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
+            _build_k4_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, false);
             break;
 
         case ShapeGraphSpec::Kind::ExtraShape: {
             auto & [shape, injective, count] = *spec.extra_shape;
-            _build_extra_shape(_imp->pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape, injective, count, true);
-            _build_extra_shape(_imp->target_graph_rows, target_size, next_target_supplemental, *shape, injective, count, false);
+            _build_extra_shape(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape, injective, count, true);
+            _build_extra_shape(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, *shape, injective, count, false);
 
             if (_imp->proof) {
                 for (unsigned p = 0; p < pattern_size; ++p) {
@@ -1018,13 +1010,13 @@ auto HomomorphismModel::prepare() -> bool
                         auto named_q = pattern_vertex_for_proof(q);
 
                         // only do this if they're actually adjacent
-                        if (! _imp->pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
+                        if (! _imp->graphs.pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
                             continue;
 
                         for (unsigned t = 0; t < target_size; ++t) {
                             auto named_t = target_vertex_for_proof(t);
                             vector<NamedVertex> named_n_t;
-                            auto n_t = _imp->target_graph_rows[t * max_graphs + next_pattern_supplemental - 1];
+                            auto n_t = _imp->graphs.target_graph_rows[t * max_graphs + next_pattern_supplemental - 1];
                             for (auto v = n_t.find_first(); v != decltype(n_t)::npos; v = n_t.find_first()) {
                                 n_t.reset(v);
                                 named_n_t.push_back(target_vertex_for_proof(v));
@@ -1041,43 +1033,43 @@ auto HomomorphismModel::prepare() -> bool
     // Defensive invariant: every plan slot has now been built, so the bump counters must
     // land on max_graphs (derived from the same plan) and match the recorded names.
     if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs ||
-            next_pattern_supplemental != _imp->supplemental_graph_names.size())
+            next_pattern_supplemental != _imp->graphs.supplemental_graph_names.size())
         throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) + " "
-        + to_string(_imp->supplemental_graph_names.size())};
+        + to_string(_imp->graphs.supplemental_graph_names.size())};
 
     // pattern and target degrees, for supplemental graphs
     for (unsigned g = 1; g < max_graphs; ++g) {
-        _imp->patterns_degrees.at(g).resize(pattern_size);
-        _imp->targets_degrees.at(g).resize(target_size);
+        _imp->graphs.patterns_degrees.at(g).resize(pattern_size);
+        _imp->graphs.targets_degrees.at(g).resize(target_size);
     }
 
     for (unsigned g = 1; g < max_graphs; ++g) {
         for (unsigned i = 0; i < pattern_size; ++i)
-            _imp->patterns_degrees.at(g).at(i) = _imp->pattern_graph_rows[i * max_graphs + g].count();
+            _imp->graphs.patterns_degrees.at(g).at(i) = _imp->graphs.pattern_graph_rows[i * max_graphs + g].count();
 
         for (unsigned i = 0; i < target_size; ++i)
-            _imp->targets_degrees.at(g).at(i) = _imp->target_graph_rows[i * max_graphs + g].count();
+            _imp->graphs.targets_degrees.at(g).at(i) = _imp->graphs.target_graph_rows[i * max_graphs + g].count();
     }
 
     for (unsigned i = 0; i < target_size; ++i)
-        _imp->largest_target_degree = max(_imp->largest_target_degree, _imp->targets_degrees[0][i]);
+        _imp->graphs.largest_target_degree = max(_imp->graphs.largest_target_degree, _imp->graphs.targets_degrees[0][i]);
 
     // re-add loops
     for (unsigned i = 0; i < pattern_size; ++i)
-        if (_imp->pattern_loops[i])
-            _imp->pattern_graph_rows[i * max_graphs + 0].set(i);
+        if (_imp->graphs.pattern_loops[i])
+            _imp->graphs.pattern_graph_rows[i * max_graphs + 0].set(i);
 
     for (unsigned i = 0; i < target_size; ++i)
-        if (_imp->target_loops[i])
-            _imp->target_graph_rows[i * max_graphs + 0].set(i);
+        if (_imp->graphs.target_loops[i])
+            _imp->graphs.target_graph_rows[i * max_graphs + 0].set(i);
 
     // pattern adjacencies, compressed
-    _imp->pattern_adjacencies_bits.resize(pattern_size * pattern_size);
+    _imp->graphs.pattern_adjacencies_bits.resize(pattern_size * pattern_size);
     for (unsigned g = 0; g < max_graphs; ++g)
         for (unsigned i = 0; i < pattern_size; ++i)
             for (unsigned j = 0; j < pattern_size; ++j)
-                if (_imp->pattern_graph_rows[i * max_graphs + g].test(j))
-                    _imp->pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
+                if (_imp->graphs.pattern_graph_rows[i * max_graphs + g].test(j))
+                    _imp->graphs.pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
 
     return true;
 }
@@ -1124,7 +1116,7 @@ auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows,
 
     if (pattern)
         for (unsigned p = 1; p <= number_of_exact_path_graphs; ++p)
-            _imp->supplemental_graph_names.push_back("exact_path_" + to_string(p));
+            _imp->graphs.supplemental_graph_names.push_back("exact_path_" + to_string(p));
 
     idx += number_of_exact_path_graphs;
 }
@@ -1148,7 +1140,7 @@ auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, 
     }
 
     if (pattern)
-        _imp->supplemental_graph_names.push_back("distance3");
+        _imp->graphs.supplemental_graph_names.push_back("distance3");
     ++idx;
 }
 
@@ -1185,7 +1177,7 @@ auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigne
     }
 
     if (pattern)
-        _imp->supplemental_graph_names.push_back("k4");
+        _imp->graphs.supplemental_graph_names.push_back("k4");
     ++idx;
 }
 
@@ -1234,88 +1226,88 @@ auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsig
     }
 
     if (pattern)
-        _imp->supplemental_graph_names.push_back("extra_shape");
+        _imp->graphs.supplemental_graph_names.push_back("extra_shape");
     ++idx;
 }
 
 auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType
 {
-    return _imp->pattern_adjacencies_bits[pattern_size * p + q];
+    return _imp->graphs.pattern_adjacencies_bits[pattern_size * p + q];
 }
 
 auto HomomorphismModel::pattern_graph_row(int g, int p) const -> const SVOBitset &
 {
-    return _imp->pattern_graph_rows[p * max_graphs + g];
+    return _imp->graphs.pattern_graph_rows[p * max_graphs + g];
 }
 
 auto HomomorphismModel::target_graph_row(int g, int t) const -> const SVOBitset &
 {
-    return _imp->target_graph_rows[t * max_graphs + g];
+    return _imp->graphs.target_graph_rows[t * max_graphs + g];
 }
 
 auto HomomorphismModel::forward_target_graph_row(int t) const -> const SVOBitset &
 {
-    return _imp->forward_target_graph_rows[t];
+    return _imp->graphs.forward_target_graph_rows[t];
 }
 
 auto HomomorphismModel::reverse_target_graph_row(int t) const -> const SVOBitset &
 {
-    return _imp->reverse_target_graph_rows[t];
+    return _imp->graphs.reverse_target_graph_rows[t];
 }
 
 auto HomomorphismModel::pattern_degree(int g, int p) const -> unsigned
 {
-    return _imp->patterns_degrees[g][p];
+    return _imp->graphs.patterns_degrees[g][p];
 }
 
 auto HomomorphismModel::target_degree(int g, int t) const -> unsigned
 {
-    return _imp->targets_degrees[g][t];
+    return _imp->graphs.targets_degrees[g][t];
 }
 
 auto HomomorphismModel::largest_target_degree() const -> unsigned
 {
-    return _imp->largest_target_degree;
+    return _imp->graphs.largest_target_degree;
 }
 
 auto HomomorphismModel::has_vertex_labels() const -> bool
 {
-    return ! _imp->pattern_vertex_labels.empty();
+    return ! _imp->graphs.pattern_vertex_labels.empty();
 }
 
 auto HomomorphismModel::has_edge_labels() const -> bool
 {
-    return ! _imp->pattern_edge_labels.empty();
+    return ! _imp->graphs.pattern_edge_labels.empty();
 }
 
 auto HomomorphismModel::pattern_vertex_label(int p) const -> int
 {
-    return _imp->pattern_vertex_labels[p];
+    return _imp->graphs.pattern_vertex_labels[p];
 }
 
 auto HomomorphismModel::target_vertex_label(int t) const -> int
 {
-    return _imp->target_vertex_labels[t];
+    return _imp->graphs.target_vertex_labels[t];
 }
 
 auto HomomorphismModel::pattern_edge_label(int p, int q) const -> int
 {
-    return _imp->pattern_edge_labels[p * pattern_size + q];
+    return _imp->graphs.pattern_edge_labels[p * pattern_size + q];
 }
 
 auto HomomorphismModel::target_edge_label(int t, int u) const -> int
 {
-    return _imp->target_edge_labels[t * target_size + u];
+    return _imp->graphs.target_edge_labels[t * target_size + u];
 }
 
 auto HomomorphismModel::pattern_has_loop(int p) const -> bool
 {
-    return _imp->pattern_loops[p];
+    return _imp->graphs.pattern_loops[p];
 }
 
 auto HomomorphismModel::target_has_loop(int t) const -> bool
 {
-    return _imp->target_loops[t];
+    return _imp->graphs.target_loops[t];
 }
 
 auto HomomorphismModel::has_less_thans() const -> bool
@@ -1330,7 +1322,7 @@ auto HomomorphismModel::has_occur_less_thans() const -> bool
 
 auto HomomorphismModel::directed() const -> bool
 {
-    return _imp->directed;
+    return _imp->graphs.directed;
 }
 
 auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
@@ -1355,5 +1347,5 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
         x.emplace_back(join("target_cliques_solve_prove_nodes =", _imp->target_cliques_solve_prove_nodes));
     }
 
-    x.emplace_back(join("supplemental_graph_names =", _imp->supplemental_graph_names));
+    x.emplace_back(join("supplemental_graph_names =", _imp->graphs.supplemental_graph_names));
 }
