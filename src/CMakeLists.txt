@@ -81,6 +81,17 @@ if(VERIPB_EXECUTABLE)
     gss_add_proof_test(proof_distance3_loopy ${SUB} --no-nds --distance3
         --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
+    # Local injectivity: the neighbourhood-injectivity encoding + the degree pigeonhole
+    # using it. Currently requires --no-supplementals --no-nds (the NDS and supplemental
+    # derivations still need locally-injective variants). Loopless and loopy (small/large
+    # have a self-loop, exercising the closed-neighbourhood form).
+    gss_add_proof_test(proof_locally_injective_unsat ${SUB_MIN}
+        --locally-injective --format lad ${GSS_INSTANCES}/star5.lad ${GSS_INSTANCES}/path5.lad)
+    gss_add_proof_test(proof_locally_injective_count ${SUB_MIN}
+        --locally-injective --count-solutions ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    gss_add_proof_test(proof_locally_injective_loopy ${SUB_MIN}
+        --locally-injective --count-solutions --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+
     # --- Preprocessing / supplemental-graph proofs (loopless) ---
     # supplemental (exact-path) graphs: create_exact_path_graphs derivations.
     gss_add_proof_test(proof_supplementals ${SUB} --no-nds

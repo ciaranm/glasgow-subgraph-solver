@@ -419,12 +419,16 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
-        if (params.injectivity != Injectivity::Injective && params.injectivity != Injectivity::NonInjective)
-            throw UnsupportedConfiguration{"Proof logging can currently only be used with injectivity or non-injectivity"};
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
+        // Local-injectivity proofs are supported with the neighbourhood-injectivity
+        // encoding plus the degree elimination; the NDS and supplemental-graph derivations
+        // still need locally-injective variants (the global-injectivity ones don't apply),
+        // so for now require those off.
+        if (params.injectivity == Injectivity::LocallyInjective && (! params.no_supplementals || ! params.no_nds))
+            throw UnsupportedConfiguration{"Proof logging with local injectivity currently requires --no-supplementals and --no-nds"};
 
         proof = make_shared<Proof>(*params.proof_options);
 
@@ -439,6 +443,14 @@ auto gss::solve_homomorphism_problem(
         // generate constraints for injectivity
         if (params.injectivity == Injectivity::Injective)
             proof->create_injectivity_constraints(pattern.size(), target.size(),
+                [&](int v) { return target.vertex_name(v); });
+        else if (params.injectivity == Injectivity::LocallyInjective)
+            // local injectivity: for each pattern vertex and each target, at most one of
+            // that vertex's neighbours may map there (so phi restricted to a neighbourhood
+            // is injective). The neighbourhood analogue of the injectivity constraints.
+            proof->create_locally_injective_constraints(pattern.size(), target.size(),
+                [&](int a, int b) { return pattern.adjacent(a, b); },
+                [&](int v) { return pattern.vertex_name(v); },
                 [&](int v) { return target.vertex_name(v); });
 
         // generate edge constraints, and also handle loops here
