@@ -36,7 +36,7 @@ call the matching `solve_*` function, and print the `*Result`.
   │ Implementation detail  (gss/innards/*)                                                    │
   │   homomorphism_model · homomorphism_searcher · homomorphism_domain · homomorphism_traits  │
   │   cheap_all_different · graph_traits · watches (nogoods) · svo_bitset                      │
-  │   proof (VeriPB logging) · verify · symmetries (GAP) · threads                             │
+  │   proof (VeriPB logging) · verify · threads                                                │
   └───────────────────────────────────────────────────────────────────────────────────────┘
                           │ uses
                           ▼
@@ -105,8 +105,6 @@ pattern into biconnected components.
 - **`RestartsSchedule`** (`gss/restarts.hh`) and **`Timeout`** (`gss/timeout.hh`) are the search
   control knobs. Restart policies: none, Luby, geometric, timed, and a thread-synchronised variant.
 - **`Proof`** (`innards/proof.{hh,cc}`) emits the VeriPB model (`.opb`) and proof log (`.pbp`).
-- **`find_symmetries`** (`innards/symmetries.{hh,cc}`) shells out to the GAP computer algebra system
-  to find pattern/target symmetries.
 
 ## Build and tests
 
