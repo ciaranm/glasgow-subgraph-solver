@@ -1,8 +1,10 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/innards/homomorphism_model.hh>
+#include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/processed_graphs_data.hh>
+#include <gss/innards/supplemental_graphs.hh>
 
 #include <chrono>
 #include <functional>
@@ -162,7 +164,9 @@ struct HomomorphismModel::Imp
 
     bool has_less_thans = false, has_occur_less_thans = false;
 
-    vector<string> pattern_vertex_proof_names, target_vertex_proof_names;
+    // The solver-proofs middle layer (owns vertex naming + hom-specific derivations);
+    // only created when proof logging is on.
+    std::unique_ptr<HomomorphismProofs> proofs;
 
     mutable bool has_pattern_cliques_sizes = false;
     mutable vector<vector<int>> pattern_cliques_sizes, target_cliques_sizes, pattern_cliques_best_knowns, target_cliques_best_knowns;
@@ -197,12 +201,8 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
 
-    if (_imp->proof) {
-        for (int v = 0; v < pattern.size(); ++v)
-            _imp->pattern_vertex_proof_names.push_back(pattern.vertex_name(v));
-        for (int v = 0; v < target.size(); ++v)
-            _imp->target_vertex_proof_names.push_back(target.vertex_name(v));
-    }
+    if (_imp->proof)
+        _imp->proofs = make_unique<HomomorphismProofs>(*_imp->proof, pattern, target);
 
     if (pattern.directed())
         _imp->graphs.directed = true;
@@ -729,16 +729,12 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
 
 auto HomomorphismModel::pattern_vertex_for_proof(int v) const -> NamedVertex
 {
-    if (v < 0 || unsigned(v) >= _imp->pattern_vertex_proof_names.size())
-        throw ProofError{"Oops, there's a bug: v out of range in pattern"};
-    return pair{v, _imp->pattern_vertex_proof_names[v]};
+    return _imp->proofs->pattern_vertex(v);
 }
 
 auto HomomorphismModel::target_vertex_for_proof(int v) const -> NamedVertex
 {
-    if (v < 0 || unsigned(v) >= _imp->target_vertex_proof_names.size())
-        throw ProofError{"Oops, there's a bug: v out of range in target"};
-    return pair{v, _imp->target_vertex_proof_names[v]};
+    return _imp->proofs->target_vertex(v);
 }
 
 auto HomomorphismModel::prepare() -> bool
@@ -821,211 +817,41 @@ auto HomomorphismModel::prepare() -> bool
     unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
 
     // Build every supplemental graph the plan registers, in plan order, each into the
-    // next free slot(s). The plan also fixes max_graphs, so the bump counters land
-    // exactly on max_graphs at the end (checked below). The proof emission for each
-    // graph is still inline here; co-locating it with its build is a later phase.
+    // next free slot(s), then (when proving) derive it through the solver-proofs layer.
+    // The plan also fixes max_graphs, so the bump counters land exactly on max_graphs at
+    // the end (checked below).
     for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops)) {
         switch (spec.kind) {
         case ShapeGraphSpec::Kind::ExactPath:
-            _build_exact_path_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);
-            _build_exact_path_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, false);
-
-            if (_imp->proof) {
-                for (int g = 1; g <= _imp->params.number_of_exact_path_graphs; ++g) {
-                    for (unsigned p = 0; p < pattern_size; ++p) {
-                        for (unsigned q = 0; q < pattern_size; ++q) {
-                            if (p == q || ! _imp->graphs.pattern_graph_rows[p * max_graphs + g].test(q))
-                                continue;
-
-                            auto named_p = pattern_vertex_for_proof(p);
-                            auto named_q = pattern_vertex_for_proof(q);
-
-                            auto n_p_q = _imp->graphs.pattern_graph_rows[p * max_graphs + 0];
-                            n_p_q &= _imp->graphs.pattern_graph_rows[q * max_graphs + 0];
-                            vector<NamedVertex> between_p_and_q;
-                            for (auto v = n_p_q.find_first(); v != decltype(n_p_q)::npos; v = n_p_q.find_first()) {
-                                n_p_q.reset(v);
-                                between_p_and_q.push_back(pattern_vertex_for_proof(v));
-                                if (between_p_and_q.size() >= unsigned(g))
-                                    break;
-                            }
-
-                            for (unsigned t = 0; t < target_size; ++t) {
-                                auto named_t = target_vertex_for_proof(t);
-
-                                vector<NamedVertex> named_n_t, named_d_n_t;
-                                vector<pair<NamedVertex, vector<NamedVertex>>> named_two_away_from_t;
-                                auto n_t = _imp->graphs.target_graph_rows[t * max_graphs + 0];
-                                for (auto w = n_t.find_first(); w != decltype(n_t)::npos; w = n_t.find_first()) {
-                                    n_t.reset(w);
-                                    named_n_t.push_back(target_vertex_for_proof(w));
-                                }
-
-                                auto nd_t = _imp->graphs.target_graph_rows[t * max_graphs + g];
-                                for (auto w = nd_t.find_first(); w != decltype(nd_t)::npos; w = nd_t.find_first()) {
-                                    nd_t.reset(w);
-                                    named_d_n_t.push_back(target_vertex_for_proof(w));
-                                }
-
-                                auto n2_t = _imp->graphs.target_graph_rows[t * max_graphs + 1];
-                                for (auto w = n2_t.find_first(); w != decltype(n2_t)::npos; w = n2_t.find_first()) {
-                                    n2_t.reset(w);
-                                    auto n_t_w = _imp->graphs.target_graph_rows[w * max_graphs + 0];
-                                    n_t_w &= _imp->graphs.target_graph_rows[t * max_graphs + 0];
-                                    vector<NamedVertex> named_n_t_w;
-                                    for (auto x = n_t_w.find_first(); x != decltype(n_t_w)::npos; x = n_t_w.find_first()) {
-                                        n_t_w.reset(x);
-                                        named_n_t_w.push_back(target_vertex_for_proof(x));
-                                    }
-                                    named_two_away_from_t.emplace_back(target_vertex_for_proof(w), named_n_t_w);
-                                }
-
-                                _imp->proof->create_exact_path_graphs(g, named_p, named_q, between_p_and_q,
-                                    named_t, named_n_t, named_two_away_from_t, named_d_n_t);
-                            }
-                        }
-                    }
-                }
-            }
+            build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);
+            build_exact_path_graphs(_imp->graphs, target_size, next_target_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, false);
+            if (_imp->proof)
+                _imp->proofs->prove_exact_path_graphs(_imp->graphs, max_graphs, _imp->params.number_of_exact_path_graphs);
             break;
 
         case ShapeGraphSpec::Kind::Distance2:
-            _build_exact_path_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, 1, _imp->graphs.directed, true, true);
-            _build_exact_path_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, 1, _imp->graphs.directed, true, false);
+            build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, 1, _imp->graphs.directed, true, true);
+            build_exact_path_graphs(_imp->graphs, target_size, next_target_supplemental, max_graphs, 1, _imp->graphs.directed, true, false);
             break;
 
         case ShapeGraphSpec::Kind::Distance3:
-            _build_distance3_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
-            _build_distance3_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, false);
-
-            if (_imp->proof) {
-                for (unsigned p = 0; p < pattern_size; ++p) {
-                    for (unsigned q = 0; q < pattern_size; ++q) {
-                        auto named_p = pattern_vertex_for_proof(p);
-                        auto named_q = pattern_vertex_for_proof(q);
-
-                        // only do this if they're actually adjacent
-                        if (p == q || ! _imp->graphs.pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
-                            continue;
-
-                        bool actually_adjacent = false;
-                        optional<NamedVertex> path_from_p_to_q_1 = nullopt, path_from_p_to_q_2 = nullopt;
-
-                        auto n_p = _imp->graphs.pattern_graph_rows[p * max_graphs + 0];
-
-                        // are they actually distance 1 apart?
-                        if (n_p.test(q))
-                            actually_adjacent = true;
-                        else {
-                            auto n_q = _imp->graphs.pattern_graph_rows[q * max_graphs + 0];
-
-                            auto n_p_q = n_p;
-                            n_p_q &= n_q;
-                            n_p_q.reset(p);
-                            n_p_q.reset(q);
-
-                            if (n_p_q.any()) {
-                                // they're actually distance 2 apart
-                                path_from_p_to_q_1 = pattern_vertex_for_proof(n_p_q.find_first());
-                            }
-                            else {
-                                // find a path of length 3
-                                n_p.reset(p);
-                                n_p.reset(q);
-                                for (auto v = n_p.find_first(); v != decltype(n_p)::npos && ! path_from_p_to_q_1; v = n_p.find_first()) {
-                                    n_p.reset(v);
-                                    auto n_v = _imp->graphs.pattern_graph_rows[v * max_graphs + 0];
-                                    n_v.reset(v);
-                                    n_v.reset(p);
-                                    n_v.reset(q);
-                                    for (auto w = n_v.find_first(); w != decltype(n_v)::npos && ! path_from_p_to_q_1; w = n_v.find_first()) {
-                                        n_v.reset(w);
-                                        if (_imp->graphs.pattern_graph_rows[w * max_graphs + 0].test(q)) {
-                                            path_from_p_to_q_1 = pattern_vertex_for_proof(v);
-                                            path_from_p_to_q_2 = pattern_vertex_for_proof(w);
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (! path_from_p_to_q_1)
-                                throw ProofError{"Oops, there's a bug: missing path from " + named_p.second + " to " + named_q.second};
-                        }
-
-                        for (unsigned t = 0; t < target_size; ++t) {
-                            auto named_t = target_vertex_for_proof(t);
-
-                            vector<NamedVertex> d1_from_t, d2_from_t, d3_from_t;
-                            set<NamedVertex> d2_from_t_set, d3_from_t_set;
-                            auto n_t = _imp->graphs.target_graph_rows[t * max_graphs + 0];
-                            n_t.set(t);
-                            for (auto v = n_t.find_first(); v != decltype(n_t)::npos; v = n_t.find_first()) {
-                                n_t.reset(v);
-                                d1_from_t.push_back(target_vertex_for_proof(v));
-                                auto n_v = _imp->graphs.target_graph_rows[v * max_graphs + 0];
-                                n_v.set(v);
-                                for (auto w = n_v.find_first(); w != decltype(n_v)::npos; w = n_v.find_first()) {
-                                    n_v.reset(w);
-                                    d2_from_t_set.insert(target_vertex_for_proof(w));
-                                    auto n_w = _imp->graphs.target_graph_rows[w * max_graphs + 0];
-                                    n_w.set(w);
-                                    for (auto x = n_w.find_first(); x != decltype(n_w)::npos; x = n_w.find_first()) {
-                                        n_w.reset(x);
-                                        d3_from_t_set.insert(target_vertex_for_proof(x));
-                                    }
-                                }
-                            }
-
-                            d2_from_t.assign(d2_from_t_set.begin(), d2_from_t_set.end());
-                            d3_from_t.assign(d3_from_t_set.begin(), d3_from_t_set.end());
-
-                            if (actually_adjacent)
-                                _imp->proof->create_distance3_graphs_but_actually_distance_1(next_pattern_supplemental - 1, named_p, named_q, named_t, d3_from_t);
-                            else if (path_from_p_to_q_2)
-                                _imp->proof->create_distance3_graphs(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
-                                    *path_from_p_to_q_2, named_t, d1_from_t, d2_from_t, d3_from_t);
-                            else
-                                _imp->proof->create_distance3_graphs_but_actually_distance_2(next_pattern_supplemental - 1, named_p, named_q, *path_from_p_to_q_1,
-                                    named_t, d1_from_t, d2_from_t, d3_from_t);
-                        }
-                    }
-                }
-            }
+            build_distance3_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, true);
+            build_distance3_graphs(_imp->graphs, target_size, next_target_supplemental, max_graphs, false);
+            if (_imp->proof)
+                _imp->proofs->prove_distance3_graphs(_imp->graphs, max_graphs, next_pattern_supplemental - 1);
             break;
 
         case ShapeGraphSpec::Kind::K4:
-            _build_k4_graphs(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, true);
-            _build_k4_graphs(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, false);
+            build_k4_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, true);
+            build_k4_graphs(_imp->graphs, target_size, next_target_supplemental, max_graphs, false);
             break;
 
         case ShapeGraphSpec::Kind::ExtraShape: {
             auto & [shape, injective, count] = *spec.extra_shape;
-            _build_extra_shape(_imp->graphs.pattern_graph_rows, pattern_size, next_pattern_supplemental, *shape, injective, count, true);
-            _build_extra_shape(_imp->graphs.target_graph_rows, target_size, next_target_supplemental, *shape, injective, count, false);
-
-            if (_imp->proof) {
-                for (unsigned p = 0; p < pattern_size; ++p) {
-                    for (unsigned q = 0; q < pattern_size; ++q) {
-                        auto named_p = pattern_vertex_for_proof(p);
-                        auto named_q = pattern_vertex_for_proof(q);
-
-                        // only do this if they're actually adjacent
-                        if (! _imp->graphs.pattern_graph_rows[p * max_graphs + next_pattern_supplemental - 1].test(q))
-                            continue;
-
-                        for (unsigned t = 0; t < target_size; ++t) {
-                            auto named_t = target_vertex_for_proof(t);
-                            vector<NamedVertex> named_n_t;
-                            auto n_t = _imp->graphs.target_graph_rows[t * max_graphs + next_pattern_supplemental - 1];
-                            for (auto v = n_t.find_first(); v != decltype(n_t)::npos; v = n_t.find_first()) {
-                                n_t.reset(v);
-                                named_n_t.push_back(target_vertex_for_proof(v));
-                            }
-                            _imp->proof->hack_in_shape_graph(next_pattern_supplemental - 1, named_p, named_q, named_t, named_n_t);
-                        }
-                    }
-                }
-            }
+            build_extra_shape(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params, *shape, injective, count, true);
+            build_extra_shape(_imp->graphs, target_size, next_target_supplemental, max_graphs, _imp->params, *shape, injective, count, false);
+            if (_imp->proof)
+                _imp->proofs->prove_extra_shape(_imp->graphs, max_graphs, next_pattern_supplemental - 1);
         } break;
         }
     }
@@ -1072,162 +898,6 @@ auto HomomorphismModel::prepare() -> bool
                     _imp->graphs.pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
 
     return true;
-}
-
-auto HomomorphismModel::_build_exact_path_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-    unsigned number_of_exact_path_graphs, bool directed, bool at_most, bool pattern) -> void
-{
-    vector<vector<unsigned>> path_counts(size, vector<unsigned>(size, 0));
-
-    // count number of paths from w to v (unless directed, only w >= v, so not v to w)
-    for (unsigned v = 0; v < size; ++v) {
-        auto nv = graph_rows[v * max_graphs + 0];
-        if (at_most)
-            nv.set(v);
-        for (auto c = nv.find_first(); c != decltype(nv)::npos; c = nv.find_first()) {
-            nv.reset(c);
-            auto nc = graph_rows[c * max_graphs + 0];
-            if (at_most)
-                nc.set(c);
-            for (auto w = nc.find_first(); w != decltype(nc)::npos && (directed ? true : w <= v); w = nc.find_first()) {
-                nc.reset(w);
-                ++path_counts[v][w];
-            }
-        }
-    }
-
-    for (unsigned v = 0; v < size; ++v) {
-        for (unsigned w = (directed ? 0 : v); w < size; ++w) {
-            if (at_most && v == w)
-                graph_rows[v * max_graphs + idx].set(w);
-            else {
-                // unless directed, w to v, not v to w, see above
-                unsigned path_count = path_counts[w][v];
-                for (unsigned p = 1; p <= number_of_exact_path_graphs; ++p) {
-                    if (path_count >= p) {
-                        graph_rows[v * max_graphs + idx + p - 1].set(w);
-                        if (! directed)
-                            graph_rows[w * max_graphs + idx + p - 1].set(v);
-                    }
-                }
-            }
-        }
-    }
-
-    if (pattern)
-        for (unsigned p = 1; p <= number_of_exact_path_graphs; ++p)
-            _imp->graphs.supplemental_graph_names.push_back("exact_path_" + to_string(p));
-
-    idx += number_of_exact_path_graphs;
-}
-
-auto HomomorphismModel::_build_distance3_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-        bool pattern) -> void
-{
-    for (unsigned v = 0; v < size; ++v) {
-        auto nv = graph_rows[v * max_graphs + 0];
-        graph_rows[v * max_graphs + idx] |= nv;
-        for (auto c = nv.find_first(); c != decltype(nv)::npos; c = nv.find_first()) {
-            nv.reset(c);
-            auto nc = graph_rows[c * max_graphs + 0];
-            graph_rows[v * max_graphs + idx] |= nc;
-            for (auto w = nc.find_first(); w != decltype(nc)::npos; w = nc.find_first()) {
-                nc.reset(w);
-                // v--c--w so v is within distance 3 of w's neighbours
-                graph_rows[v * max_graphs + idx] |= graph_rows[w * max_graphs + 0];
-            }
-        }
-    }
-
-    if (pattern)
-        _imp->graphs.supplemental_graph_names.push_back("distance3");
-    ++idx;
-}
-
-auto HomomorphismModel::_build_k4_graphs(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, bool pattern) -> void
-{
-    for (unsigned v = 0; v < size; ++v) {
-        auto nv = graph_rows[v * max_graphs + 0];
-        for (unsigned w = 0; w < v; ++w) {
-            if (nv.test(w)) {
-                // are there two common neighbours with an edge between them?
-                auto common_neighbours = graph_rows[w * max_graphs + 0];
-                common_neighbours &= nv;
-                common_neighbours.reset(v);
-                common_neighbours.reset(w);
-                auto count = common_neighbours.count();
-                if (count >= 2) {
-                    bool done = false;
-                    auto cn1 = common_neighbours;
-                    for (auto x = cn1.find_first(); x != decltype(cn1)::npos && ! done; x = cn1.find_first()) {
-                        cn1.reset(x);
-                        auto cn2 = common_neighbours;
-                        for (auto y = cn2.find_first(); y != decltype(cn2)::npos && ! done; y = cn2.find_first()) {
-                            cn2.reset(y);
-                            if (v != w && v != x && v != y && w != x && w != y && graph_rows[x * max_graphs + 0].test(y)) {
-                                graph_rows[v * max_graphs + idx].set(w);
-                                graph_rows[w * max_graphs + idx].set(v);
-                                done = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (pattern)
-        _imp->graphs.supplemental_graph_names.push_back("k4");
-    ++idx;
-}
-
-auto HomomorphismModel::_build_extra_shape(vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, InputGraph & shape,
-    bool injective, int count, bool pattern) -> void
-{
-    InputGraph master_graph(size, true, false);
-
-    for (unsigned v = 0; v < size; ++v) {
-        auto nv = graph_rows[v * max_graphs + 0];
-        for (unsigned w = 0; w < v; ++w) {
-            if (nv.test(w))
-                master_graph.add_edge(v, w);
-        }
-    }
-
-    for (unsigned v = 0; v < size && ! _imp->params.timeout->should_abort(); ++v) {
-        for (unsigned w = 0; w < v && ! _imp->params.timeout->should_abort(); ++w) {
-            HomomorphismParams child_params;
-            child_params.timeout = _imp->params.timeout;
-            child_params.start_time = _imp->params.start_time;
-            child_params.induced = false;
-            child_params.restarts_schedule = make_unique<NoRestartsSchedule>();
-            child_params.clique_detection = false;
-            child_params.injectivity = injective ? Injectivity::Injective : Injectivity::NonInjective;
-            child_params.no_supplementals = true;
-
-            int seen_count = 0;
-            if (count > 1) {
-                child_params.count_solutions = true;
-                child_params.enumerate_callback = [&](const VertexToVertexMapping &) {
-                    return ++seen_count < count;
-                };
-            }
-
-            master_graph.set_vertex_label(v, "from");
-            master_graph.set_vertex_label(w, "to");
-            auto child_result = solve_homomorphism_problem(shape, master_graph, child_params);
-            if ((count > 1) ? seen_count >= count : ! child_result.mapping.empty()) {
-                graph_rows[v * max_graphs + idx].set(w);
-                graph_rows[w * max_graphs + idx].set(v);
-            }
-            master_graph.set_vertex_label(v, "");
-            master_graph.set_vertex_label(w, "");
-        }
-    }
-
-    if (pattern)
-        _imp->graphs.supplemental_graph_names.push_back("extra_shape");
-    ++idx;
 }
 
 auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType

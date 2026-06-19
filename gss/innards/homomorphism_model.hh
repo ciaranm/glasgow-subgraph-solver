@@ -17,16 +17,6 @@ namespace gss::innards
         struct Imp;
         std::unique_ptr<Imp> _imp;
 
-        auto _build_exact_path_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-            unsigned number_of_exact_path_graphs, bool directed, bool at_most, bool pattern) -> void;
-
-        auto _build_distance3_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, bool pattern) -> void;
-
-        auto _build_k4_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, bool pattern) -> void;
-
-        auto _build_extra_shape(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-            InputGraph & shape, bool injective, int count, bool pattern) -> void;
-
         auto _check_degree_compatibility(
             int p,
             int t,
