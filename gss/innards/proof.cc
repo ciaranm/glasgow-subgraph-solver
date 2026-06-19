@@ -203,7 +203,7 @@ auto Proof::finalise_model() -> void
 auto Proof::finish_unsat_proof() -> void
 {
     *_imp->proof_stream << "% asserting that we've proved unsat\n";
-    *_imp->proof_stream << "rup >= 1 ;\n";
+    *_imp->proof_stream << "@unsatconc rup >= 1 ;\n";
     ++_imp->proof_line;
     *_imp->proof_stream << "output NONE;\n"
                         << "conclusion UNSAT : -1;\n"
@@ -279,6 +279,8 @@ auto Proof::incompatible_by_degrees(
     bool first_time_deg = ! _imp->eliminations.contains(pair{p.first, t.first});
     if (first_time_deg)
         *_imp->proof_stream << "@elimdegpol" << var_deg << " ";
+    else
+        *_imp->proof_stream << "@reelimdegpol" << g << "_" << var_deg << " ";
     *_imp->proof_stream << "pol";
     bool first = true;
     for (auto & n : n_p) {
@@ -302,6 +304,8 @@ auto Proof::incompatible_by_degrees(
 
     if (first_time_deg)
         *_imp->proof_stream << "@elimdeg" << var_deg << " ";
+    else
+        *_imp->proof_stream << "@reelimdeg" << g << "_" << var_deg << " ";
     *_imp->proof_stream << "ia 1 ~x" << var_deg << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
     _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
@@ -329,6 +333,8 @@ auto Proof::incompatible_by_nds(
     bool first_time_nds = ! _imp->eliminations.contains(pair{p.first, t.first});
     if (first_time_nds)
         *_imp->proof_stream << "@elimndspol" << var_nds << " ";
+    else
+        *_imp->proof_stream << "@reelimndspol" << g << "_" << var_nds << " ";
     // summing up horizontally
     *_imp->proof_stream << "pol";
     bool first = true;
@@ -369,6 +375,8 @@ auto Proof::incompatible_by_nds(
 
     if (first_time_nds)
         *_imp->proof_stream << "@elimndsconc" << var_nds << " ";
+    else
+        *_imp->proof_stream << "@reelimndsconc" << g << "_" << var_nds << " ";
     *_imp->proof_stream << "ia 1 ~x" << var_nds << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
