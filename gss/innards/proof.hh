@@ -166,6 +166,18 @@ namespace gss::innards
             const NamedVertex & t,
             const std::vector<NamedVertex> & n_t) -> void;
 
+        // Supplemental adjacency-constraint subsumption support. When the strongest-only
+        // emission elides a graph-g constraint that a degree/NDS check then needs, this
+        // re-derives it on demand: the elided constraint is a weakening (wider target set,
+        // same head) of the kept stronger one (in graph from_g), so it follows by a single
+        // implication step from that constraint's label. forget_supplemental_adjacency
+        // deletes it again afterwards (it was only needed for that one check). target_set is
+        // the graph-g neighbourhood of t (the wider permitted set).
+        [[nodiscard]] auto adjacency_line_exists(int g, int p, int q, int t) const -> bool;
+        auto weaken_supplemental_adjacency(int g, const NamedVertex & p, const NamedVertex & q,
+            const NamedVertex & t, const std::vector<NamedVertex> & target_set, int from_g) -> void;
+        auto forget_supplemental_adjacency(int g, int p, int q, int t) -> void;
+
         // new constraints
         auto emit_hall_set_or_violator(const std::vector<NamedVertex> & lhs, const std::vector<NamedVertex> & rhs) -> void;
 

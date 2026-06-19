@@ -51,22 +51,43 @@ auto HomomorphismProofs::target_vertex(int v) const -> NamedVertex
 }
 
 auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs,
-    const std::vector<std::pair<int, unsigned>> & exact_path_index_and_slot, unsigned exact_path_1_slot) -> void
+    const std::vector<std::pair<int, unsigned>> & exact_path_index_and_slot, unsigned exact_path_1_slot,
+    bool elide_subsumed) -> std::set<std::pair<int, int>>
 {
     const unsigned pattern_size = _pattern_names.size();
     const unsigned target_size = _target_names.size();
 
-    // g is the exact-path index (the path-count threshold); slot is where that graph
-    // lives (after inert-graph elimination may have renumbered the supplementals).
-    for (auto & [g, slot] : exact_path_index_and_slot) {
-        for (unsigned p = 0; p < pattern_size; ++p) {
-            for (unsigned q = 0; q < pattern_size; ++q) {
-                if (p == q || ! graphs.pattern_graph_rows[p * max_graphs + slot].test(q))
-                    continue;
+    std::set<std::pair<int, int>> covered;
 
-                auto named_p = pattern_vertex(p);
-                auto named_q = pattern_vertex(q);
+    for (unsigned p = 0; p < pattern_size; ++p) {
+        for (unsigned q = 0; q < pattern_size; ++q) {
+            if (p == q)
+                continue;
 
+            // the exact-path indices (with their slot) whose pattern edge (p,q) holds.
+            vector<pair<int, unsigned>> emit_for;
+            for (auto & [gg, ss] : exact_path_index_and_slot)
+                if (graphs.pattern_graph_rows[p * max_graphs + ss].test(q))
+                    emit_for.emplace_back(gg, ss);
+            if (emit_for.empty())
+                continue;
+
+            // Eliding: the highest index has the smallest target set and so subsumes every
+            // lower index's constraint for this head, so emit only it and record (p,q) as
+            // covered (distance3, which is wider still, then skips it). Otherwise emit them
+            // all (the index list is ascending, so the last entry is the highest index).
+            if (elide_subsumed) {
+                covered.emplace(p, q);
+                emit_for = {emit_for.back()};
+                // remember which slot's constraint we kept, so a degree/NDS check on a lower
+                // (elided) exact-path graph or on distance3 can weaken from it on demand.
+                _kept_supplemental_slot[pair{int(p), int(q)}] = emit_for.front().second;
+            }
+
+            auto named_p = pattern_vertex(p);
+            auto named_q = pattern_vertex(q);
+
+            for (auto & [g, slot] : emit_for) {
                 auto n_p_q = graphs.pattern_graph_rows[p * max_graphs + 0];
                 n_p_q &= graphs.pattern_graph_rows[q * max_graphs + 0];
                 vector<NamedVertex> between_p_and_q;
@@ -113,9 +134,12 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
             }
         }
     }
+
+    return covered;
 }
 
-auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void
+auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot,
+    const std::set<std::pair<int, int>> & covered_by_exact_path) -> void
 {
     const unsigned pattern_size = _pattern_names.size();
     const unsigned target_size = _target_names.size();
@@ -128,6 +152,16 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
             // only do this if they're actually adjacent
             if (p == q || ! graphs.pattern_graph_rows[p * max_graphs + slot].test(q))
                 continue;
+
+            // a distance-3 constraint's target set (within distance 3 of t) is a superset of
+            // any exact-path set (within two paths of t) for the same head, so if exact-path
+            // already covered (p,q) the distance-3 form is subsumed -- skip it.
+            if (covered_by_exact_path.contains(pair{int(p), int(q)}))
+                continue;
+
+            // this (p,q) is not exact-path-covered, so the distance-3 graph holds its kept
+            // (strongest) constraint -- record the slot for on-demand weakening if needed.
+            _kept_supplemental_slot[pair{int(p), int(q)}] = slot;
 
             bool actually_adjacent = false;
             optional<NamedVertex> path_from_p_to_q_1 = nullopt, path_from_p_to_q_2 = nullopt;
@@ -424,4 +458,41 @@ auto HomomorphismProofs::prove_no_clique(const ProcessedGraphsData & graphs, uns
             throw ProofError{"Oops, found a clique that shound't exist"};
         _proof->finish_hom_clique_proof(pattern_vertex(p), target_vertex(tt), decide_size);
     }
+}
+
+auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData & graphs, unsigned max_graphs,
+    int g, int p, int q, int t) -> void
+{
+    // present already (it is the kept constraint, the original graph, or elision is off): nothing to do.
+    if (_proof->adjacency_line_exists(g, p, q, t))
+        return;
+
+    // no kept supplemental constraint for this head means we never emitted (or could emit) a
+    // supplemental adjacency line here -- e.g. the original graph (g 0), or a distance-2 /
+    // k4 graph, which carry no adjacency lines. The degree/NDS pigeonhole already tolerates a
+    // missing term in those cases, so leave it missing (matches the no-elision behaviour).
+    auto kept = _kept_supplemental_slot.find(pair{p, q});
+    if (kept == _kept_supplemental_slot.end())
+        return;
+
+    // otherwise it was elided in favour of a stronger one for this head; weaken that back to
+    // the graph-g target set (which subsumption guarantees is wider).
+
+    vector<NamedVertex> target_set;
+    auto row = graphs.target_graph_rows[t * max_graphs + g];
+    for (auto u = row.find_first(); u != decltype(row)::npos; u = row.find_first()) {
+        row.reset(u);
+        target_set.push_back(target_vertex(u));
+    }
+
+    _proof->weaken_supplemental_adjacency(g, pattern_vertex(p), pattern_vertex(q), target_vertex(t),
+        target_set, int(kept->second));
+    _pending_transient_adjacencies.emplace_back(g, p, q, t);
+}
+
+auto HomomorphismProofs::forget_transient_supplemental_adjacencies() -> void
+{
+    for (auto & [g, p, q, t] : _pending_transient_adjacencies)
+        _proof->forget_supplemental_adjacency(g, p, q, t);
+    _pending_transient_adjacencies.clear();
 }

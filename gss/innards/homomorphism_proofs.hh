@@ -6,8 +6,11 @@
 #include <gss/innards/processed_graphs_data.hh>
 #include <gss/innards/proof.hh>
 
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -29,6 +32,14 @@ namespace gss::innards
         std::shared_ptr<Proof> _proof;
         std::vector<std::string> _pattern_names, _target_names;
 
+        // For each pattern edge (p,q) whose supplemental adjacency constraint was emitted
+        // under subsumption elision, the slot whose (strongest) constraint we kept. Used to
+        // re-derive an elided weaker constraint on demand (see ensure_supplemental_adjacency).
+        std::map<std::pair<int, int>, unsigned> _kept_supplemental_slot;
+        // Supplemental adjacency lines created transiently for a degree/NDS check, to delete
+        // once it is done.
+        std::vector<std::tuple<int, int, int, int>> _pending_transient_adjacencies;
+
     public:
         HomomorphismProofs(const std::shared_ptr<Proof> & proof, const InputGraph & pattern, const InputGraph & target);
 
@@ -49,10 +60,34 @@ namespace gss::innards
         // path-count threshold) with the slot it occupies; exact_path_1_slot is where the
         // "at least one 2-path" graph lives (needed to justify all of them). Decoupling
         // the index from the slot lets inert-graph elimination renumber the supplementals.
+        //
+        // The supplemental adjacency constraints nest: for a fixed (p,t,q), the target set
+        // shrinks as the path-count threshold grows (exact-path-k+1 subset of exact-path-k,
+        // both subset of distance3), and a smaller-set constraint with the same head
+        // syntactically subsumes a larger-set one. So we only emit the strongest (set-minimal)
+        // constraint per head: prove_exact_path_graphs emits, for each pattern edge (p,q),
+        // just the highest exact-path index that holds, and returns the (p,q) pairs it covered
+        // so prove_distance3_graphs can skip them (distance3 is always the weakest). The
+        // weaker constraints a per-graph degree/NDS check needs are created-then-deleted there
+        // (see proof.cc); search-RUP can always fall back to the kept stronger constraint.
+        // When elide_subsumed is false, every exact-path index's constraint is emitted (and
+        // the returned covered set is empty, so distance3 also emits everything) -- the
+        // pre-optimisation behaviour, kept behind --no-proof-supplemental-subsumption.
         auto prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs,
-            const std::vector<std::pair<int, unsigned>> & exact_path_index_and_slot, unsigned exact_path_1_slot) -> void;
-        auto prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void;
+            const std::vector<std::pair<int, unsigned>> & exact_path_index_and_slot, unsigned exact_path_1_slot,
+            bool elide_subsumed) -> std::set<std::pair<int, int>>;
+        auto prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot,
+            const std::set<std::pair<int, int>> & covered_by_exact_path) -> void;
         auto prove_extra_shape(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void;
+
+        // A degree/NDS check needs the graph-g adjacency constraint for head (p->t, q). If
+        // subsumption elision dropped it, re-derive it (a weakening of the kept stronger
+        // constraint) so the check can cite it; record it so it can be deleted afterwards.
+        // No-op if the constraint is still present (it was the kept one, or elision is off).
+        auto ensure_supplemental_adjacency(const ProcessedGraphsData & graphs, unsigned max_graphs,
+            int g, int p, int q, int t) -> void;
+        // Delete every adjacency line ensure_supplemental_adjacency created since the last call.
+        auto forget_transient_supplemental_adjacencies() -> void;
 
         // Prove that pattern vertex p cannot map to target tt, because p sits in a bigger
         // clique (in graph pair g) than tt does. Runs the clique solver with proof

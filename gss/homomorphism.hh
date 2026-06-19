@@ -91,6 +91,14 @@ namespace gss
         /// Disable neighbourhood degree sequence processing?
         bool no_nds = false;
 
+        /// Proof-emission optimisation: emit only the strongest of a set of nested
+        /// supplemental adjacency constraints (a constraint with the same head but a smaller
+        /// target set subsumes the wider ones, so the wider ones are redundant). On by
+        /// default; the hidden --no-proof-supplemental-subsumption flag turns it off so every
+        /// supplemental constraint is emitted, which is useful for studying its effect (e.g.
+        /// on proof trimming). Has no effect when proof logging is disabled.
+        bool prove_supplemental_subsumption = true;
+
         /// Less pattern constraints
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
 

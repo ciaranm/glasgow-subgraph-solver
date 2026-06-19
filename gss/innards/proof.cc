@@ -62,6 +62,9 @@ struct Proof::Imp
     map<pair<long, long>, string> locally_injective_constraints;
     bool locally_injective = false;
     map<tuple<long, long, long, long>, string> adjacency_lines;
+    // numeric proof-line ids of supplemental adjacency lines, so transient ones (re-derived
+    // on demand for a degree/NDS check, see weaken_supplemental_adjacency) can be deleted.
+    map<tuple<long, long, long, long>, long> adjacency_line_ids;
     map<tuple<long, long, long, long>, vector<long>> adjacency_permitted;
     map<pair<long, long>, long> eliminations;
     map<pair<long, long>, string> non_edge_constraints;
@@ -811,6 +814,37 @@ auto Proof::hack_in_shape_graph(
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+}
+
+auto Proof::adjacency_line_exists(int g, int p, int q, int t) const -> bool
+{
+    return _imp->adjacency_lines.contains(tuple{g, p, q, t});
+}
+
+auto Proof::weaken_supplemental_adjacency(int g, const NamedVertex & p, const NamedVertex & q,
+    const NamedVertex & t, const vector<NamedVertex> & target_set, int from_g) -> void
+{
+    // The graph-g constraint "p -> t implies q maps to one of N_g(t)" was elided because a
+    // stronger constraint (in graph from_g, a narrower target set) with the same head was
+    // kept. The wider one follows from the narrower by a single implication step, so derive
+    // it that way, citing the kept constraint by its label.
+    auto from_label = _imp->adjacency_lines.at(tuple{from_g, p.first, q.first, t.first});
+    auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
+    *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
+    for (auto & u : target_set)
+        if (u.first != t.first)
+            *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
+    *_imp->proof_stream << " >= 1 : " << from_label << " ;\n";
+    ++_imp->proof_line;
+    _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency_line_ids.emplace(tuple{g, p.first, q.first, t.first}, _imp->proof_line);
+}
+
+auto Proof::forget_supplemental_adjacency(int g, int p, int q, int t) -> void
+{
+    *_imp->proof_stream << "del id " << _imp->adjacency_line_ids.at(tuple{g, p, q, t}) << " ;\n";
+    _imp->adjacency_lines.erase(tuple{g, p, q, t});
+    _imp->adjacency_line_ids.erase(tuple{g, p, q, t});
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_1(

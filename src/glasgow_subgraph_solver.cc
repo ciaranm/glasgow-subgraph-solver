@@ -111,7 +111,8 @@ auto main(int argc, char * argv[]) -> int
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")
             ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>(shapes))
             ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts))
-            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives));
+            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives))
+            ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)");
 
         options.add_options()
             ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
@@ -228,6 +229,7 @@ auto main(int argc, char * argv[]) -> int
             params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
+        params.prove_supplemental_subsumption = ! options_vars.count("no-proof-supplemental-subsumption");
         params.clique_size_constraints = options_vars.count("cliques");
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 

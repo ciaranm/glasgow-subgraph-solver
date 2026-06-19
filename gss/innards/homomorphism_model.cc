@@ -359,8 +359,17 @@ auto HomomorphismModel::_check_degree_compatibility(
                     n_t.push_back(j);
                 }
 
+                // the pigeonhole cites the graph-g adjacency constraint for each neighbour;
+                // re-derive any that subsumption elision dropped, then delete them again.
+                if (_imp->params.prove_supplemental_subsumption)
+                    for (int n : n_p)
+                        _imp->proofs->ensure_supplemental_adjacency(_imp->graphs, max_graphs, g, p, n, t);
+
                 _imp->proof->incompatible_by_degrees(g, pattern_vertex_for_proof(p), n_p,
                     target_vertex_for_proof(t), n_t);
+
+                if (_imp->params.prove_supplemental_subsumption)
+                    _imp->proofs->forget_transient_supplemental_adjacencies();
             }
             return false;
         }
@@ -416,8 +425,18 @@ auto HomomorphismModel::_check_degree_compatibility(
                     for (unsigned y = x + 1; y < t_nds.size(); ++y)
                         t_remaining.push_back(t_nds[y].first);
 
+                    // the NDS pigeonhole cites the graph-g adjacency constraint for each
+                    // pattern vertex in the failing subsequence; re-derive any that
+                    // subsumption elision dropped, then delete them again.
+                    if (_imp->params.prove_supplemental_subsumption)
+                        for (int n : p_subsequence)
+                            _imp->proofs->ensure_supplemental_adjacency(_imp->graphs, max_graphs, g, p, n, t);
+
                     _imp->proof->incompatible_by_nds(g, pattern_vertex_for_proof(p),
                         target_vertex_for_proof(t), p_subsequence, t_subsequence, t_remaining);
+
+                    if (_imp->params.prove_supplemental_subsumption)
+                        _imp->proofs->forget_transient_supplemental_adjacencies();
                 }
                 return false;
             }
@@ -623,6 +642,10 @@ auto HomomorphismModel::prepare() -> bool
 
     unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
 
+    // Pattern edges (p,q) whose exact-path adjacency constraint was emitted: the distance-3
+    // derivation skips these, since its (wider) constraint is subsumed by the exact-path one.
+    std::set<std::pair<int, int>> exact_path_covered;
+
     // Build every supplemental graph the plan registers, in plan order, each into the
     // next free slot(s), then (when proving) derive it through the solver-proofs layer.
     // The plan also fixes max_graphs, so the bump counters land exactly on max_graphs at
@@ -639,7 +662,8 @@ auto HomomorphismModel::prepare() -> bool
                 vector<pair<int, unsigned>> exact_path_index_and_slot;
                 for (int g = 1; g <= _imp->params.number_of_exact_path_graphs; ++g)
                     exact_path_index_and_slot.emplace_back(g, base + g - 1);
-                _imp->proofs->prove_exact_path_graphs(_imp->graphs, max_graphs, exact_path_index_and_slot, base);
+                exact_path_covered = _imp->proofs->prove_exact_path_graphs(_imp->graphs, max_graphs, exact_path_index_and_slot, base,
+                    _imp->params.prove_supplemental_subsumption);
             }
             break;
 
@@ -652,7 +676,7 @@ auto HomomorphismModel::prepare() -> bool
             build_distance3_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, true);
             build_distance3_graphs(_imp->graphs, target_size, next_target_supplemental, max_graphs, false);
             if (_imp->proof)
-                _imp->proofs->prove_distance3_graphs(_imp->graphs, max_graphs, next_pattern_supplemental - 1);
+                _imp->proofs->prove_distance3_graphs(_imp->graphs, max_graphs, next_pattern_supplemental - 1, exact_path_covered);
             break;
 
         case ShapeGraphSpec::Kind::K4:
