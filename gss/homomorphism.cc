@@ -8,6 +8,7 @@
 #include <gss/innards/homomorphism_searcher.hh>
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/proof.hh>
+#include <gss/innards/solve_state.hh>
 #include <gss/innards/thread_utils.hh>
 
 #include <algorithm>
@@ -60,13 +61,15 @@ namespace
     {
         using Domains = vector<HomomorphismDomain>;
 
+        SolveState & state;
         const HomomorphismModel & model;
         const HomomorphismParams & params;
         const std::shared_ptr<Proof> proof;
 
-        HomomorphismSolver(const HomomorphismModel & m, const HomomorphismParams & p,
+        HomomorphismSolver(SolveState & s, const HomomorphismParams & p,
             const std::shared_ptr<Proof> & r) :
-            model(m),
+            state(s),
+            model(*s.model),
             params(p),
             proof(r)
         {
@@ -81,8 +84,9 @@ namespace
         {
             HomomorphismResult result;
 
-            // domains
-            Domains domains(model.pattern_size, HomomorphismDomain{model.target_size});
+            // domains (carried in the shared solve state)
+            Domains & domains = state.domains;
+            domains = Domains(model.pattern_size, HomomorphismDomain{model.target_size});
             if (! model.initialise_domains(domains)) {
                 result.complete = true;
                 model.add_extra_stats(result.extra_stats);
@@ -101,7 +105,7 @@ namespace
             unsigned number_of_restarts = 0;
 
             HomomorphismSearcher searcher(
-                model, params, [](const HomomorphismAssignments &) -> bool { return true; }, proof);
+                model, params, [](const HomomorphismAssignments &) -> bool { return true; }, proof, state.watches);
 
             while (! done) {
                 ++number_of_restarts;
@@ -211,9 +215,9 @@ namespace
     {
         unsigned n_threads;
 
-        ThreadedSolver(const HomomorphismModel & m, const HomomorphismParams & p,
+        ThreadedSolver(SolveState & s, const HomomorphismParams & p,
             const std::shared_ptr<Proof> & r, unsigned t) :
-            HomomorphismSolver(m, p, r),
+            HomomorphismSolver(s, p, r),
             n_threads(t)
         {
         }
@@ -224,8 +228,10 @@ namespace
             HomomorphismResult common_result;
             string by_thread_nodes, by_thread_propagations;
 
-            // domains
-            Domains common_domains(model.pattern_size, HomomorphismDomain{model.target_size});
+            // domains (the canonical root domains, carried in the shared solve state;
+            // each thread takes its own working copy below)
+            Domains & common_domains = state.domains;
+            common_domains = Domains(model.pattern_size, HomomorphismDomain{model.target_size});
             if (! model.initialise_domains(common_domains)) {
                 common_result.complete = true;
                 return common_result;
@@ -239,6 +245,10 @@ namespace
 
             vector<unique_ptr<HomomorphismSearcher>> searchers{n_threads};
 
+            // each thread keeps its own nogood store (the threaded search is the
+            // terminal, unbounded step, so these are not the carried state.watches)
+            vector<Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable>> thread_watches{n_threads};
+
             barrier wait_for_new_nogoods_barrier{n_threads}, synced_nogoods_barrier{n_threads};
             atomic<bool> restart_synchroniser{false};
 
@@ -246,7 +256,7 @@ namespace
             unordered_set<VertexToVertexMapping, VertexToVertexMappingHash> duplicate_filter_set;
 
             function<auto(unsigned)->void> work_function =
-                [&searchers, &common_domains, &threads, &work_function,
+                [&searchers, &common_domains, &thread_watches, &threads, &work_function,
                     &model = this->model, &params = this->params, proof = this->proof, n_threads = this->n_threads,
                     &common_result, &common_result_mutex, &by_thread_nodes, &by_thread_propagations,
                     &wait_for_new_nogoods_barrier, &synced_nogoods_barrier, &restart_synchroniser,
@@ -263,7 +273,7 @@ namespace
                         unique_lock<mutex> lock{duplicate_filter_set_mutex};
                         return duplicate_filter_set.insert(v).second;
                     },
-                    proof);
+                    proof, thread_watches[t]);
                 if (0 != t)
                     searchers[t]->set_seed(t);
 
@@ -426,6 +436,7 @@ namespace
         const HomomorphismParams & params;
         const shared_ptr<Proof> & proof;
         HomomorphismProofs * hom_proofs = nullptr;
+        SolveState state;
         HomomorphismResult result;
     };
 
@@ -553,7 +564,11 @@ namespace
             const auto & params = ctx.params;
             const auto & proof = ctx.proof;
 
-            HomomorphismModel model(target, pattern, params, proof, ctx.hom_proofs);
+            // Build the model now -- after the cheap shortcut steps have had their
+            // chance to conclude -- into the carried state, where the search steps
+            // (and, later, staged builder / filter steps) read it.
+            ctx.state.model = make_unique<HomomorphismModel>(target, pattern, params, proof, ctx.hom_proofs);
+            auto & model = *ctx.state.model;
 
             if (! model.prepare()) {
                 HomomorphismResult result;
@@ -571,7 +586,7 @@ namespace
 
             HomomorphismResult result;
             if (1 == params.n_threads) {
-                SequentialSolver solver(model, params, proof);
+                SequentialSolver solver(ctx.state, params, proof);
                 result = solver.solve();
             }
             else {
@@ -579,7 +594,7 @@ namespace
                     throw UnsupportedConfiguration{"Threaded search requires restarts"};
 
                 unsigned n_threads = how_many_threads(params.n_threads);
-                ThreadedSolver solver(model, params, proof, n_threads);
+                ThreadedSolver solver(ctx.state, params, proof, n_threads);
                 result = solver.solve();
             }
 
@@ -636,7 +651,7 @@ auto gss::solve_homomorphism_problem(
     // The solve runs as a pipeline of steps over a shared context, in registration
     // order, stopping at the first step that concludes the problem; the search is the
     // terminal step (see dev_docs/preprocessor-refactor.md).
-    SolveContext ctx{pattern, target, params, proof, hom_proofs.get()};
+    SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}};
 
     vector<unique_ptr<SolveStep>> steps;
     steps.push_back(make_unique<EmitProofModelStep>());          // emit the OPB model
