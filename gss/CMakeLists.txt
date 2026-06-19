@@ -25,7 +25,6 @@ add_library(glasgow_subgraphs
         innards/homomorphism_traits.cc
         innards/proof.cc
         innards/svo_bitset.cc
-        innards/symmetries.cc
         innards/thread_utils.cc
         innards/verify.cc
         innards/watches.cc

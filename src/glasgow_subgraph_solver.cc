@@ -1,6 +1,5 @@
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
-#include <gss/innards/symmetries.hh>
 #include <gss/innards/verify.hh>
 #include <gss/restarts.hh>
 #include <gss/sip_decomposer.hh>
@@ -75,9 +74,7 @@ auto main(int argc, char * argv[]) -> int
             ("restart-interval", "Specify the restart interval in milliseconds for timed restarts", cxxopts::value<int>())
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
-            ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
-            ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")
-            ("target-symmetries", "Eliminate target symmetries (requires Gap)");
+            ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>());
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")
@@ -355,30 +352,8 @@ auto main(int argc, char * argv[]) -> int
         /* Start the clock */
         params.start_time = steady_clock::now();
 
-        if (options_vars.count("pattern-symmetries")) {
-            auto gap_start_time = steady_clock::now();
-            innards::find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
-            was_given_pattern_automorphism_group = true;
-            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
-            cout << "pattern_less_constraints =";
-            for (auto & [a, b] : params.pattern_less_constraints)
-                cout << " " << a << "<" << b;
-            cout << endl;
-        }
-
         if (was_given_pattern_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
-
-        if (options_vars.count("target-symmetries")) {
-            auto gap_start_time = steady_clock::now();
-            innards::find_symmetries(argv[0], target, params.target_occur_less_constraints, target_automorphism_group_size);
-            was_given_target_automorphism_group = true;
-            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
-            cout << "target_occur_less_constraints =";
-            for (auto & [a, b] : params.target_occur_less_constraints)
-                cout << " " << a << "<" << b;
-            cout << endl;
-        }
 
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;

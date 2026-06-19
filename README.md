@@ -92,13 +92,18 @@ fourth,,square
 Symmetries
 ----------
 
-Symmetry elimination support is currently very experimental, only usable on pattern symmetries, and
-is probably only useful for solution counting. To use it, you must have the GAP computer algebra
-system in your PATH as 'gap', with the 'digraph' library installed. Then, do:
+Symmetry elimination support is currently very experimental, and is probably only useful for solution
+counting. Symmetry-breaking constraints can be supplied manually: a "less than" constraint forces one
+pattern vertex to map below another, and an "occurs less than" constraint orders how often target
+vertices are used. Vertices are named as in the input files.
 
 ```shell session
-$ ./build/glasgow_clique_solver --pattern-symmetries --count-solutions pattern-file target-file
+$ ./build/glasgow_subgraph_solver --pattern-less-than 'a<b' --target-occurs-less-than '0<1' \
+    --count-solutions pattern-file target-file
 ```
+
+Automatic detection of these constraints (it previously shelled out to the GAP computer algebra
+system) has been removed pending a more robust replacement.
 
 Proof Logging
 -------------
