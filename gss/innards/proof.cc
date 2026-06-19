@@ -59,6 +59,8 @@ struct Proof::Imp
     map<tuple<long, long, long>, string> connected_variable_mappings;
     map<tuple<long, long, long, long>, string> connected_variable_mappings_aux;
     map<long, string> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
+    map<pair<long, long>, string> locally_injective_constraints;
+    bool locally_injective = false;
     map<tuple<long, long, long, long>, string> adjacency_lines;
     map<tuple<long, long, long, long>, vector<long>> adjacency_permitted;
     map<pair<long, long>, long> eliminations;
@@ -147,6 +149,38 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size,
     }
 }
 
+auto Proof::create_locally_injective_constraints(int pattern_size, int target_size,
+    const function<auto(int, int)->bool> & adjacent,
+    const function<auto(int)->string> & pattern_name,
+    const function<auto(int)->string> & target_name) -> void
+{
+    _imp->locally_injective = true;
+
+    for (int v = 0; v < pattern_size; ++v) {
+        // the neighbourhood of v: if v has a self-loop then v is its own neighbour, so
+        // local injectivity also forces phi(v) to differ from its neighbours' images.
+        vector<int> neighbours;
+        for (int u = 0; u < pattern_size; ++u)
+            if (adjacent(v, u))
+                neighbours.push_back(u);
+
+        // at most one neighbour maps to a given target only bites for |N(v)| >= 2
+        if (neighbours.size() < 2)
+            continue;
+
+        for (int t = 0; t < target_size; ++t) {
+            _imp->model_stream << "* local injectivity on neighbourhood of " << v << " for value " << t << '\n';
+            auto label = "@linj" + pattern_name(v) + "_" + target_name(t);
+            _imp->model_stream << label;
+            for (auto & u : neighbours)
+                _imp->model_stream << " -1 x" << _imp->variable_mappings[pair{u, t}];
+            _imp->model_stream << " >= -1 ;\n";
+            ++_imp->nb_constraints;
+            _imp->locally_injective_constraints.emplace(pair{v, t}, label);
+        }
+    }
+}
+
 auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
 {
     _imp->model_stream << "* forbidden assignment\n";
@@ -187,6 +221,14 @@ auto Proof::loop_fix_adjacencies() -> void
     // proof line reassign an existing label, so every later reference to @adj in a pol
     // picks up the loop-cancelled form automatically; the original loop-bearing
     // constraint stays in the database (by number) so solutions still satisfy the model.
+    //
+    // The loop-cancelled form relies on global injectivity on t, which local injectivity
+    // does not give. But under local injectivity the pol-summing filters that would need
+    // it (degree/NDS/supplemental on loopy instances) are disabled anyway (issue #58), so
+    // no loop-cancelled adjacency is ever needed; skip the relabelling entirely.
+    if (_imp->locally_injective)
+        return;
+
     for (auto & [key, label] : _imp->adjacency_lines) {
         auto & [g, p, q, t] = key;
         // a pattern self-loop edge (p == q) has its loop term pinned by at-most-one rather
@@ -358,9 +400,12 @@ auto Proof::incompatible_by_degrees(
         }
     }
 
-    // if I map p to t, I have to map the neighbours of p to neighbours of t
+    // if I map p to t, I have to map the neighbours of p to distinct neighbours of t.
+    // Under full injectivity that distinctness is the global injectivity on each value;
+    // under local injectivity it is the neighbourhood-injectivity of p (phi|N(p) is
+    // injective), which is exactly what the degree pigeonhole needs.
     for (auto & n : n_t)
-        *_imp->proof_stream << " " << _imp->injectivity_constraints[n] << " +";
+        *_imp->proof_stream << " " << (_imp->locally_injective ? _imp->locally_injective_constraints[pair{p.first, n}] : _imp->injectivity_constraints[n]) << " +";
 
     *_imp->proof_stream << " s ;\n";
     ++_imp->proof_line;
@@ -403,10 +448,13 @@ auto Proof::incompatible_by_nds(
         }
     }
 
-    // injectivity in the square
+    // injectivity in the square: each column of the square holds at most one of p's
+    // neighbours. Under full injectivity that is the global injectivity on the value;
+    // under local injectivity it is the neighbourhood-injectivity of p (at most one
+    // neighbour of p maps to t), exactly as in the degree pigeonhole above.
     for (auto & t : t_subsequence) {
         if (t != t_subsequence.back())
-            *_imp->proof_stream << " " << _imp->injectivity_constraints.at(t) << " +";
+            *_imp->proof_stream << " " << (_imp->locally_injective ? _imp->locally_injective_constraints.at(pair{p.first, t}) : _imp->injectivity_constraints.at(t)) << " +";
     }
 
     // block to the right of the failing square
@@ -669,8 +717,14 @@ auto Proof::create_exact_path_graphs(
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
-    // if p maps to t then q does not map to t
-    *_imp->proof_stream << "pol " << _imp->proof_line << " " << _imp->injectivity_constraints[t.first] << " + s ;\n";
+    // if p maps to t then q does not map to t. Under full injectivity that is the global
+    // injectivity on t; under local injectivity p and q are not globally distinct, but they
+    // share a common neighbour b (that is what between_p_and_q holds), so both are in N(b),
+    // and the neighbourhood-injectivity of b forbids them both mapping to t. Either way the
+    // constraint cancels the "q maps to t" term, leaving the same tidy-up.
+    *_imp->proof_stream << "pol " << _imp->proof_line << " "
+                        << (_imp->locally_injective ? _imp->locally_injective_constraints.at(pair{between_p_and_q.front().first, t.first}) : _imp->injectivity_constraints[t.first])
+                        << " + s ;\n";
     ++_imp->proof_line;
 
     // and cancel out stray extras from injectivity
@@ -700,8 +754,13 @@ auto Proof::create_exact_path_graphs(
             *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[b.first] << " +";
         }
 
+        // the between-vertices must map to distinct common neighbours of t and u (the z's).
+        // Under full injectivity that distinctness is global injectivity on each z; under
+        // local injectivity the between-vertices are all neighbours of p, so the
+        // neighbourhood-injectivity of p (at most one of N(p) maps to z) gives the same
+        // pigeonhole -- there are g between-vertices but fewer than g of the z's.
         for (auto & z : u.second)
-            *_imp->proof_stream << " " << _imp->injectivity_constraints[z.first] << " +";
+            *_imp->proof_stream << " " << (_imp->locally_injective ? _imp->locally_injective_constraints.at(pair{p.first, z.first}) : _imp->injectivity_constraints[z.first]) << " +";
 
         *_imp->proof_stream << " s ;\n";
         ++_imp->proof_line;

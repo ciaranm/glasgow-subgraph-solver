@@ -58,6 +58,13 @@ namespace gss::innards
         auto create_injectivity_constraints(int pattern_size, int target_size,
             const std::function<auto(int)->std::string> & target_name) -> void;
 
+        // Local-injectivity analogue: for each pattern vertex v and target t, at most one
+        // neighbour of v maps to t (phi restricted to N(v) is injective).
+        auto create_locally_injective_constraints(int pattern_size, int target_size,
+            const std::function<auto(int, int)->bool> & adjacent,
+            const std::function<auto(int)->std::string> & pattern_name,
+            const std::function<auto(int)->std::string> & target_name) -> void;
+
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
         auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,

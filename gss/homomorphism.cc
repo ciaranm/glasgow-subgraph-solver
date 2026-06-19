@@ -419,13 +419,10 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
-        if (params.injectivity != Injectivity::Injective && params.injectivity != Injectivity::NonInjective)
-            throw UnsupportedConfiguration{"Proof logging can currently only be used with injectivity or non-injectivity"};
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
-
         proof = make_shared<Proof>(*params.proof_options);
 
         // set up our model file, with a set of OPB variables for each CP variable
@@ -439,6 +436,14 @@ auto gss::solve_homomorphism_problem(
         // generate constraints for injectivity
         if (params.injectivity == Injectivity::Injective)
             proof->create_injectivity_constraints(pattern.size(), target.size(),
+                [&](int v) { return target.vertex_name(v); });
+        else if (params.injectivity == Injectivity::LocallyInjective)
+            // local injectivity: for each pattern vertex and each target, at most one of
+            // that vertex's neighbours may map there (so phi restricted to a neighbourhood
+            // is injective). The neighbourhood analogue of the injectivity constraints.
+            proof->create_locally_injective_constraints(pattern.size(), target.size(),
+                [&](int a, int b) { return pattern.adjacent(a, b); },
+                [&](int v) { return pattern.vertex_name(v); },
                 [&](int v) { return target.vertex_name(v); });
 
         // generate edge constraints, and also handle loops here
@@ -470,10 +475,18 @@ auto gss::solve_homomorphism_problem(
                 if (params.induced) {
                     for (int q = 0; q < pattern.size(); ++q)
                         if (q != p && ! pattern.adjacent(p, q)) {
-                            // ... must be mapped to a neighbour of t
+                            // ... must be mapped to a non-neighbour of t. t itself counts as
+                            // a non-neighbour exactly when it has no self-loop, so the
+                            // permitted set is just the non-neighbours of t (the same test
+                            // the q == p case below uses). Under full injectivity q cannot
+                            // share t with p anyway, so whether t is in the set is moot; but
+                            // under local injectivity p and q may both map to a loopless t,
+                            // and that is a legitimate induced non-edge (t is not adjacent to
+                            // itself), so t must stay in the set or the model wrongly rejects
+                            // it.
                             vector<int> permitted;
                             for (int u = 0; u < target.size(); ++u)
-                                if (t != u && ! target.adjacent(t, u))
+                                if (! target.adjacent(t, u))
                                     permitted.push_back(u);
                             proof->create_adjacency_constraint(
                                 NamedVertex{p, pattern.vertex_name(p)},

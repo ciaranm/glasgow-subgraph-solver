@@ -43,11 +43,27 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | a single thread (no `--parallel`, `--threads 1`) | proof logging is not thread-safe yet |
 | `--no-clique-detection` | the clique-detection shortcut is not yet logged |
 | no less-than / occurs-less symmetry constraints | not yet logged |
-| injective or non-injective only (not `--locally-injective`) | only these two are encoded |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
 
-Supplemental graphs, distance-3 (`--distance3`), neighbourhood degree sequences, and clique-size
-constraints (`--cliques`) are supported with proof logging, on both loopless and loopy instances.
+Injective and non-injective proofs support supplemental graphs, distance-3 (`--distance3`),
+neighbourhood degree sequences, and clique-size constraints (`--cliques`), on both loopless and
+loopy instances.
+
+Local injectivity (`--locally-injective`) is encoded by *neighbourhood*-injectivity constraints
+(`@linj`): for each pattern vertex `v` and target `t`, at most one of `v`'s neighbours maps to `t`
+(its closed neighbourhood if `v` has a self-loop). The degree, NDS and exact-path-graph derivations
+use these in place of the global injectivity constraints — wherever those derivations would sum "at
+most one pattern vertex maps to this target", local injectivity instead sums "at most one of the
+neighbours of some `v` maps to this target", which is exactly what the argument needs (the relevant
+pattern vertices are all neighbours of `v`). For the exact-path (distance-2 supplemental) graphs:
+dropping the "`q` maps to `t`" term uses the neighbourhood-injectivity of a common neighbour of `p`
+and `q` (both are in its neighbourhood), and the insufficient-paths pigeonhole uses the
+neighbourhood-injectivity of `p` (the intermediate vertices are all neighbours of `p`). Loopy
+instances fall back to plain adjacency + local-injectivity propagation, with the degree/NDS/exact-path
+filters disabled ([issue #58]), so those derivations only run loopless. Distance-3 and `--k4` shape
+graphs are only built under full injectivity, so they never arise under local injectivity.
+
+[issue #58]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/58
 
 Loops used to be incompatible with supplemental graphs ([issue #56], now fixed). The adjacency
 constraint keeps the target's self-loop term (so a loop→loop mapping satisfies the model, see
@@ -58,6 +74,12 @@ than `t` itself, which follows from the constraint plus injectivity on `t` — a
 supplemental-graph and distance-3 pols sum *that* in its place. The induced encoding additionally
 forbids a non-loopy pattern vertex from mapping to a loopy target (the `q == p` case of induced
 non-edge preservation), which the model previously left out.
+
+The induced non-edge constraint (for non-adjacent `p`, `q`: if `p` maps to `t` then `q` maps to a
+non-neighbour of `t`) takes the *full* set of non-neighbours of `t`, including `t` itself when `t`
+has no self-loop. Under full injectivity `q` cannot share `t` with `p`, so leaving `t` out was
+harmless; under local injectivity `p` and `q` may both map to a loopless `t`, and since `t` is not
+adjacent to itself that is a legitimate induced non-edge, so the model has to keep `t` in the set.
 
 [issue #56]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/56
 

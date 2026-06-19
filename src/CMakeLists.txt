@@ -81,6 +81,39 @@ if(VERIPB_EXECUTABLE)
     gss_add_proof_test(proof_distance3_loopy ${SUB} --no-nds --distance3
         --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
+    # Local injectivity: the neighbourhood-injectivity encoding + the degree and NDS
+    # pigeonholes using it. Currently requires --no-supplementals (the supplemental-graph
+    # derivations still need locally-injective variants). Loopless and loopy (small/large
+    # have a self-loop, exercising the closed-neighbourhood form).
+    gss_add_proof_test(proof_locally_injective_unsat ${SUB_MIN}
+        --locally-injective --format lad ${GSS_INSTANCES}/star5.lad ${GSS_INSTANCES}/path5.lad)
+    gss_add_proof_test(proof_locally_injective_count ${SUB_MIN}
+        --locally-injective --count-solutions ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    gss_add_proof_test(proof_locally_injective_loopy ${SUB_MIN}
+        --locally-injective --count-solutions --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+    # NDS pigeonhole under local injectivity: --no-supplementals keeps NDS on, so the
+    # "injectivity in the square" step sums the neighbourhood-injectivity (@linj)
+    # constraints in place of the global ones (trident -> longtrident fires it for the
+    # degree-2 vertex).
+    gss_add_proof_test(proof_locally_injective_nds ${SUB} --no-supplementals
+        --locally-injective --count-solutions ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    # Exact-path (distance-2) supplemental graphs under local injectivity: the
+    # create_exact_path_graphs derivation sums @linj in place of the global injectivity,
+    # both to drop the "q maps to t" term (site 1) and in the insufficient-paths pigeonhole
+    # (site 2). This instance is dense enough to fire site 2 (a g>=2 exact-path graph with a
+    # target vertex sharing too few common neighbours).
+    gss_add_proof_test(proof_locally_injective_supplementals ${SUB} --no-nds --format csv
+        --locally-injective --count-solutions
+        ${GSS_INSTANCES}/li_exact_path_pattern.csv ${GSS_INSTANCES}/li_exact_path_target.csv)
+    # Induced non-edge under local injectivity: two non-adjacent pattern vertices may both
+    # map to the same loopless target (it is not adjacent to itself, so the non-edge is
+    # preserved), which needs the target kept in the induced non-edge's permitted set. Two
+    # edgeless vertices into two edgeless vertices -> all 4 mappings, including the two that
+    # share a target.
+    gss_add_proof_test(proof_locally_injective_induced ${SUB_MIN} --format lad
+        --locally-injective --induced --count-solutions
+        ${GSS_INSTANCES}/two_isolated.lad ${GSS_INSTANCES}/two_isolated_target.lad)
+
     # --- Preprocessing / supplemental-graph proofs (loopless) ---
     # supplemental (exact-path) graphs: create_exact_path_graphs derivations.
     gss_add_proof_test(proof_supplementals ${SUB} --no-nds
