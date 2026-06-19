@@ -401,6 +401,189 @@ namespace
             return common_result;
         }
     };
+
+    // --- Solve pipeline -------------------------------------------------------------
+    //
+    // The top-level solve is expressed as a sequence of steps over a shared context.
+    // Each step may transform the context and may conclude the problem (emitting the
+    // proof's conclusion); the driver runs them in registration order until one
+    // concludes, with the search as the terminal step. This is the skeleton of the
+    // unified pipeline described in dev_docs/preprocessor-refactor.md; later phases fold
+    // the model, domains and watches into a single SolveState and turn the preprocessing
+    // filters and supplemental-graph builders into steps too.
+
+    enum class StepOutcome
+    {
+        Continue, // carry on to the next step
+        Concluded // the problem is decided; stop the pipeline
+    };
+
+    struct SolveContext
+    {
+        const InputGraph & pattern;
+        const InputGraph & target;
+        const HomomorphismParams & params;
+        const shared_ptr<Proof> & proof;
+        HomomorphismResult result;
+    };
+
+    struct SolveStep
+    {
+        virtual ~SolveStep() = default;
+        virtual auto run(SolveContext & ctx) -> StepOutcome = 0;
+    };
+
+    // If we are finding a non-shrinking mapping and the pattern has more vertices than
+    // the target, there is trivially no solution.
+    struct PatternBiggerThanTargetStep : SolveStep
+    {
+        auto run(SolveContext & ctx) -> StepOutcome override
+        {
+            if (! (is_nonshrinking(ctx.params) && (ctx.pattern.size() > ctx.target.size())))
+                return StepOutcome::Continue;
+
+            if (ctx.proof) {
+                ctx.proof->failure_due_to_pattern_bigger_than_target();
+                if (ctx.params.count_solutions)
+                    ctx.proof->finish_enumeration_proof(0, true);
+                else
+                    ctx.proof->finish_unsat_proof();
+            }
+
+            ctx.result = HomomorphismResult{};
+            return StepOutcome::Concluded;
+        }
+    };
+
+    // If the target has a loop and we only need a single non-injective mapping, map
+    // every pattern vertex onto the loop.
+    struct TargetLoopShortcutStep : SolveStep
+    {
+        auto run(SolveContext & ctx) -> StepOutcome override
+        {
+            const auto & params = ctx.params;
+            const auto & pattern = ctx.pattern;
+            const auto & target = ctx.target;
+
+            if (! ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback))
+                return StepOutcome::Continue;
+
+            HomomorphismResult result;
+            result.extra_stats.emplace_back("used_loops_property = true");
+            result.complete = true;
+            int loop = -1;
+            for (int t = 0; t < target.size(); ++t)
+                if (target.adjacent(t, t)) {
+                    loop = t;
+                    break;
+                }
+
+            for (int n = 0; n < pattern.size(); ++n)
+                result.mapping.emplace(n, loop);
+
+            ++result.solution_count;
+
+            ctx.result = move(result);
+            return StepOutcome::Concluded;
+        }
+    };
+
+    // If the pattern is a clique, solve it with the clique algorithm instead.
+    struct CliqueShortcutStep : SolveStep
+    {
+        auto run(SolveContext & ctx) -> StepOutcome override
+        {
+            const auto & params = ctx.params;
+            const auto & pattern = ctx.pattern;
+            const auto & target = ctx.target;
+
+            if (! (can_use_clique(params) && is_simple_clique(pattern)))
+                return StepOutcome::Continue;
+
+            CliqueParams clique_params;
+            clique_params.timeout = params.timeout;
+            clique_params.start_time = params.start_time;
+            clique_params.decide = make_optional(pattern.size());
+            clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
+            auto clique_result = solve_clique_problem(target, clique_params);
+
+            // now translate the result back into what we expect
+            HomomorphismResult result;
+            int v = 0;
+            for (auto & m : clique_result.clique) {
+                result.mapping.emplace(v++, m);
+                // the clique solver can find a bigger clique than we ask for
+                if (v >= pattern.size())
+                    break;
+            }
+            result.nodes = clique_result.nodes;
+            result.extra_stats = move(clique_result.extra_stats);
+            result.extra_stats.emplace_back("used_clique_solver = true");
+            result.complete = clique_result.complete;
+
+            ctx.result = move(result);
+            return StepOutcome::Concluded;
+        }
+    };
+
+    // Build the constraint model and run the search. The terminal step: it always
+    // concludes (with a solution, unsat, or an aborted/partial result).
+    struct MainSolveStep : SolveStep
+    {
+        auto run(SolveContext & ctx) -> StepOutcome override
+        {
+            const auto & pattern = ctx.pattern;
+            const auto & target = ctx.target;
+            const auto & params = ctx.params;
+            const auto & proof = ctx.proof;
+
+            HomomorphismModel model(target, pattern, params, proof);
+
+            if (! model.prepare()) {
+                HomomorphismResult result;
+                result.extra_stats.emplace_back("model_consistent = false");
+                result.complete = true;
+                if (proof) {
+                    if (params.count_solutions)
+                        proof->finish_enumeration_proof(0, true);
+                    else
+                        proof->finish_unsat_proof();
+                }
+                ctx.result = move(result);
+                return StepOutcome::Concluded;
+            }
+
+            HomomorphismResult result;
+            if (1 == params.n_threads) {
+                SequentialSolver solver(model, params, proof);
+                result = solver.solve();
+            }
+            else {
+                if (! params.restarts_schedule->might_restart())
+                    throw UnsupportedConfiguration{"Threaded search requires restarts"};
+
+                unsigned n_threads = how_many_threads(params.n_threads);
+                ThreadedSolver solver(model, params, proof, n_threads);
+                result = solver.solve();
+            }
+
+            if (proof) {
+                if (params.count_solutions)
+                    // counting / enumeration: a complete search yields ENUMERATION_COMPLETE,
+                    // otherwise (timeout or solution limit) ENUMERATION_PARTIAL
+                    proof->finish_enumeration_proof(result.solution_count, result.complete);
+                else if (result.complete && result.mapping.empty())
+                    proof->finish_unsat_proof();
+                else if (! result.mapping.empty())
+                    proof->finish_sat_proof();
+                else
+                    proof->finish_unknown_proof();
+            }
+
+            ctx.result = move(result);
+            return StepOutcome::Concluded;
+        }
+    };
 }
 
 auto gss::solve_homomorphism_problem(
@@ -530,109 +713,22 @@ auto gss::solve_homomorphism_problem(
         proof->loop_fix_adjacencies();
     }
 
-    // first sanity check: if we're finding an injective mapping, and there
-    // aren't enough vertices, fail immediately.
-    if (is_nonshrinking(params) && (pattern.size() > target.size())) {
-        if (proof) {
-            proof->failure_due_to_pattern_bigger_than_target();
-            if (params.count_solutions)
-                proof->finish_enumeration_proof(0, true);
-            else
-                proof->finish_unsat_proof();
-        }
+    // The rest of the solve runs as a pipeline of steps over a shared context, in
+    // registration order, stopping at the first step that concludes the problem; the
+    // search is the terminal step. (Emitting the OPB model above will itself become a
+    // step once proof emission is co-located per step; see
+    // dev_docs/preprocessor-refactor.md.)
+    SolveContext ctx{pattern, target, params, proof};
 
-        return HomomorphismResult{};
-    }
+    vector<unique_ptr<SolveStep>> steps;
+    steps.push_back(make_unique<PatternBiggerThanTargetStep>()); // trivial size refutation
+    steps.push_back(make_unique<TargetLoopShortcutStep>());      // non-injective target-loop shortcut
+    steps.push_back(make_unique<CliqueShortcutStep>());          // clique-pattern reduction
+    steps.push_back(make_unique<MainSolveStep>());               // build model + search (terminal)
 
-    // does the target have loops, and are we looking for a single non-injective mapping?
-    if ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback) {
-        HomomorphismResult result;
-        result.extra_stats.emplace_back("used_loops_property = true");
-        result.complete = true;
-        int loop = -1;
-        for (int t = 0; t < target.size(); ++t)
-            if (target.adjacent(t, t)) {
-                loop = t;
-                break;
-            }
+    for (auto & step : steps)
+        if (step->run(ctx) == StepOutcome::Concluded)
+            break;
 
-        for (int n = 0; n < pattern.size(); ++n)
-            result.mapping.emplace(n, loop);
-
-        ++result.solution_count;
-
-        return result;
-    }
-
-    // is the pattern a clique? if so, use a clique algorithm instead
-    if (can_use_clique(params) && is_simple_clique(pattern)) {
-        CliqueParams clique_params;
-        clique_params.timeout = params.timeout;
-        clique_params.start_time = params.start_time;
-        clique_params.decide = make_optional(pattern.size());
-        clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
-        auto clique_result = solve_clique_problem(target, clique_params);
-
-        // now translate the result back into what we expect
-        HomomorphismResult result;
-        int v = 0;
-        for (auto & m : clique_result.clique) {
-            result.mapping.emplace(v++, m);
-            // the clique solver can find a bigger clique than we ask for
-            if (v >= pattern.size())
-                break;
-        }
-        result.nodes = clique_result.nodes;
-        result.extra_stats = move(clique_result.extra_stats);
-        result.extra_stats.emplace_back("used_clique_solver = true");
-        result.complete = clique_result.complete;
-
-        return result;
-    }
-    else {
-        // just solve the problem
-        HomomorphismModel model(target, pattern, params, proof);
-
-        if (! model.prepare()) {
-            HomomorphismResult result;
-            result.extra_stats.emplace_back("model_consistent = false");
-            result.complete = true;
-            if (proof) {
-                if (params.count_solutions)
-                    proof->finish_enumeration_proof(0, true);
-                else
-                    proof->finish_unsat_proof();
-            }
-            return result;
-        }
-
-        HomomorphismResult result;
-        if (1 == params.n_threads) {
-            SequentialSolver solver(model, params, proof);
-            result = solver.solve();
-        }
-        else {
-            if (! params.restarts_schedule->might_restart())
-                throw UnsupportedConfiguration{"Threaded search requires restarts"};
-
-            unsigned n_threads = how_many_threads(params.n_threads);
-            ThreadedSolver solver(model, params, proof, n_threads);
-            result = solver.solve();
-        }
-
-        if (proof) {
-            if (params.count_solutions)
-                // counting / enumeration: a complete search yields ENUMERATION_COMPLETE,
-                // otherwise (timeout or solution limit) ENUMERATION_PARTIAL
-                proof->finish_enumeration_proof(result.solution_count, result.complete);
-            else if (result.complete && result.mapping.empty())
-                proof->finish_unsat_proof();
-            else if (! result.mapping.empty())
-                proof->finish_sat_proof();
-            else
-                proof->finish_unknown_proof();
-        }
-
-        return result;
-    }
+    return move(ctx.result);
 }
