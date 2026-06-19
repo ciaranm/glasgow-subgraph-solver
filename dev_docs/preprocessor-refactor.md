@@ -126,10 +126,17 @@ Each phase is an independently mergeable PR.
   sequential search becomes the **terminal step**. Keep the `HomomorphismModel` / searcher
   boundary and have the search step wrap the existing engine; do **not** unify `SolveState`
   yet. Guardrail: byte-identical proofs (sweep + cake).
-- **Phase 1b — Unify `SolveState`.** Fold model rows + domains + watches into one carried
-  state, the model "frozen" during a search step and mutable between steps. Deferred until
-  Phase 6 needs growable-model-across-rounds; isolated so it can land on its own.
-  Guardrail: byte-identical proofs.
+- **Phase 1b — Unify `SolveState`.** *Done (commit 504c96c).* The constraint model, the
+  (root) domains and the nogood store now live in one `SolveState` (`gss/innards/solve_state.hh`)
+  carried through the pipeline, instead of as locals scattered across the model build and the two
+  solvers. The model is built into the carried state — still lazily by the main solve step, after
+  the cheap shortcut steps, so the `max_graphs` guard cannot fire before a shortcut concludes — and
+  is "frozen" during a search step. The searcher no longer owns its nogood store: it takes a
+  `Watches &` from the caller (the sequential path supplies `state.watches`; the threaded terminal
+  search keeps a per-thread `vector<Watches>`, as threaded staging is deferred). This is the
+  prerequisite for Phase 6's growable-model-across-rounds and persistent nogoods. Guardrail held:
+  274/274 proof files byte-identical, 49/49 ctest, clean under ASan/UBSan, threaded runs match the
+  sequential results.
 - **Phase 2 — Self-allocating slots + commit/discard (S1).** Replace
   `calculate_n_shape_graphs`, the manual `next_*_supplemental` threading, and the
   slot-index sanity check with context-driven slot allocation; `max_graphs` becomes a
