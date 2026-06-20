@@ -96,6 +96,48 @@ for loops in "" "--loops 0.3"; do
             total_pbp=$((total_pbp + pbp_lines))
             recorded=$((recorded + 1))
         done
+
+        # Staged solving (Phase 6): cheap filtering first, supplemental graphs built only if a
+        # first bounded search round does not conclude. A tiny first-round budget forces the
+        # Stage-1 -> Stage-2 transition on most of these instances, so the mid-proof
+        # supplemental derivation (at the level-0 restart boundary) is verified here; instances
+        # that conclude in Stage 1 exercise the no-supplemental, smaller-proof path. Staging
+        # uses restarts internally, so counting is not combined with it under proof.
+        for opts in "--staged" "--induced --staged"; do
+            checked=$((checked + 1))
+            proof="${workdir}/rps_proof_${seed}_${checked}"
+
+            # shellcheck disable=SC2086
+            if ! "${solver}" --format csv --no-clique-detection ${opts} --staged-first-round-backtracks 2 --prove "${proof}" \
+                    "${pat}" "${tgt}" > "${proof}.log" 2>&1; then
+                echo "loops='${loops}' seed ${seed}, opts '${opts}': solver failed" 1>&2
+                cat "${proof}.log" 1>&2
+                fails=$((fails + 1))
+                continue
+            fi
+
+            verify=ok
+            if ! "${veripb}" "${proof}.opb" "${proof}.pbp" 2>&1 | grep -q 'VERIFIED'; then
+                echo "loops='${loops}' seed ${seed}, opts '${opts}': proof did NOT verify" 1>&2
+                "${veripb}" "${proof}.opb" "${proof}.pbp" 2>&1 | tail -4 1>&2
+                fails=$((fails + 1))
+                verify=FAIL
+            fi
+
+            family="staged"; [ -n "${loops}" ] && family="staged-loopy"
+            opb_lines=$(wc -l < "${proof}.opb")
+            pbp_lines=$(wc -l < "${proof}.pbp")
+            shape=$(sed -n 's/^shape_graphs = //p' "${proof}.log"); shape="${shape:-NA}"
+            sols=$(sed -n 's/^solution_count = //p' "${proof}.log")
+            [ -z "${sols}" ] && sols=$(sed -n 's/^status = //p' "${proof}.log")
+            sols="${sols:-NA}"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "${family}" "${seed}" "${opts:-none}" "${shape}" "${opb_lines}" "${pbp_lines}" "${sols}" "${verify}" \
+                >> "${metrics}"
+            total_opb=$((total_opb + opb_lines))
+            total_pbp=$((total_pbp + pbp_lines))
+            recorded=$((recorded + 1))
+        done
     done
 done
 

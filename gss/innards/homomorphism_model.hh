@@ -52,6 +52,17 @@ namespace gss::innards
 
         auto prepare() -> bool;
 
+        // Build the supplemental graphs (exact-path, distance-3, …) into their slots and,
+        // when proving, derive them. prepare() calls this itself unless staging is on, in
+        // which case the staged solve driver calls it after a first bounded search round.
+        // Precondition: prepare() has run and the original-graph self-loops are present.
+        auto build_supplemental_graphs() -> void;
+
+        // Tighten already-initialised domains using the supplemental graphs and NDS (the
+        // filtering deferred past Stage 1 under staging), emitting the new prunings to the
+        // proof. Returns false if a domain wipes out. Precondition: build_supplemental_graphs().
+        auto tighten_domains_with_supplementals(std::vector<HomomorphismDomain> & domains) const -> bool;
+
         auto pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType;
         auto pattern_graph_row(int g, int p) const -> const SVOBitset &;
         auto target_graph_row(int g, int t) const -> const SVOBitset &;
@@ -74,7 +85,9 @@ namespace gss::innards
         auto pattern_has_loop(int p) const -> bool;
         auto target_has_loop(int t) const -> bool;
 
-        auto initialise_domains(std::vector<HomomorphismDomain> & domains) const -> bool;
+        // When stage1 is true (staging), only the original graph is considered and NDS is
+        // skipped -- the cheapest filtering, run before any supplemental graph is built.
+        auto initialise_domains(std::vector<HomomorphismDomain> & domains, bool stage1 = false) const -> bool;
 
         auto add_extra_stats(std::list<std::string> &) const -> void;
     };

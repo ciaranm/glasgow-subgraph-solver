@@ -91,6 +91,19 @@ namespace gss
         /// Disable neighbourhood degree sequence processing?
         bool no_nds = false;
 
+        /// Staged solving (S3): run cheap preprocessing (no supplemental graphs, degree but
+        /// not NDS, Hall), search within a bounded budget, and only then build the
+        /// supplemental graphs + NDS, re-filter, and search unbounded. Sequential only;
+        /// under proof it stays valid (supplementals are derived at the level-0 restart
+        /// boundary). See dev_docs/preprocessor-refactor.md, Phase 6.
+        bool staged = false;
+
+        /// Staged solving: the backtrack budget for the first (cheap) search round, after
+        /// which the supplemental graphs are built. A tunable behind a sensible default; the
+        /// hidden --staged-first-round-backtracks flag sets it (mainly for testing, to force
+        /// the transition on small instances). Only used when staged is true.
+        unsigned long long staged_first_round_backtracks = 100;
+
         /// Proof-emission optimisation: emit only the strongest of a set of nested
         /// supplemental adjacency constraints (a constraint with the same head but a smaller
         /// target set subsumes the wider ones, so the wider ones are redundant). On by

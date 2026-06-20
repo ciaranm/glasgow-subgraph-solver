@@ -448,15 +448,19 @@ auto HomomorphismModel::_check_degree_compatibility(
     return true;
 }
 
-auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains) const -> bool
+auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains, bool stage1) const -> bool
 {
-    unsigned max_graphs_for_degree_things = (_imp->params.injectivity == Injectivity::LocallyInjective ? 1 : max_graphs);
+    // Under staging, Stage 1 considers only the original graph (supplementals are not built
+    // yet) and skips NDS -- the cheapest filtering. tighten_domains_with_supplementals adds
+    // the supplemental degrees and NDS later.
+    unsigned max_graphs_for_degree_things = (stage1 || _imp->params.injectivity == Injectivity::LocallyInjective ? 1 : max_graphs);
+    bool do_nds = ! stage1;
 
     /* pattern and target neighbourhood degree sequences */
     vector<vector<vector<int>>> patterns_ndss(max_graphs_for_degree_things);
     vector<vector<optional<vector<int>>>> targets_ndss(max_graphs_for_degree_things);
 
-    if (degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+    if (do_nds && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
         for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
             patterns_ndss.at(g).resize(pattern_size);
             targets_ndss.at(g).resize(target_size);
@@ -485,7 +489,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
                 ok = false;
             else if (! _check_loop_compatibility(i, j))
                 ok = false;
-            else if (! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, _imp->proof.get()))
+            else if (! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, stage1 || _imp->proof.get()))
                 ok = false;
             else if (! _check_clique_compatibility(i, j))
                 ok = false;
@@ -503,7 +507,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
     }
 
     // for proof logging, we need degree information before we can output nds proofs
-    if (_imp->proof && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+    if (do_nds && _imp->proof && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
         for (unsigned i = 0; i < pattern_size; ++i) {
             for (unsigned j = 0; j < target_size; ++j) {
                 if (domains.at(i).values.test(j) &&
@@ -546,6 +550,81 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains)
         d.count = d.values.count();
         if (0 == d.count && _imp->proof) {
             _imp->proof->initial_domain_is_empty(d.v, "post-initialisation stage");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+auto HomomorphismModel::tighten_domains_with_supplementals(vector<HomomorphismDomain> & domains) const -> bool
+{
+    // The filtering Stage 1 deferred: supplemental-graph degrees (g >= 1) and NDS. Applied
+    // as a tightening of the already-initialised domains -- only values still present are
+    // tested, so only the newly-failing prunings are emitted (the Stage-1 g=0 degree
+    // prunings are not re-emitted). Mirrors initialise_domains' two-pass (degree then NDS)
+    // structure so the proof ordering is the proven-good one.
+    unsigned max_graphs_for_degree_things = (_imp->params.injectivity == Injectivity::LocallyInjective ? 1 : max_graphs);
+
+    vector<vector<vector<int>>> patterns_ndss(max_graphs_for_degree_things);
+    vector<vector<optional<vector<int>>>> targets_ndss(max_graphs_for_degree_things);
+
+    if (degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+        for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
+            patterns_ndss.at(g).resize(pattern_size);
+            targets_ndss.at(g).resize(target_size);
+        }
+
+        for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
+            for (unsigned i = 0; i < pattern_size; ++i) {
+                auto ni = pattern_graph_row(g, i);
+                for (auto j = ni.find_first(); j != decltype(ni)::npos; j = ni.find_first()) {
+                    ni.reset(j);
+                    patterns_ndss.at(g).at(i).push_back(pattern_degree(g, j));
+                }
+                sort(patterns_ndss.at(g).at(i).begin(), patterns_ndss.at(g).at(i).end(), greater<int>());
+            }
+        }
+    }
+
+    // pass 1: degrees over all graphs (NDS deferred when proving, so degree prunings precede
+    // NDS ones, as in initialise_domains). The g=0 degrees were already applied in Stage 1,
+    // so only the supplemental (g >= 1) degrees can newly fire here.
+    for (unsigned i = 0; i < pattern_size; ++i) {
+        for (unsigned j = 0; j < target_size; ++j) {
+            if (domains.at(i).values.test(j) &&
+                ! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, _imp->proof.get())) {
+                domains.at(i).values.reset(j);
+                if (0 == --domains.at(i).count) {
+                    if (_imp->proof)
+                        _imp->proof->initial_domain_is_empty(domains.at(i).v, "supplemental degree stage");
+                    return false;
+                }
+            }
+        }
+    }
+
+    // pass 2 (proof only): NDS, now that the degree prunings are in the proof
+    if (_imp->proof && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+        for (unsigned i = 0; i < pattern_size; ++i) {
+            for (unsigned j = 0; j < target_size; ++j) {
+                if (domains.at(i).values.test(j) &&
+                    ! _check_degree_compatibility(i, j, max_graphs_for_degree_things, patterns_ndss, targets_ndss, false)) {
+                    domains.at(i).values.reset(j);
+                    if (0 == --domains.at(i).count) {
+                        if (_imp->proof)
+                            _imp->proof->initial_domain_is_empty(domains.at(i).v, "supplemental nds stage");
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    for (auto & d : domains) {
+        d.count = d.values.count();
+        if (0 == d.count && _imp->proof) {
+            _imp->proof->initial_domain_is_empty(d.v, "post-supplemental stage");
             return false;
         }
     }
@@ -640,6 +719,48 @@ auto HomomorphismModel::prepare() -> bool
             }
     }
 
+    // largest target degree (over the original graph), needed by the searcher
+    for (unsigned i = 0; i < target_size; ++i)
+        _imp->graphs.largest_target_degree = max(_imp->graphs.largest_target_degree, _imp->graphs.targets_degrees[0][i]);
+
+    // re-add loops to the original graph (stripped during recoding; the searcher needs them)
+    for (unsigned i = 0; i < pattern_size; ++i)
+        if (_imp->graphs.pattern_loops[i])
+            _imp->graphs.pattern_graph_rows[i * max_graphs + 0].set(i);
+
+    for (unsigned i = 0; i < target_size; ++i)
+        if (_imp->graphs.target_loops[i])
+            _imp->graphs.target_graph_rows[i * max_graphs + 0].set(i);
+
+    // pattern adjacencies, compressed -- the original graph (g=0) now; the supplemental
+    // graphs OR in their own bits in build_supplemental_graphs (which may run later, under
+    // staging). The array is zero-initialised, so the two passes compose.
+    _imp->graphs.pattern_adjacencies_bits.resize(pattern_size * pattern_size);
+    for (unsigned i = 0; i < pattern_size; ++i)
+        for (unsigned j = 0; j < pattern_size; ++j)
+            if (_imp->graphs.pattern_graph_rows[i * max_graphs + 0].test(j))
+                _imp->graphs.pattern_adjacencies_bits[i * pattern_size + j] |= (1u << 0);
+
+    // Unless staging, build (and derive) the supplemental graphs now -- unchanged
+    // behaviour. Under staging this is deferred to after a first bounded search round.
+    if (! _imp->params.staged)
+        build_supplemental_graphs();
+
+    return true;
+}
+
+auto HomomorphismModel::build_supplemental_graphs() -> void
+{
+    // The supplemental builders read the original-graph rows, which must be loop-stripped
+    // (the same form they were recoded into). prepare() has since re-added the g=0 self-loops,
+    // so strip them for the duration of the build and restore them at the end.
+    for (unsigned i = 0; i < pattern_size; ++i)
+        if (_imp->graphs.pattern_loops[i])
+            _imp->graphs.pattern_graph_rows[i * max_graphs + 0].reset(i);
+    for (unsigned i = 0; i < target_size; ++i)
+        if (_imp->graphs.target_loops[i])
+            _imp->graphs.target_graph_rows[i * max_graphs + 0].reset(i);
+
     unsigned next_pattern_supplemental = 1, next_target_supplemental = 1;
 
     // Pattern edges (p,q) whose exact-path adjacency constraint was emitted: the distance-3
@@ -715,27 +836,21 @@ auto HomomorphismModel::prepare() -> bool
             _imp->graphs.targets_degrees.at(g).at(i) = _imp->graphs.target_graph_rows[i * max_graphs + g].count();
     }
 
-    for (unsigned i = 0; i < target_size; ++i)
-        _imp->graphs.largest_target_degree = max(_imp->graphs.largest_target_degree, _imp->graphs.targets_degrees[0][i]);
-
-    // re-add loops
+    // restore the original-graph self-loops stripped for the build above
     for (unsigned i = 0; i < pattern_size; ++i)
         if (_imp->graphs.pattern_loops[i])
             _imp->graphs.pattern_graph_rows[i * max_graphs + 0].set(i);
-
     for (unsigned i = 0; i < target_size; ++i)
         if (_imp->graphs.target_loops[i])
             _imp->graphs.target_graph_rows[i * max_graphs + 0].set(i);
 
-    // pattern adjacencies, compressed
-    _imp->graphs.pattern_adjacencies_bits.resize(pattern_size * pattern_size);
-    for (unsigned g = 0; g < max_graphs; ++g)
+    // OR the supplemental graphs' adjacency bits into the compressed array (g=0 was done
+    // in prepare())
+    for (unsigned g = 1; g < max_graphs; ++g)
         for (unsigned i = 0; i < pattern_size; ++i)
             for (unsigned j = 0; j < pattern_size; ++j)
                 if (_imp->graphs.pattern_graph_rows[i * max_graphs + g].test(j))
                     _imp->graphs.pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
-
-    return true;
 }
 
 auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType

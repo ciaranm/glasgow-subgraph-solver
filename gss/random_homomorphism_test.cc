@@ -141,5 +141,28 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
         // a non-empty enumeration must have run to completion; the only incomplete
         // case is the trivial injective pattern-bigger-than-target shortcut (0 solutions)
         CHECK((result.complete || expected.empty()));
+
+        // Staged solving must not change the answer: it reorders preprocessing and search,
+        // not the result. Run the same instance unstaged and staged in decision mode (a tiny
+        // first-round budget forces the Stage-1 -> Stage-2 transition, exercising the
+        // supplemental-graph build + re-filter path) and require they agree on satisfiability.
+        // We compare staged to unstaged (not to the oracle) so the check is about staging
+        // alone: the decision-mode shortcuts (clique and target-loop reduction) have their own
+        // pre-existing induced+loops issues, but they fire identically with and without
+        // staging, so staged-vs-unstaged isolates staging's correctness. Core correctness is
+        // covered by the unstaged count-vs-oracle check above, and staged proofs are verified
+        // by the random proof sweep. (Staged counting is rejected by solve_homomorphism_problem:
+        // a mid-enumeration restart would recount already-explored subtrees.)
+        params.count_solutions = false;
+        params.enumerate_callback = {};
+        params.staged = false;
+        auto unstaged_decision = solve_homomorphism_problem(pattern, target, params);
+        params.staged = true;
+        params.staged_first_round_backtracks = 1;
+        auto staged_decision = solve_homomorphism_problem(pattern, target, params);
+        INFO("staged vs unstaged decision: iteration " << iter
+                                                       << ", staged_sat=" << (! staged_decision.mapping.empty())
+                                                       << " unstaged_sat=" << (! unstaged_decision.mapping.empty()));
+        CHECK((! staged_decision.mapping.empty()) == (! unstaged_decision.mapping.empty()));
     }
 }

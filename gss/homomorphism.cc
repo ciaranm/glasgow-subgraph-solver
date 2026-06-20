@@ -84,10 +84,11 @@ namespace
         {
             HomomorphismResult result;
 
-            // domains (carried in the shared solve state)
+            // domains (carried in the shared solve state). Under staging, Stage 1 filters
+            // only on the original graph (supplementals are not built yet) and skips NDS.
             Domains & domains = state.domains;
             domains = Domains(model.pattern_size, HomomorphismDomain{model.target_size});
-            if (! model.initialise_domains(domains)) {
+            if (! model.initialise_domains(domains, params.staged)) {
                 result.complete = true;
                 model.add_extra_stats(result.extra_stats);
                 return result;
@@ -106,6 +107,17 @@ namespace
 
             HomomorphismSearcher searcher(
                 model, params, [](const HomomorphismAssignments &) -> bool { return true; }, proof, state.watches);
+
+            // Staging: Stage 1 searches under a small fixed backtrack-budget schedule; at its
+            // first restart we build the supplemental graphs (deriving them at the level-0
+            // restart boundary, when proving), tighten the domains, and switch to the user's
+            // schedule for Stage 2. Nogoods accumulated in Stage 1 persist in state.watches
+            // across the transition. If Stage 1 concludes first, no supplementals are built.
+            bool staging = params.staged;
+            unique_ptr<RestartsSchedule> stage1_schedule;
+            if (staging)
+                stage1_schedule = make_unique<GeometricRestartsSchedule>(double(params.staged_first_round_backtracks), 1.0);
+            RestartsSchedule * active_schedule = staging ? stage1_schedule.get() : params.restarts_schedule.get();
 
             while (! done) {
                 ++number_of_restarts;
@@ -129,12 +141,15 @@ namespace
 
                 searcher.watches.clear_new_nogoods();
 
+                // the schedule that bounds this round (stage 1's budget, or the user's)
+                RestartsSchedule * round_schedule = active_schedule;
+
                 ++result.propagations;
                 if (searcher.propagate(true, domains, assignments)) {
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
-                        result.solution_count, 0, *params.restarts_schedule)) {
+                        result.solution_count, 0, *round_schedule)) {
                     case SearchResult::Satisfiable:
                         searcher.save_result(assignments_copy, result);
                         // when counting, reaching here means the enumerate callback asked
@@ -158,6 +173,20 @@ namespace
                         break;
 
                     case SearchResult::Restart:
+                        // Stage-1 -> Stage-2 transition (once): the cheap round did not
+                        // conclude, so build (and, when proving, derive) the supplemental
+                        // graphs now -- the proof is at level 0 here, the restart having
+                        // backed up to top -- then re-filter and continue under the user's
+                        // schedule. state.model is non-const (the model grows here).
+                        if (staging) {
+                            state.model->build_supplemental_graphs();
+                            if (! model.tighten_domains_with_supplementals(domains)) {
+                                result.complete = true;
+                                done = true;
+                            }
+                            staging = false;
+                            active_schedule = params.restarts_schedule.get();
+                        }
                         break;
                     }
                 }
@@ -168,7 +197,7 @@ namespace
                     done = true;
                 }
 
-                params.restarts_schedule->did_a_restart();
+                round_schedule->did_a_restart();
             }
 
             if (params.restarts_schedule->might_restart())
@@ -622,6 +651,17 @@ auto gss::solve_homomorphism_problem(
     const InputGraph & target,
     const HomomorphismParams & params) -> HomomorphismResult
 {
+    // Staged solving uses an internal bounded search round (a restart) as its budget, so it
+    // only makes sense for the sequential engine; threaded staging is a later refinement.
+    if (params.staged && 1 != params.n_threads)
+        throw UnsupportedConfiguration{"Staged solving requires sequential search, use --threads 1"};
+    // Counting is not yet supported under staging: the Stage-1 -> Stage-2 transition is a
+    // restart, and a restart that fires mid-enumeration recounts already-explored-and-
+    // backtracked subtrees (counting does not post solution-blocking nogoods). Correct staged
+    // counting needs those nogoods (or a non-counting Stage-1 probe); a later refinement.
+    if (params.staged && params.count_solutions)
+        throw UnsupportedConfiguration{"Staged solving cannot yet be used when counting solutions, drop --staged or --count-solutions"};
+
     // start by setting up proof logging, if necessary
     shared_ptr<Proof> proof;
     if (params.proof_options) {

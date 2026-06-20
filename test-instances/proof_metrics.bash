@@ -50,6 +50,7 @@ configs=(
     "cliques|${common} --no-supplementals --no-nds --cliques --format csv|trident.csv|longtrident.csv"
     "locally_injective|${min} --locally-injective --count-solutions --format csv|trident.csv|longtrident.csv"
     "loopy_supplementals|${common} --no-nds --format lad|small|large"
+    "staged|${common} --staged --format csv|trident.csv|longtrident.csv"
 )
 
 header=$'config\tshape_graphs\topb_lines\tpbp_lines\tsolutions\tnodes'
