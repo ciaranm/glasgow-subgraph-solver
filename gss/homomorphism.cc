@@ -521,7 +521,10 @@ namespace
             const auto & pattern = ctx.pattern;
             const auto & target = ctx.target;
 
-            if (! ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback))
+            // Not for induced: mapping every pattern vertex onto one self-looped target vertex
+            // sends each pattern non-edge to that loop -- an edge -- which an induced mapping
+            // forbids.
+            if (! ((params.injectivity == Injectivity::NonInjective) && ! params.induced && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback))
                 return StepOutcome::Continue;
 
             HomomorphismResult result;
@@ -553,7 +556,10 @@ namespace
             const auto & pattern = ctx.pattern;
             const auto & target = ctx.target;
 
-            if (! (can_use_clique(params) && is_simple_clique(pattern)))
+            // Not for an induced mapping into a target with loops: a simple-clique pattern is
+            // loopless, so an induced mapping must avoid self-looped target vertices, but the
+            // clique algorithm ignores loops and may map a pattern vertex onto one.
+            if (! (can_use_clique(params) && is_simple_clique(pattern) && ! (params.induced && target.loopy())))
                 return StepOutcome::Continue;
 
             CliqueParams clique_params;
