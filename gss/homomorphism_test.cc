@@ -161,6 +161,82 @@ R"(1,2
     }
 }
 
+TEST_CASE("induced mapping does not misuse the loop or clique shortcuts")
+{
+    // Regression: the non-injective target-loop shortcut and the clique-pattern shortcut both
+    // ignored --induced on a loopy target, returning mappings that send a loopless pattern
+    // vertex (or a pattern non-edge) onto a target self-loop, which an induced mapping forbids.
+
+    SECTION("target-loop shortcut is not used for an induced mapping")
+    {
+        // Two isolated (loopless) pattern vertices; the only target vertex has a self-loop. The
+        // non-injective loop shortcut would map both onto the loop, but no loopless pattern
+        // vertex can map onto a looped target vertex under an induced mapping.
+        auto pattern = read_csv(stringstream{"a,\nc,\n"}, "pattern");
+        auto target = read_csv(stringstream{"1,1\n"}, "target");
+
+        HomomorphismParams params;
+        params.timeout = make_shared<Timeout>(0s);
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        params.injectivity = Injectivity::NonInjective;
+        params.induced = true;
+
+        auto decided = solve_homomorphism_problem(pattern, target, params);
+        CHECK(decided.mapping.empty());
+        CHECK(decided.complete);
+
+        params.count_solutions = true;
+        auto counted = solve_homomorphism_problem(pattern, target, params);
+        CHECK(counted.solution_count == 0);
+    }
+
+    SECTION("clique shortcut is not used for an induced mapping into a loopy target")
+    {
+        // A K2 pattern is a simple (loopless) clique; the target's vertices all have self-loops.
+        // The clique algorithm would find the K2, but its loopless endpoints cannot map onto
+        // looped target vertices under an induced mapping.
+        auto pattern = read_csv(stringstream{"a,b\n"}, "pattern");
+        auto target = read_csv(stringstream{"1,2\n1,1\n2,2\n"}, "target");
+
+        HomomorphismParams params;
+        params.timeout = make_shared<Timeout>(0s);
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        params.clique_detection = true;
+        params.induced = true;
+
+        auto decided = solve_homomorphism_problem(pattern, target, params);
+        CHECK(decided.mapping.empty());
+        CHECK(decided.complete);
+
+        params.count_solutions = true;
+        auto counted = solve_homomorphism_problem(pattern, target, params);
+        CHECK(counted.solution_count == 0);
+    }
+
+    SECTION("clique shortcut is still used for an induced mapping into a loopless target")
+    {
+        // The fix must not disable the optimisation in the common case: a K2 pattern into a
+        // loopless K3 target has induced solutions and should still go through the clique
+        // algorithm.
+        auto pattern = read_csv(stringstream{"a,b\n"}, "pattern");
+        auto target = read_csv(stringstream{"1,2\n1,3\n2,3\n"}, "target");
+
+        HomomorphismParams params;
+        params.timeout = make_shared<Timeout>(0s);
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        params.clique_detection = true;
+        params.induced = true;
+
+        auto decided = solve_homomorphism_problem(pattern, target, params);
+        CHECK(! decided.mapping.empty());
+        bool used_clique_solver = false;
+        for (auto & stat : decided.extra_stats)
+            if (stat == "used_clique_solver = true")
+                used_clique_solver = true;
+        CHECK(used_clique_solver);
+    }
+}
+
 TEST_CASE("homomorphism loop shrinking")
 {
     auto pattern = read_csv(stringstream{// clang-format off
