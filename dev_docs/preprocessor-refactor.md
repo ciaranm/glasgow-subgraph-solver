@@ -161,12 +161,27 @@ Each phase is an independently mergeable PR.
   cost; cheap concluding steps run before expensive builders, so easy-unsat instances
   conclude before any supplemental derivations are emitted. The order is a property of the
   registered list. Guardrail: proofs still verify; measurable PBP shrink on easy instances.
-- **Phase 6 — Staged solving (S3, first-class).** Bounded-search steps interleaved with
-  builder / filter steps; nogoods persist across rounds; re-filter after new graphs.
-  Requires Phase 1b. Sequential staging first; threaded staging is a later refinement (the
-  threaded engine has internal barriers and nogood sharing, so a *bounded threaded* step is
-  harder — the unbounded threaded search stays terminal meanwhile). Ship behind a flag,
-  measure, then consider making it the default.
+- **Phase 6 — Staged solving (S3, first-class).** *v1 done (commit 52185f3; flag-gated, sequential, decision).*
+  `--staged` runs a cheap first round (original graph only: degree + Hall, no NDS, no
+  supplemental graphs), and only if a small backtrack budget passes without concluding does it
+  build the supplemental graphs and NDS, re-filter the domains, and continue unbounded. The
+  budget is the transition trigger: `prepare()` is split into the Stage-1 work and a new
+  `build_supplemental_graphs()`, and the driver in `SequentialSolver` runs Stage 1 under its own
+  fixed-budget restart schedule, then at the first restart calls `build_supplemental_graphs()` +
+  `tighten_domains_with_supplementals()` and switches to the user's schedule. Nogoods persist in
+  the carried `state.watches` (Phase 1b) across the transition. **Full proof support:** the
+  supplemental graphs are derived mid-proof at the level-0 restart boundary (`back_up_to_top`),
+  and the re-filter emits only the new degree/NDS prunings; staged proofs verify under VeriPB,
+  and easy instances that conclude in Stage 1 emit *no* supplemental derivations (e.g. trident
+  PBP 2168 → 136). Guardrails: unstaged proofs byte-identical; staged proofs verify (sweep
+  160/160); staging is satisfiability-neutral vs unstaged (random correctness sweep). **Deferred
+  to follow-ups:** staged *counting* (a mid-enumeration restart would recount explored subtrees
+  — needs solution-blocking nogoods, so `--staged --count-solutions` is rejected for now);
+  threaded staging (the threaded engine's barriers / nogood sharing make a *bounded threaded*
+  round harder — the unbounded threaded search stays terminal); finer multi-tier schedules;
+  expressing the bounded round as a first-class composable `SolveStep`; making `--staged` the
+  default. (Aside, found while testing: the decision-mode clique and target-loop shortcut steps
+  ignore `--induced` on loopy targets — a *pre-existing* bug, orthogonal to staging.)
 
 ### Strand → phase
 
