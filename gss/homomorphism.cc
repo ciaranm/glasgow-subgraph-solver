@@ -545,7 +545,9 @@ auto gss::solve_homomorphism_problem(
     }
 
     // does the target have loops, and are we looking for a single non-injective mapping?
-    if ((params.injectivity == Injectivity::NonInjective) && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback) {
+    // (not for induced: mapping every pattern vertex onto one self-looped target vertex sends
+    // each pattern non-edge to that loop -- an edge -- which an induced mapping forbids)
+    if ((params.injectivity == Injectivity::NonInjective) && ! params.induced && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback) {
         HomomorphismResult result;
         result.extra_stats.emplace_back("used_loops_property = true");
         result.complete = true;
@@ -564,8 +566,11 @@ auto gss::solve_homomorphism_problem(
         return result;
     }
 
-    // is the pattern a clique? if so, use a clique algorithm instead
-    if (can_use_clique(params) && is_simple_clique(pattern)) {
+    // is the pattern a clique? if so, use a clique algorithm instead. (Not for an induced
+    // mapping into a target with loops: a simple-clique pattern is loopless, so an induced
+    // mapping must avoid self-looped target vertices, but the clique algorithm ignores loops
+    // and may map a pattern vertex onto one.)
+    if (can_use_clique(params) && is_simple_clique(pattern) && ! (params.induced && target.loopy())) {
         CliqueParams clique_params;
         clique_params.timeout = params.timeout;
         clique_params.start_time = params.start_time;
