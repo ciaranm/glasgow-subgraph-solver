@@ -142,6 +142,31 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
         // case is the trivial injective pattern-bigger-than-target shortcut (0 solutions)
         CHECK((result.complete || expected.empty()));
 
+        // Staged counting must match the oracle exactly, including under the no-restarts
+        // schedule counting uses: a tiny first-round budget forces the Stage-1 -> Stage-2
+        // transition mid-enumeration, and the restart-resumption nogoods must stop Stage 2
+        // re-counting the solutions Stage 1 already found. (This is the regression guard for
+        // the might_have_watches fix: with the watch machinery disabled under staging, the
+        // transition posts no nogoods and Stage 2 re-explores the whole tree, inflating the
+        // count.) Counting disables the decision-mode shortcuts, so unlike the decision check
+        // below this can compare straight to the oracle. The distinct-set check catches a
+        // missed solution; the solution_count check catches a double-counted one.
+        set<map<int, int>> staged_got;
+        params.staged = true;
+        params.staged_first_round_backtracks = 1;
+        params.enumerate_callback = [&](const VertexToVertexMapping & mapping) {
+            staged_got.insert(mapping);
+            return true;
+        };
+        auto staged_count = solve_homomorphism_problem(pattern, target, params);
+        INFO("staged count: iteration " << iter << ", staged_distinct=" << staged_got.size()
+                                        << " staged_total=" << staged_count.solution_count
+                                        << " oracle=" << expected.size());
+        CHECK(staged_got == expected);
+        CHECK(staged_count.solution_count == int(expected.size()));
+        CHECK((staged_count.complete || expected.empty()));
+        params.staged = false;
+
         // Staged solving must not change the answer: it reorders preprocessing and search,
         // not the result. Run the same instance unstaged and staged in decision mode (a tiny
         // first-round budget forces the Stage-1 -> Stage-2 transition, exercising the
@@ -151,8 +176,7 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
         // pre-existing induced+loops issues, but they fire identically with and without
         // staging, so staged-vs-unstaged isolates staging's correctness. Core correctness is
         // covered by the unstaged count-vs-oracle check above, and staged proofs are verified
-        // by the random proof sweep. (Staged counting is rejected by solve_homomorphism_problem:
-        // a mid-enumeration restart would recount already-explored subtrees.)
+        // by the random proof sweep.
         params.count_solutions = false;
         params.enumerate_callback = {};
         params.staged = false;
