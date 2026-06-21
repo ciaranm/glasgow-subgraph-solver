@@ -99,6 +99,11 @@ namespace gss::innards
         [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
         [[nodiscard]] auto is_locally_injective() const -> bool;
 
+        // The OPB-model analogues: emit_model_constraint writes a constraint into the model
+        // (bumping the constraint count); emit_model_comment writes a `*` comment line.
+        auto emit_model_constraint(const std::string & line) -> void;
+        auto emit_model_comment(const std::string & line) -> void;
+
         // Read accessors for the model constraint labels the homomorphism derivations cite:
         // the injectivity constraint on target t, its local-injectivity analogue on (pattern
         // p, target t), and the at-most-one-value constraint on pattern vertex p. Plus the

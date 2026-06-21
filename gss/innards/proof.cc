@@ -666,6 +666,17 @@ auto Proof::is_locally_injective() const -> bool
     return _imp->locally_injective;
 }
 
+auto Proof::emit_model_constraint(const string & line) -> void
+{
+    _imp->model_stream << line << "\n";
+    ++_imp->nb_constraints;
+}
+
+auto Proof::emit_model_comment(const string & line) -> void
+{
+    _imp->model_stream << line << "\n";
+}
+
 auto Proof::injectivity_label(int t) const -> const string &
 {
     return _imp->injectivity_constraints.at(t);

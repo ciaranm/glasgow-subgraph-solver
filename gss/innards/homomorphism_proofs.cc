@@ -52,6 +52,21 @@ auto HomomorphismProofs::target_vertex(int v) const -> NamedVertex
     return pair{v, _target_names[v]};
 }
 
+auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void
+{
+    std::string adj_label = "@adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string line = adj_label + " 1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : permitted)
+        line += " 1 x" + _proof->variable_name(q, u);
+    line += " >= 1 ;";
+    _proof->emit_model_constraint(line);
+
+    auto & adjacency = _proof->adjacency_proof_lines();
+    adjacency.labels.emplace(std::tuple<long, long, long, long>{0, p, q, t}, adj_label);
+    adjacency.permitted.emplace(std::tuple<long, long, long, long>{0, p, q, t},
+        std::vector<long>(permitted.begin(), permitted.end()));
+}
+
 auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::vector<int> & between_p_and_q,
     int t, const std::vector<int> & n_t, const std::vector<std::pair<int, std::vector<int>>> & two_away_from_t,
     const std::vector<int> & d_n_t) -> void
@@ -520,7 +535,7 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
         for (int t = 0; t < target.size(); ++t) {
             // it's simpler to always have the adjacency constraints, even
             // if the assignment is forbidden
-            _proof->start_adjacency_constraints_for(p, t);
+            _proof->emit_model_comment("* adjacency " + std::to_string(p) + " maps to " + std::to_string(t));
 
             // if p can be mapped to t, then each neighbour of p...
             for (int q = 0; q < pattern.size(); ++q)
@@ -533,11 +548,7 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
                     for (int u = 0; u < target.size(); ++u)
                         if (target.adjacent(t, u))
                             permitted.push_back(u);
-                    _proof->create_adjacency_constraint(
-                        NamedVertex{p, pattern.vertex_name(p)},
-                        NamedVertex{q, pattern.vertex_name(q)},
-                        NamedVertex{t, target.vertex_name(t)},
-                        permitted, false);
+                    emit_adjacency_constraint(p, q, t, permitted);
                 }
 
             // same for non-adjacency for induced
@@ -557,11 +568,7 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
                         for (int u = 0; u < target.size(); ++u)
                             if (! target.adjacent(t, u))
                                 permitted.push_back(u);
-                        _proof->create_adjacency_constraint(
-                            NamedVertex{p, pattern.vertex_name(p)},
-                            NamedVertex{q, pattern.vertex_name(q)},
-                            NamedVertex{t, target.vertex_name(t)},
-                            permitted, true);
+                        emit_adjacency_constraint(p, q, t, permitted);
                     }
 
                 // the q == p case of non-edge preservation: a non-loopy pattern
@@ -576,11 +583,7 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
                     for (int u = 0; u < target.size(); ++u)
                         if (! target.adjacent(t, u))
                             permitted.push_back(u);
-                    _proof->create_adjacency_constraint(
-                        NamedVertex{p, pattern.vertex_name(p)},
-                        NamedVertex{p, pattern.vertex_name(p)},
-                        NamedVertex{t, target.vertex_name(t)},
-                        permitted, true);
+                    emit_adjacency_constraint(p, p, t, permitted);
                 }
             }
         }

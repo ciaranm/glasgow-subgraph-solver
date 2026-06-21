@@ -46,6 +46,13 @@ namespace gss::innards
         // p and q; n_t / d_n_t are the neighbours of t in the original / exact-path graph; and
         // two_away_from_t pairs each vertex two hops from t with their common neighbours with
         // t. Emits through the generic Proof primitives over the shared adjacency cache.
+        // Emit one original-graph (g=0) adjacency constraint into the OPB model: "p maps to t
+        // implies q maps to one of the permitted target vertices", labelled @adj..., and record
+        // it (with its permitted set) in the shared adjacency cache. The model-emission analogue
+        // of Proof::create_adjacency_constraint, which is kept for the clique / common-subgraph
+        // solvers; this is the homomorphism solver's own path.
+        auto emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void;
+
         auto emit_exact_path_graph(int g, int p, int q, const std::vector<int> & between_p_and_q,
             int t, const std::vector<int> & n_t,
             const std::vector<std::pair<int, std::vector<int>>> & two_away_from_t,
