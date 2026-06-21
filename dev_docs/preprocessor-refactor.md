@@ -192,14 +192,30 @@ Each phase is an independently mergeable PR.
   and the re-filter emits only the new degree/NDS prunings; staged proofs verify under VeriPB,
   and easy instances that conclude in Stage 1 emit *no* supplemental derivations (e.g. trident
   PBP 2168 → 136). Guardrails: unstaged proofs byte-identical; staged proofs verify (sweep
-  160/160); staging is satisfiability-neutral vs unstaged (random correctness sweep). **Deferred
-  to follow-ups:** staged *counting* (a mid-enumeration restart would recount explored subtrees
-  — needs solution-blocking nogoods, so `--staged --count-solutions` is rejected for now);
-  threaded staging (the threaded engine's barriers / nogood sharing make a *bounded threaded*
-  round harder — the unbounded threaded search stays terminal); finer multi-tier schedules;
-  expressing the bounded round as a first-class composable `SolveStep`; making `--staged` the
-  default. (Aside, found while testing: the decision-mode clique and target-loop shortcut steps
-  ignore `--induced` on loopy targets — a *pre-existing* bug, orthogonal to staging.)
+  160/160); staging is satisfiability-neutral vs unstaged (random correctness sweep).
+- **Staged counting (without proof) — fixed as a follow-up.** It first appeared to need
+  solution-blocking nogoods (a mid-enumeration transition restart was re-counting Stage-1
+  solutions, so `--staged --count-solutions` was rejected). The real cause was narrower:
+  `might_have_watches()` — the gate for the whole nogood/watch machinery — returned
+  `params.restarts_schedule->might_restart()`, keyed on the *user's* schedule. Counting
+  defaults to `--restarts none`, so watches were off and the transition's `post_nogood` calls
+  were no-ops; with no resumption nogoods, Stage 2 re-explored the whole tree, and sequential
+  counting does no per-solution dedup, so every solution was counted twice. Since staging
+  *always* restarts once, `might_have_watches()` now also returns true when `params.staged`;
+  the ordinary restart-resumption nogoods then make staged counting exact (verified against the
+  brute-force oracle over the 1500-instance sweep). This only touches staged counting (staged
+  decision already defaulted to Luby; non-staged is untouched), so all 274 proofs stay
+  byte-identical. Under *proof* it is still rejected (logging an enumeration across a restart is
+  not yet handled — the same restriction as counting with restarts), so the guard is now
+  `staged + count + proof` rather than `staged + count`.
+- **Phase 6 — still deferred:** staged counting *under proof* (needs the enumeration proof to
+  survive a restart / the reverted solution-blocking deletion, which is where the upstream VeriPB
+  `core id` bug sits); threaded staging (the threaded engine's barriers / nogood sharing make a
+  *bounded threaded* round harder — the unbounded threaded search stays terminal); finer
+  multi-tier schedules; expressing the bounded round as a first-class composable `SolveStep`;
+  making `--staged` the default. (Aside, found while testing: the decision-mode clique and
+  target-loop shortcut steps ignore `--induced` on loopy targets — a *pre-existing* bug,
+  orthogonal to staging.)
 
 ### Strand → phase
 
