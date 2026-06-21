@@ -48,10 +48,16 @@ namespace gss::innards
 
         // Emit the OPB model: a set of variables per CP variable, the (local-)injectivity
         // constraints, the adjacency constraints (and, for induced, the non-adjacency
-        // constraints), the preserved set, then finalise and derive the loop-cancelled
-        // adjacency forms. Operates on the raw input graphs (it runs before the model is
-        // built), so it is the solver's first proof step.
+        // constraints), the preserved set, then finalise. Operates on the raw input graphs
+        // (it runs before the model is built), so it is the solver's first proof step.
         auto emit_model(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void;
+
+        // Derive the loop-cancelled forms of the adjacency constraints (a PBP derivation the
+        // degree / supplemental-graph / distance-3 pols rely on). Deferred out of emit_model
+        // and run by the search step, after the cheap concluding steps have had their chance:
+        // an early conclusion (pattern-too-big, target-loop, clique) then never pays for these
+        // derivations, while an instance that reaches search emits a byte-identical proof.
+        auto derive_loop_fixed_adjacencies() -> void;
 
         // Prove the supplemental graphs that have just been built into the
         // ProcessedGraphsData. max_graphs is the bitset stride; number_of_exact_path_graphs

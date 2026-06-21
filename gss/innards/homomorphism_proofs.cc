@@ -375,10 +375,21 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
 
     // output the model file
     _proof->finalise_model();
+}
 
-    // derive the loop-cancelled form of each loopy adjacency constraint, so the
-    // degree, supplemental-graph and distance-3 derivations can sum them into pols
-    // without a stray "maps to the loopy target" term (issue #56).
+auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
+{
+    // Derive the loop-cancelled form of each loopy adjacency constraint, so the degree,
+    // supplemental-graph and distance-3 derivations can sum them into pols without a stray
+    // "maps to the loopy target" term (issue #56).
+    //
+    // This is deferred out of emit_model (the OPB stays complete and is emitted up front,
+    // but these are PBP *derivations*) until the search step runs it, just before the first
+    // @adj-citing pol. A cheap concluding step (pattern-too-big, target-loop, clique) then
+    // pays nothing for it: its refutation cites injectivity, never adjacency. For any
+    // instance that does reach search nothing is emitted to the proof in between, so the
+    // proof is byte-identical -- this only removes the derivations on an early conclusion
+    // (e.g. the induced pattern-bigger-than-target case, where they were all dead).
     _proof->loop_fix_adjacencies();
 }
 

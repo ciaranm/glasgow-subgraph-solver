@@ -599,6 +599,13 @@ namespace
             ctx.state.model = make_unique<HomomorphismModel>(target, pattern, params, proof, ctx.hom_proofs);
             auto & model = *ctx.state.model;
 
+            // The loop-cancelled adjacency derivations were deferred out of the model
+            // emission (Phase 5 cost ordering): the cheap concluding steps above run first
+            // and, on an easy refutation, pay nothing for them. We have reached search, so
+            // emit them now -- before prepare()'s degree pols cite the @adj labels.
+            if (ctx.hom_proofs)
+                ctx.hom_proofs->derive_loop_fixed_adjacencies();
+
             if (! model.prepare()) {
                 HomomorphismResult result;
                 result.extra_stats.emplace_back("model_consistent = false");
