@@ -61,11 +61,11 @@ struct Proof::Imp
     map<long, string> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<pair<long, long>, string> locally_injective_constraints;
     bool locally_injective = false;
-    map<tuple<long, long, long, long>, string> adjacency_lines;
-    // numeric proof-line ids of supplemental adjacency lines, so transient ones (re-derived
-    // on demand for a degree/NDS check, see weaken_supplemental_adjacency) can be deleted.
-    map<tuple<long, long, long, long>, long> adjacency_line_ids;
-    map<tuple<long, long, long, long>, vector<long>> adjacency_permitted;
+    // The adjacency-line proof state: labels, the numeric proof-line ids of supplemental
+    // adjacency lines (so transient ones re-derived for a degree/NDS check can be deleted,
+    // see weaken_supplemental_adjacency), and permitted target sets. Grouped so the
+    // derivations consuming it can migrate to the middle layer (adjacency.labels/.ids/.permitted).
+    AdjacencyProofLines adjacency;
     map<pair<long, long>, long> eliminations;
     map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
@@ -208,8 +208,8 @@ auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex
         _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u}];
     _imp->model_stream << " >= 1 ;\n";
     ++_imp->nb_constraints;
-    _imp->adjacency_lines.emplace(tuple{0, p.first, q.first, t.first}, adj_label);
-    _imp->adjacency_permitted.emplace(tuple{0, p.first, q.first, t.first}, vector<long>(uu.begin(), uu.end()));
+    _imp->adjacency.labels.emplace(tuple{0, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency.permitted.emplace(tuple{0, p.first, q.first, t.first}, vector<long>(uu.begin(), uu.end()));
 }
 
 auto Proof::loop_fix_adjacencies() -> void
@@ -232,14 +232,14 @@ auto Proof::loop_fix_adjacencies() -> void
     if (_imp->locally_injective)
         return;
 
-    for (auto & [key, label] : _imp->adjacency_lines) {
+    for (auto & [key, label] : _imp->adjacency.labels) {
         auto & [g, p, q, t] = key;
         // a pattern self-loop edge (p == q) has its loop term pinned by at-most-one rather
         // than injectivity, and is not summed into the supplemental/degree pols; skip it.
         if (p == q)
             continue;
-        auto pit = _imp->adjacency_permitted.find(key);
-        if (pit == _imp->adjacency_permitted.end())
+        auto pit = _imp->adjacency.permitted.find(key);
+        if (pit == _imp->adjacency.permitted.end())
             continue;
         if (find(pit->second.begin(), pit->second.end(), t) == pit->second.end())
             continue; // t is not a neighbour of itself: no loop term to cancel
@@ -393,13 +393,13 @@ auto Proof::incompatible_by_degrees(
     bool first = true;
     for (auto & n : n_p) {
         // due to loops or labels, it might not be possible to map n to t.first
-        if (_imp->adjacency_lines.count(tuple{g, p.first, n, t.first})) {
+        if (_imp->adjacency.labels.count(tuple{g, p.first, n, t.first})) {
             if (first) {
                 first = false;
-                *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{g, p.first, n, t.first});
+                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first});
             }
             else
-                *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{g, p.first, n, t.first}) << " +";
+                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first}) << " +";
         }
     }
 
@@ -441,13 +441,13 @@ auto Proof::incompatible_by_nds(
     bool first = true;
     for (auto & n : p_subsequence) {
         // due to loops or labels, it might not be possible to map n to t.first
-        if (_imp->adjacency_lines.count(tuple{g, p.first, n, t.first})) {
+        if (_imp->adjacency.labels.count(tuple{g, p.first, n, t.first})) {
             if (first) {
                 first = false;
-                *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{g, p.first, n, t.first});
+                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first});
             }
             else
-                *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{g, p.first, n, t.first}) << " +";
+                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first}) << " +";
         }
     }
 
@@ -681,7 +681,7 @@ auto Proof::create_exact_path_graphs(
 
     auto it = _imp->cached_proof_lines.find(tidied_up.str());
     if (it != _imp->cached_proof_lines.end()) {
-        _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, it->second);
+        _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, it->second);
         return;
     }
 
@@ -693,7 +693,7 @@ auto Proof::create_exact_path_graphs(
     // if p maps to t then things in between_p_and_q have to go to one of these...
     bool first = true;
     for (auto & b : between_p_and_q) {
-        *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, p.first, b.first, t.first});
+        *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, p.first, b.first, t.first});
         if (! first)
             *_imp->proof_stream << " s +";
         first = false;
@@ -703,8 +703,8 @@ auto Proof::create_exact_path_graphs(
     for (auto & b : between_p_and_q) {
         for (auto & w : n_t) {
             // due to loops or labels, it might not be possible to map to w
-            if (_imp->adjacency_lines.contains(tuple{0, b.first, q.first, w.first}))
-                *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, b.first, q.first, w.first}) << " +";
+            if (_imp->adjacency.labels.contains(tuple{0, b.first, q.first, w.first}))
+                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, b.first, q.first, w.first}) << " +";
         }
     }
 
@@ -749,11 +749,11 @@ auto Proof::create_exact_path_graphs(
         *_imp->proof_stream << "pol";
         bool first = true;
         for (auto & b : between_p_and_q) {
-            *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, p.first, b.first, t.first});
+            *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, p.first, b.first, t.first});
             if (! first)
                 *_imp->proof_stream << " +";
             first = false;
-            *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, q.first, b.first, u.first.first}) << " +";
+            *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, q.first, b.first, u.first.first}) << " +";
             *_imp->proof_stream << " " << _imp->at_most_one_value_constraints[b.first] << " +";
         }
 
@@ -793,7 +793,7 @@ auto Proof::create_exact_path_graphs(
     auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
     *_imp->proof_stream << adj_label << " ia " << tidied_up.str() << " " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
-    _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
     _imp->cached_proof_lines.emplace(tidied_up.str(), adj_label);
     *_imp->proof_stream << "wiplvl 1;\n";
 }
@@ -813,12 +813,17 @@ auto Proof::hack_in_shape_graph(
     *_imp->proof_stream << " >= 1 ;\n";
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
 }
 
 auto Proof::adjacency_line_exists(int g, int p, int q, int t) const -> bool
 {
-    return _imp->adjacency_lines.contains(tuple{g, p, q, t});
+    return _imp->adjacency.labels.contains(tuple{g, p, q, t});
+}
+
+auto Proof::adjacency_proof_lines() -> AdjacencyProofLines &
+{
+    return _imp->adjacency;
 }
 
 auto Proof::weaken_supplemental_adjacency(int g, const NamedVertex & p, const NamedVertex & q,
@@ -828,7 +833,7 @@ auto Proof::weaken_supplemental_adjacency(int g, const NamedVertex & p, const Na
     // stronger constraint (in graph from_g, a narrower target set) with the same head was
     // kept. The wider one follows from the narrower by a single implication step, so derive
     // it that way, citing the kept constraint by its label.
-    auto from_label = _imp->adjacency_lines.at(tuple{from_g, p.first, q.first, t.first});
+    auto from_label = _imp->adjacency.labels.at(tuple{from_g, p.first, q.first, t.first});
     auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
     *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : target_set)
@@ -836,15 +841,15 @@ auto Proof::weaken_supplemental_adjacency(int g, const NamedVertex & p, const Na
             *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
     *_imp->proof_stream << " >= 1 : " << from_label << " ;\n";
     ++_imp->proof_line;
-    _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
-    _imp->adjacency_line_ids.emplace(tuple{g, p.first, q.first, t.first}, _imp->proof_line);
+    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency.ids.emplace(tuple{g, p.first, q.first, t.first}, _imp->proof_line);
 }
 
 auto Proof::forget_supplemental_adjacency(int g, int p, int q, int t) -> void
 {
-    *_imp->proof_stream << "del id " << _imp->adjacency_line_ids.at(tuple{g, p, q, t}) << " ;\n";
-    _imp->adjacency_lines.erase(tuple{g, p, q, t});
-    _imp->adjacency_line_ids.erase(tuple{g, p, q, t});
+    *_imp->proof_stream << "del id " << _imp->adjacency.ids.at(tuple{g, p, q, t}) << " ;\n";
+    _imp->adjacency.labels.erase(tuple{g, p, q, t});
+    _imp->adjacency.ids.erase(tuple{g, p, q, t});
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_1(
@@ -860,10 +865,10 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
         *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
-    *_imp->proof_stream << " >= 1 : " << _imp->adjacency_lines.at(tuple{0, p.first, q.first, t.first}) << " ;\n";
+    *_imp->proof_stream << " >= 1 : " << _imp->adjacency.labels.at(tuple{0, p.first, q.first, t.first}) << " ;\n";
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_2(
@@ -883,10 +888,10 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     *_imp->proof_stream << "pol";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
-    *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, p.first, path_from_p_to_q.first, t.first});
+    *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, p.first, path_from_p_to_q.first, t.first});
     // so the second thing on the path from p to q has to go to one of...
     for (auto & u : d1_from_t)
-        *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, path_from_p_to_q.first, q.first, u.first}) << " +";
+        *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, path_from_p_to_q.first, q.first, u.first}) << " +";
 
     *_imp->proof_stream << " ;\n";
     ++_imp->proof_line;
@@ -907,7 +912,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
 }
 
 auto Proof::create_distance3_graphs(
@@ -928,10 +933,10 @@ auto Proof::create_distance3_graphs(
     *_imp->proof_stream << "pol";
 
     // if p maps to t then the first thing on the path from p to q has to go to one of...
-    *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, p.first, path_from_p_to_q_1.first, t.first});
+    *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, p.first, path_from_p_to_q_1.first, t.first});
     // so the second thing on the path from p to q has to go to one of...
     for (auto & u : d1_from_t)
-        *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, path_from_p_to_q_1.first, path_from_p_to_q_2.first, u.first}) << " +";
+        *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, path_from_p_to_q_1.first, path_from_p_to_q_2.first, u.first}) << " +";
 
     *_imp->proof_stream << " ;\n";
     ++_imp->proof_line;
@@ -945,7 +950,7 @@ auto Proof::create_distance3_graphs(
 
     *_imp->proof_stream << "pol " << _imp->proof_line;
     for (auto & u : d2_from_t)
-        *_imp->proof_stream << " " << _imp->adjacency_lines.at(tuple{0, path_from_p_to_q_2.first, q.first, u.first}) << " s +";
+        *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{0, path_from_p_to_q_2.first, q.first, u.first}) << " s +";
     *_imp->proof_stream << " ;\n";
     ++_imp->proof_line;
 
@@ -958,7 +963,7 @@ auto Proof::create_distance3_graphs(
     *_imp->proof_stream << " >= 1 : " << _imp->proof_line << " ;\n";
     ++_imp->proof_line;
 
-    _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
 }
 
 auto Proof::create_binary_variable(int vertex,

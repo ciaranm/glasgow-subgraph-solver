@@ -31,6 +31,21 @@ namespace gss::innards
 
     using NamedVertex = std::pair<int, std::string>;
 
+    // The proof state shared across the homomorphism adjacency / supplemental-graph
+    // derivations: for each (graph g, pattern p, pattern q, target t) the adjacency
+    // constraint's label, its numeric line id (for deleting a transiently-derived one),
+    // and its permitted target set (needed to cancel a self-loop term). These are keyed
+    // entirely by index, not name. Grouping them lets the derivations that read and write
+    // them migrate out of Proof into the solver-proofs middle layer one at a time, each
+    // sharing this one object rather than a Proof-private map. (See
+    // dev_docs/preprocessor-refactor.md, Phase 3 Option 2.)
+    struct AdjacencyProofLines
+    {
+        std::map<std::tuple<long, long, long, long>, std::string> labels;
+        std::map<std::tuple<long, long, long, long>, long> ids;
+        std::map<std::tuple<long, long, long, long>, std::vector<long>> permitted;
+    };
+
     class Proof
     {
     private:
@@ -177,6 +192,10 @@ namespace gss::innards
         auto weaken_supplemental_adjacency(int g, const NamedVertex & p, const NamedVertex & q,
             const NamedVertex & t, const std::vector<NamedVertex> & target_set, int from_g) -> void;
         auto forget_supplemental_adjacency(int g, int p, int q, int t) -> void;
+
+        // The shared adjacency-line proof state, so the derivations that build and consume it
+        // can move into the solver-proofs middle layer while it still lives here.
+        [[nodiscard]] auto adjacency_proof_lines() -> AdjacencyProofLines &;
 
         // new constraints
         auto emit_hall_set_or_violator(const std::vector<NamedVertex> & lhs, const std::vector<NamedVertex> & rhs) -> void;
