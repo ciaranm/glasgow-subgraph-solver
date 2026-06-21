@@ -40,6 +40,17 @@ namespace gss::innards
         // once it is done.
         std::vector<std::tuple<int, int, int, int>> _pending_transient_adjacencies;
 
+        // Derive the exact-path (G^[gx2]) adjacency constraint for one head: "p maps to t
+        // implies q maps to a vertex reachable from t by enough 2-walks". g is the slot the
+        // constraint is recorded under; between_p_and_q are the (capped) common neighbours of
+        // p and q; n_t / d_n_t are the neighbours of t in the original / exact-path graph; and
+        // two_away_from_t pairs each vertex two hops from t with their common neighbours with
+        // t. Emits through the generic Proof primitives over the shared adjacency cache.
+        auto emit_exact_path_graph(int g, int p, int q, const std::vector<int> & between_p_and_q,
+            int t, const std::vector<int> & n_t,
+            const std::vector<std::pair<int, std::vector<int>>> & two_away_from_t,
+            const std::vector<int> & d_n_t) -> void;
+
     public:
         HomomorphismProofs(const std::shared_ptr<Proof> & proof, const InputGraph & pattern, const InputGraph & target);
 

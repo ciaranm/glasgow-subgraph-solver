@@ -99,6 +99,17 @@ namespace gss::innards
         [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
         [[nodiscard]] auto is_locally_injective() const -> bool;
 
+        // Read accessors for the model constraint labels the homomorphism derivations cite:
+        // the injectivity constraint on target t, its local-injectivity analogue on (pattern
+        // p, target t), and the at-most-one-value constraint on pattern vertex p. Plus the
+        // generic dedup cache (keyed by a constraint's text) the supplemental derivations use
+        // to reuse an identical line's label instead of re-deriving it.
+        [[nodiscard]] auto injectivity_label(int t) const -> const std::string &;
+        [[nodiscard]] auto locally_injective_label(int p, int t) const -> const std::string &;
+        [[nodiscard]] auto at_most_one_value_label(int p) const -> const std::string &;
+        [[nodiscard]] auto cached_proof_line(const std::string & key) const -> std::optional<std::string>;
+        auto cache_proof_line(const std::string & key, const std::string & label) -> void;
+
         // Declare a projected (preserved) set, listing exactly the assignment
         // variables, so the proof's solution count is in terms of the high-level
         // mapping rather than any auxiliary encoding variables. Must be called
@@ -141,17 +152,6 @@ namespace gss::innards
             const NamedVertex & t) -> void;
 
         auto initial_domain_is_empty(int p, const std::string & where) -> void;
-
-        // distance 2 graphs
-        auto create_exact_path_graphs(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const std::vector<NamedVertex> & between_p_and_q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & n_t,
-            const std::vector<std::pair<NamedVertex, std::vector<NamedVertex>>> & two_away_from_t,
-            const std::vector<NamedVertex> & d_n_t) -> void;
 
         // distance 3 graphs
         auto create_distance3_graphs_but_actually_distance_1(

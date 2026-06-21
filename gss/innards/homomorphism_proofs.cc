@@ -52,6 +52,133 @@ auto HomomorphismProofs::target_vertex(int v) const -> NamedVertex
     return pair{v, _target_names[v]};
 }
 
+auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::vector<int> & between_p_and_q,
+    int t, const std::vector<int> & n_t, const std::vector<std::pair<int, std::vector<int>>> & two_away_from_t,
+    const std::vector<int> & d_n_t) -> void
+{
+    auto & adjacency = _proof->adjacency_proof_lines();
+
+    // tidy up to get what we wanted. do this first so we can check for duplicates
+    std::string tidied_up = "1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : d_n_t)
+        if (u != t)
+            tidied_up += " 1 x" + _proof->variable_name(q, u);
+    tidied_up += " >= 1 :";
+
+    if (auto cached = _proof->cached_proof_line(tidied_up)) {
+        adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, *cached);
+        return;
+    }
+
+    _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
+        " in G^[" + std::to_string(g) + "x2] so " + _pattern_names[q] + " maps to one of...");
+
+    _proof->emit_proof_directive("setlvl 1;");
+
+    // if p maps to t then things in between_p_and_q have to go to one of these, and then go
+    // two hops out cancelling between_p_and_q things with where q can go
+    std::string pol = "pol";
+    bool first = true;
+    for (auto & b : between_p_and_q) {
+        pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, b, t});
+        if (! first)
+            pol += " s +";
+        first = false;
+    }
+    for (auto & b : between_p_and_q)
+        for (auto & w : n_t)
+            // due to loops or labels, it might not be possible to map to w
+            if (adjacency.labels.contains(std::tuple<long, long, long, long>{0, b, q, w}))
+                pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, b, q, w}) + " +";
+    pol += " s ;";
+    _proof->emit_proof_line(pol);
+
+    // first tidy-up step: if p maps to t then q maps to something a two-walk away from t. The
+    // adjacency constraints summed above are the loop-cancelled forms, so plain implication
+    // addition closes it.
+    {
+        std::string line = "ia 1 ~x" + _proof->variable_name(p, t);
+        for (auto & u : two_away_from_t)
+            line += " 1 x" + _proof->variable_name(q, u.first);
+        line += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
+        _proof->emit_proof_line(line);
+    }
+
+    // if p maps to t then q does not map to t. Under full injectivity that is the global
+    // injectivity on t; under local injectivity p and q share a common neighbour b (that is
+    // what between_p_and_q holds), so the neighbourhood-injectivity of b forbids them both
+    // mapping to t. Either way the constraint cancels the "q maps to t" term.
+    {
+        const std::string & inj = _proof->is_locally_injective()
+            ? _proof->locally_injective_label(between_p_and_q.front(), t)
+            : _proof->injectivity_label(t);
+        _proof->emit_proof_line("pol " + std::to_string(_proof->current_proof_line()) + " " + inj + " + s ;");
+    }
+
+    // and cancel out stray extras from injectivity
+    {
+        std::string line = "ia 1 ~x" + _proof->variable_name(p, t);
+        for (auto & u : two_away_from_t)
+            if (u.first != t)
+                line += " 1 x" + _proof->variable_name(q, u.first);
+        line += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
+        _proof->emit_proof_line(line);
+    }
+
+    std::vector<long> things_to_add_up;
+    things_to_add_up.push_back(_proof->current_proof_line());
+
+    // cancel out anything that is two away from t, but by insufficiently many paths
+    for (auto & u : two_away_from_t) {
+        if ((u.first == t) || (std::find(d_n_t.begin(), d_n_t.end(), u.first) != d_n_t.end()))
+            continue;
+
+        std::string pol2 = "pol";
+        bool first2 = true;
+        for (auto & b : between_p_and_q) {
+            pol2 += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, b, t});
+            if (! first2)
+                pol2 += " +";
+            first2 = false;
+            pol2 += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, q, b, u.first}) + " +";
+            pol2 += " " + _proof->at_most_one_value_label(b) + " +";
+        }
+        // the between-vertices must map to distinct common neighbours of t and u (the z's):
+        // global injectivity on each z, or under local injectivity the neighbourhood-
+        // injectivity of p (the between-vertices are all neighbours of p) -- the same pigeonhole.
+        for (auto & z : u.second)
+            pol2 += " " + (_proof->is_locally_injective() ? _proof->locally_injective_label(p, z) : _proof->injectivity_label(z)) + " +";
+        pol2 += " s ;";
+        _proof->emit_proof_line(pol2);
+
+        // want: ~x_p_t + ~x_q_u >= 1
+        std::string line = "ia 1 ~x" + _proof->variable_name(p, t) + " 1 ~x" + _proof->variable_name(q, u.first) +
+            " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
+        things_to_add_up.push_back(_proof->emit_proof_line(line));
+    }
+
+    // do the getting rid of
+    if (things_to_add_up.size() > 1) {
+        std::string pol3 = "pol";
+        bool first3 = true;
+        for (auto & line_id : things_to_add_up) {
+            pol3 += " " + std::to_string(line_id);
+            if (! first3)
+                pol3 += " +";
+            first3 = false;
+        }
+        pol3 += " s ;";
+        _proof->emit_proof_line(pol3);
+    }
+
+    _proof->emit_proof_directive("setlvl 0;");
+    std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    _proof->emit_proof_line(adj_label + " ia " + tidied_up + " " + std::to_string(_proof->current_proof_line()) + " ;");
+    adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+    _proof->cache_proof_line(tidied_up, adj_label);
+    _proof->emit_proof_directive("wiplvl 1;");
+}
+
 auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs,
     const std::vector<std::pair<int, unsigned>> & exact_path_index_and_slot, unsigned exact_path_1_slot,
     bool elide_subsumed) -> std::set<std::pair<int, int>>
@@ -86,35 +213,30 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
                 _kept_supplemental_slot[pair{int(p), int(q)}] = emit_for.front().second;
             }
 
-            auto named_p = pattern_vertex(p);
-            auto named_q = pattern_vertex(q);
-
             for (auto & [g, slot] : emit_for) {
                 auto n_p_q = graphs.pattern_graph_rows[p * max_graphs + 0];
                 n_p_q &= graphs.pattern_graph_rows[q * max_graphs + 0];
-                vector<NamedVertex> between_p_and_q;
+                vector<int> between_p_and_q;
                 for (auto v = n_p_q.find_first(); v != decltype(n_p_q)::npos; v = n_p_q.find_first()) {
                     n_p_q.reset(v);
-                    between_p_and_q.push_back(pattern_vertex(v));
+                    between_p_and_q.push_back(int(v));
                     if (between_p_and_q.size() >= unsigned(g))
                         break;
                 }
 
                 for (unsigned t = 0; t < target_size; ++t) {
-                    auto named_t = target_vertex(t);
-
-                    vector<NamedVertex> named_n_t, named_d_n_t;
-                    vector<pair<NamedVertex, vector<NamedVertex>>> named_two_away_from_t;
-                    auto n_t = graphs.target_graph_rows[t * max_graphs + 0];
-                    for (auto w = n_t.find_first(); w != decltype(n_t)::npos; w = n_t.find_first()) {
-                        n_t.reset(w);
-                        named_n_t.push_back(target_vertex(w));
+                    vector<int> n_t, d_n_t;
+                    vector<pair<int, vector<int>>> two_away_from_t;
+                    auto n_t_row = graphs.target_graph_rows[t * max_graphs + 0];
+                    for (auto w = n_t_row.find_first(); w != decltype(n_t_row)::npos; w = n_t_row.find_first()) {
+                        n_t_row.reset(w);
+                        n_t.push_back(int(w));
                     }
 
                     auto nd_t = graphs.target_graph_rows[t * max_graphs + slot];
                     for (auto w = nd_t.find_first(); w != decltype(nd_t)::npos; w = nd_t.find_first()) {
                         nd_t.reset(w);
-                        named_d_n_t.push_back(target_vertex(w));
+                        d_n_t.push_back(int(w));
                     }
 
                     auto n2_t = graphs.target_graph_rows[t * max_graphs + exact_path_1_slot];
@@ -122,16 +244,16 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
                         n2_t.reset(w);
                         auto n_t_w = graphs.target_graph_rows[w * max_graphs + 0];
                         n_t_w &= graphs.target_graph_rows[t * max_graphs + 0];
-                        vector<NamedVertex> named_n_t_w;
+                        vector<int> n_t_w_idx;
                         for (auto x = n_t_w.find_first(); x != decltype(n_t_w)::npos; x = n_t_w.find_first()) {
                             n_t_w.reset(x);
-                            named_n_t_w.push_back(target_vertex(x));
+                            n_t_w_idx.push_back(int(x));
                         }
-                        named_two_away_from_t.emplace_back(target_vertex(w), named_n_t_w);
+                        two_away_from_t.emplace_back(int(w), n_t_w_idx);
                     }
 
-                    _proof->create_exact_path_graphs(slot, named_p, named_q, between_p_and_q,
-                        named_t, named_n_t, named_two_away_from_t, named_d_n_t);
+                    emit_exact_path_graph(int(slot), int(p), int(q), between_p_and_q,
+                        int(t), n_t, two_away_from_t, d_n_t);
                 }
             }
         }
