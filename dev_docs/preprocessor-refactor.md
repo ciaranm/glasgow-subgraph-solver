@@ -157,10 +157,28 @@ Each phase is an independently mergeable PR.
   for studying the effect (e.g. on a proof trimmer). Guardrail: identical solution counts (correctness sweep);
   smaller proofs that still verify (proof sweep, 128/128); ~25–39% PBP shrink on preprocessing-heavy configs.
   (Graph rows / `max_graphs` / search-side filtering are deliberately untouched.)
-- **Phase 5 — Cost ordering + reorderable strategy (S2b; S3 ordering).** Steps declare a
-  cost; cheap concluding steps run before expensive builders, so easy-unsat instances
-  conclude before any supplemental derivations are emitted. The order is a property of the
-  registered list. Guardrail: proofs still verify; measurable PBP shrink on easy instances.
+- **Phase 5 — Cost ordering: defer the adjacency derivations (S2b).** *Done.* The cheap
+  concluding steps (pattern-too-big, target-loop, clique) already run before the supplemental
+  *builders* (those live in `MainSolveStep` via `prepare()`), so an early conclusion never paid
+  for a supplemental derivation. What it *did* pay for was the **loop-cancelled adjacency
+  derivations** (`loop_fix_adjacencies`): these are PBP derivations the degree / supplemental /
+  distance-3 pols later cite, but they were emitted at the tail of `emit_model` — the very first
+  step — so even a trivial refutation carried them. Under `--induced` *every* non-edge constraint
+  has the target in its permitted set (a vertex is its own non-neighbour), so all of them get
+  rewritten: the induced `c3 -> trident` refutation (pattern bigger than target, a one-line
+  injectivity pigeonhole that cites no adjacency constraint) emitted **2430** dead `@adj` rup
+  lines before concluding. Phase 5 moves the derivation out of `emit_model` into a new
+  `HomomorphismProofs::derive_loop_fixed_adjacencies()`, called at the start of `MainSolveStep`
+  (after the cheap steps, before `prepare()`'s first `@adj`-citing pol). Nothing is emitted to the
+  proof between the two points for an instance that reaches search, so its proof is **byte-identical**;
+  an instance that concludes early simply omits the derivation. The OPB is untouched (it stays
+  complete and up front). Guardrail held: 273/274 proof-metrics + sweep files byte-identical, the
+  one change being `induced_unsat` PBP **2439 -> 9** (still verifies); all 49 ctests pass (release +
+  ASan/UBSan), including the random proof sweep and the cake pipeline. (A *further* S2b lever — when
+  search does start but the cheap original-graph degree/Hall filter already refutes at the root,
+  before the supplementals it built were needed — is left as a follow-up; it is the non-staged
+  cousin of staged solving and would change the filtering order, so it overlaps with "make `--staged`
+  the default" rather than this byte-identical reordering.)
 - **Phase 6 — Staged solving (S3, first-class).** *v1 done (commit 52185f3; flag-gated, sequential, decision).*
   `--staged` runs a cheap first round (original graph only: degree + Hall, no NDS, no
   supplemental graphs), and only if a small backtrack budget passes without concluding does it
