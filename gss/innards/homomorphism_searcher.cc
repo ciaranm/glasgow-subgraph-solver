@@ -24,11 +24,13 @@ using std::uniform_int_distribution;
 using std::vector;
 
 HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
-    const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f) :
+    const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f,
+    Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & w) :
     model(m),
     params(p),
     _duplicate_solution_filterer(d),
-    proof(f)
+    proof(f),
+    watches(w)
 {
     if (might_have_watches(params)) {
         watches.table.target_size = model.target_size;

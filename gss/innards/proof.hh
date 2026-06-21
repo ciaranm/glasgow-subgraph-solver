@@ -31,6 +31,21 @@ namespace gss::innards
 
     using NamedVertex = std::pair<int, std::string>;
 
+    // The proof state shared across the homomorphism adjacency / supplemental-graph
+    // derivations: for each (graph g, pattern p, pattern q, target t) the adjacency
+    // constraint's label, its numeric line id (for deleting a transiently-derived one),
+    // and its permitted target set (needed to cancel a self-loop term). These are keyed
+    // entirely by index, not name. Grouping them lets the derivations that read and write
+    // them migrate out of Proof into the solver-proofs middle layer one at a time, each
+    // sharing this one object rather than a Proof-private map. (See
+    // dev_docs/preprocessor-refactor.md, Phase 3 Option 2.)
+    struct AdjacencyProofLines
+    {
+        std::map<std::tuple<long, long, long, long>, std::string> labels;
+        std::map<std::tuple<long, long, long, long>, long> ids;
+        std::map<std::tuple<long, long, long, long>, std::vector<long>> permitted;
+    };
+
     class Proof
     {
     private:
@@ -70,11 +85,35 @@ namespace gss::innards
         auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
             const std::vector<int> & u, bool induced) -> void;
 
-        // For every adjacency constraint over a loopy target, derive its loop-cancelled
-        // form (the pre-#49 encoding) once, so that derivations can sum it into a pol
-        // without dragging in the stray "maps to the loopy target" term. Must be called
-        // after finalise_model and before any derivation that sums adjacency constraints.
-        auto loop_fix_adjacencies() -> void;
+        // Generic low-level proof-emission primitives, so the homomorphism-specific
+        // derivations can live in the solver-proofs middle layer and emit through here
+        // rather than reaching into Proof's innards. emit_proof_line writes a constraint
+        // line (appending the newline), bumps the proof-line counter, and returns the new
+        // line's number; emit_proof_directive writes a non-constraint line (a comment, a
+        // setlvl/wiplvl, a `del id`) with no counter change; current_proof_line is the
+        // most recent line's number, for building a citation. variable_name is the proof
+        // variable for assigning pattern vertex p to target vertex t.
+        auto emit_proof_line(const std::string & line) -> long;
+        auto emit_proof_directive(const std::string & line) -> void;
+        [[nodiscard]] auto current_proof_line() const -> long;
+        [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
+        [[nodiscard]] auto is_locally_injective() const -> bool;
+
+        // The OPB-model analogues: emit_model_constraint writes a constraint into the model
+        // (bumping the constraint count); emit_model_comment writes a `*` comment line.
+        auto emit_model_constraint(const std::string & line) -> void;
+        auto emit_model_comment(const std::string & line) -> void;
+
+        // Read accessors for the model constraint labels the homomorphism derivations cite:
+        // the injectivity constraint on target t, its local-injectivity analogue on (pattern
+        // p, target t), and the at-most-one-value constraint on pattern vertex p. Plus the
+        // generic dedup cache (keyed by a constraint's text) the supplemental derivations use
+        // to reuse an identical line's label instead of re-deriving it.
+        [[nodiscard]] auto injectivity_label(int t) const -> const std::string &;
+        [[nodiscard]] auto locally_injective_label(int p, int t) const -> const std::string &;
+        [[nodiscard]] auto at_most_one_value_label(int p) const -> const std::string &;
+        [[nodiscard]] auto cached_proof_line(const std::string & key) const -> std::optional<std::string>;
+        auto cache_proof_line(const std::string & key, const std::string & label) -> void;
 
         // Declare a projected (preserved) set, listing exactly the assignment
         // variables, so the proof's solution count is in terms of the high-level
@@ -119,52 +158,9 @@ namespace gss::innards
 
         auto initial_domain_is_empty(int p, const std::string & where) -> void;
 
-        // distance 2 graphs
-        auto create_exact_path_graphs(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const std::vector<NamedVertex> & between_p_and_q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & n_t,
-            const std::vector<std::pair<NamedVertex, std::vector<NamedVertex>>> & two_away_from_t,
-            const std::vector<NamedVertex> & d_n_t) -> void;
-
-        // distance 3 graphs
-        auto create_distance3_graphs_but_actually_distance_1(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & d3_from_t) -> void;
-
-        auto create_distance3_graphs_but_actually_distance_2(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & path_from_p_to_q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & d1_from_t,
-            const std::vector<NamedVertex> & d2_from_t,
-            const std::vector<NamedVertex> & d3_from_t) -> void;
-
-        auto create_distance3_graphs(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & path_from_p_to_q_1,
-            const NamedVertex & path_from_p_to_q_2,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & d1_from_t,
-            const std::vector<NamedVertex> & d2_from_t,
-            const std::vector<NamedVertex> & d3_from_t) -> void;
-
-        auto hack_in_shape_graph(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & n_t) -> void;
+        // The shared adjacency-line proof state, so the derivations that build and consume it
+        // can move into the solver-proofs middle layer while it still lives here.
+        [[nodiscard]] auto adjacency_proof_lines() -> AdjacencyProofLines &;
 
         // new constraints
         auto emit_hall_set_or_violator(const std::vector<NamedVertex> & lhs, const std::vector<NamedVertex> & rhs) -> void;

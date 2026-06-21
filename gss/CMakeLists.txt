@@ -18,12 +18,15 @@ add_library(glasgow_subgraphs
         sip_decomposer.cc
         timeout.cc
         innards/cheap_all_different.cc
+        innards/clique_size_constraints.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc
         innards/homomorphism_model.cc
+        innards/homomorphism_proofs.cc
         innards/homomorphism_searcher.cc
         innards/homomorphism_traits.cc
         innards/proof.cc
+        innards/supplemental_graphs.cc
         innards/svo_bitset.cc
         innards/thread_utils.cc
         innards/verify.cc
