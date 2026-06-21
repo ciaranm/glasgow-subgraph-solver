@@ -262,6 +262,104 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
     return covered;
 }
 
+auto HomomorphismProofs::emit_distance3_graph_distance_1(int g, int p, int q, int t,
+    const std::vector<int> & d3_from_t) -> void
+{
+    auto & adjacency = _proof->adjacency_proof_lines();
+    _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
+        " in G^3 so by adjacency, " + _pattern_names[q] + " maps to one of...");
+
+    std::string adj_label = "@d3adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : d3_from_t)
+        line += " 1 x" + _proof->variable_name(q, u);
+    line += " >= 1 : " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, q, t}) + " ;";
+    _proof->emit_proof_line(line);
+
+    adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+}
+
+auto HomomorphismProofs::emit_distance3_graph_distance_2(int g, int p, int q, int path1, int t,
+    const std::vector<int> & d1_from_t, const std::vector<int> & d2_from_t,
+    const std::vector<int> & d3_from_t) -> void
+{
+    auto & adjacency = _proof->adjacency_proof_lines();
+    _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
+        " in G^3 so using vertex " + _pattern_names[path1] + ", " + _pattern_names[q] + " maps to one of...");
+
+    _proof->emit_proof_directive("setlvl 1;");
+
+    // if p maps to t then the first thing on the path from p to q has to go to one of, so the
+    // second thing on the path from p to q has to go to one of...
+    std::string pol = "pol " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, path1, t});
+    for (auto & u : d1_from_t)
+        pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, path1, q, u}) + " +";
+    pol += " ;";
+    _proof->emit_proof_line(pol);
+
+    // tidy up
+    std::string ia = "ia 1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : d2_from_t)
+        ia += " 1 x" + _proof->variable_name(q, u);
+    ia += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
+    _proof->emit_proof_line(ia);
+
+    _proof->emit_proof_directive("setlvl 0;");
+
+    std::string adj_label = "@d3adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : d3_from_t)
+        line += " 1 x" + _proof->variable_name(q, u);
+    line += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
+    _proof->emit_proof_line(line);
+
+    adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+}
+
+auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, int path2, int t,
+    const std::vector<int> & d1_from_t, const std::vector<int> & d2_from_t,
+    const std::vector<int> & d3_from_t) -> void
+{
+    auto & adjacency = _proof->adjacency_proof_lines();
+    _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
+        " in G^3 so using path " + _pattern_names[path1] + " -- " + _pattern_names[path2] + ", " +
+        _pattern_names[q] + " maps to one of...");
+
+    _proof->emit_proof_directive("setlvl 1;");
+
+    // if p maps to t then the first thing on the path from p to q has to go to one of, so the
+    // second thing on the path from p to q has to go to one of...
+    std::string pol = "pol " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, path1, t});
+    for (auto & u : d1_from_t)
+        pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, path1, path2, u}) + " +";
+    pol += " ;";
+    _proof->emit_proof_line(pol);
+
+    // tidy up
+    std::string ia = "ia 1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : d2_from_t)
+        ia += " 1 x" + _proof->variable_name(path2, u);
+    ia += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
+    _proof->emit_proof_line(ia);
+
+    std::string pol2 = "pol " + std::to_string(_proof->current_proof_line());
+    for (auto & u : d2_from_t)
+        pol2 += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, path2, q, u}) + " s +";
+    pol2 += " ;";
+    _proof->emit_proof_line(pol2);
+
+    _proof->emit_proof_directive("setlvl 0;");
+
+    std::string adj_label = "@d3adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : d3_from_t)
+        line += " 1 x" + _proof->variable_name(q, u);
+    line += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
+    _proof->emit_proof_line(line);
+
+    adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+}
+
 auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot,
     const std::set<std::pair<int, int>> & covered_by_exact_path) -> void
 {
@@ -270,9 +368,6 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
 
     for (unsigned p = 0; p < pattern_size; ++p) {
         for (unsigned q = 0; q < pattern_size; ++q) {
-            auto named_p = pattern_vertex(p);
-            auto named_q = pattern_vertex(q);
-
             // only do this if they're actually adjacent
             if (p == q || ! graphs.pattern_graph_rows[p * max_graphs + slot].test(q))
                 continue;
@@ -288,7 +383,7 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
             _kept_supplemental_slot[pair{int(p), int(q)}] = slot;
 
             bool actually_adjacent = false;
-            optional<NamedVertex> path_from_p_to_q_1 = nullopt, path_from_p_to_q_2 = nullopt;
+            optional<int> path_from_p_to_q_1 = nullopt, path_from_p_to_q_2 = nullopt;
 
             auto n_p = graphs.pattern_graph_rows[p * max_graphs + 0];
 
@@ -305,7 +400,7 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
 
                 if (n_p_q.any()) {
                     // they're actually distance 2 apart
-                    path_from_p_to_q_1 = pattern_vertex(n_p_q.find_first());
+                    path_from_p_to_q_1 = int(n_p_q.find_first());
                 }
                 else {
                     // find a path of length 3
@@ -320,37 +415,35 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
                         for (auto w = n_v.find_first(); w != decltype(n_v)::npos && ! path_from_p_to_q_1; w = n_v.find_first()) {
                             n_v.reset(w);
                             if (graphs.pattern_graph_rows[w * max_graphs + 0].test(q)) {
-                                path_from_p_to_q_1 = pattern_vertex(v);
-                                path_from_p_to_q_2 = pattern_vertex(w);
+                                path_from_p_to_q_1 = int(v);
+                                path_from_p_to_q_2 = int(w);
                             }
                         }
                     }
                 }
 
                 if (! path_from_p_to_q_1)
-                    throw ProofError{"Oops, there's a bug: missing path from " + named_p.second + " to " + named_q.second};
+                    throw ProofError{"Oops, there's a bug: missing path from " + _pattern_names[p] + " to " + _pattern_names[q]};
             }
 
             for (unsigned t = 0; t < target_size; ++t) {
-                auto named_t = target_vertex(t);
-
-                vector<NamedVertex> d1_from_t, d2_from_t, d3_from_t;
-                set<NamedVertex> d2_from_t_set, d3_from_t_set;
+                vector<int> d1_from_t, d2_from_t, d3_from_t;
+                set<int> d2_from_t_set, d3_from_t_set;
                 auto n_t = graphs.target_graph_rows[t * max_graphs + 0];
                 n_t.set(t);
                 for (auto v = n_t.find_first(); v != decltype(n_t)::npos; v = n_t.find_first()) {
                     n_t.reset(v);
-                    d1_from_t.push_back(target_vertex(v));
+                    d1_from_t.push_back(int(v));
                     auto n_v = graphs.target_graph_rows[v * max_graphs + 0];
                     n_v.set(v);
                     for (auto w = n_v.find_first(); w != decltype(n_v)::npos; w = n_v.find_first()) {
                         n_v.reset(w);
-                        d2_from_t_set.insert(target_vertex(w));
+                        d2_from_t_set.insert(int(w));
                         auto n_w = graphs.target_graph_rows[w * max_graphs + 0];
                         n_w.set(w);
                         for (auto x = n_w.find_first(); x != decltype(n_w)::npos; x = n_w.find_first()) {
                             n_w.reset(x);
-                            d3_from_t_set.insert(target_vertex(x));
+                            d3_from_t_set.insert(int(x));
                         }
                     }
                 }
@@ -359,13 +452,13 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
                 d3_from_t.assign(d3_from_t_set.begin(), d3_from_t_set.end());
 
                 if (actually_adjacent)
-                    _proof->create_distance3_graphs_but_actually_distance_1(slot, named_p, named_q, named_t, d3_from_t);
+                    emit_distance3_graph_distance_1(int(slot), int(p), int(q), int(t), d3_from_t);
                 else if (path_from_p_to_q_2)
-                    _proof->create_distance3_graphs(slot, named_p, named_q, *path_from_p_to_q_1,
-                        *path_from_p_to_q_2, named_t, d1_from_t, d2_from_t, d3_from_t);
+                    emit_distance3_graph(int(slot), int(p), int(q), *path_from_p_to_q_1,
+                        *path_from_p_to_q_2, int(t), d1_from_t, d2_from_t, d3_from_t);
                 else
-                    _proof->create_distance3_graphs_but_actually_distance_2(slot, named_p, named_q, *path_from_p_to_q_1,
-                        named_t, d1_from_t, d2_from_t, d3_from_t);
+                    emit_distance3_graph_distance_2(int(slot), int(p), int(q), *path_from_p_to_q_1,
+                        int(t), d1_from_t, d2_from_t, d3_from_t);
             }
         }
     }

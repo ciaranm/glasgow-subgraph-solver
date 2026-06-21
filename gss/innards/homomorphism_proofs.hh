@@ -51,6 +51,18 @@ namespace gss::innards
             const std::vector<std::pair<int, std::vector<int>>> & two_away_from_t,
             const std::vector<int> & d_n_t) -> void;
 
+        // Derive a distance-3 (G^3) adjacency constraint for one head, by the route the pattern
+        // takes from p to q: a direct edge (distance_1), a single intermediate vertex
+        // (distance_2), or a two-vertex path. d1/d2/d3_from_t are the target vertices within
+        // distance 1/2/3 of t. Emits through the generic Proof primitives.
+        auto emit_distance3_graph_distance_1(int g, int p, int q, int t, const std::vector<int> & d3_from_t) -> void;
+        auto emit_distance3_graph_distance_2(int g, int p, int q, int path1, int t,
+            const std::vector<int> & d1_from_t, const std::vector<int> & d2_from_t,
+            const std::vector<int> & d3_from_t) -> void;
+        auto emit_distance3_graph(int g, int p, int q, int path1, int path2, int t,
+            const std::vector<int> & d1_from_t, const std::vector<int> & d2_from_t,
+            const std::vector<int> & d3_from_t) -> void;
+
     public:
         HomomorphismProofs(const std::shared_ptr<Proof> & proof, const InputGraph & pattern, const InputGraph & target);
 

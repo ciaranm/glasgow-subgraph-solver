@@ -153,35 +153,6 @@ namespace gss::innards
 
         auto initial_domain_is_empty(int p, const std::string & where) -> void;
 
-        // distance 3 graphs
-        auto create_distance3_graphs_but_actually_distance_1(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & d3_from_t) -> void;
-
-        auto create_distance3_graphs_but_actually_distance_2(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & path_from_p_to_q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & d1_from_t,
-            const std::vector<NamedVertex> & d2_from_t,
-            const std::vector<NamedVertex> & d3_from_t) -> void;
-
-        auto create_distance3_graphs(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & path_from_p_to_q_1,
-            const NamedVertex & path_from_p_to_q_2,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & d1_from_t,
-            const std::vector<NamedVertex> & d2_from_t,
-            const std::vector<NamedVertex> & d3_from_t) -> void;
-
         auto hack_in_shape_graph(
             int g,
             const NamedVertex & p,
