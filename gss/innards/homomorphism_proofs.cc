@@ -479,6 +479,20 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
     }
 }
 
+auto HomomorphismProofs::emit_shape_graph(int g, int p, int q, int t, const std::vector<int> & n_t) -> void
+{
+    _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
+        " in shape graph " + std::to_string(g) + " so " + _pattern_names[q] + " maps to one of...");
+    std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string line = adj_label + " a 1 ~x" + _proof->variable_name(p, t);
+    for (auto & u : n_t)
+        line += " 1 x" + _proof->variable_name(q, u);
+    line += " >= 1 ;";
+    _proof->emit_proof_line(line);
+
+    _proof->adjacency_proof_lines().labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+}
+
 auto HomomorphismProofs::prove_extra_shape(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void
 {
     const unsigned pattern_size = _pattern_names.size();
@@ -486,22 +500,18 @@ auto HomomorphismProofs::prove_extra_shape(const ProcessedGraphsData & graphs, u
 
     for (unsigned p = 0; p < pattern_size; ++p) {
         for (unsigned q = 0; q < pattern_size; ++q) {
-            auto named_p = pattern_vertex(p);
-            auto named_q = pattern_vertex(q);
-
             // only do this if they're actually adjacent
             if (! graphs.pattern_graph_rows[p * max_graphs + slot].test(q))
                 continue;
 
             for (unsigned t = 0; t < target_size; ++t) {
-                auto named_t = target_vertex(t);
-                vector<NamedVertex> named_n_t;
-                auto n_t = graphs.target_graph_rows[t * max_graphs + slot];
-                for (auto v = n_t.find_first(); v != decltype(n_t)::npos; v = n_t.find_first()) {
-                    n_t.reset(v);
-                    named_n_t.push_back(target_vertex(v));
+                vector<int> n_t;
+                auto n_t_row = graphs.target_graph_rows[t * max_graphs + slot];
+                for (auto v = n_t_row.find_first(); v != decltype(n_t_row)::npos; v = n_t_row.find_first()) {
+                    n_t_row.reset(v);
+                    n_t.push_back(int(v));
                 }
-                _proof->hack_in_shape_graph(slot, named_p, named_q, named_t, named_n_t);
+                emit_shape_graph(int(slot), int(p), int(q), int(t), n_t);
             }
         }
     }

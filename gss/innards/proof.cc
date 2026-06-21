@@ -617,24 +617,6 @@ auto Proof::new_incumbent(const vector<tuple<NamedVertex, NamedVertex, bool>> & 
     _imp->objective_line = ++_imp->proof_line;
 }
 
-auto Proof::hack_in_shape_graph(
-    int g,
-    const NamedVertex & p,
-    const NamedVertex & q,
-    const NamedVertex & t,
-    const vector<NamedVertex> & n_t) -> void
-{
-    *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in shape graph " << g << " so " << q.second << " maps to one of...\n";
-    auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
-    *_imp->proof_stream << adj_label << " a 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
-    for (auto & u : n_t)
-        *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
-    *_imp->proof_stream << " >= 1 ;\n";
-    ++_imp->proof_line;
-
-    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
-}
-
 auto Proof::adjacency_proof_lines() -> AdjacencyProofLines &
 {
     return _imp->adjacency;

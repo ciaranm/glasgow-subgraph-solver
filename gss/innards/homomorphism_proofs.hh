@@ -70,6 +70,10 @@ namespace gss::innards
             const std::vector<int> & d1_from_t, const std::vector<int> & d2_from_t,
             const std::vector<int> & d3_from_t) -> void;
 
+        // Assert an extra-shape-graph adjacency constraint ("p maps to t implies q maps to one
+        // of n_t in shape graph g"), recording its label in the shared adjacency cache.
+        auto emit_shape_graph(int g, int p, int q, int t, const std::vector<int> & n_t) -> void;
+
     public:
         HomomorphismProofs(const std::shared_ptr<Proof> & proof, const InputGraph & pattern, const InputGraph & target);
 

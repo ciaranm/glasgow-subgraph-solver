@@ -158,13 +158,6 @@ namespace gss::innards
 
         auto initial_domain_is_empty(int p, const std::string & where) -> void;
 
-        auto hack_in_shape_graph(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & q,
-            const NamedVertex & t,
-            const std::vector<NamedVertex> & n_t) -> void;
-
         // The shared adjacency-line proof state, so the derivations that build and consume it
         // can move into the solver-proofs middle layer while it still lives here.
         [[nodiscard]] auto adjacency_proof_lines() -> AdjacencyProofLines &;
