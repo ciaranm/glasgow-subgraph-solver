@@ -85,11 +85,19 @@ namespace gss::innards
         auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
             const std::vector<int> & u, bool induced) -> void;
 
-        // For every adjacency constraint over a loopy target, derive its loop-cancelled
-        // form (the pre-#49 encoding) once, so that derivations can sum it into a pol
-        // without dragging in the stray "maps to the loopy target" term. Must be called
-        // after finalise_model and before any derivation that sums adjacency constraints.
-        auto loop_fix_adjacencies() -> void;
+        // Generic low-level proof-emission primitives, so the homomorphism-specific
+        // derivations can live in the solver-proofs middle layer and emit through here
+        // rather than reaching into Proof's innards. emit_proof_line writes a constraint
+        // line (appending the newline), bumps the proof-line counter, and returns the new
+        // line's number; emit_proof_directive writes a non-constraint line (a comment, a
+        // setlvl/wiplvl, a `del id`) with no counter change; current_proof_line is the
+        // most recent line's number, for building a citation. variable_name is the proof
+        // variable for assigning pattern vertex p to target vertex t.
+        auto emit_proof_line(const std::string & line) -> long;
+        auto emit_proof_directive(const std::string & line) -> void;
+        [[nodiscard]] auto current_proof_line() const -> long;
+        [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
+        [[nodiscard]] auto is_locally_injective() const -> bool;
 
         // Declare a projected (preserved) set, listing exactly the assignment
         // variables, so the proof's solution count is in terms of the high-level
@@ -180,18 +188,6 @@ namespace gss::innards
             const NamedVertex & q,
             const NamedVertex & t,
             const std::vector<NamedVertex> & n_t) -> void;
-
-        // Supplemental adjacency-constraint subsumption support. When the strongest-only
-        // emission elides a graph-g constraint that a degree/NDS check then needs, this
-        // re-derives it on demand: the elided constraint is a weakening (wider target set,
-        // same head) of the kept stronger one (in graph from_g), so it follows by a single
-        // implication step from that constraint's label. forget_supplemental_adjacency
-        // deletes it again afterwards (it was only needed for that one check). target_set is
-        // the graph-g neighbourhood of t (the wider permitted set).
-        [[nodiscard]] auto adjacency_line_exists(int g, int p, int q, int t) const -> bool;
-        auto weaken_supplemental_adjacency(int g, const NamedVertex & p, const NamedVertex & q,
-            const NamedVertex & t, const std::vector<NamedVertex> & target_set, int from_g) -> void;
-        auto forget_supplemental_adjacency(int g, int p, int q, int t) -> void;
 
         // The shared adjacency-line proof state, so the derivations that build and consume it
         // can move into the solver-proofs middle layer while it still lives here.

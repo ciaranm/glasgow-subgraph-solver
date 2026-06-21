@@ -212,50 +212,6 @@ auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex
     _imp->adjacency.permitted.emplace(tuple{0, p.first, q.first, t.first}, vector<long>(uu.begin(), uu.end()));
 }
 
-auto Proof::loop_fix_adjacencies() -> void
-{
-    // Before issue #49 the adjacency constraint left the target's self-loop term out, so
-    // it could be summed into a pol cleanly. We now keep that term (so a loop->loop
-    // mapping satisfies the model), but it then appears as a stray "q maps to the loopy
-    // target" term in every pol. For each adjacency constraint over a loopy target t,
-    // rewrite its @adj label here to the loop-cancelled version -- ~x_p_t together with
-    // the neighbours of t other than t -- which follows from the constraint plus
-    // injectivity on t (mapping p to t forbids q from also mapping to t). VeriPB lets a
-    // proof line reassign an existing label, so every later reference to @adj in a pol
-    // picks up the loop-cancelled form automatically; the original loop-bearing
-    // constraint stays in the database (by number) so solutions still satisfy the model.
-    //
-    // The loop-cancelled form relies on global injectivity on t, which local injectivity
-    // does not give. But under local injectivity the pol-summing filters that would need
-    // it (degree/NDS/supplemental on loopy instances) are disabled anyway (issue #58), so
-    // no loop-cancelled adjacency is ever needed; skip the relabelling entirely.
-    if (_imp->locally_injective)
-        return;
-
-    for (auto & [key, label] : _imp->adjacency.labels) {
-        auto & [g, p, q, t] = key;
-        // a pattern self-loop edge (p == q) has its loop term pinned by at-most-one rather
-        // than injectivity, and is not summed into the supplemental/degree pols; skip it.
-        if (p == q)
-            continue;
-        auto pit = _imp->adjacency.permitted.find(key);
-        if (pit == _imp->adjacency.permitted.end())
-            continue;
-        if (find(pit->second.begin(), pit->second.end(), t) == pit->second.end())
-            continue; // t is not a neighbour of itself: no loop term to cancel
-        *_imp->proof_stream << label << " rup 1 ~x" << _imp->variable_mappings[pair{p, t}];
-        for (auto & u : pit->second)
-            if (u != t)
-                *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q, u}];
-        *_imp->proof_stream << " >= 1 ;\n";
-        ++_imp->proof_line;
-        // (The original loop-bearing constraint is now redundant, but it is left in place:
-        // deleting it needs `del id <number>`, and that number does not correspond to the
-        // same constraint in CakePB's independently-numbered OPB, so the deletion breaks
-        // the verified-pipeline elaboration. The extra constraint is cheap.)
-    }
-}
-
 auto Proof::emit_preserved_assignment_variables() -> void
 {
     // List exactly the assignment variables as the projected (preserved) set,
@@ -816,40 +772,35 @@ auto Proof::hack_in_shape_graph(
     _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
 }
 
-auto Proof::adjacency_line_exists(int g, int p, int q, int t) const -> bool
-{
-    return _imp->adjacency.labels.contains(tuple{g, p, q, t});
-}
-
 auto Proof::adjacency_proof_lines() -> AdjacencyProofLines &
 {
     return _imp->adjacency;
 }
 
-auto Proof::weaken_supplemental_adjacency(int g, const NamedVertex & p, const NamedVertex & q,
-    const NamedVertex & t, const vector<NamedVertex> & target_set, int from_g) -> void
+auto Proof::emit_proof_line(const string & line) -> long
 {
-    // The graph-g constraint "p -> t implies q maps to one of N_g(t)" was elided because a
-    // stronger constraint (in graph from_g, a narrower target set) with the same head was
-    // kept. The wider one follows from the narrower by a single implication step, so derive
-    // it that way, citing the kept constraint by its label.
-    auto from_label = _imp->adjacency.labels.at(tuple{from_g, p.first, q.first, t.first});
-    auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
-    *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
-    for (auto & u : target_set)
-        if (u.first != t.first)
-            *_imp->proof_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u.first}];
-    *_imp->proof_stream << " >= 1 : " << from_label << " ;\n";
-    ++_imp->proof_line;
-    _imp->adjacency.labels.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
-    _imp->adjacency.ids.emplace(tuple{g, p.first, q.first, t.first}, _imp->proof_line);
+    *_imp->proof_stream << line << "\n";
+    return ++_imp->proof_line;
 }
 
-auto Proof::forget_supplemental_adjacency(int g, int p, int q, int t) -> void
+auto Proof::emit_proof_directive(const string & line) -> void
 {
-    *_imp->proof_stream << "del id " << _imp->adjacency.ids.at(tuple{g, p, q, t}) << " ;\n";
-    _imp->adjacency.labels.erase(tuple{g, p, q, t});
-    _imp->adjacency.ids.erase(tuple{g, p, q, t});
+    *_imp->proof_stream << line << "\n";
+}
+
+auto Proof::current_proof_line() const -> long
+{
+    return _imp->proof_line;
+}
+
+auto Proof::variable_name(int p, int t) const -> const string &
+{
+    return _imp->variable_mappings.at(pair<long, long>{p, t});
+}
+
+auto Proof::is_locally_injective() const -> bool
+{
+    return _imp->locally_injective;
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_1(

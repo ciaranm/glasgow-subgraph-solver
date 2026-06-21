@@ -1,12 +1,14 @@
 #include <gss/clique.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 
+#include <algorithm>
 #include <chrono>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -390,7 +392,45 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
     // instance that does reach search nothing is emitted to the proof in between, so the
     // proof is byte-identical -- this only removes the derivations on an early conclusion
     // (e.g. the induced pattern-bigger-than-target case, where they were all dead).
-    _proof->loop_fix_adjacencies();
+    //
+    // Mechanism: before issue #49 the adjacency constraint left the target's self-loop term
+    // out, so it could be summed into a pol cleanly. We now keep that term (so a loop->loop
+    // mapping satisfies the model), but it then appears as a stray "q maps to the loopy
+    // target" term in every pol. For each adjacency constraint over a loopy target t, rewrite
+    // its @adj label to the loop-cancelled version -- ~x_p_t together with the neighbours of t
+    // other than t -- which follows from the constraint plus injectivity on t (mapping p to t
+    // forbids q from also mapping to t). VeriPB lets a proof line reassign an existing label,
+    // so every later @adj reference in a pol picks up the loop-cancelled form; the original
+    // loop-bearing constraint stays in the database (by number) so solutions still satisfy the
+    // model. The loop-cancelled form relies on global injectivity on t, which local injectivity
+    // does not give -- but under local injectivity the pol-summing filters that would need it
+    // are disabled anyway (issue #58), so skip the relabelling entirely.
+    if (_proof->is_locally_injective())
+        return;
+
+    auto & adjacency = _proof->adjacency_proof_lines();
+    for (auto & [key, label] : adjacency.labels) {
+        auto & [g, p, q, t] = key;
+        // a pattern self-loop edge (p == q) has its loop term pinned by at-most-one rather
+        // than injectivity, and is not summed into the supplemental/degree pols; skip it.
+        if (p == q)
+            continue;
+        auto pit = adjacency.permitted.find(key);
+        if (pit == adjacency.permitted.end())
+            continue;
+        if (std::find(pit->second.begin(), pit->second.end(), t) == pit->second.end())
+            continue; // t is not a neighbour of itself: no loop term to cancel
+        std::string line = label + " rup 1 ~x" + _proof->variable_name(p, t);
+        for (auto & u : pit->second)
+            if (u != t)
+                line += " 1 x" + _proof->variable_name(q, u);
+        line += " >= 1 ;";
+        _proof->emit_proof_line(line);
+        // (The original loop-bearing constraint is now redundant, but it is left in place:
+        // deleting it needs `del id <number>`, and that number does not correspond to the
+        // same constraint in CakePB's independently-numbered OPB, so the deletion breaks the
+        // verified-pipeline elaboration. The extra constraint is cheap.)
+    }
 }
 
 auto HomomorphismProofs::prove_no_clique(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned pattern_size,
@@ -475,7 +515,8 @@ auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData
     int g, int p, int q, int t) -> void
 {
     // present already (it is the kept constraint, the original graph, or elision is off): nothing to do.
-    if (_proof->adjacency_line_exists(g, p, q, t))
+    auto & adjacency = _proof->adjacency_proof_lines();
+    if (adjacency.labels.contains(std::tuple<long, long, long, long>{g, p, q, t}))
         return;
 
     // no kept supplemental constraint for this head means we never emitted (or could emit) a
@@ -486,24 +527,34 @@ auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData
     if (kept == _kept_supplemental_slot.end())
         return;
 
-    // otherwise it was elided in favour of a stronger one for this head; weaken that back to
-    // the graph-g target set (which subsumption guarantees is wider).
-
-    vector<NamedVertex> target_set;
+    // otherwise it was elided in favour of a stronger same-head one (in graph from_g, a
+    // narrower target set). The wider graph-g constraint follows from the narrower by a single
+    // implication step, so derive it that way, citing the kept constraint by its label.
+    int from_g = int(kept->second);
+    auto from_label = adjacency.labels.at(std::tuple<long, long, long, long>{from_g, p, q, t});
+    std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
     auto row = graphs.target_graph_rows[t * max_graphs + g];
     for (auto u = row.find_first(); u != decltype(row)::npos; u = row.find_first()) {
         row.reset(u);
-        target_set.push_back(target_vertex(u));
+        if (int(u) != t)
+            line += " 1 x" + _proof->variable_name(q, int(u));
     }
-
-    _proof->weaken_supplemental_adjacency(g, pattern_vertex(p), pattern_vertex(q), target_vertex(t),
-        target_set, int(kept->second));
+    line += " >= 1 : " + from_label + " ;";
+    auto id = _proof->emit_proof_line(line);
+    adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+    adjacency.ids.emplace(std::tuple<long, long, long, long>{g, p, q, t}, id);
     _pending_transient_adjacencies.emplace_back(g, p, q, t);
 }
 
 auto HomomorphismProofs::forget_transient_supplemental_adjacencies() -> void
 {
-    for (auto & [g, p, q, t] : _pending_transient_adjacencies)
-        _proof->forget_supplemental_adjacency(g, p, q, t);
+    auto & adjacency = _proof->adjacency_proof_lines();
+    for (auto & [g, p, q, t] : _pending_transient_adjacencies) {
+        std::tuple<long, long, long, long> key{g, p, q, t};
+        _proof->emit_proof_directive("del id " + std::to_string(adjacency.ids.at(key)) + " ;");
+        adjacency.labels.erase(key);
+        adjacency.ids.erase(key);
+    }
     _pending_transient_adjacencies.clear();
 }
