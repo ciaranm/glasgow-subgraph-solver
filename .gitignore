@@ -1,4 +1,7 @@
 build
+build-debug
+build-sanitize
+build-coverage
 perf.data
 perf.data.old
 

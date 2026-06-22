@@ -16,7 +16,6 @@ namespace gss::innards
     {
         Aborted,
         Unsatisfiable,
-        UnsatisfiableAndBackjumpUsingLackey,
         Satisfiable,
         SatisfiableButKeepGoing,
         Restart
@@ -122,11 +121,12 @@ namespace gss::innards
 
     public:
         HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
-            const DuplicateSolutionFilterer &, const std::shared_ptr<Proof> &);
+            const DuplicateSolutionFilterer &, const std::shared_ptr<Proof> &,
+            Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & watches);
 
         auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 
-        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool;
+        auto propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments) -> bool;
 
         auto restarting_search(
             HomomorphismAssignments & assignments,
@@ -141,7 +141,11 @@ namespace gss::innards
 
         auto set_seed(int n) -> void;
 
-        Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;
+        // The nogood store is owned by the carried SolveState (sequential path) or
+        // by a per-thread vector (threaded path), not by the searcher, so that
+        // nogoods can persist across staged search rounds independently of any one
+        // searcher's lifetime.
+        Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & watches;
     };
 }
 

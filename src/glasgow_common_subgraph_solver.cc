@@ -58,8 +58,7 @@ auto main(int argc, char * argv[]) -> int
 
         options.add_options("Proof Logging Options")
             ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
-            ("verbose-proofs", "Write lots of comments to the proof, for tracing")
-            ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing");
 
         options.add_options()
             ("first-file", "Specify the first graph file", cxxopts::value<string>())
@@ -149,7 +148,6 @@ auto main(int argc, char * argv[]) -> int
             ProofOptions proof_options{
                 .opb_file = fn + ".opb",
                 .log_file = fn + ".pbp",
-                .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
             cout << "proof_model = " << fn << ".opb" << endl;

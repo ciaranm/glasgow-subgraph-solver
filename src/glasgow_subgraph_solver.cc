@@ -1,7 +1,5 @@
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
-#include <gss/innards/lackey.hh>
-#include <gss/innards/symmetries.hh>
 #include <gss/innards/verify.hh>
 #include <gss/restarts.hh>
 #include <gss/sip_decomposer.hh>
@@ -62,7 +60,7 @@ auto main(int argc, char * argv[]) -> int
             ("induced", "Find an induced mapping")
             ("count-solutions", "Count the number of solutions")
             ("print-all-solutions", "Print out every solution, rather than one")
-            ("solution-limit", "Stop after finding this many solutions (only when --print-all-solutions)", cxxopts::value<unsigned long long>());
+            ("solution-limit", "Stop after finding this many solutions (implies counting)", cxxopts::value<unsigned long long>());
 
         options.add_options("Input file options")
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
@@ -77,8 +75,7 @@ auto main(int argc, char * argv[]) -> int
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
             ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
-            ("pattern-symmetries", "Eliminate pattern symmetries (requires Gap)")
-            ("target-symmetries", "Eliminate target symmetries (requires Gap)");
+            ("staged", "Staged preprocessing: cheap filtering first, build supplemental graphs only if a first bounded search round does not solve it (sequential only)");
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")
@@ -99,16 +96,9 @@ auto main(int argc, char * argv[]) -> int
                 cxxopts::value<vector<string>>(target_occur_less_thans))
             ("target-automorphism-group-size", "Specify the size of the target graph automorphism group", cxxopts::value<string>());
 
-        options.add_options("External constraint solver options")
-            ("send-to-lackey", "Send candidate solutions to an external solver over this named pipe", cxxopts::value<string>())
-            ("receive-from-lackey", "Receive responses from external solver over this named pipe", cxxopts::value<string>())
-            ("send-partials-to-lackey", "Send partial solutions to the lackey")
-            ("propagate-using-lackey", "Propagate using lackey (never / root / root-and-backjump / always)", cxxopts::value<string>());
-
         options.add_options("Proof logging options")
             ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
-            ("verbose-proofs", "Write lots of comments to the proof, for tracing")
-            ("recover-proof-encoding", "Recover the proof encoding, to work with verified encoders");
+            ("verbose-proofs", "Write lots of comments to the proof, for tracing");
 
         vector<string> shapes;
         vector<int> shape_counts, shape_injectives;
@@ -120,9 +110,11 @@ auto main(int argc, char * argv[]) -> int
             ("decomposition", "Use decomposition")
             ("cliques", "Use clique size constraints")
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")
-            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>())
-            ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>())
-            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>());
+            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>(shapes))
+            ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts))
+            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives))
+            ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)")
+            ("staged-first-round-backtracks", "Staged solving: backtrack budget for the first cheap search round before supplemental graphs are built", cxxopts::value<unsigned long long>());
 
         options.add_options()
             ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
@@ -159,7 +151,7 @@ auto main(int argc, char * argv[]) -> int
             params.injectivity = Injectivity::Injective;
 
         params.induced = options_vars.count("induced");
-        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions");
+        params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions") || options_vars.count("solution-limit");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
 
@@ -239,6 +231,10 @@ auto main(int argc, char * argv[]) -> int
             params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
+        params.staged = options_vars.count("staged");
+        if (options_vars.count("staged-first-round-backtracks"))
+            params.staged_first_round_backtracks = options_vars["staged-first-round-backtracks"].as<unsigned long long>();
+        params.prove_supplemental_subsumption = ! options_vars.count("no-proof-supplemental-subsumption");
         params.clique_size_constraints = options_vars.count("cliques");
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 
@@ -284,11 +280,6 @@ auto main(int argc, char * argv[]) -> int
             params.target_occur_less_constraints.emplace_back(a, b);
         }
 
-        if (options_vars.count("send-to-lackey") ^ options_vars.count("receive-from-lackey")) {
-            cerr << "Must specify both of --send-to-lackey and --receive-from-lackey" << endl;
-            return EXIT_FAILURE;
-        }
-
 #if ! defined(__WIN32)
         char hostname_buf[255];
         if (0 == gethostname(hostname_buf, 255))
@@ -312,44 +303,19 @@ auto main(int argc, char * argv[]) -> int
         cout << "pattern_file = " << options_vars["pattern-file"].as<string>() << endl;
         cout << "target_file = " << options_vars["target-file"].as<string>() << endl;
 
-        if (options_vars.count("send-to-lackey") && options_vars.count("receive-from-lackey")) {
-            auto lackey_started_at = steady_clock::now();
-            params.lackey = make_unique<innards::Lackey>(
-                options_vars["send-to-lackey"].as<string>(),
-                options_vars["receive-from-lackey"].as<string>(),
-                pattern, target);
-            auto lackey_time = duration_cast<milliseconds>(steady_clock::now() - lackey_started_at);
-            cout << "lackey_init_time = " << lackey_time.count() << endl;
-        }
-        params.send_partials_to_lackey = options_vars.count("send-partials-to-lackey");
-        if (options_vars.count("propagate-using-lackey")) {
-            string propagate_using_lackey = options_vars["propagate-using-lackey"].as<string>();
-            if (propagate_using_lackey == "always")
-                params.propagate_using_lackey = PropagateUsingLackey::Always;
-            else if (propagate_using_lackey == "root")
-                params.propagate_using_lackey = PropagateUsingLackey::Root;
-            else if (propagate_using_lackey == "root-and-backjump")
-                params.propagate_using_lackey = PropagateUsingLackey::RootAndBackjump;
-            else if (propagate_using_lackey == "never")
-                params.propagate_using_lackey = PropagateUsingLackey::Never;
-            else {
-                cerr << "Unknown propagate-using-lackey option '" << propagate_using_lackey << "'" << endl;
-                return EXIT_FAILURE;
-            }
-        }
-        else
-            params.propagate_using_lackey = PropagateUsingLackey::Never;
-
         optional<unsigned long long> solutions_remaining;
         if (options_vars.contains("solution-limit"))
             solutions_remaining = options_vars["solution-limit"].as<unsigned long long>();
 
-        if (options_vars.count("print-all-solutions")) {
-            params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
-                cout << "mapping = ";
-                for (auto v : mapping)
-                    cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
-                cout << endl;
+        if (options_vars.count("print-all-solutions") || options_vars.contains("solution-limit")) {
+            bool print_solutions = options_vars.count("print-all-solutions");
+            params.enumerate_callback = [&, print_solutions](const VertexToVertexMapping & mapping) -> bool {
+                if (print_solutions) {
+                    cout << "mapping = ";
+                    for (auto v : mapping)
+                        cout << "(" << pattern.vertex_name(v.first) << " -> " << target.vertex_name(v.second) << ") ";
+                    cout << endl;
+                }
 
                 return (! solutions_remaining) || (0 != --*solutions_remaining);
             };
@@ -360,7 +326,6 @@ auto main(int argc, char * argv[]) -> int
             ProofOptions proof_options{
                 .opb_file = fn + ".opb",
                 .log_file = fn + ".pbp",
-                .recover_encoding = options_vars.contains("recover-proof-encoding"),
                 .super_extra_verbose = options_vars.contains("verbose-proofs")};
             params.proof_options = proof_options;
             cout << "proof_model = " << fn << ".opb" << endl;
@@ -394,30 +359,8 @@ auto main(int argc, char * argv[]) -> int
         /* Start the clock */
         params.start_time = steady_clock::now();
 
-        if (options_vars.count("pattern-symmetries")) {
-            auto gap_start_time = steady_clock::now();
-            innards::find_symmetries(argv[0], pattern, params.pattern_less_constraints, pattern_automorphism_group_size);
-            was_given_pattern_automorphism_group = true;
-            cout << "pattern_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
-            cout << "pattern_less_constraints =";
-            for (auto & [a, b] : params.pattern_less_constraints)
-                cout << " " << a << "<" << b;
-            cout << endl;
-        }
-
         if (was_given_pattern_automorphism_group)
             cout << "pattern_automorphism_group_size = " << pattern_automorphism_group_size << endl;
-
-        if (options_vars.count("target-symmetries")) {
-            auto gap_start_time = steady_clock::now();
-            innards::find_symmetries(argv[0], target, params.target_occur_less_constraints, target_automorphism_group_size);
-            was_given_target_automorphism_group = true;
-            cout << "target_symmetry_time = " << duration_cast<milliseconds>(steady_clock::now() - gap_start_time).count() << endl;
-            cout << "target_occur_less_constraints =";
-            for (auto & [a, b] : params.target_occur_less_constraints)
-                cout << " " << a << "<" << b;
-            cout << endl;
-        }
 
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
@@ -453,13 +396,6 @@ auto main(int argc, char * argv[]) -> int
 
         for (const auto & s : result.extra_stats)
             cout << s << endl;
-
-        if (params.lackey) {
-            cout << "lackey_calls = " << params.lackey->number_of_calls() << endl;
-            cout << "lackey_checks = " << params.lackey->number_of_checks() << endl;
-            cout << "lackey_deletions = " << params.lackey->number_of_deletions() << endl;
-            cout << "lackey_propagations = " << params.lackey->number_of_propagations() << endl;
-        }
 
         innards::verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective,
             params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);

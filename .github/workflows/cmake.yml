@@ -6,28 +6,56 @@ on:
   pull_request:
     branches: [ "master" ]
 
-env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
-
 jobs:
-  job:
+  build:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, ubuntu-24.04, macos-14, macos-latest ] # macos-14 and macos-15 as of 10/25
+        os: [ ubuntu-24.04, ubuntu-26.04, macos-15, macos-26 ]
 
     steps:
-    - name: Telling you what the matrix is
-      run: echo "matrix.os is [$MATRIX_OS]"
-      env:
-          MATRIX_OS: ${{ matrix.os }}
-
     - name: Checkout
       uses: actions/checkout@v4
+
+    # Release builds bake the build CPU's ISA into the objects (-march=native, see
+    # CMakeLists.txt). The runner CPU varies between jobs, so a cached object compiled on
+    # a runner with a richer ISA must not be reused on one that lacks those instructions:
+    # it would execute an illegal instruction (SIGILL). Fold the CPU's feature set into
+    # the ccache key so only ISA-compatible runners share objects. (The sanitize and
+    # coverage jobs don't use -march=native, so their caches stay CPU-agnostic.)
+    - name: Compute CPU signature for ccache key
+      id: cpu
+      shell: bash
+      run: |
+        if [ -r /proc/cpuinfo ]; then
+          sig=$(grep -m1 -E '^(flags|Features)[[:space:]]*:' /proc/cpuinfo)
+        else
+          sig="$(sysctl -n machdep.cpu.brand_string 2>/dev/null) $(uname -m)"
+        fi
+        h=$(printf '%s' "$sig" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16)
+        echo "hash=$h" >> "$GITHUB_OUTPUT"
+        echo "CPU signature -> $h"
+
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ matrix.os }}-release-${{ steps.cpu.outputs.hash }}
+
+    - name: Install dependencies (Linux)
+      if: startsWith(matrix.os, 'ubuntu')
+      # `|| true`: don't fail the build if an unrelated third-party repo
+      # preinstalled on the runner image is broken (e.g. packages.microsoft.com
+      # returning 403); we only need libgmp-dev, which the install step still gates.
+      run: sudo apt-get update || true; sudo apt-get install -y libgmp-dev
+
+    # On macOS, install Catch2 too: Homebrew ships a prebuilt bottle, so it does not
+    # have to be compiled from source (see find_package(Catch2) in CMakeLists.txt).
+    - name: Install dependencies (macOS)
+      if: startsWith(matrix.os, 'macos')
+      run: brew install gmp catch2
 
     - name: Fetch VeriPB
       run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
@@ -36,16 +64,92 @@ jobs:
       run: cargo install --path ./VeriPB
 
     - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: |
+        EXTRA="-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+        if [[ "${{ matrix.os }}" == macos* ]]; then EXTRA="$EXTRA -DCMAKE_PREFIX_PATH=$(brew --prefix)"; fi
+        cmake --preset release $EXTRA
 
     - name: Build
-      # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -j4
+      run: cmake --build --preset release
 
     - name: Test
-      working-directory: ${{github.workspace}}/build
-      # Execute tests defined by the CMake configuration.
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest -C ${{env.BUILD_TYPE}} -j4
+      run: ctest --preset release -j $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) --rerun-failed --output-on-failure
+
+  sanitize:
+    name: Sanitize (ubuntu-26.04)
+    runs-on: ubuntu-26.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: sanitize
+
+    - name: Install GMP
+      # `|| true`: don't fail the build if an unrelated third-party repo
+      # preinstalled on the runner image is broken (e.g. packages.microsoft.com
+      # returning 403); we only need libgmp-dev, which the install step still gates.
+      run: sudo apt-get update || true; sudo apt-get install -y libgmp-dev
+
+    - name: Fetch VeriPB
+      run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
+
+    - name: Install VeriPB using cargo
+      run: cargo install --path ./VeriPB
+
+    - name: Configure CMake (Sanitize)
+      run: cmake --preset sanitize -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build (Sanitize)
+      run: cmake --build --preset sanitize
+
+    - name: Test (Sanitize)
+      run: ctest --preset sanitize -j $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) --rerun-failed --output-on-failure
+
+  coverage:
+    name: Proof coverage (ubuntu-26.04)
+    runs-on: ubuntu-26.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: coverage
+
+    - name: Install GMP and gcovr
+      run: sudo apt-get update || true; sudo apt-get install -y libgmp-dev gcovr
+
+    - name: Fetch VeriPB
+      run: git -c core.hooksPath=/dev/null clone --depth 1 https://gitlab.com/MIAOresearch/software/VeriPB.git
+
+    - name: Install VeriPB using cargo
+      run: cargo install --path ./VeriPB
+
+    - name: Configure CMake (Coverage)
+      run: cmake --preset coverage -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build (Coverage)
+      run: cmake --build --preset coverage
+
+    - name: Test (Coverage)
+      run: ctest --preset coverage -j $(nproc 2>/dev/null || sysctl -n hw.logicalcpu) --output-on-failure
+
+    # Ratchet: fail if the proof-writing code's coverage regresses, so a new
+    # conditional proof feature has to arrive with a test that triggers it.
+    # (cake_pb_iso isn't installed here, so the cake_* tests are skipped; they add
+    # no proof.cc coverage beyond the VeriPB tests.)
+    - name: Check proof.cc coverage
+      # --exclude / --gcov-ignore-errors: the FetchContent-built Catch2 is also
+      # instrumented, and gcovr can't resolve its source paths; we only care about
+      # proof.cc, so skip the rest rather than fail on it.
+      run: |
+        gcovr --root . build-coverage --filter 'gss/innards/proof\.cc' \
+          --exclude '.*/_deps/.*' --gcov-ignore-errors=no_working_dir_found \
+          --decisions --print-summary \
+          --fail-under-line 80 --fail-under-decision 70

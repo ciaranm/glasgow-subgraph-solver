@@ -24,11 +24,13 @@ using std::uniform_int_distribution;
 using std::vector;
 
 HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
-    const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f) :
+    const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f,
+    Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & w) :
     model(m),
     params(p),
     _duplicate_solution_filterer(d),
-    proof(f)
+    proof(f),
+    watches(w)
 {
     if (might_have_watches(params)) {
         watches.table.target_size = model.target_size;
@@ -102,21 +104,6 @@ auto HomomorphismSearcher::restarting_search(
     // find ourselves a domain, or succeed if we're all assigned
     const HomomorphismDomain * branch_domain = find_branch_domain(domains);
     if (! branch_domain) {
-        if (params.lackey) {
-            VertexToVertexMapping mapping;
-            expand_to_full_result(assignments, mapping);
-            if (! params.lackey->check_solution(mapping, false, params.count_solutions, {})) {
-                switch (params.propagate_using_lackey) {
-                case PropagateUsingLackey::RootAndBackjump:
-                    return SearchResult::UnsatisfiableAndBackjumpUsingLackey;
-                case PropagateUsingLackey::Never:
-                case PropagateUsingLackey::Root:
-                case PropagateUsingLackey::Always:
-                    return SearchResult::Unsatisfiable;
-                }
-            }
-        }
-
         if (proof)
             proof->post_solution(solution_in_proof_form(assignments));
 
@@ -173,9 +160,6 @@ auto HomomorphismSearcher::restarting_search(
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
 
-    // override whether we use the lackey for propagation, in case we are inside a backjump
-    bool use_lackey_for_propagation = false;
-
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
         if (proof)
@@ -192,7 +176,7 @@ auto HomomorphismSearcher::restarting_search(
 
         // propagate
         ++propagations;
-        if (! propagate(false, new_domains, assignments, use_lackey_for_propagation || (params.propagate_using_lackey == PropagateUsingLackey::Always))) {
+        if (! propagate(false, new_domains, assignments)) {
             // failure? restore assignments and go on to the next thing
             if (proof)
                 proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
@@ -241,10 +225,6 @@ auto HomomorphismSearcher::restarting_search(
             assignments.values.resize(assignments_size);
             break;
 
-        case SearchResult::UnsatisfiableAndBackjumpUsingLackey:
-            use_lackey_for_propagation = true;
-            [[std::fallthrough]];
-
         case SearchResult::Unsatisfiable:
             if (proof) {
                 proof->back_up_to_level(depth + 1);
@@ -275,7 +255,7 @@ auto HomomorphismSearcher::restarting_search(
         return SearchResult::Restart;
     }
     else
-        return use_lackey_for_propagation ? SearchResult::UnsatisfiableAndBackjumpUsingLackey : SearchResult::Unsatisfiable;
+        return SearchResult::Unsatisfiable;
 }
 
 auto HomomorphismSearcher::degree_sort(
@@ -723,7 +703,7 @@ auto HomomorphismSearcher::propagate_occur_less_thans(
     return true;
 }
 
-auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments, bool propagate_using_lackey) -> bool
+auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, HomomorphismAssignments & assignments) -> bool
 {
     // nogoods might be watching things in initial assignments. this is possibly not the
     // best place to put this...
@@ -820,41 +800,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             if (! cheap_all_different(model.target_size, new_domains, proof, &model))
                 return false;
         done_globals_at_least_once = true;
-    }
-
-    int dcount = 0;
-    if (params.lackey && (propagate_using_lackey || params.send_partials_to_lackey)) {
-        VertexToVertexMapping mapping;
-        expand_to_full_result(assignments, mapping);
-
-        if (! propagate_using_lackey) {
-            if (! params.lackey->check_solution(mapping, true, false, Lackey::DeletionFunction{}))
-                return false;
-        }
-        else {
-            bool wipeout = false;
-            vector<int> find_domain(model.pattern_size, -1);
-            for (unsigned i = 0; i < new_domains.size(); ++i)
-                find_domain[new_domains[i].v] = i;
-
-            auto deletion = [&](int p, int t) -> bool {
-                if (! wipeout) {
-                    if (int d = find_domain[p]; d != -1) {
-                        if (new_domains[d].values.test(t)) {
-                            ++dcount;
-                            new_domains[d].values.reset(t);
-                            if (0 == --new_domains[d].count)
-                                wipeout = true;
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            };
-
-            if (! params.lackey->check_solution(mapping, true, false, deletion) || wipeout)
-                return false;
-        }
     }
 
     return true;

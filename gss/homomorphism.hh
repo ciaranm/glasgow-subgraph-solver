@@ -2,7 +2,6 @@
 #define GLASGOW_SUBGRAPH_SOLVER_HOMOMORPHISM_HH 1
 
 #include <gss/formats/input_graph.hh>
-#include <gss/innards/lackey.hh>
 #include <gss/innards/proof-fwd.hh>
 #include <gss/loooong.hh>
 #include <gss/proof_options.hh>
@@ -24,14 +23,6 @@ namespace gss
         Injective,
         LocallyInjective,
         NonInjective
-    };
-
-    enum class PropagateUsingLackey
-    {
-        Never,
-        Root,
-        Always,
-        RootAndBackjump
     };
 
     struct HomomorphismParams
@@ -100,20 +91,32 @@ namespace gss
         /// Disable neighbourhood degree sequence processing?
         bool no_nds = false;
 
+        /// Staged solving (S3): run cheap preprocessing (no supplemental graphs, degree but
+        /// not NDS, Hall), search within a bounded budget, and only then build the
+        /// supplemental graphs + NDS, re-filter, and search unbounded. Sequential only;
+        /// under proof it stays valid (supplementals are derived at the level-0 restart
+        /// boundary). See dev_docs/preprocessor-refactor.md, Phase 6.
+        bool staged = false;
+
+        /// Staged solving: the backtrack budget for the first (cheap) search round, after
+        /// which the supplemental graphs are built. A tunable behind a sensible default; the
+        /// hidden --staged-first-round-backtracks flag sets it (mainly for testing, to force
+        /// the transition on small instances). Only used when staged is true.
+        unsigned long long staged_first_round_backtracks = 100;
+
+        /// Proof-emission optimisation: emit only the strongest of a set of nested
+        /// supplemental adjacency constraints (a constraint with the same head but a smaller
+        /// target set subsumes the wider ones, so the wider ones are redundant). On by
+        /// default; the hidden --no-proof-supplemental-subsumption flag turns it off so every
+        /// supplemental constraint is emitted, which is useful for studying its effect (e.g.
+        /// on proof trimming). Has no effect when proof logging is disabled.
+        bool prove_supplemental_subsumption = true;
+
         /// Less pattern constraints
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
 
         /// Occurs less target constraints
         std::list<std::pair<std::string, std::string>> target_occur_less_constraints;
-
-        /// Optional lackey, for external side constraints
-        std::unique_ptr<innards::Lackey> lackey;
-
-        /// Send partial solutions to the lackey?
-        bool send_partials_to_lackey = false;
-
-        /// Propagate using the lackey?
-        PropagateUsingLackey propagate_using_lackey = PropagateUsingLackey::Never;
 
         /// Optional proof options
         std::optional<ProofOptions> proof_options;

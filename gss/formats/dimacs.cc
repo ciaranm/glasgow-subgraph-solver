@@ -2,18 +2,18 @@
 #include <gss/formats/graph_file_error.hh>
 #include <gss/formats/input_graph.hh>
 
-#include <fstream>
+#include <istream>
 #include <regex>
 
 using std::getline;
-using std::ifstream;
+using std::istream;
 using std::regex;
 using std::smatch;
 using std::stoi;
 using std::string;
 using std::to_string;
 
-auto read_dimacs(ifstream && infile, const string & filename) -> InputGraph
+auto read_dimacs(istream && infile, const string & filename) -> InputGraph
 {
     InputGraph result{0, false, false};
 

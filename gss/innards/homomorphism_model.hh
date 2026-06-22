@@ -11,21 +11,13 @@
 
 namespace gss::innards
 {
+    class HomomorphismProofs;
+
     class HomomorphismModel
     {
     private:
         struct Imp;
         std::unique_ptr<Imp> _imp;
-
-        auto _build_exact_path_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-            unsigned number_of_exact_path_graphs, bool directed, bool at_most, bool pattern) -> void;
-
-        auto _build_distance3_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, bool pattern) -> void;
-
-        auto _build_k4_graphs(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx, bool pattern) -> void;
-
-        auto _build_extra_shape(std::vector<SVOBitset> & graph_rows, unsigned size, unsigned & idx,
-            InputGraph & shape, bool injective, int count, bool pattern) -> void;
 
         auto _check_degree_compatibility(
             int p,
@@ -41,12 +33,6 @@ namespace gss::innards
 
         auto _check_clique_compatibility(int p, int t) const -> bool;
 
-        auto _build_pattern_clique_sizes() const -> void;
-
-        auto _build_target_clique_size(int v) const -> void;
-
-        auto _prove_no_clique(unsigned g, int p, int t) const -> void;
-
     public:
         using PatternAdjacencyBitsType = uint8_t;
 
@@ -58,13 +44,24 @@ namespace gss::innards
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-            const std::shared_ptr<Proof> & proof);
+            const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs);
         ~HomomorphismModel();
 
         auto pattern_vertex_for_proof(int v) const -> NamedVertex;
         auto target_vertex_for_proof(int v) const -> NamedVertex;
 
         auto prepare() -> bool;
+
+        // Build the supplemental graphs (exact-path, distance-3, …) into their slots and,
+        // when proving, derive them. prepare() calls this itself unless staging is on, in
+        // which case the staged solve driver calls it after a first bounded search round.
+        // Precondition: prepare() has run and the original-graph self-loops are present.
+        auto build_supplemental_graphs() -> void;
+
+        // Tighten already-initialised domains using the supplemental graphs and NDS (the
+        // filtering deferred past Stage 1 under staging), emitting the new prunings to the
+        // proof. Returns false if a domain wipes out. Precondition: build_supplemental_graphs().
+        auto tighten_domains_with_supplementals(std::vector<HomomorphismDomain> & domains) const -> bool;
 
         auto pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType;
         auto pattern_graph_row(int g, int p) const -> const SVOBitset &;
@@ -88,7 +85,9 @@ namespace gss::innards
         auto pattern_has_loop(int p) const -> bool;
         auto target_has_loop(int t) const -> bool;
 
-        auto initialise_domains(std::vector<HomomorphismDomain> & domains) const -> bool;
+        // When stage1 is true (staging), only the original graph is considered and NDS is
+        // skipped -- the cheapest filtering, run before any supplemental graph is built.
+        auto initialise_domains(std::vector<HomomorphismDomain> & domains, bool stage1 = false) const -> bool;
 
         auto add_extra_stats(std::list<std::string> &) const -> void;
     };

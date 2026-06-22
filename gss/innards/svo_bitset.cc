@@ -15,8 +15,8 @@ SVOBitset::SVOBitset(unsigned size, unsigned bits)
             _data.short_data[i] = bits;
     }
     else {
-        _data.long_data = new BitWord[size];
-        for (unsigned i = 0; i < size; ++i)
+        _data.long_data = new BitWord[n_words];
+        for (unsigned i = 0; i < n_words; ++i)
             _data.long_data[i] = bits;
     }
 }

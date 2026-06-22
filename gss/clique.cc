@@ -24,6 +24,7 @@ using std::is_same;
 using std::list;
 using std::make_shared;
 using std::make_tuple;
+using std::max_element;
 using std::move;
 using std::mt19937;
 using std::pair;
@@ -86,15 +87,14 @@ namespace
 
         mt19937 global_rand;
 
-        int * space;
+        std::unique_ptr<int[]> space;
 
         CliqueRunner(const InputGraph & g, const CliqueParams & p) :
             params(p),
             size(g.size()),
             adj(g.size(), SVOBitset{unsigned(size), 0}),
             order(size),
-            invorder(size),
-            space(nullptr)
+            invorder(size)
         {
             if (p.proof_options)
                 proof = make_shared<Proof>(*p.proof_options);
@@ -115,8 +115,6 @@ namespace
                 proof->finalise_model();
             }
 
-            space = new int[size * (size + 1) * 2];
-
             if (params.restarts_schedule->might_restart())
                 watches.table.data.resize(g.size());
 
@@ -126,7 +124,16 @@ namespace
             // pre-calculate degrees
             vector<int> degrees;
             degrees.resize(size);
-            g.for_each_edge([&](int f, int, string_view) { ++degrees[f]; });
+            g.for_each_edge([&](int f, int t, string_view) { if (f != t) ++degrees[f]; });
+
+            // Workspace for the search: two int[size] arrays per recursion level. The
+            // search never recurses deeper than the largest clique, which is at most
+            // one more than the largest degree, so size the workspace to that rather
+            // than to the number of vertices (which would be quadratic in memory, and
+            // overflows an int product beyond ~32k vertices -- issue #39). size_t
+            // arithmetic keeps it correct for dense graphs where the degree is large.
+            int max_degree = degrees.empty() ? 0 : *max_element(degrees.begin(), degrees.end());
+            space = std::make_unique<int[]>(std::size_t(2) * size * (max_degree + 2));
 
             // sort on degree
             if (! params.input_order)
@@ -136,18 +143,17 @@ namespace
             for (unsigned i = 0; i < order.size(); ++i)
                 invorder[order[i]] = i;
 
-            g.for_each_edge([&](int f, int t, string_view) { adj[invorder[f]].set(invorder[t]); });
+            // Loops are irrelevant to cliques (a vertex is never its own clique
+            // neighbour). Including them would leave a vertex's own bit set in its
+            // adjacency, letting it be re-selected during search and recursing past
+            // the workspace bound — a crash on looped inputs (issue #38).
+            g.for_each_edge([&](int f, int t, string_view) { if (f != t) adj[invorder[f]].set(invorder[t]); });
 
             if (params.connected) {
                 connected_table.resize(size);
                 for (int v = 0; v < size; ++v)
                     connected_table[v] = params.connected(order.at(v), [&](int x) { return invorder.at(x); });
             }
-        }
-
-        ~CliqueRunner()
-        {
-            delete[] space;
         }
 
         auto colour_class_order(

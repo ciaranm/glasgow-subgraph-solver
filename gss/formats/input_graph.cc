@@ -53,7 +53,7 @@ struct InputGraph::Imp
 };
 
 InputGraph::InputGraph(int size, bool v, bool e) :
-    _imp(new Imp{})
+    _imp(std::make_unique<Imp>())
 {
     _imp->has_vertex_labels = v;
     _imp->has_edge_labels = e;
