@@ -627,22 +627,29 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
     // proof is byte-identical -- this only removes the derivations on an early conclusion
     // (e.g. the induced pattern-bigger-than-target case, where they were all dead).
     //
-    // Mechanism: before issue #49 the adjacency constraint left the target's self-loop term
-    // out, so it could be summed into a pol cleanly. We now keep that term (so a loop->loop
-    // mapping satisfies the model), but it then appears as a stray "q maps to the loopy
-    // target" term in every pol. For each adjacency constraint over a loopy target t, rewrite
-    // its @adj label to the loop-cancelled version -- ~x_p_t together with the neighbours of t
-    // other than t -- which follows from the constraint plus injectivity on t (mapping p to t
-    // forbids q from also mapping to t). VeriPB lets a proof line reassign an existing label,
-    // so every later @adj reference in a pol picks up the loop-cancelled form; the original
-    // loop-bearing constraint stays in the database (by number) so solutions still satisfy the
-    // model. The loop-cancelled form relies on global injectivity on t, which local injectivity
-    // does not give -- but under local injectivity the pol-summing filters that would need it
-    // are disabled anyway (issue #58), so skip the relabelling entirely.
+    // Mechanism: the OPB adjacency constraint for a loopy target t includes x_q_t
+    // (because t is a neighbour of itself), but injectivity forbids p and q from
+    // both mapping to t.  We derive the loop-cancelled form via a POL step:
+    //
+    //   1. Load @inj_t:  ~x0_t + ~x1_t + ... + ~xN_t >= N      (injectivity on t)
+    //   2. Weaken by every xk_t where k != p and k != q:
+    //      result:        ~xp_t + ~xq_t >= 1                     (pairwise injectivity)
+    //   3. Add with @adj: ~xp_t + xq_t + S >= 1                  (original adjacency)
+    //      xq_t and ~xq_t cancel, giving:  2·~xp_t + S >= 1
+    //   4. Saturate:      ~xp_t + S >= 1                          (loop-cancelled form)
+    //
+    // VeriPB lets a proof line reassign an existing label, so every later @adj
+    // reference in a pol picks up the loop-cancelled form; the original loop-bearing
+    // constraint stays in the database (by number) so solutions still satisfy the
+    // model.  The loop-cancelled form relies on global injectivity on t, which local
+    // injectivity does not give -- but under local injectivity the pol-summing
+    // filters that would need it are disabled anyway (issue #58), so skip the
+    // relabelling entirely.
     if (_proof->is_locally_injective())
         return;
 
     auto & adjacency = _proof->adjacency_proof_lines();
+    const int pattern_size = static_cast<int>(_pattern_names.size());
     for (auto & [key, label] : adjacency.labels) {
         auto & [g, p, q, t] = key;
         // a pattern self-loop edge (p == q) has its loop term pinned by at-most-one rather
@@ -654,16 +661,15 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
             continue;
         if (std::find(pit->second.begin(), pit->second.end(), t) == pit->second.end())
             continue; // t is not a neighbour of itself: no loop term to cancel
-        std::string line = label + " rup 1 ~x" + _proof->variable_name(p, t);
-        for (auto & u : pit->second)
-            if (u != t)
-                line += " 1 x" + _proof->variable_name(q, u);
-        line += " >= 1 ;";
+        // POL derivation: weaken the injectivity constraint on t down to the pairwise
+        // form (just p and q), then add with the adjacency constraint and saturate.
+        // This cancels x_q_t (from adj) with ~x_q_t (from pairwise injectivity).
+        std::string line = label + " pol " + _proof->injectivity_label(t);
+        for (int k = 0; k < pattern_size; ++k)
+            if (k != p && k != q && _proof->has_variable_mapping(k, t))
+                line += " x" + _proof->variable_name(k, t) + " w";
+        line += " " + label + " + s ;";
         _proof->emit_proof_line(line);
-        // (The original loop-bearing constraint is now redundant, but it is left in place:
-        // deleting it needs `del id <number>`, and that number does not correspond to the
-        // same constraint in CakePB's independently-numbered OPB, so the deletion breaks the
-        // verified-pipeline elaboration. The extra constraint is cheap.)
     }
 }
 

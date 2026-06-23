@@ -97,6 +97,10 @@ namespace gss::innards
         auto emit_proof_directive(const std::string & line) -> void;
         [[nodiscard]] auto current_proof_line() const -> long;
         [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
+        // True when create_cp_variable recorded a variable for (p, t).  Used by
+        // the POL loop-cancellation to skip pattern nodes whose domain was pruned
+        // before injectivity constraints were written.
+        [[nodiscard]] auto has_variable_mapping(int p, int t) const -> bool;
         [[nodiscard]] auto is_locally_injective() const -> bool;
 
         // The OPB-model analogues: emit_model_constraint writes a constraint into the model

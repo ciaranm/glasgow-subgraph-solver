@@ -666,6 +666,11 @@ auto Proof::variable_name(int p, int t) const -> const string &
     return _imp->variable_mappings.at(pair<long, long>{p, t});
 }
 
+auto Proof::has_variable_mapping(int p, int t) const -> bool
+{
+    return _imp->variable_mappings.contains(pair<long, long>{p, t});
+}
+
 auto Proof::is_locally_injective() const -> bool
 {
     return _imp->locally_injective;
