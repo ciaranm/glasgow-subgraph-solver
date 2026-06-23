@@ -350,12 +350,25 @@ auto HomomorphismSearcher::copy_nonfixed_domains_and_make_assignment(
 auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const HomomorphismDomain *
 {
     const HomomorphismDomain * result = nullptr;
-    for (auto & d : domains)
-        if (! d.fixed)
-            if ((! result) ||
-                (d.count < result->count) ||
-                (d.count == result->count && model.pattern_degree(0, d.v) > model.pattern_degree(0, result->v)))
-                result = &d;
+    const auto & prio = params.pattern_order_priority;
+
+    if (! prio.empty()) {
+        for (auto & d : domains)
+            if (! d.fixed) {
+                unsigned d_prio = d.v < prio.size() ? prio[d.v] : prio.size();
+                unsigned r_prio = result ? (result->v < prio.size() ? prio[result->v] : prio.size()) : prio.size() + 1;
+                if (d_prio < r_prio)
+                    result = &d;
+            }
+    }
+    else {
+        for (auto & d : domains)
+            if (! d.fixed)
+                if ((! result) ||
+                    (d.count < result->count) ||
+                    (d.count == result->count && model.pattern_degree(0, d.v) > model.pattern_degree(0, result->v)))
+                    result = &d;
+    }
     return result;
 }
 

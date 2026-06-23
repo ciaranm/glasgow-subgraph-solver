@@ -9,10 +9,12 @@
 #include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <vector>
 
 #include <unistd.h>
@@ -114,7 +116,8 @@ auto main(int argc, char * argv[]) -> int
             ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts))
             ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives))
             ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)")
-            ("staged-first-round-backtracks", "Staged solving: backtrack budget for the first cheap search round before supplemental graphs are built", cxxopts::value<unsigned long long>());
+            ("staged-first-round-backtracks", "Staged solving: backtrack budget for the first cheap search round before supplemental graphs are built", cxxopts::value<unsigned long long>())
+            ("pattern-order-file", "Override branching variable order with priorities from file (one 'vertex_id count' line per vertex, highest-count first)", cxxopts::value<string>());
 
         options.add_options()
             ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
@@ -237,6 +240,30 @@ auto main(int argc, char * argv[]) -> int
         params.prove_supplemental_subsumption = ! options_vars.count("no-proof-supplemental-subsumption");
         params.clique_size_constraints = options_vars.count("cliques");
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
+
+        if (options_vars.count("pattern-order-file")) {
+            string order_file = options_vars["pattern-order-file"].as<string>();
+            std::ifstream ifs(order_file);
+            if (! ifs) {
+                cerr << "Cannot open pattern order file '" << order_file << "'" << endl;
+                return EXIT_FAILURE;
+            }
+            vector<unsigned> vertex_ids;
+            string line;
+            while (getline(ifs, line)) {
+                if (line.empty()) continue;
+                std::istringstream iss(line);
+                unsigned vid;
+                if (iss >> vid)
+                    vertex_ids.push_back(vid);
+            }
+            if (! vertex_ids.empty()) {
+                unsigned max_v = *max_element(vertex_ids.begin(), vertex_ids.end());
+                params.pattern_order_priority.assign(max_v + 1, vertex_ids.size());
+                for (unsigned rank = 0; rank < vertex_ids.size(); ++rank)
+                    params.pattern_order_priority[vertex_ids[rank]] = rank;
+            }
+        }
 
         if (options_vars.count("shape")) {
             for (decltype(shapes.size()) s = 0; s != shapes.size(); ++s) {
