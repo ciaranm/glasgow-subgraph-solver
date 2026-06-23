@@ -120,6 +120,10 @@ namespace gss
 
         /// Optional proof options
         std::optional<ProofOptions> proof_options;
+
+        /// Oracle branching: priority[v] = rank (0 = branch first).
+        /// When non-empty, find_branch_domain picks the lowest-rank unfixed vertex.
+        std::vector<unsigned> pattern_order_priority;
     };
 
     struct HomomorphismResult
