@@ -642,6 +642,11 @@ auto HomomorphismModel::target_vertex_for_proof(int v) const -> NamedVertex
     return _imp->proofs->target_vertex(v);
 }
 
+auto HomomorphismModel::proofs() const -> HomomorphismProofs *
+{
+    return _imp->proofs;
+}
+
 auto HomomorphismModel::prepare() -> bool
 {
     if (is_nonshrinking(_imp->params) && (pattern_size > target_size))

@@ -96,6 +96,10 @@ namespace gss::innards
         auto emit_proof_line(const std::string & line) -> long;
         auto emit_proof_directive(const std::string & line) -> void;
         [[nodiscard]] auto current_proof_line() const -> long;
+        // The currently active proof level (0 at the root, depth+2 during search). The
+        // middle layer uses this to scratch one level above the search when materialising a
+        // supplemental derivation mid-search (wiplvl wipes every level >= its argument).
+        [[nodiscard]] auto active_level() const -> int;
         [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
         [[nodiscard]] auto is_locally_injective() const -> bool;
 
