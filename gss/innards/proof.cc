@@ -63,6 +63,12 @@ struct Proof::Imp
     bool locally_injective = false;
     map<tuple<long, long, long, long>, string> adjacency_lines;
     map<tuple<long, long, long, long>, vector<long>> adjacency_permitted;
+    // Supplemental-graph adjacency constraints, registered eagerly by the create_*_graphs
+    // builders but emitted lazily on first use. pending_supplementals maps the key
+    // (g, p, q, t) to its emit closure; pending_by_antecedent indexes those keys by
+    // antecedent (p, t) so an assignment/removal of x_p_t can materialise them all.
+    map<tuple<long, long, long, long>, function<void()>> pending_supplementals;
+    map<pair<long, long>, vector<tuple<long, long, long, long>>> pending_by_antecedent;
     map<pair<long, long>, long> eliminations;
     map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
@@ -384,6 +390,11 @@ auto Proof::incompatible_by_degrees(
     const NamedVertex & t,
     const vector<int> & n_t) -> void
 {
+    // the pol below sums the supplemental adjacency constraints for p's neighbours; emit
+    // any that are still pending before we start the (uninterruptible) pol line.
+    for (auto & n : n_p)
+        materialise_one(tuple{g, p.first, n, t.first});
+
     *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << '\n';
 
     *_imp->proof_stream << "pol";
@@ -425,6 +436,11 @@ auto Proof::incompatible_by_nds(
     const vector<int> & t_subsequence,
     const vector<int> & t_remaining) -> void
 {
+    // the pol below sums the supplemental adjacency constraints for p's neighbours; emit
+    // any that are still pending before we start the (uninterruptible) pol line.
+    for (auto & n : p_subsequence)
+        materialise_one(tuple{g, p.first, n, t.first});
+
     *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << '\n';
 
     for (auto & n : p_subsequence)
@@ -531,6 +547,8 @@ auto Proof::root_propagation_failed() -> void
 
 auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex & val) -> void
 {
+    // branching on branch_v->val forward-checks using its supplemental adjacency; emit them.
+    materialise_adjacency_for(branch_v.first, val.first);
     *_imp->proof_stream << "% [" << depth << "] guessing " << branch_v.second << "=" << val.second << '\n';
 }
 
@@ -564,6 +582,8 @@ auto Proof::out_of_guesses(const vector<pair<int, int>> &) -> void
 
 auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void
 {
+    // a forced var->val also forward-checks using its supplemental adjacency; emit them.
+    materialise_adjacency_for(var.first, val.first);
     *_imp->proof_stream << "% unit propagating " << var.second << "=" << val.second << '\n';
 }
 
@@ -658,7 +678,58 @@ auto Proof::new_incumbent(const vector<tuple<NamedVertex, NamedVertex, bool>> & 
     _imp->objective_line = ++_imp->proof_line;
 }
 
+auto Proof::materialise_one(const tuple<long, long, long, long> & key) -> bool
+{
+    auto it = _imp->pending_supplementals.find(key);
+    if (it == _imp->pending_supplementals.end())
+        return false;
+    auto emit = move(it->second);
+    _imp->pending_supplementals.erase(it);
+    emit();
+    return true;
+}
+
+auto Proof::has_pending_supplementals() const -> bool
+{
+    return ! _imp->pending_supplementals.empty();
+}
+
+auto Proof::materialise_adjacency_for(int p, int t) -> void
+{
+    auto it = _imp->pending_by_antecedent.find(pair<long, long>{p, t});
+    if (it == _imp->pending_by_antecedent.end())
+        return;
+    auto keys = move(it->second);
+    _imp->pending_by_antecedent.erase(it);
+    // each emit leaves the proof at level 0 (where the @label persists); restore the
+    // search's active level once for the whole batch rather than once per supplemental.
+    bool emitted_any = false;
+    for (auto & key : keys)
+        emitted_any = materialise_one(key) || emitted_any;
+    if (emitted_any && _imp->active_level != 0)
+        *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
+}
+
 auto Proof::create_exact_path_graphs(
+    int g,
+    const NamedVertex & p,
+    const NamedVertex & q,
+    const vector<NamedVertex> & between_p_and_q,
+    const NamedVertex & t,
+    const vector<NamedVertex> & n_t,
+    const vector<pair<NamedVertex, vector<NamedVertex>>> & two_away_from_t,
+    const vector<NamedVertex> & d_n_t) -> void
+{
+    auto key = tuple{g, p.first, q.first, t.first};
+    if (_imp->pending_supplementals.contains(key) || _imp->adjacency_lines.contains(key))
+        return;
+    _imp->pending_supplementals.emplace(key, [=, this]() {
+        emit_exact_path_graphs(g, p, q, between_p_and_q, t, n_t, two_away_from_t, d_n_t);
+    });
+    _imp->pending_by_antecedent[pair{p.first, t.first}].push_back(key);
+}
+
+auto Proof::emit_exact_path_graphs(
     int g,
     const NamedVertex & p,
     const NamedVertex & q,
@@ -684,7 +755,10 @@ auto Proof::create_exact_path_graphs(
 
     *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in G^[" << g << "x2] so " << q.second << " maps to one of...\n";
 
-    *_imp->proof_stream << "setlvl 1;\n";
+    // scratch one level above the search: wiplvl wipes every level >= its argument, so a
+    // hardcoded level 1 would wipe the whole search trail when materialising mid-search.
+    auto scratch = _imp->active_level + 1;
+    *_imp->proof_stream << "setlvl " << scratch << ";\n";
     *_imp->proof_stream << "pol";
 
     // if p maps to t then things in between_p_and_q have to go to one of these...
@@ -792,7 +866,9 @@ auto Proof::create_exact_path_graphs(
     ++_imp->proof_line;
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
     _imp->cached_proof_lines.emplace(tidied_up.str(), adj_label);
-    *_imp->proof_stream << "wiplvl 1;\n";
+    *_imp->proof_stream << "wiplvl " << scratch << ";\n";
+    // the @label landed at level 0 so it persists; the caller (materialise_adjacency_for)
+    // restores the search's active level once for the whole batch.
 }
 
 auto Proof::hack_in_shape_graph(
@@ -802,7 +878,25 @@ auto Proof::hack_in_shape_graph(
     const NamedVertex & t,
     const vector<NamedVertex> & n_t) -> void
 {
+    auto key = tuple{g, p.first, q.first, t.first};
+    if (_imp->pending_supplementals.contains(key) || _imp->adjacency_lines.contains(key))
+        return;
+    _imp->pending_supplementals.emplace(key, [=, this]() {
+        emit_hack_in_shape_graph(g, p, q, t, n_t);
+    });
+    _imp->pending_by_antecedent[pair{p.first, t.first}].push_back(key);
+}
+
+auto Proof::emit_hack_in_shape_graph(
+    int g,
+    const NamedVertex & p,
+    const NamedVertex & q,
+    const NamedVertex & t,
+    const vector<NamedVertex> & n_t) -> void
+{
     *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in shape graph " << g << " so " << q.second << " maps to one of...\n";
+    // the @label must persist for the rest of the proof, so emit it at the top level
+    *_imp->proof_stream << "setlvl 0;\n";
     auto adj_label = "@g" + to_string(g) + "adj" + p.second + "_" + t.second + "_" + q.second;
     *_imp->proof_stream << adj_label << " a 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : n_t)
@@ -811,6 +905,7 @@ auto Proof::hack_in_shape_graph(
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    // (@label is at level 0; materialise_adjacency_for restores the search level for the batch.)
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_1(
@@ -820,8 +915,26 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     const NamedVertex & t,
     const vector<NamedVertex> & d3_from_t) -> void
 {
+    auto key = tuple{g, p.first, q.first, t.first};
+    if (_imp->pending_supplementals.contains(key) || _imp->adjacency_lines.contains(key))
+        return;
+    _imp->pending_supplementals.emplace(key, [=, this]() {
+        emit_distance3_graphs_but_actually_distance_1(g, p, q, t, d3_from_t);
+    });
+    _imp->pending_by_antecedent[pair{p.first, t.first}].push_back(key);
+}
+
+auto Proof::emit_distance3_graphs_but_actually_distance_1(
+    int g,
+    const NamedVertex & p,
+    const NamedVertex & q,
+    const NamedVertex & t,
+    const vector<NamedVertex> & d3_from_t) -> void
+{
     *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in G^3 so by adjacency, " << q.second << " maps to one of...\n";
 
+    // the @label must persist for the rest of the proof, so emit it at the top level
+    *_imp->proof_stream << "setlvl 0;\n";
     auto adj_label = "@d3adj" + p.second + "_" + t.second + "_" + q.second;
     *_imp->proof_stream << adj_label << " ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
     for (auto & u : d3_from_t)
@@ -830,6 +943,7 @@ auto Proof::create_distance3_graphs_but_actually_distance_1(
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    // (@label is at level 0; materialise_adjacency_for restores the search level for the batch.)
 }
 
 auto Proof::create_distance3_graphs_but_actually_distance_2(
@@ -842,9 +956,30 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     const vector<NamedVertex> & d2_from_t,
     const vector<NamedVertex> & d3_from_t) -> void
 {
+    auto key = tuple{g, p.first, q.first, t.first};
+    if (_imp->pending_supplementals.contains(key) || _imp->adjacency_lines.contains(key))
+        return;
+    _imp->pending_supplementals.emplace(key, [=, this]() {
+        emit_distance3_graphs_but_actually_distance_2(g, p, q, path_from_p_to_q, t, d1_from_t, d2_from_t, d3_from_t);
+    });
+    _imp->pending_by_antecedent[pair{p.first, t.first}].push_back(key);
+}
+
+auto Proof::emit_distance3_graphs_but_actually_distance_2(
+    int g,
+    const NamedVertex & p,
+    const NamedVertex & q,
+    const NamedVertex & path_from_p_to_q,
+    const NamedVertex & t,
+    const vector<NamedVertex> & d1_from_t,
+    const vector<NamedVertex> & d2_from_t,
+    const vector<NamedVertex> & d3_from_t) -> void
+{
     *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in G^3 so using vertex " << path_from_p_to_q.second << ", " << q.second << " maps to one of...\n";
 
-    *_imp->proof_stream << "setlvl 1;\n";
+    // scratch one level above the search (see emit_exact_path_graphs).
+    auto scratch = _imp->active_level + 1;
+    *_imp->proof_stream << "setlvl " << scratch << ";\n";
 
     *_imp->proof_stream << "pol";
 
@@ -874,6 +1009,9 @@ auto Proof::create_distance3_graphs_but_actually_distance_2(
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    // self-clean the scratch (lazy ordering means we can't rely on the next supplemental's
+    // wiplvl to do it); the @label is at level 0 and the caller restores the search level.
+    *_imp->proof_stream << "wiplvl " << scratch << ";\n";
 }
 
 auto Proof::create_distance3_graphs(
@@ -887,9 +1025,31 @@ auto Proof::create_distance3_graphs(
     const vector<NamedVertex> & d2_from_t,
     const vector<NamedVertex> & d3_from_t) -> void
 {
+    auto key = tuple{g, p.first, q.first, t.first};
+    if (_imp->pending_supplementals.contains(key) || _imp->adjacency_lines.contains(key))
+        return;
+    _imp->pending_supplementals.emplace(key, [=, this]() {
+        emit_distance3_graphs(g, p, q, path_from_p_to_q_1, path_from_p_to_q_2, t, d1_from_t, d2_from_t, d3_from_t);
+    });
+    _imp->pending_by_antecedent[pair{p.first, t.first}].push_back(key);
+}
+
+auto Proof::emit_distance3_graphs(
+    int g,
+    const NamedVertex & p,
+    const NamedVertex & q,
+    const NamedVertex & path_from_p_to_q_1,
+    const NamedVertex & path_from_p_to_q_2,
+    const NamedVertex & t,
+    const vector<NamedVertex> & d1_from_t,
+    const vector<NamedVertex> & d2_from_t,
+    const vector<NamedVertex> & d3_from_t) -> void
+{
     *_imp->proof_stream << "% adjacency " << p.second << " maps to " << t.second << " in G^3 so using path " << path_from_p_to_q_1.second << " -- " << path_from_p_to_q_2.second << ", " << q.second << " maps to one of...\n";
 
-    *_imp->proof_stream << "setlvl 1;\n";
+    // scratch one level above the search (see emit_exact_path_graphs).
+    auto scratch = _imp->active_level + 1;
+    *_imp->proof_stream << "setlvl " << scratch << ";\n";
 
     *_imp->proof_stream << "pol";
 
@@ -925,6 +1085,8 @@ auto Proof::create_distance3_graphs(
     ++_imp->proof_line;
 
     _imp->adjacency_lines.emplace(tuple{g, p.first, q.first, t.first}, adj_label);
+    // self-clean the scratch (see distance_2 above); caller restores the search level.
+    *_imp->proof_stream << "wiplvl " << scratch << ";\n";
 }
 
 auto Proof::create_binary_variable(int vertex,

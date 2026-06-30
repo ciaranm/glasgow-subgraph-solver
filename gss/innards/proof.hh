@@ -39,6 +39,29 @@ namespace gss::innards
 
         auto need_elimination(int p, int t) -> void;
 
+        // Supplemental-graph adjacency constraints are emitted lazily: the create_*_graphs
+        // builders register a pending derivation, and materialise_* runs it on first use
+        // (the proof needs a supplemental for (p, t) only when x_p_t's value is decided by
+        // adjacency during search, or for a root degree/NDS read). See proof.cc.
+        auto materialise_one(const std::tuple<long, long, long, long> & key) -> bool;
+        auto emit_exact_path_graphs(int g, const NamedVertex & p, const NamedVertex & q,
+            const std::vector<NamedVertex> & between_p_and_q, const NamedVertex & t,
+            const std::vector<NamedVertex> & n_t,
+            const std::vector<std::pair<NamedVertex, std::vector<NamedVertex>>> & two_away_from_t,
+            const std::vector<NamedVertex> & d_n_t) -> void;
+        auto emit_distance3_graphs_but_actually_distance_1(int g, const NamedVertex & p,
+            const NamedVertex & q, const NamedVertex & t, const std::vector<NamedVertex> & d3_from_t) -> void;
+        auto emit_distance3_graphs_but_actually_distance_2(int g, const NamedVertex & p,
+            const NamedVertex & q, const NamedVertex & path_from_p_to_q, const NamedVertex & t,
+            const std::vector<NamedVertex> & d1_from_t, const std::vector<NamedVertex> & d2_from_t,
+            const std::vector<NamedVertex> & d3_from_t) -> void;
+        auto emit_distance3_graphs(int g, const NamedVertex & p, const NamedVertex & q,
+            const NamedVertex & path_from_p_to_q_1, const NamedVertex & path_from_p_to_q_2,
+            const NamedVertex & t, const std::vector<NamedVertex> & d1_from_t,
+            const std::vector<NamedVertex> & d2_from_t, const std::vector<NamedVertex> & d3_from_t) -> void;
+        auto emit_hack_in_shape_graph(int g, const NamedVertex & p, const NamedVertex & q,
+            const NamedVertex & t, const std::vector<NamedVertex> & n_t) -> void;
+
     public:
         explicit Proof(const ProofOptions &);
         Proof(Proof &&);
@@ -165,6 +188,15 @@ namespace gss::innards
             const NamedVertex & q,
             const NamedVertex & t,
             const std::vector<NamedVertex> & n_t) -> void;
+
+        // Materialise every pending supplemental-graph adjacency constraint whose
+        // antecedent is (p, t). Called when p->t is assigned, and when forward-checking
+        // removes value t from dom(p) (so the elimination's branch-consequence is logged).
+        auto materialise_adjacency_for(int p, int t) -> void;
+
+        // whether any supplemental is still pending; lets the searcher skip its
+        // forward-check removal bookkeeping once everything has been materialised.
+        [[nodiscard]] auto has_pending_supplementals() const -> bool;
 
         // new constraints
         auto emit_hall_set_or_violator(const std::vector<NamedVertex> & lhs, const std::vector<NamedVertex> & rhs) -> void;

@@ -75,6 +75,26 @@ supplemental-graph and distance-3 pols sum *that* in its place. The induced enco
 forbids a non-loopy pattern vertex from mapping to a loopy target (the `q == p` case of induced
 non-edge preservation), which the model previously left out.
 
+### Lazy emission of supplemental adjacency constraints
+
+The supplemental-graph adjacency constraints (exact-path / distance-2, distance-3 and `--k4` shape
+graphs) are *derived* in the proof, not part of the OPB. They are emitted **lazily**: the
+`create_*_graphs` builders register a pending derivation keyed by `(graph, p, q, t)`, and
+`Proof::materialise_adjacency_for` runs it only on first use. A supplemental for antecedent `(p, t)`
+is needed exactly when `x_p_t`'s value is decided *by adjacency* during search — assigned true (the
+forward-checking use; triggered from `guessing` / `unit_propagating`) or removed from `dom(p)` by
+forward-checking (the Hall-confinement use; triggered from the searcher's
+`propagate_adjacency_constraints`, which materialises the constraint for each value it removes) —
+plus the root degree/NDS reads (which materialise before their `pol`). Supplementals for `(p, t)`
+pairs that are eliminated at the root (a kept unit suffices) or only ever removed by all-different
+(justified by a Hall `pol`) are never emitted. This typically defers ~40–70% of the supplemental
+derivations with no change to the OPB or the search.
+
+The derivations use a scratch proof level for their intermediate working. Because `wiplvl N` wipes
+*every* level ≥ `N` (that is how `forget_level` discards a search subtree), and search uses levels
+`depth + 2`, a materialisation mid-search scratches at `active_level + 1` (so its `wiplvl` clears
+only the scratch), emits the persistent `@label` at level 0, and the caller restores `active_level`.
+
 The induced non-edge constraint (for non-adjacent `p`, `q`: if `p` maps to `t` then `q` maps to a
 non-neighbour of `t`) takes the *full* set of non-neighbours of `t`, including `t` itself when `t`
 has no self-loop. Under full injectivity `q` cannot share `t` with `p`, so leaving `t` out was

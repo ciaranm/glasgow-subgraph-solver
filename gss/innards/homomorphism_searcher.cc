@@ -362,6 +362,15 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 {
     const auto & graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
 
+    // Lazy supplemental proofs: every value this forward-check removes from dom(d.v) is an
+    // adjacency-based elimination whose branch-consequence the proof may later need (for a
+    // Hall confinement). Snapshot dom(d.v) so we can materialise those supplementals below.
+    // Skip the bookkeeping entirely once nothing is left to defer (or with proofs off).
+    const bool lazy_proof = proof && proof->has_pending_supplementals();
+    SVOBitset lazy_proof_before;
+    if (lazy_proof)
+        lazy_proof_before = d.values;
+
     [[maybe_unused]] conditional_t<verbose_proofs_, SVOBitset, tuple<>> before;
     if constexpr (verbose_proofs_) {
         before = d.values;
@@ -457,6 +466,17 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
                 if (got_reverse_label != want_reverse_label)
                     d.values.reset(c);
             }
+        }
+    }
+
+    if (lazy_proof) {
+        auto removed = lazy_proof_before;
+        removed.intersect_with_complement(d.values); // before & ~after = removed values
+        for (auto c = removed.find_first(); c != decltype(removed)::npos; c = removed.find_first()) {
+            removed.reset(c);
+            // pattern_vertex_for_proof / target_vertex_for_proof are the identity on the
+            // index, so (d.v, c) is already the proof-space (p, t) antecedent.
+            proof->materialise_adjacency_for(int(d.v), int(c));
         }
     }
 }
