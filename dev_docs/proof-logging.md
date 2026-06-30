@@ -108,8 +108,15 @@ whether the search completed:
 | counting / enumeration | stopped early (timeout or `--solution-limit`) | `ENUMERATION_PARTIAL <n>` |
 
 Each solution is logged with the `solx` rule at the *top* proof level, so the blocking constraint it
-introduces survives the deletions that clean up the search subtree on backtrack — this is what keeps
-the solution count sound. VeriPB checks the claimed count `<n>` against the number of `solx` rules.
+introduces survives the `wiplvl` cleanup of the search subtree on backtrack — this is what keeps the
+solution count sound. VeriPB checks the claimed count `<n>` against the number of `solx` rules.
+
+Each backtrack nogood is moved into the core (`core id`); on backtracking out of a level, the blocking
+constraints (and the now-subsumed deeper core nogoods) recorded at that level are checked-deleted
+(`del id`), re-deriving by RUP from the subsuming nogood, and the nogood itself is deleted when we
+backtrack past its own level. This matters most for counting, where the per-solution blocking
+constraints would otherwise accumulate and make the proof linear in the number of solutions; deleting
+them keeps it linear in the search *depth* instead.
 
 ## Current status and known limitations
 
@@ -120,11 +127,10 @@ the solution count sound. VeriPB checks the claimed count `<n>` against the numb
   `s VERIFIED {COMPLETE,PARTIAL} ENUMERATION OF n SOLUTIONS`. The adjacency constraint keeps the
   target self-loop term in its neighbour sum, so a loop→loop solution satisfies the model (this was
   [issue #49], now fixed).
-- **Enumeration proof size is linear in the number of solutions.** Each solution's `solx` blocking
-  constraint is kept at the top proof level for the rest of the proof. Deleting them on backtrack to
-  keep the proof linear in the search depth (by moving the subsuming backtrack nogoods into the core)
-  was tried, but `core id`-ing those nogoods triggered an upstream VeriPB bug that made later steps
-  fail to verify, so it was reverted. See [issue #59] for the tracking issue and how to re-enable it.
+- **Enumeration proof size is linear in the search depth.** Each solution's `solx` blocking
+  constraint is checked-deleted once we backtrack out of the level it was found at, by moving the
+  subsuming backtrack nogoods into the core (see above). This depends on an upstream VeriPB fix to a
+  `core id` monotonicity bug ([issue #59]); an earlier attempt was reverted while that bug was open.
 
 [issue #49]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/49
 [issue #59]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/59
