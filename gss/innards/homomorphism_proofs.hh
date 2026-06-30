@@ -6,6 +6,7 @@
 #include <gss/innards/processed_graphs_data.hh>
 #include <gss/innards/proof.hh>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -39,6 +40,23 @@ namespace gss::innards
         // Supplemental adjacency lines created transiently for a degree/NDS check, to delete
         // once it is done.
         std::vector<std::tuple<int, int, int, int>> _pending_transient_adjacencies;
+
+        // Lazy emission: the kept (post-subsumption) supplemental adjacency derivations are
+        // registered here rather than emitted up front, and materialised on first use -- a
+        // degree/NDS root read, an assignment of x_p_t, or a forward-check removal of t from
+        // dom(p). A supplemental for antecedent (p,t) is needed only when x_p_t's value is
+        // decided by adjacency during search, so a head never touched is never emitted.
+        // pending_supplementals maps the constraint key (g,p,q,t) to its emit closure;
+        // pending_by_antecedent indexes those keys by antecedent (p,t).
+        std::map<std::tuple<long, long, long, long>, std::function<void()>> _pending_supplementals;
+        std::map<std::pair<int, int>, std::vector<std::tuple<long, long, long, long>>> _pending_by_antecedent;
+
+        // Register a supplemental derivation to be emitted lazily (no-op if already pending
+        // or already emitted): key is (g,p,q,t), antecedent is (p,t).
+        auto register_supplemental(const std::tuple<long, long, long, long> & key, int p, int t,
+            std::function<void()> emit) -> void;
+        // Run the pending derivation for one key (idempotent); true iff it emitted.
+        auto materialise_one(const std::tuple<long, long, long, long> & key) -> bool;
 
         // Derive the exact-path (G^[gx2]) adjacency constraint for one head: "p maps to t
         // implies q maps to a vertex reachable from t by enough 2-walks". g is the slot the
@@ -128,6 +146,17 @@ namespace gss::innards
             int g, int p, int q, int t) -> void;
         // Delete every adjacency line ensure_supplemental_adjacency created since the last call.
         auto forget_transient_supplemental_adjacencies() -> void;
+
+        // Materialise every pending supplemental adjacency derivation whose antecedent is
+        // (p,t). The searcher calls this when p->t is assigned (branch or unit propagation)
+        // and when forward-checking removes t from dom(p). Mid-search the derivations scratch
+        // one level above the search and the @label persists at level 0; this restores the
+        // search's active level once for the batch.
+        auto materialise_adjacency_for(int p, int t) -> void;
+
+        // Whether any supplemental is still pending; lets the searcher skip its per-removal
+        // bookkeeping once everything has been materialised.
+        [[nodiscard]] auto has_pending_supplementals() const -> bool;
 
         // Prove that pattern vertex p cannot map to target tt, because p sits in a bigger
         // clique (in graph pair g) than tt does. Runs the clique solver with proof

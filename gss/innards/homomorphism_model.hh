@@ -50,6 +50,10 @@ namespace gss::innards
         auto pattern_vertex_for_proof(int v) const -> NamedVertex;
         auto target_vertex_for_proof(int v) const -> NamedVertex;
 
+        // The solver-proofs middle layer (nullptr when not proving), so the searcher can
+        // drive lazy supplemental materialisation on assignment / forward-check removal.
+        [[nodiscard]] auto proofs() const -> HomomorphismProofs *;
+
         auto prepare() -> bool;
 
         // Build the supplemental graphs (exact-path, distance-3, …) into their slots and,

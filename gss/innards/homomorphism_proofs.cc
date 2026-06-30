@@ -52,6 +52,47 @@ auto HomomorphismProofs::target_vertex(int v) const -> NamedVertex
     return pair{v, _target_names[v]};
 }
 
+auto HomomorphismProofs::register_supplemental(const std::tuple<long, long, long, long> & key, int p, int t,
+    std::function<void()> emit) -> void
+{
+    if (_pending_supplementals.contains(key) || _proof->adjacency_proof_lines().labels.contains(key))
+        return;
+    _pending_supplementals.emplace(key, move(emit));
+    _pending_by_antecedent[pair<int, int>{p, t}].push_back(key);
+}
+
+auto HomomorphismProofs::materialise_one(const std::tuple<long, long, long, long> & key) -> bool
+{
+    auto it = _pending_supplementals.find(key);
+    if (it == _pending_supplementals.end())
+        return false;
+    auto emit = move(it->second);
+    _pending_supplementals.erase(it);
+    emit();
+    return true;
+}
+
+auto HomomorphismProofs::materialise_adjacency_for(int p, int t) -> void
+{
+    auto it = _pending_by_antecedent.find(pair<int, int>{p, t});
+    if (it == _pending_by_antecedent.end())
+        return;
+    auto keys = move(it->second);
+    _pending_by_antecedent.erase(it);
+    // each emit leaves the proof at level 0 (where the @label persists); restore the
+    // search's active level once for the whole batch rather than once per supplemental.
+    bool emitted_any = false;
+    for (auto & key : keys)
+        emitted_any = materialise_one(key) || emitted_any;
+    if (emitted_any && _proof->active_level() != 0)
+        _proof->emit_proof_directive("setlvl " + std::to_string(_proof->active_level()) + ";");
+}
+
+auto HomomorphismProofs::has_pending_supplementals() const -> bool
+{
+    return ! _pending_supplementals.empty();
+}
+
 auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void
 {
     std::string adj_label = "@adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
@@ -88,7 +129,12 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
     _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
         " in G^[" + std::to_string(g) + "x2] so " + _pattern_names[q] + " maps to one of...");
 
-    _proof->emit_proof_directive("setlvl 1;");
+    // Scratch one level above the search: wiplvl wipes every level >= its argument (that is
+    // how forget_level discards a search subtree), so a hardcoded level 1 would wipe the whole
+    // search trail when materialising mid-search. The @label is emitted at level 0 below so it
+    // persists; the caller restores the search level.
+    int scratch = _proof->active_level() + 1;
+    _proof->emit_proof_directive("setlvl " + std::to_string(scratch) + ";");
 
     // if p maps to t then things in between_p_and_q have to go to one of these, and then go
     // two hops out cancelling between_p_and_q things with where q can go
@@ -191,7 +237,7 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
     _proof->emit_proof_line(adj_label + " ia " + tidied_up + " " + std::to_string(_proof->current_proof_line()) + " ;");
     adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
     _proof->cache_proof_line(tidied_up, adj_label);
-    _proof->emit_proof_directive("wiplvl 1;");
+    _proof->emit_proof_directive("wiplvl " + std::to_string(scratch) + ";");
 }
 
 auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs,
@@ -267,8 +313,11 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
                         two_away_from_t.emplace_back(int(w), n_t_w_idx);
                     }
 
-                    emit_exact_path_graph(int(slot), int(p), int(q), between_p_and_q,
-                        int(t), n_t, two_away_from_t, d_n_t);
+                    int slot_i = int(slot), p_i = int(p), q_i = int(q), t_i = int(t);
+                    register_supplemental(std::tuple<long, long, long, long>{slot_i, p_i, q_i, t_i}, p_i, t_i,
+                        [this, slot_i, p_i, q_i, t_i, between_p_and_q, n_t, two_away_from_t, d_n_t]() {
+                            emit_exact_path_graph(slot_i, p_i, q_i, between_p_and_q, t_i, n_t, two_away_from_t, d_n_t);
+                        });
                 }
             }
         }
@@ -284,6 +333,9 @@ auto HomomorphismProofs::emit_distance3_graph_distance_1(int g, int p, int q, in
     _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
         " in G^3 so by adjacency, " + _pattern_names[q] + " maps to one of...");
 
+    // single-line derivation: emit the @label at the top level so it persists across search
+    // backtracking (the caller restores the active level for the batch).
+    _proof->emit_proof_directive("setlvl 0;");
     std::string adj_label = "@d3adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
     std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
     for (auto & u : d3_from_t)
@@ -302,7 +354,9 @@ auto HomomorphismProofs::emit_distance3_graph_distance_2(int g, int p, int q, in
     _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
         " in G^3 so using vertex " + _pattern_names[path1] + ", " + _pattern_names[q] + " maps to one of...");
 
-    _proof->emit_proof_directive("setlvl 1;");
+    // scratch one level above the search (see emit_exact_path_graph).
+    int scratch = _proof->active_level() + 1;
+    _proof->emit_proof_directive("setlvl " + std::to_string(scratch) + ";");
 
     // if p maps to t then the first thing on the path from p to q has to go to one of, so the
     // second thing on the path from p to q has to go to one of...
@@ -329,6 +383,9 @@ auto HomomorphismProofs::emit_distance3_graph_distance_2(int g, int p, int q, in
     _proof->emit_proof_line(line);
 
     adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+    // self-clean the scratch (lazy ordering means we can't rely on a later supplemental's
+    // wiplvl); the @label is at level 0, and the caller restores the search's active level.
+    _proof->emit_proof_directive("wiplvl " + std::to_string(scratch) + ";");
 }
 
 auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, int path2, int t,
@@ -340,7 +397,9 @@ auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, in
         " in G^3 so using path " + _pattern_names[path1] + " -- " + _pattern_names[path2] + ", " +
         _pattern_names[q] + " maps to one of...");
 
-    _proof->emit_proof_directive("setlvl 1;");
+    // scratch one level above the search (see emit_exact_path_graph).
+    int scratch = _proof->active_level() + 1;
+    _proof->emit_proof_directive("setlvl " + std::to_string(scratch) + ";");
 
     // if p maps to t then the first thing on the path from p to q has to go to one of, so the
     // second thing on the path from p to q has to go to one of...
@@ -373,6 +432,9 @@ auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, in
     _proof->emit_proof_line(line);
 
     adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+    // self-clean the scratch (lazy ordering means we can't rely on a later supplemental's
+    // wiplvl); the @label is at level 0, and the caller restores the search's active level.
+    _proof->emit_proof_directive("wiplvl " + std::to_string(scratch) + ";");
 }
 
 auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot,
@@ -466,14 +528,19 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
                 d2_from_t.assign(d2_from_t_set.begin(), d2_from_t_set.end());
                 d3_from_t.assign(d3_from_t_set.begin(), d3_from_t_set.end());
 
-                if (actually_adjacent)
-                    emit_distance3_graph_distance_1(int(slot), int(p), int(q), int(t), d3_from_t);
-                else if (path_from_p_to_q_2)
-                    emit_distance3_graph(int(slot), int(p), int(q), *path_from_p_to_q_1,
-                        *path_from_p_to_q_2, int(t), d1_from_t, d2_from_t, d3_from_t);
-                else
-                    emit_distance3_graph_distance_2(int(slot), int(p), int(q), *path_from_p_to_q_1,
-                        int(t), d1_from_t, d2_from_t, d3_from_t);
+                int slot_i = int(slot), p_i = int(p), q_i = int(q), t_i = int(t);
+                bool adj = actually_adjacent;
+                int path1 = path_from_p_to_q_1.value_or(-1);
+                optional<int> path2 = path_from_p_to_q_2;
+                register_supplemental(std::tuple<long, long, long, long>{slot_i, p_i, q_i, t_i}, p_i, t_i,
+                    [this, slot_i, p_i, q_i, t_i, adj, path1, path2, d1_from_t, d2_from_t, d3_from_t]() {
+                        if (adj)
+                            emit_distance3_graph_distance_1(slot_i, p_i, q_i, t_i, d3_from_t);
+                        else if (path2)
+                            emit_distance3_graph(slot_i, p_i, q_i, path1, *path2, t_i, d1_from_t, d2_from_t, d3_from_t);
+                        else
+                            emit_distance3_graph_distance_2(slot_i, p_i, q_i, path1, t_i, d1_from_t, d2_from_t, d3_from_t);
+                    });
             }
         }
     }
@@ -483,6 +550,9 @@ auto HomomorphismProofs::emit_shape_graph(int g, int p, int q, int t, const std:
 {
     _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
         " in shape graph " + std::to_string(g) + " so " + _pattern_names[q] + " maps to one of...");
+    // single-line assertion: emit the @label at the top level so it persists across search
+    // backtracking (the caller restores the active level for the batch).
+    _proof->emit_proof_directive("setlvl 0;");
     std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
     std::string line = adj_label + " a 1 ~x" + _proof->variable_name(p, t);
     for (auto & u : n_t)
@@ -511,7 +581,11 @@ auto HomomorphismProofs::prove_extra_shape(const ProcessedGraphsData & graphs, u
                     n_t_row.reset(v);
                     n_t.push_back(int(v));
                 }
-                emit_shape_graph(int(slot), int(p), int(q), int(t), n_t);
+                int slot_i = int(slot), p_i = int(p), q_i = int(q), t_i = int(t);
+                register_supplemental(std::tuple<long, long, long, long>{slot_i, p_i, q_i, t_i}, p_i, t_i,
+                    [this, slot_i, p_i, q_i, t_i, n_t]() {
+                        emit_shape_graph(slot_i, p_i, q_i, t_i, n_t);
+                    });
             }
         }
     }
@@ -744,6 +818,9 @@ auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData
 {
     // present already (it is the kept constraint, the original graph, or elision is off): nothing to do.
     auto & adjacency = _proof->adjacency_proof_lines();
+    // with lazy emission the kept constraint for this head may still be pending; if (g,p,q,t)
+    // is itself the kept one, materialising it makes it present and we are done.
+    materialise_one(std::tuple<long, long, long, long>{g, p, q, t});
     if (adjacency.labels.contains(std::tuple<long, long, long, long>{g, p, q, t}))
         return;
 
@@ -759,6 +836,8 @@ auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData
     // narrower target set). The wider graph-g constraint follows from the narrower by a single
     // implication step, so derive it that way, citing the kept constraint by its label.
     int from_g = int(kept->second);
+    // the kept (stronger) constraint we weaken from may itself still be pending; emit it first.
+    materialise_one(std::tuple<long, long, long, long>{from_g, p, q, t});
     auto from_label = adjacency.labels.at(std::tuple<long, long, long, long>{from_g, p, q, t});
     std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
     std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);

@@ -638,6 +638,11 @@ auto Proof::current_proof_line() const -> long
     return _imp->proof_line;
 }
 
+auto Proof::active_level() const -> int
+{
+    return _imp->active_level;
+}
+
 auto Proof::variable_name(int p, int t) const -> const string &
 {
     return _imp->variable_mappings.at(pair<long, long>{p, t});

@@ -1,4 +1,5 @@
 #include <gss/innards/cheap_all_different.hh>
+#include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_searcher.hh>
 
 #include <optional>
@@ -162,8 +163,13 @@ auto HomomorphismSearcher::restarting_search(
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
-        if (proof)
+        if (proof) {
             proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
+            // branching on branch_v->*f_v forward-checks using its supplemental adjacency; emit
+            // any still-pending supplemental for this antecedent before the propagation.
+            if (auto hp = model.proofs())
+                hp->materialise_adjacency_for(int(branch_domain->v), int(*f_v));
+        }
 
         // modified in-place by appending, we can restore by shrinking
         auto assignments_size = assignments.values.size();
@@ -364,6 +370,15 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 {
     const auto & graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
 
+    // Lazy supplemental proofs: every value this forward-check removes from dom(d.v) is an
+    // adjacency-based elimination whose branch-consequence a later Hall confinement may cite,
+    // so materialise the supplemental for (d.v, removed value) below. Snapshot dom(d.v) now;
+    // skipped once nothing is left to defer (or with proofs off).
+    const bool lazy_proof = proof && model.proofs() && model.proofs()->has_pending_supplementals();
+    SVOBitset lazy_proof_before;
+    if (lazy_proof)
+        lazy_proof_before = d.values;
+
     [[maybe_unused]] conditional_t<verbose_proofs_, SVOBitset, tuple<>> before;
     if constexpr (verbose_proofs_) {
         before = d.values;
@@ -459,6 +474,17 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
                 if (got_reverse_label != want_reverse_label)
                     d.values.reset(c);
             }
+        }
+    }
+
+    if (lazy_proof) {
+        auto removed = lazy_proof_before;
+        removed.intersect_with_complement(d.values); // before & ~after = removed values
+        for (auto c = removed.find_first(); c != decltype(removed)::npos; c = removed.find_first()) {
+            removed.reset(c);
+            // pattern_vertex_for_proof / target_vertex_for_proof are the identity on the index,
+            // so (d.v, c) is already the proof-space (p, t) antecedent.
+            model.proofs()->materialise_adjacency_for(int(d.v), int(c));
         }
     }
 }
@@ -753,10 +779,14 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             branch_domain->fixed = true;
             assignments.values.push_back({*current_assignment, false, -1, -1});
 
-            if (proof)
+            if (proof) {
                 proof->unit_propagating(
                     model.pattern_vertex_for_proof(current_assignment->pattern_vertex),
                     model.target_vertex_for_proof(current_assignment->target_vertex));
+                // a forced var->val also forward-checks using its supplemental adjacency.
+                if (auto hp = model.proofs())
+                    hp->materialise_adjacency_for(int(current_assignment->pattern_vertex), int(current_assignment->target_vertex));
+            }
 
             // propagate watches
             if (might_have_watches(params)) {
