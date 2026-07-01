@@ -51,6 +51,15 @@ namespace gss::innards
         std::map<std::tuple<long, long, long, long>, std::function<void()>> _pending_supplementals;
         std::map<std::pair<int, int>, std::vector<std::tuple<long, long, long, long>>> _pending_by_antecedent;
 
+        // For each pattern->target assignment (p,t) already refuted, the proof line (or model
+        // constraint) that eliminated it. The NDS pigeonhole cites these when summing up the
+        // block of already-eliminated cells; need_elimination fills any that are still missing.
+        std::map<std::pair<int, int>, long> _eliminations;
+
+        // Ensure p->t is eliminated (as a scratch unit at the root level), for the NDS
+        // pigeonhole to cite; a no-op if it already is.
+        auto need_elimination(int p, int t) -> void;
+
         // Register a supplemental derivation to be emitted lazily (no-op if already pending
         // or already emitted): key is (g,p,q,t), antecedent is (p,t).
         auto register_supplemental(const std::tuple<long, long, long, long> & key, int p, int t,
@@ -171,6 +180,25 @@ namespace gss::innards
         // exists. Sums each lhs vertex's at-least-one-value constraint against each rhs target's
         // injectivity constraint. lhs / rhs are pattern / target vertex indices.
         auto emit_hall_set_or_violator(const std::vector<int> & lhs, const std::vector<int> & rhs) -> void;
+
+        // Refute p->t because p has a self-loop that t does not (in graph pair 0): a unit clause
+        // ~x_p_t. Idempotent -- prepare() emits these up front and domain initialisation may ask
+        // again -- so it records the elimination and no-ops on the second request.
+        auto incompatible_by_loops(int p, int t) -> void;
+
+        // Refute p->t by a degree pigeonhole in graph pair g: mapping p to t would need p's n_p
+        // neighbours to occupy distinct neighbours of t (n_t), but there are too few. Sums the
+        // graph-g adjacency constraint for each neighbour against the (local-)injectivity
+        // constraints, and records the elimination for a later NDS check to cite.
+        auto incompatible_by_degrees(int g, int p, const std::vector<int> & n_p, int t, const std::vector<int> & n_t) -> void;
+
+        // Refute p->t by a neighbourhood-degree-sequence pigeonhole in graph pair g: the failing
+        // prefix p_subsequence of p's neighbours (sorted by degree) cannot fit the corresponding
+        // targets t_subsequence, given the already-eliminated cells for t_remaining. Sums the
+        // adjacency constraints, the (local-)injectivity constraints down the square, and the
+        // eliminations to the right of and below it.
+        auto incompatible_by_nds(int g, int p, int t, const std::vector<int> & p_subsequence,
+            const std::vector<int> & t_subsequence, const std::vector<int> & t_remaining) -> void;
 
         // Prove that pattern vertex p cannot map to target tt, because p sits in a bigger
         // clique (in graph pair g) than tt does. Runs the clique solver with proof

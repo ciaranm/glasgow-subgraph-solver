@@ -66,7 +66,6 @@ struct Proof::Imp
     // see weaken_supplemental_adjacency), and permitted target sets. Grouped so the
     // derivations consuming it can migrate to the middle layer (adjacency.labels/.ids/.permitted).
     AdjacencyProofLines adjacency;
-    map<pair<long, long>, long> eliminations;
     map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
     stringstream objective_sum;
@@ -189,7 +188,6 @@ auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
     _imp->model_stream << "* forbidden assignment\n";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
     ++_imp->nb_constraints;
-    _imp->eliminations.emplace(pair{p, t}, _imp->nb_constraints);
 }
 
 auto Proof::start_adjacency_constraints_for(int p, int t) -> void
@@ -324,132 +322,6 @@ auto Proof::failure_due_to_pattern_bigger_than_target() -> void
         *_imp->proof_stream << " " << label << " +";
     *_imp->proof_stream << " ;\n";
     ++_imp->proof_line;
-}
-
-auto Proof::need_elimination(int p, int t) -> void
-{
-    if (! _imp->eliminations.contains(pair{p, t})) {
-        *_imp->proof_stream << "setlvl 0;\n";
-        *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
-        _imp->eliminations[pair{p, t}] = ++_imp->proof_line;
-        *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
-    }
-}
-
-auto Proof::incompatible_by_degrees(
-    int g,
-    const NamedVertex & p,
-    const vector<int> & n_p,
-    const NamedVertex & t,
-    const vector<int> & n_t) -> void
-{
-    *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to degrees in graph pairs " << g << '\n';
-
-    *_imp->proof_stream << "pol";
-    bool first = true;
-    for (auto & n : n_p) {
-        // due to loops or labels, it might not be possible to map n to t.first
-        if (_imp->adjacency.labels.count(tuple{g, p.first, n, t.first})) {
-            if (first) {
-                first = false;
-                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first});
-            }
-            else
-                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first}) << " +";
-        }
-    }
-
-    // if I map p to t, I have to map the neighbours of p to distinct neighbours of t.
-    // Under full injectivity that distinctness is the global injectivity on each value;
-    // under local injectivity it is the neighbourhood-injectivity of p (phi|N(p) is
-    // injective), which is exactly what the degree pigeonhole needs.
-    for (auto & n : n_t)
-        *_imp->proof_stream << " " << (_imp->locally_injective ? _imp->locally_injective_constraints[pair{p.first, n}] : _imp->injectivity_constraints[n]) << " +";
-
-    *_imp->proof_stream << " s ;\n";
-    ++_imp->proof_line;
-
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 : " << _imp->proof_line << " ;\n";
-    ++_imp->proof_line;
-    _imp->eliminations.emplace(pair{p.first, t.first}, _imp->proof_line);
-
-    *_imp->proof_stream << "del id " << _imp->proof_line - 1 << " ;\n";
-}
-
-auto Proof::incompatible_by_nds(
-    int g,
-    const NamedVertex & p,
-    const NamedVertex & t,
-    const vector<int> & p_subsequence,
-    const vector<int> & t_subsequence,
-    const vector<int> & t_remaining) -> void
-{
-    *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to nds in graph pairs " << g << '\n';
-
-    for (auto & n : p_subsequence)
-        for (auto & u : t_remaining)
-            need_elimination(n, u);
-    for (auto & n : p_subsequence)
-        need_elimination(n, t_subsequence.back());
-
-    // summing up horizontally
-    *_imp->proof_stream << "pol";
-    bool first = true;
-    for (auto & n : p_subsequence) {
-        // due to loops or labels, it might not be possible to map n to t.first
-        if (_imp->adjacency.labels.count(tuple{g, p.first, n, t.first})) {
-            if (first) {
-                first = false;
-                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first});
-            }
-            else
-                *_imp->proof_stream << " " << _imp->adjacency.labels.at(tuple{g, p.first, n, t.first}) << " +";
-        }
-    }
-
-    // injectivity in the square: each column of the square holds at most one of p's
-    // neighbours. Under full injectivity that is the global injectivity on the value;
-    // under local injectivity it is the neighbourhood-injectivity of p (at most one
-    // neighbour of p maps to t), exactly as in the degree pigeonhole above.
-    for (auto & t : t_subsequence) {
-        if (t != t_subsequence.back())
-            *_imp->proof_stream << " " << (_imp->locally_injective ? _imp->locally_injective_constraints.at(pair{p.first, t}) : _imp->injectivity_constraints.at(t)) << " +";
-    }
-
-    // block to the right of the failing square
-    for (auto & n : p_subsequence) {
-        for (auto & u : t_remaining) {
-            /* n -> t is already eliminated by degree or loop */
-            *_imp->proof_stream << " " << _imp->eliminations[pair{n, u}] << " +";
-        }
-    }
-
-    // final column
-    for (auto & n : p_subsequence) {
-        /* n -> t is already eliminated by degree or loop */
-        *_imp->proof_stream << " " << _imp->eliminations[pair{n, t_subsequence.back()}] << " +";
-    }
-
-    *_imp->proof_stream << " s ;\n";
-    ++_imp->proof_line;
-
-    *_imp->proof_stream << "ia 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 : " << _imp->proof_line << " ;\n";
-    ++_imp->proof_line;
-
-    *_imp->proof_stream << "del id " << _imp->proof_line - 1 << " ;\n";
-}
-
-auto Proof::incompatible_by_loops(
-    const NamedVertex & p,
-    const NamedVertex & t) -> void
-{
-    // may be requested both up front (so the unit is available to later derivations and
-    // search propagations) and again during domain initialisation: only emit it once.
-    if (_imp->eliminations.contains(pair{p.first, t.first}))
-        return;
-    *_imp->proof_stream << "% cannot map " << p.second << " to " << t.second << " due to loop\n";
-    *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
-    _imp->eliminations.emplace(pair{p.first, t.first}, ++_imp->proof_line);
 }
 
 auto Proof::root_propagation_failed() -> void

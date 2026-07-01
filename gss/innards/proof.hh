@@ -52,8 +52,6 @@ namespace gss::innards
         struct Imp;
         std::unique_ptr<Imp> _imp;
 
-        auto need_elimination(int p, int t) -> void;
-
     public:
         explicit Proof(const ProofOptions &);
         Proof(Proof &&);
@@ -140,26 +138,6 @@ namespace gss::innards
 
         // top of search failures
         auto failure_due_to_pattern_bigger_than_target() -> void;
-
-        // domain initialisation
-        auto incompatible_by_degrees(
-            int g,
-            const NamedVertex & p,
-            const std::vector<int> & n_p,
-            const NamedVertex & t,
-            const std::vector<int> & n_t) -> void;
-
-        auto incompatible_by_nds(
-            int g,
-            const NamedVertex & p,
-            const NamedVertex & t,
-            const std::vector<int> & p_subsequence,
-            const std::vector<int> & t_subsequence,
-            const std::vector<int> & t_remaining) -> void;
-
-        auto incompatible_by_loops(
-            const NamedVertex & p,
-            const NamedVertex & t) -> void;
 
         // The shared adjacency-line proof state, so the derivations that build and consume it
         // can move into the solver-proofs middle layer while it still lives here.

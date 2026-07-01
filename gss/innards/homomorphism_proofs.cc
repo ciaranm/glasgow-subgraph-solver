@@ -125,6 +125,122 @@ auto HomomorphismProofs::emit_hall_set_or_violator(const std::vector<int> & lhs,
     _proof->emit_proof_line(pol);
 }
 
+auto HomomorphismProofs::need_elimination(int p, int t) -> void
+{
+    if (! _eliminations.contains(std::pair{p, t})) {
+        _proof->emit_proof_directive("setlvl 0;");
+        _eliminations[std::pair{p, t}] = _proof->emit_proof_line("rup 1 ~x" + _proof->variable_name(p, t) + " >= 1 ;");
+        _proof->emit_proof_directive("setlvl " + std::to_string(_proof->active_level()) + ";");
+    }
+}
+
+auto HomomorphismProofs::incompatible_by_loops(int p, int t) -> void
+{
+    // may be requested both up front (so the unit is available to later derivations and
+    // search propagations) and again during domain initialisation: only emit it once.
+    if (_eliminations.contains(std::pair{p, t}))
+        return;
+    _proof->emit_proof_directive("% cannot map " + _pattern_names[p] + " to " + _target_names[t] + " due to loop");
+    _eliminations.emplace(std::pair{p, t}, _proof->emit_proof_line("rup 1 ~x" + _proof->variable_name(p, t) + " >= 1 ;"));
+}
+
+auto HomomorphismProofs::incompatible_by_degrees(int g, int p, const std::vector<int> & n_p, int t, const std::vector<int> & n_t) -> void
+{
+    auto & adjacency = _proof->adjacency_proof_lines();
+    _proof->emit_proof_directive("% cannot map " + _pattern_names[p] + " to " + _target_names[t] +
+        " due to degrees in graph pairs " + std::to_string(g));
+
+    std::string pol = "pol";
+    bool first = true;
+    for (auto & n : n_p) {
+        // due to loops or labels, it might not be possible to map n to t
+        if (adjacency.labels.count(std::tuple<long, long, long, long>{g, p, n, t})) {
+            if (first) {
+                first = false;
+                pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{g, p, n, t});
+            }
+            else
+                pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{g, p, n, t}) + " +";
+        }
+    }
+
+    // if I map p to t, I have to map the neighbours of p to distinct neighbours of t.
+    // Under full injectivity that distinctness is the global injectivity on each value;
+    // under local injectivity it is the neighbourhood-injectivity of p (phi|N(p) is
+    // injective), which is exactly what the degree pigeonhole needs.
+    for (auto & n : n_t)
+        pol += " " + (_proof->is_locally_injective() ? _proof->locally_injective_label(p, n) : _proof->injectivity_label(n)) + " +";
+
+    pol += " s ;";
+    auto sum_line = _proof->emit_proof_line(pol);
+
+    _proof->emit_proof_line("ia 1 ~x" + _proof->variable_name(p, t) + " >= 1 : " + std::to_string(sum_line) + " ;");
+    auto ia_line = _proof->current_proof_line();
+    _eliminations.emplace(std::pair{p, t}, ia_line);
+
+    _proof->emit_proof_directive("del id " + std::to_string(ia_line - 1) + " ;");
+}
+
+auto HomomorphismProofs::incompatible_by_nds(int g, int p, int t, const std::vector<int> & p_subsequence,
+    const std::vector<int> & t_subsequence, const std::vector<int> & t_remaining) -> void
+{
+    auto & adjacency = _proof->adjacency_proof_lines();
+    _proof->emit_proof_directive("% cannot map " + _pattern_names[p] + " to " + _target_names[t] +
+        " due to nds in graph pairs " + std::to_string(g));
+
+    for (auto & n : p_subsequence)
+        for (auto & u : t_remaining)
+            need_elimination(n, u);
+    for (auto & n : p_subsequence)
+        need_elimination(n, t_subsequence.back());
+
+    // summing up horizontally
+    std::string pol = "pol";
+    bool first = true;
+    for (auto & n : p_subsequence) {
+        // due to loops or labels, it might not be possible to map n to t
+        if (adjacency.labels.count(std::tuple<long, long, long, long>{g, p, n, t})) {
+            if (first) {
+                first = false;
+                pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{g, p, n, t});
+            }
+            else
+                pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{g, p, n, t}) + " +";
+        }
+    }
+
+    // injectivity in the square: each column of the square holds at most one of p's
+    // neighbours. Under full injectivity that is the global injectivity on the value;
+    // under local injectivity it is the neighbourhood-injectivity of p (at most one
+    // neighbour of p maps to t), exactly as in the degree pigeonhole above.
+    for (auto & tsub : t_subsequence) {
+        if (tsub != t_subsequence.back())
+            pol += " " + (_proof->is_locally_injective() ? _proof->locally_injective_label(p, tsub) : _proof->injectivity_label(tsub)) + " +";
+    }
+
+    // block to the right of the failing square
+    for (auto & n : p_subsequence) {
+        for (auto & u : t_remaining) {
+            /* n -> u is already eliminated by degree or loop */
+            pol += " " + std::to_string(_eliminations[std::pair{n, u}]) + " +";
+        }
+    }
+
+    // final column
+    for (auto & n : p_subsequence) {
+        /* n -> t_subsequence.back() is already eliminated by degree or loop */
+        pol += " " + std::to_string(_eliminations[std::pair{n, t_subsequence.back()}]) + " +";
+    }
+
+    pol += " s ;";
+    auto sum_line = _proof->emit_proof_line(pol);
+
+    _proof->emit_proof_line("ia 1 ~x" + _proof->variable_name(p, t) + " >= 1 : " + std::to_string(sum_line) + " ;");
+    auto ia_line = _proof->current_proof_line();
+
+    _proof->emit_proof_directive("del id " + std::to_string(ia_line - 1) + " ;");
+}
+
 auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void
 {
     std::string adj_label = "@adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];

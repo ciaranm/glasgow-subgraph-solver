@@ -315,7 +315,7 @@ auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
 {
     if (pattern_has_loop(p) && ! target_has_loop(t)) {
         if (_imp->proof)
-            _imp->proof->incompatible_by_loops(pattern_vertex_for_proof(p), target_vertex_for_proof(t));
+            _imp->proofs->incompatible_by_loops(p, t);
         return false;
     }
     else if (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t)))
@@ -365,8 +365,7 @@ auto HomomorphismModel::_check_degree_compatibility(
                     for (int n : n_p)
                         _imp->proofs->ensure_supplemental_adjacency(_imp->graphs, max_graphs, g, p, n, t);
 
-                _imp->proof->incompatible_by_degrees(g, pattern_vertex_for_proof(p), n_p,
-                    target_vertex_for_proof(t), n_t);
+                _imp->proofs->incompatible_by_degrees(g, p, n_p, t, n_t);
 
                 if (_imp->params.prove_supplemental_subsumption)
                     _imp->proofs->forget_transient_supplemental_adjacencies();
@@ -432,8 +431,7 @@ auto HomomorphismModel::_check_degree_compatibility(
                         for (int n : p_subsequence)
                             _imp->proofs->ensure_supplemental_adjacency(_imp->graphs, max_graphs, g, p, n, t);
 
-                    _imp->proof->incompatible_by_nds(g, pattern_vertex_for_proof(p),
-                        target_vertex_for_proof(t), p_subsequence, t_subsequence, t_remaining);
+                    _imp->proofs->incompatible_by_nds(g, p, t, p_subsequence, t_subsequence, t_remaining);
 
                     if (_imp->params.prove_supplemental_subsumption)
                         _imp->proofs->forget_transient_supplemental_adjacencies();
@@ -665,7 +663,7 @@ auto HomomorphismModel::prepare() -> bool
             for (unsigned t = 0; t < target_size; ++t)
                 if ((pattern_has_loop(p) && ! target_has_loop(t)) ||
                     (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t))))
-                    _imp->proof->incompatible_by_loops(pattern_vertex_for_proof(p), target_vertex_for_proof(t));
+                    _imp->proofs->incompatible_by_loops(p, t);
     }
 
     // pattern and target degrees, for the main graph
@@ -706,9 +704,7 @@ auto HomomorphismModel::prepare() -> bool
                                 n_t.push_back(j);
                             }
 
-                            _imp->proof->incompatible_by_degrees(0,
-                                pattern_vertex_for_proof(p_gds.at(p).first), n_p,
-                                target_vertex_for_proof(t_gds.at(t).first), n_t);
+                            _imp->proofs->incompatible_by_degrees(0, p_gds.at(p).first, n_p, t_gds.at(t).first, n_t);
                         }
                     }
 
