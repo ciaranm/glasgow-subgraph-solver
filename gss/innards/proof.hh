@@ -110,12 +110,13 @@ namespace gss::innards
 
         // Read accessors for the model constraint labels the homomorphism derivations cite:
         // the injectivity constraint on target t, its local-injectivity analogue on (pattern
-        // p, target t), and the at-most-one-value constraint on pattern vertex p. Plus the
-        // generic dedup cache (keyed by a constraint's text) the supplemental derivations use
-        // to reuse an identical line's label instead of re-deriving it.
+        // p, target t), and the at-most-one / at-least-one-value constraints on pattern vertex
+        // p. Plus the generic dedup cache (keyed by a constraint's text) the supplemental
+        // derivations use to reuse an identical line's label instead of re-deriving it.
         [[nodiscard]] auto injectivity_label(int t) const -> const std::string &;
         [[nodiscard]] auto locally_injective_label(int p, int t) const -> const std::string &;
         [[nodiscard]] auto at_most_one_value_label(int p) const -> const std::string &;
+        [[nodiscard]] auto at_least_one_value_label(int p) const -> const std::string &;
         [[nodiscard]] auto cached_proof_line(const std::string & key) const -> std::optional<std::string>;
         auto cache_proof_line(const std::string & key, const std::string & label) -> void;
 
@@ -163,9 +164,6 @@ namespace gss::innards
         // The shared adjacency-line proof state, so the derivations that build and consume it
         // can move into the solver-proofs middle layer while it still lives here.
         [[nodiscard]] auto adjacency_proof_lines() -> AdjacencyProofLines &;
-
-        // new constraints
-        auto emit_hall_set_or_violator(const std::vector<NamedVertex> & lhs, const std::vector<NamedVertex> & rhs) -> void;
 
         // branch logging
         auto root_propagation_failed() -> void;

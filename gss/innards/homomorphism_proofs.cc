@@ -98,6 +98,33 @@ auto HomomorphismProofs::initial_domain_is_empty(int p, const std::string & wher
     _proof->emit_proof_directive("% failure due to domain " + std::to_string(p) + " being empty at " + where);
 }
 
+auto HomomorphismProofs::emit_hall_set_or_violator(const std::vector<int> & lhs, const std::vector<int> & rhs) -> void
+{
+    std::string comment = "% hall set or violator {";
+    for (auto & l : lhs)
+        comment += " " + _pattern_names[l];
+    comment += " } / {";
+    for (auto & r : rhs)
+        comment += " " + _target_names[r];
+    comment += " }";
+    _proof->emit_proof_directive(comment);
+
+    std::string pol = "pol";
+    bool first = true;
+    for (auto & l : lhs) {
+        if (first) {
+            first = false;
+            pol += " " + _proof->at_least_one_value_label(l);
+        }
+        else
+            pol += " " + _proof->at_least_one_value_label(l) + " +";
+    }
+    for (auto & r : rhs)
+        pol += " " + _proof->injectivity_label(r) + " +";
+    pol += " ;";
+    _proof->emit_proof_line(pol);
+}
+
 auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void
 {
     std::string adj_label = "@adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];

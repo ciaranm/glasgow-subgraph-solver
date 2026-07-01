@@ -166,6 +166,12 @@ namespace gss::innards
         // unsatisfiability is carried by the constraints already emitted).
         auto initial_domain_is_empty(int p, const std::string & where) -> void;
 
+        // Emit a Hall set / violator refutation: the pattern vertices in lhs collectively have
+        // fewer target values (rhs) available than there are of them, so no injective mapping
+        // exists. Sums each lhs vertex's at-least-one-value constraint against each rhs target's
+        // injectivity constraint. lhs / rhs are pattern / target vertex indices.
+        auto emit_hall_set_or_violator(const std::vector<int> & lhs, const std::vector<int> & rhs) -> void;
+
         // Prove that pattern vertex p cannot map to target tt, because p sits in a bigger
         // clique (in graph pair g) than tt does. Runs the clique solver with proof
         // extension over tt's neighbourhood to certify the bound.

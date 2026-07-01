@@ -452,32 +452,6 @@ auto Proof::incompatible_by_loops(
     _imp->eliminations.emplace(pair{p.first, t.first}, ++_imp->proof_line);
 }
 
-auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vector<NamedVertex> & rhs) -> void
-{
-    *_imp->proof_stream << "% hall set or violator {";
-    for (auto & l : lhs)
-        *_imp->proof_stream << " " << l.second;
-    *_imp->proof_stream << " } / {";
-    for (auto & r : rhs)
-        *_imp->proof_stream << " " << r.second;
-    *_imp->proof_stream << " }\n";
-
-    *_imp->proof_stream << "pol";
-    bool first = true;
-    for (auto & l : lhs) {
-        if (first) {
-            first = false;
-            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints.at(l.first);
-        }
-        else
-            *_imp->proof_stream << " " << _imp->at_least_one_value_constraints.at(l.first) << " +";
-    }
-    for (auto & r : rhs)
-        *_imp->proof_stream << " " << _imp->injectivity_constraints.at(r.first) << " +";
-    *_imp->proof_stream << " ;\n";
-    ++_imp->proof_line;
-}
-
 auto Proof::root_propagation_failed() -> void
 {
     *_imp->proof_stream << "% root node propagation failed\n";
@@ -672,6 +646,11 @@ auto Proof::locally_injective_label(int p, int t) const -> const string &
 auto Proof::at_most_one_value_label(int p) const -> const string &
 {
     return _imp->at_most_one_value_constraints.at(p);
+}
+
+auto Proof::at_least_one_value_label(int p) const -> const string &
+{
+    return _imp->at_least_one_value_constraints.at(p);
 }
 
 auto Proof::cached_proof_line(const string & key) const -> optional<string>
