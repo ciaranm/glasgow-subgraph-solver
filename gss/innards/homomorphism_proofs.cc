@@ -55,7 +55,7 @@ auto HomomorphismProofs::target_vertex(int v) const -> NamedVertex
 auto HomomorphismProofs::register_supplemental(const std::tuple<long, long, long, long> & key, int p, int t,
     std::function<void()> emit) -> void
 {
-    if (_pending_supplementals.contains(key) || _proof->adjacency_proof_lines().labels.contains(key))
+    if (_pending_supplementals.contains(key) || _adjacency.labels.contains(key))
         return;
     _pending_supplementals.emplace(key, move(emit));
     _pending_by_antecedent[pair<int, int>{p, t}].push_back(key);
@@ -146,7 +146,7 @@ auto HomomorphismProofs::incompatible_by_loops(int p, int t) -> void
 
 auto HomomorphismProofs::incompatible_by_degrees(int g, int p, const std::vector<int> & n_p, int t, const std::vector<int> & n_t) -> void
 {
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     _proof->emit_proof_directive("% cannot map " + _pattern_names[p] + " to " + _target_names[t] +
         " due to degrees in graph pairs " + std::to_string(g));
 
@@ -184,7 +184,7 @@ auto HomomorphismProofs::incompatible_by_degrees(int g, int p, const std::vector
 auto HomomorphismProofs::incompatible_by_nds(int g, int p, int t, const std::vector<int> & p_subsequence,
     const std::vector<int> & t_subsequence, const std::vector<int> & t_remaining) -> void
 {
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     _proof->emit_proof_directive("% cannot map " + _pattern_names[p] + " to " + _target_names[t] +
         " due to nds in graph pairs " + std::to_string(g));
 
@@ -250,7 +250,7 @@ auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const st
     line += " >= 1 ;";
     _proof->emit_model_constraint(line);
 
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     adjacency.labels.emplace(std::tuple<long, long, long, long>{0, p, q, t}, adj_label);
     adjacency.permitted.emplace(std::tuple<long, long, long, long>{0, p, q, t},
         std::vector<long>(permitted.begin(), permitted.end()));
@@ -260,7 +260,7 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
     int t, const std::vector<int> & n_t, const std::vector<std::pair<int, std::vector<int>>> & two_away_from_t,
     const std::vector<int> & d_n_t) -> void
 {
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
 
     // tidy up to get what we wanted. do this first so we can check for duplicates
     std::string tidied_up = "1 ~x" + _proof->variable_name(p, t);
@@ -477,7 +477,7 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
 auto HomomorphismProofs::emit_distance3_graph_distance_1(int g, int p, int q, int t,
     const std::vector<int> & d3_from_t) -> void
 {
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
         " in G^3 so by adjacency, " + _pattern_names[q] + " maps to one of...");
 
@@ -498,7 +498,7 @@ auto HomomorphismProofs::emit_distance3_graph_distance_2(int g, int p, int q, in
     const std::vector<int> & d1_from_t, const std::vector<int> & d2_from_t,
     const std::vector<int> & d3_from_t) -> void
 {
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
         " in G^3 so using vertex " + _pattern_names[path1] + ", " + _pattern_names[q] + " maps to one of...");
 
@@ -540,7 +540,7 @@ auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, in
     const std::vector<int> & d1_from_t, const std::vector<int> & d2_from_t,
     const std::vector<int> & d3_from_t) -> void
 {
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     _proof->emit_proof_directive("% adjacency " + _pattern_names[p] + " maps to " + _target_names[t] +
         " in G^3 so using path " + _pattern_names[path1] + " -- " + _pattern_names[path2] + ", " +
         _pattern_names[q] + " maps to one of...");
@@ -708,7 +708,7 @@ auto HomomorphismProofs::emit_shape_graph(int g, int p, int q, int t, const std:
     line += " >= 1 ;";
     _proof->emit_proof_line(line);
 
-    _proof->adjacency_proof_lines().labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
+    _adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
 }
 
 auto HomomorphismProofs::prove_extra_shape(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot) -> void
@@ -858,7 +858,7 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
     if (_proof->is_locally_injective())
         return;
 
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     for (auto & [key, label] : adjacency.labels) {
         auto & [g, p, q, t] = key;
         // a pattern self-loop edge (p == q) has its loop term pinned by at-most-one rather
@@ -965,7 +965,7 @@ auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData
     int g, int p, int q, int t) -> void
 {
     // present already (it is the kept constraint, the original graph, or elision is off): nothing to do.
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     // with lazy emission the kept constraint for this head may still be pending; if (g,p,q,t)
     // is itself the kept one, materialising it makes it present and we are done.
     materialise_one(std::tuple<long, long, long, long>{g, p, q, t});
@@ -1004,7 +1004,7 @@ auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData
 
 auto HomomorphismProofs::forget_transient_supplemental_adjacencies() -> void
 {
-    auto & adjacency = _proof->adjacency_proof_lines();
+    auto & adjacency = _adjacency;
     for (auto & [g, p, q, t] : _pending_transient_adjacencies) {
         std::tuple<long, long, long, long> key{g, p, q, t};
         _proof->emit_proof_directive("del id " + std::to_string(adjacency.ids.at(key)) + " ;");

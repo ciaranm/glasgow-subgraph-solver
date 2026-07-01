@@ -17,6 +17,18 @@
 
 namespace gss::innards
 {
+    // The homomorphism adjacency-line proof state: for each (graph g, pattern p, pattern q,
+    // target t) the adjacency constraint's label, its numeric line id (for deleting a
+    // transiently-derived one), and its permitted target set (needed to cancel a self-loop
+    // term). Keyed entirely by index, not name. Owned by the middle layer -- every derivation
+    // that reads or writes it lives here now (the generic Proof no longer touches it).
+    struct AdjacencyProofLines
+    {
+        std::map<std::tuple<long, long, long, long>, std::string> labels;
+        std::map<std::tuple<long, long, long, long>, long> ids;
+        std::map<std::tuple<long, long, long, long>, std::vector<long>> permitted;
+    };
+
     // The "solver-proofs" middle layer for the homomorphism solver. It owns the mapping
     // from internal vertex indices to their proof names, and the homomorphism-specific
     // proof derivations, reading the ProcessedGraphsData directly rather than having the
@@ -32,6 +44,11 @@ namespace gss::innards
     private:
         std::shared_ptr<Proof> _proof;
         std::vector<std::string> _pattern_names, _target_names;
+
+        // The adjacency-line cache, written and read by this layer's model emission and
+        // supplemental / degree / NDS derivations. Formerly held by Proof and reached through
+        // Proof::adjacency_proof_lines(); now owned here directly.
+        AdjacencyProofLines _adjacency;
 
         // For each pattern edge (p,q) whose supplemental adjacency constraint was emitted
         // under subsumption elision, the slot whose (strongest) constraint we kept. Used to

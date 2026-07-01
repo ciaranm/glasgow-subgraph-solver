@@ -61,11 +61,6 @@ struct Proof::Imp
     map<long, string> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
     map<pair<long, long>, string> locally_injective_constraints;
     bool locally_injective = false;
-    // The adjacency-line proof state: labels, the numeric proof-line ids of supplemental
-    // adjacency lines (so transient ones re-derived for a degree/NDS check can be deleted,
-    // see weaken_supplemental_adjacency), and permitted target sets. Grouped so the
-    // derivations consuming it can migrate to the middle layer (adjacency.labels/.ids/.permitted).
-    AdjacencyProofLines adjacency;
     map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
     stringstream objective_sum;
@@ -206,8 +201,6 @@ auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex
         _imp->model_stream << " 1 x" << _imp->variable_mappings[pair{q.first, u}];
     _imp->model_stream << " >= 1 ;\n";
     ++_imp->nb_constraints;
-    _imp->adjacency.labels.emplace(tuple{0, p.first, q.first, t.first}, adj_label);
-    _imp->adjacency.permitted.emplace(tuple{0, p.first, q.first, t.first}, vector<long>(uu.begin(), uu.end()));
 }
 
 auto Proof::emit_preserved_assignment_variables() -> void
@@ -456,11 +449,6 @@ auto Proof::new_incumbent(const vector<tuple<NamedVertex, NamedVertex, bool>> & 
         *_imp->proof_stream << " " << (t ? "" : "~") << "x" << _imp->variable_mappings[pair{var.first, val.first}];
     *_imp->proof_stream << ";\n";
     _imp->objective_line = ++_imp->proof_line;
-}
-
-auto Proof::adjacency_proof_lines() -> AdjacencyProofLines &
-{
-    return _imp->adjacency;
 }
 
 auto Proof::emit_proof_line(const string & line) -> long
