@@ -93,6 +93,11 @@ auto HomomorphismProofs::has_pending_supplementals() const -> bool
     return ! _pending_supplementals.empty();
 }
 
+auto HomomorphismProofs::initial_domain_is_empty(int p, const std::string & where) -> void
+{
+    _proof->emit_proof_directive("% failure due to domain " + std::to_string(p) + " being empty at " + where);
+}
+
 auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void
 {
     std::string adj_label = "@adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];

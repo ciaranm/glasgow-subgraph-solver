@@ -158,6 +158,14 @@ namespace gss::innards
         // bookkeeping once everything has been materialised.
         [[nodiscard]] auto has_pending_supplementals() const -> bool;
 
+        // Filter-stage conclusions, logged as the domain-initialisation filters fire. These
+        // used to be called on the generic Proof directly; routing them through here keeps the
+        // homomorphism-specific naming and proof text in the middle layer.
+        //
+        // Log that pattern vertex p's domain became empty at the named stage (a comment; the
+        // unsatisfiability is carried by the constraints already emitted).
+        auto initial_domain_is_empty(int p, const std::string & where) -> void;
+
         // Prove that pattern vertex p cannot map to target tt, because p sits in a bigger
         // clique (in graph pair g) than tt does. Runs the clique solver with proof
         // extension over tt's neighbourhood to certify the bound.

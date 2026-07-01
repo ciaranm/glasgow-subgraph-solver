@@ -501,7 +501,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
         domains.at(i).count = domains.at(i).values.count();
         if (0 == domains.at(i).count) {
             if (_imp->proof)
-                _imp->proof->initial_domain_is_empty(domains.at(i).v, "compatibility stage");
+                _imp->proofs->initial_domain_is_empty(domains.at(i).v, "compatibility stage");
             return false;
         }
     }
@@ -515,7 +515,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
                     domains.at(i).values.reset(j);
                     if (0 == --domains.at(i).count) {
                         if (_imp->proof)
-                            _imp->proof->initial_domain_is_empty(domains.at(i).v, "nds stage");
+                            _imp->proofs->initial_domain_is_empty(domains.at(i).v, "nds stage");
                         return false;
                     }
                 }
@@ -549,7 +549,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
     for (auto & d : domains) {
         d.count = d.values.count();
         if (0 == d.count && _imp->proof) {
-            _imp->proof->initial_domain_is_empty(d.v, "post-initialisation stage");
+            _imp->proofs->initial_domain_is_empty(d.v, "post-initialisation stage");
             return false;
         }
     }
@@ -597,7 +597,7 @@ auto HomomorphismModel::tighten_domains_with_supplementals(vector<HomomorphismDo
                 domains.at(i).values.reset(j);
                 if (0 == --domains.at(i).count) {
                     if (_imp->proof)
-                        _imp->proof->initial_domain_is_empty(domains.at(i).v, "supplemental degree stage");
+                        _imp->proofs->initial_domain_is_empty(domains.at(i).v, "supplemental degree stage");
                     return false;
                 }
             }
@@ -613,7 +613,7 @@ auto HomomorphismModel::tighten_domains_with_supplementals(vector<HomomorphismDo
                     domains.at(i).values.reset(j);
                     if (0 == --domains.at(i).count) {
                         if (_imp->proof)
-                            _imp->proof->initial_domain_is_empty(domains.at(i).v, "supplemental nds stage");
+                            _imp->proofs->initial_domain_is_empty(domains.at(i).v, "supplemental nds stage");
                         return false;
                     }
                 }
@@ -624,7 +624,7 @@ auto HomomorphismModel::tighten_domains_with_supplementals(vector<HomomorphismDo
     for (auto & d : domains) {
         d.count = d.values.count();
         if (0 == d.count && _imp->proof) {
-            _imp->proof->initial_domain_is_empty(d.v, "post-supplemental stage");
+            _imp->proofs->initial_domain_is_empty(d.v, "post-supplemental stage");
             return false;
         }
     }

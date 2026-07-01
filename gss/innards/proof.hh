@@ -160,8 +160,6 @@ namespace gss::innards
             const NamedVertex & p,
             const NamedVertex & t) -> void;
 
-        auto initial_domain_is_empty(int p, const std::string & where) -> void;
-
         // The shared adjacency-line proof state, so the derivations that build and consume it
         // can move into the solver-proofs middle layer while it still lives here.
         [[nodiscard]] auto adjacency_proof_lines() -> AdjacencyProofLines &;

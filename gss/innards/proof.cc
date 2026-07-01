@@ -452,11 +452,6 @@ auto Proof::incompatible_by_loops(
     _imp->eliminations.emplace(pair{p.first, t.first}, ++_imp->proof_line);
 }
 
-auto Proof::initial_domain_is_empty(int p, const string & where) -> void
-{
-    *_imp->proof_stream << "% failure due to domain " << p << " being empty at " << where << '\n';
-}
-
 auto Proof::emit_hall_set_or_violator(const vector<NamedVertex> & lhs, const vector<NamedVertex> & rhs) -> void
 {
     *_imp->proof_stream << "% hall set or violator {";
