@@ -136,9 +136,11 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
     int scratch = _proof->active_level() + 1;
     _proof->emit_proof_directive("setlvl " + std::to_string(scratch) + ";");
 
+    std::string pathg_prefix = "@pathg" + std::to_string(g) + "_" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+
     // if p maps to t then things in between_p_and_q have to go to one of these, and then go
     // two hops out cancelling between_p_and_q things with where q can go
-    std::string pol = "pol";
+    std::string pol = pathg_prefix + "_s1 pol";
     bool first = true;
     for (auto & b : between_p_and_q) {
         pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, b, t});
@@ -158,7 +160,7 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
     // adjacency constraints summed above are the loop-cancelled forms, so plain implication
     // addition closes it.
     {
-        std::string line = "ia 1 ~x" + _proof->variable_name(p, t);
+        std::string line = pathg_prefix + "_ia1 ia 1 ~x" + _proof->variable_name(p, t);
         for (auto & u : two_away_from_t)
             line += " 1 x" + _proof->variable_name(q, u.first);
         line += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
@@ -173,12 +175,12 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
         const std::string & inj = _proof->is_locally_injective()
             ? _proof->locally_injective_label(between_p_and_q.front(), t)
             : _proof->injectivity_label(t);
-        _proof->emit_proof_line("pol " + std::to_string(_proof->current_proof_line()) + " " + inj + " + s ;");
+        _proof->emit_proof_line(pathg_prefix + "_s2 pol " + std::to_string(_proof->current_proof_line()) + " " + inj + " + s ;");
     }
 
     // and cancel out stray extras from injectivity
     {
-        std::string line = "ia 1 ~x" + _proof->variable_name(p, t);
+        std::string line = pathg_prefix + "_ia2 ia 1 ~x" + _proof->variable_name(p, t);
         for (auto & u : two_away_from_t)
             if (u.first != t)
                 line += " 1 x" + _proof->variable_name(q, u.first);
@@ -194,7 +196,7 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
         if ((u.first == t) || (std::find(d_n_t.begin(), d_n_t.end(), u.first) != d_n_t.end()))
             continue;
 
-        std::string pol2 = "pol";
+        std::string pol2 = pathg_prefix + "_eu" + _target_names[u.first] + "_s pol";
         bool first2 = true;
         for (auto & b : between_p_and_q) {
             pol2 += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, b, t});
@@ -213,14 +215,14 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
         _proof->emit_proof_line(pol2);
 
         // want: ~x_p_t + ~x_q_u >= 1
-        std::string line = "ia 1 ~x" + _proof->variable_name(p, t) + " 1 ~x" + _proof->variable_name(q, u.first) +
+        std::string line = pathg_prefix + "_eu" + _target_names[u.first] + "_ia ia 1 ~x" + _proof->variable_name(p, t) + " 1 ~x" + _proof->variable_name(q, u.first) +
             " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
         things_to_add_up.push_back(_proof->emit_proof_line(line));
     }
 
     // do the getting rid of
     if (things_to_add_up.size() > 1) {
-        std::string pol3 = "pol";
+        std::string pol3 = pathg_prefix + "_sfin pol";
         bool first3 = true;
         for (auto & line_id : things_to_add_up) {
             pol3 += " " + std::to_string(line_id);
@@ -335,8 +337,10 @@ auto HomomorphismProofs::emit_distance3_graph_distance_1(int g, int p, int q, in
 
     // single-line derivation: emit the @label at the top level so it persists across search
     // backtracking (the caller restores the active level for the batch).
+    // single-line derivation: emit the @label at the top level so it persists across search
+    // backtracking (the caller restores the active level for the batch).
     _proof->emit_proof_directive("setlvl 0;");
-    std::string adj_label = "@d3adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
     std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
     for (auto & u : d3_from_t)
         line += " 1 x" + _proof->variable_name(q, u);
@@ -358,16 +362,18 @@ auto HomomorphismProofs::emit_distance3_graph_distance_2(int g, int p, int q, in
     int scratch = _proof->active_level() + 1;
     _proof->emit_proof_directive("setlvl " + std::to_string(scratch) + ";");
 
+    std::string d2g_prefix = "@d2g" + std::to_string(g) + "_" + _pattern_names[p] + "_" + _pattern_names[q] + "_" + _target_names[t];
+
     // if p maps to t then the first thing on the path from p to q has to go to one of, so the
     // second thing on the path from p to q has to go to one of...
-    std::string pol = "pol " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, path1, t});
+    std::string pol = d2g_prefix + "_s1 pol " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, path1, t});
     for (auto & u : d1_from_t)
         pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, path1, q, u}) + " +";
     pol += " ;";
     _proof->emit_proof_line(pol);
 
     // tidy up
-    std::string ia = "ia 1 ~x" + _proof->variable_name(p, t);
+    std::string ia = d2g_prefix + "_ia1 ia 1 ~x" + _proof->variable_name(p, t);
     for (auto & u : d2_from_t)
         ia += " 1 x" + _proof->variable_name(q, u);
     ia += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
@@ -375,7 +381,7 @@ auto HomomorphismProofs::emit_distance3_graph_distance_2(int g, int p, int q, in
 
     _proof->emit_proof_directive("setlvl 0;");
 
-    std::string adj_label = "@d3adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
     std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
     for (auto & u : d3_from_t)
         line += " 1 x" + _proof->variable_name(q, u);
@@ -401,22 +407,24 @@ auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, in
     int scratch = _proof->active_level() + 1;
     _proof->emit_proof_directive("setlvl " + std::to_string(scratch) + ";");
 
+    std::string d3g_prefix = "@d3g" + std::to_string(g) + "_" + _pattern_names[p] + "_" + _pattern_names[q] + "_" + _target_names[t];
+
     // if p maps to t then the first thing on the path from p to q has to go to one of, so the
     // second thing on the path from p to q has to go to one of...
-    std::string pol = "pol " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, path1, t});
+    std::string pol = d3g_prefix + "_s1 pol " + adjacency.labels.at(std::tuple<long, long, long, long>{0, p, path1, t});
     for (auto & u : d1_from_t)
         pol += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, path1, path2, u}) + " +";
     pol += " ;";
     _proof->emit_proof_line(pol);
 
     // tidy up
-    std::string ia = "ia 1 ~x" + _proof->variable_name(p, t);
+    std::string ia = d3g_prefix + "_ia1 ia 1 ~x" + _proof->variable_name(p, t);
     for (auto & u : d2_from_t)
         ia += " 1 x" + _proof->variable_name(path2, u);
     ia += " >= 1 : " + std::to_string(_proof->current_proof_line()) + " ;";
     _proof->emit_proof_line(ia);
 
-    std::string pol2 = "pol " + std::to_string(_proof->current_proof_line());
+    std::string pol2 = d3g_prefix + "_s2 pol " + std::to_string(_proof->current_proof_line());
     for (auto & u : d2_from_t)
         pol2 += " " + adjacency.labels.at(std::tuple<long, long, long, long>{0, path2, q, u}) + " s +";
     pol2 += " ;";
@@ -424,7 +432,7 @@ auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, in
 
     _proof->emit_proof_directive("setlvl 0;");
 
-    std::string adj_label = "@d3adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
+    std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
     std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
     for (auto & u : d3_from_t)
         line += " 1 x" + _proof->variable_name(q, u);
