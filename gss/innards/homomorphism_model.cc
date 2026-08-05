@@ -7,6 +7,7 @@
 #include <gss/innards/processed_graphs_data.hh>
 #include <gss/innards/supplemental_graphs.hh>
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <list>
@@ -94,6 +95,17 @@ namespace
         return n;
     }
 
+    // Do slots g1 and g2 hold the same graph? An early-exit word compare, so a differing pair
+    // costs a row or two; the full cost when they match is size * ceil(size/64) words, three
+    // orders of magnitude below the O(size * degree^2) build that just produced them.
+    auto graph_rows_identical(const vector<SVOBitset> & rows, unsigned size, unsigned max_graphs,
+        unsigned g1, unsigned g2) -> bool
+    {
+        for (unsigned v = 0; v < size; ++v)
+            if (rows[v * max_graphs + g1] != rows[v * max_graphs + g2])
+                return false;
+        return true;
+    }
 }
 
 struct HomomorphismModel::Imp
@@ -115,6 +127,10 @@ struct HomomorphismModel::Imp
     // sizes are computed lazily during the const domain-compatibility checks.
     mutable CliqueSizeData clique_data;
 
+    // The slots the filtering loops iterate: every slot until build_supplemental_graphs
+    // narrows it to the ones that are not subsumed by an earlier slot (see active_graphs()).
+    vector<unsigned> active_graphs;
+
     Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr) :
         params(p),
         proof(r),
@@ -134,6 +150,9 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     _imp->graphs.patterns_degrees.resize(max_graphs);
     _imp->graphs.targets_degrees.resize(max_graphs);
+
+    for (unsigned g = 0; g < max_graphs; ++g)
+        _imp->active_graphs.push_back(g);
 
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
@@ -341,7 +360,11 @@ auto HomomorphismModel::_check_degree_compatibility(
     if (! degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops))
         return true;
 
-    for (unsigned g = 0; g < graphs_to_consider; ++g) {
+    // active_graphs is ascending, so the graphs_to_consider prefix ends the loop
+    for (unsigned g : _imp->active_graphs) {
+        if (g >= graphs_to_consider)
+            break;
+
         if (target_degree(g, t) < pattern_degree(g, p)) {
             // not ok, degrees differ
             if (_imp->proof) {
@@ -383,7 +406,10 @@ auto HomomorphismModel::_check_degree_compatibility(
 
     // full compare of neighbourhood degree sequences
     if (! targets_ndss.at(0).at(t)) {
-        for (unsigned g = 0; g < graphs_to_consider; ++g) {
+        for (unsigned g : _imp->active_graphs) {
+            if (g >= graphs_to_consider)
+                break;
+
             targets_ndss.at(g).at(t) = vector<int>{};
             auto ni = target_graph_row(g, t);
             for (auto j = ni.find_first(); j != decltype(ni)::npos; j = ni.find_first()) {
@@ -394,7 +420,10 @@ auto HomomorphismModel::_check_degree_compatibility(
         }
     }
 
-    for (unsigned g = 0; g < graphs_to_consider; ++g) {
+    for (unsigned g : _imp->active_graphs) {
+        if (g >= graphs_to_consider)
+            break;
+
         for (unsigned x = 0; x < patterns_ndss.at(g).at(p).size(); ++x) {
             if (targets_ndss.at(g).at(t)->at(x) < patterns_ndss.at(g).at(p).at(x)) {
                 if (_imp->proof) {
@@ -466,7 +495,11 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
             targets_ndss.at(g).resize(target_size);
         }
 
-        for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
+        // only the slots _check_degree_compatibility will actually read (see active_graphs())
+        for (unsigned g : _imp->active_graphs) {
+            if (g >= max_graphs_for_degree_things)
+                break;
+
             for (unsigned i = 0; i < pattern_size; ++i) {
                 auto ni = pattern_graph_row(g, i);
                 for (auto j = ni.find_first(); j != decltype(ni)::npos; j = ni.find_first()) {
@@ -575,7 +608,11 @@ auto HomomorphismModel::tighten_domains_with_supplementals(vector<HomomorphismDo
             targets_ndss.at(g).resize(target_size);
         }
 
-        for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
+        // only the slots _check_degree_compatibility will actually read (see active_graphs())
+        for (unsigned g : _imp->active_graphs) {
+            if (g >= max_graphs_for_degree_things)
+                break;
+
             for (unsigned i = 0; i < pattern_size; ++i) {
                 auto ni = pattern_graph_row(g, i);
                 for (auto j = ni.find_first(); j != decltype(ni)::npos; j = ni.find_first()) {
@@ -772,6 +809,11 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
     // derivation skips these, since its (wider) constraint is subsumed by the exact-path one.
     std::set<std::pair<int, int>> exact_path_covered;
 
+    // Each exact-path run, as (first slot, slot count). Exact-path is the one family whose
+    // slots nest -- index g+1 needs g+1 two-paths where g needs g, on both the pattern and the
+    // target side -- which is what makes the subsumed-slot test below sound.
+    vector<pair<unsigned, unsigned>> exact_path_runs;
+
     // Build every supplemental graph the plan registers, in plan order, each into the
     // next free slot(s), then (when proving) derive it through the solver-proofs layer.
     // The plan also fixes max_graphs, so the bump counters land exactly on max_graphs at
@@ -781,9 +823,14 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
         case ShapeGraphSpec::Kind::ExactPath:
             build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);
             build_exact_path_graphs(_imp->graphs, target_size, next_target_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, false);
+            // exact-path graph g (1..number_of_exact_path_graphs) was built into slot
+            // base + g - 1
+            {
+                unsigned base = next_pattern_supplemental - _imp->params.number_of_exact_path_graphs;
+                exact_path_runs.emplace_back(base, unsigned(_imp->params.number_of_exact_path_graphs));
+            }
             if (_imp->proof) {
-                // exact-path graph g (1..number_of_exact_path_graphs) was built into slot
-                // base + g - 1; pair each index with its slot for the derivation.
+                // pair each index with its slot for the derivation
                 unsigned base = next_pattern_supplemental - _imp->params.number_of_exact_path_graphs;
                 vector<pair<int, unsigned>> exact_path_index_and_slot;
                 for (int g = 1; g <= _imp->params.number_of_exact_path_graphs; ++g)
@@ -827,6 +874,35 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
         throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) + " "
         + to_string(_imp->graphs.supplemental_graph_names.size())};
 
+    // Subsumed-slot elimination. Within an exact-path run, slot g is redundant when its
+    // target graph is identical to slot g-1's: the runs nest, so P_g is a subset of P_{g-1}
+    // while T_g == T_{g-1}, and then every filtering slot g could do is dominated by slot g-1
+    // -- the searcher's adjacency intersection (the same target row, ANDed in already),
+    // the degree bound (deg_T(g,t) == deg_T(g-1,t) < deg_P(g,p) <= deg_P(g-1,p)), and the NDS
+    // bound (same target sequence, elementwise-smaller pattern sequence). Since the loops run
+    // in slot order, slot g-1 also fires *first*, so slot g's checks were already dead code:
+    // dropping it changes no pruning and no proof line, only the work done to rediscover them.
+    // It is a common degeneracy -- on a target that is a disjoint union of cliques all four
+    // exact-path graphs are the "same part" relation, so three of the four slots are pure waste.
+    //
+    // Under exact degree matching (induced isomorphism) the nesting is not enough: an equality
+    // test can fail on the smaller pattern side while passing on the larger. There the pattern
+    // sides have to match too.
+    {
+        const bool exact_degrees = degree_and_nds_are_exact(_imp->params, pattern_size, target_size);
+        vector<bool> subsumed(max_graphs, false);
+        for (auto & [base, count] : exact_path_runs)
+            for (unsigned g = base + 1; g < base + count; ++g)
+                if (graph_rows_identical(_imp->graphs.target_graph_rows, target_size, max_graphs, g, g - 1) &&
+                    (! exact_degrees || graph_rows_identical(_imp->graphs.pattern_graph_rows, pattern_size, max_graphs, g, g - 1)))
+                    subsumed[g] = true; // and transitively so, if g-1 was itself subsumed
+
+        _imp->active_graphs.clear();
+        for (unsigned g = 0; g < max_graphs; ++g)
+            if (! subsumed[g])
+                _imp->active_graphs.push_back(g);
+    }
+
     // pattern and target degrees, for supplemental graphs
     for (unsigned g = 1; g < max_graphs; ++g) {
         _imp->graphs.patterns_degrees.at(g).resize(pattern_size);
@@ -856,6 +932,11 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
             for (unsigned j = 0; j < pattern_size; ++j)
                 if (_imp->graphs.pattern_graph_rows[i * max_graphs + g].test(j))
                     _imp->graphs.pattern_adjacencies_bits[i * pattern_size + j] |= (1u << g);
+}
+
+auto HomomorphismModel::active_graphs() const -> const vector<unsigned> &
+{
+    return _imp->active_graphs;
 }
 
 auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType
@@ -976,4 +1057,21 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
     }
 
     x.emplace_back(join("supplemental_graph_names =", _imp->graphs.supplemental_graph_names));
+
+    // the supplemental slots dropped from the filtering loops as subsumed, by name (see
+    // active_graphs()); the line is absent when every slot was distinct, the usual case
+    list<string> subsumed;
+    {
+        // names[g] is slot g's name, and names[0] is "original", so the supplemental slots
+        // start at the second entry
+        auto name = _imp->graphs.supplemental_graph_names.begin();
+        for (unsigned g = 1; g < max_graphs && name != _imp->graphs.supplemental_graph_names.end(); ++g) {
+            ++name;
+            if (name != _imp->graphs.supplemental_graph_names.end() &&
+                _imp->active_graphs.end() == std::find(_imp->active_graphs.begin(), _imp->active_graphs.end(), g))
+                subsumed.push_back(*name);
+        }
+    }
+    if (! subsumed.empty())
+        x.emplace_back(join("subsumed_supplemental_graphs =", subsumed));
 }

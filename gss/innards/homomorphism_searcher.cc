@@ -444,8 +444,12 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
         before = d.values;
     }
 
-    // and for each remaining graph pair...
-    for (unsigned g = 1; g < model.max_graphs; ++g) {
+    // and for each remaining graph pair... (skipping the slots an earlier slot already
+    // subsumes, whose intersection would be a no-op -- see HomomorphismModel::active_graphs)
+    for (unsigned g : model.active_graphs()) {
+        if (0 == g)
+            continue;
+
         // if we're adjacent...
         if (graph_pairs_to_consider & (1u << g)) {
             // ...then we can only be mapped to adjacent vertices

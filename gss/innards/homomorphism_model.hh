@@ -67,6 +67,15 @@ namespace gss::innards
         // proof. Returns false if a domain wipes out. Precondition: build_supplemental_graphs().
         auto tighten_domains_with_supplementals(std::vector<HomomorphismDomain> & domains) const -> bool;
 
+        // The graph slots worth filtering with, ascending, always starting with the original
+        // graph 0. A supplemental slot is dropped when an earlier slot in the same exact-path
+        // run already subsumes it (identical target graph, and the exact-path graphs nest on
+        // the pattern side) -- see build_supplemental_graphs. max_graphs, the bitset stride,
+        // is unaffected: the slot still exists and is still built and proved, it is just never
+        // re-tested. Meaningful only after build_supplemental_graphs; before it (Stage 1 under
+        // staging) every slot is listed, which is harmless since only graph 0 is consulted then.
+        [[nodiscard]] auto active_graphs() const -> const std::vector<unsigned> &;
+
         auto pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType;
         auto pattern_graph_row(int g, int p) const -> const SVOBitset &;
         auto target_graph_row(int g, int t) const -> const SVOBitset &;

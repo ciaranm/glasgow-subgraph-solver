@@ -196,6 +196,24 @@ namespace gss::innards
             }
         }
 
+        auto operator==(const SVOBitset & other) const -> bool
+        {
+            if (n_words != other.n_words)
+                return false;
+
+            // n_words words, not the whole short buffer the &= / |= loops run over: every bit
+            // the bitset holds lives below n_words * bits_per_word, and the words past that
+            // are padding a default-constructed bitset never initialises
+            const BitWord * a = (_is_long() ? _data.long_data : _data.short_data);
+            const BitWord * b = (other._is_long() ? other._data.long_data : other._data.short_data);
+            return std::equal(a, a + n_words, b);
+        }
+
+        auto operator!=(const SVOBitset & other) const -> bool
+        {
+            return ! (*this == other);
+        }
+
         auto count() const -> unsigned
         {
             unsigned result = 0;
