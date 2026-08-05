@@ -438,13 +438,13 @@ auto HomomorphismModel::_check_degree_compatibility(
                     auto np = pattern_graph_row(g, p);
                     for (auto w = np.find_first(); w != decltype(np)::npos; w = np.find_first()) {
                         np.reset(w);
-                        p_nds.emplace_back(w, pattern_graph_row(g, w).count());
+                        p_nds.emplace_back(w, pattern_degree(g, w));
                     }
 
                     auto nt = target_graph_row(g, t);
                     for (auto w = nt.find_first(); w != decltype(nt)::npos; w = nt.find_first()) {
                         nt.reset(w);
-                        t_nds.emplace_back(w, target_graph_row(g, w).count());
+                        t_nds.emplace_back(w, target_degree(g, w));
                     }
 
                     sort(p_nds.begin(), p_nds.end(), [](const pair<int, int> & a, const pair<int, int> & b) { return a.second > b.second; });
