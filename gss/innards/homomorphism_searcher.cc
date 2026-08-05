@@ -446,9 +446,8 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 
     // and for each remaining graph pair... (skipping the slots an earlier slot already
     // subsumes, whose intersection would be a no-op -- see HomomorphismModel::active_graphs)
-    for (unsigned g : model.active_graphs()) {
-        if (0 == g)
-            continue;
+    for (unsigned i = 0, i_end = model.n_active_supplemental_graphs; i < i_end; ++i) {
+        const unsigned g = model.active_supplemental_graphs[i];
 
         // if we're adjacent...
         if (graph_pairs_to_consider & (1u << g)) {

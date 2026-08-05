@@ -153,6 +153,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     for (unsigned g = 0; g < max_graphs; ++g)
         _imp->active_graphs.push_back(g);
+    _sync_active_supplemental_graphs();
 
     if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
         throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
@@ -901,6 +902,7 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
         for (unsigned g = 0; g < max_graphs; ++g)
             if (! subsumed[g])
                 _imp->active_graphs.push_back(g);
+        _sync_active_supplemental_graphs();
     }
 
     // pattern and target degrees, for supplemental graphs
@@ -937,6 +939,14 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
 auto HomomorphismModel::active_graphs() const -> const vector<unsigned> &
 {
     return _imp->active_graphs;
+}
+
+auto HomomorphismModel::_sync_active_supplemental_graphs() -> void
+{
+    n_active_supplemental_graphs = 0;
+    for (unsigned g : _imp->active_graphs)
+        if (g != 0)
+            active_supplemental_graphs[n_active_supplemental_graphs++] = std::uint8_t(g);
 }
 
 auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType

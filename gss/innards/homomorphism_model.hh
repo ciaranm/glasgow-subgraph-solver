@@ -7,7 +7,10 @@
 #include <gss/innards/proof.hh>
 #include <gss/innards/svo_bitset.hh>
 
+#include <array>
+#include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace gss::innards
 {
@@ -33,11 +36,25 @@ namespace gss::innards
 
         auto _check_clique_compatibility(int p, int t) const -> bool;
 
+        // Refresh the searcher's flat copy of active_graphs() (minus the original graph).
+        auto _sync_active_supplemental_graphs() -> void;
+
     public:
         using PatternAdjacencyBitsType = uint8_t;
 
         const unsigned max_graphs;
         unsigned pattern_size, target_size;
+
+        // The supplemental slots (g >= 1) the searcher still has to intersect with, and how
+        // many there are -- active_graphs() without the original graph. A plain array member
+        // rather than the vector behind it, because this is read once per
+        // propagate_adjacency_constraints call: going through active_graphs() costs an
+        // out-of-line call and two dependent loads (unique_ptr<Imp>, then the vector's heap
+        // buffer) on a search that can run 65k nodes/s, which measurably outweighs the saving
+        // on the targets where nothing is subsumed -- and those are the common case.
+        // max_graphs is capped at 8 * sizeof(PatternAdjacencyBitsType) at construction.
+        std::array<std::uint8_t, 8 * sizeof(PatternAdjacencyBitsType)> active_supplemental_graphs{};
+        unsigned n_active_supplemental_graphs = 0;
 
         auto has_less_thans() const -> bool;
         auto has_occur_less_thans() const -> bool;
