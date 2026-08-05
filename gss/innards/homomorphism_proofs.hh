@@ -63,8 +63,14 @@ namespace gss::innards
         // these at materialisation time rather than capturing a copy of them: the vectors
         // depend only on (t, slot), so capturing them by value in the per-(p,q,t) closure
         // retained them once per closure (~290 KB each on a dense target -- the lazy-mode
-        // memory blow-up). Non-owning: ProcessedGraphsData lives on the model, which outlives
-        // the search.
+        // memory blow-up).
+        //
+        // Non-owning, and the lifetime is *not* self-evident: the ProcessedGraphsData belongs
+        // to the HomomorphismModel, which solve_homomorphism_problem destroys before this
+        // object (hom_proofs is declared first, so it outlives the model rather than the other
+        // way round). What makes the pointer safe is that every materialisation happens inside
+        // the solve step, while the model is alive; nothing reads it during teardown. Do not
+        // add a use of it from a destructor or a post-solve hook.
         const ProcessedGraphsData * _exact_path_graphs = nullptr;
         unsigned _exact_path_max_graphs = 0, _exact_path_1_slot = 0;
 
@@ -73,20 +79,26 @@ namespace gss::innards
         // neighbours with t. One materialisation batch is a single (p,t) antecedent, so a
         // single-entry memo hits for every key in the batch while retaining only one target's
         // worth of data (a growing cache would reintroduce the retention we are removing).
+        //
+        // Held by shared_ptr, and handed out by shared_ptr, so that a caller keeps its data
+        // alive even if a nested materialisation replaces the memo entry underneath it.
+        // Emission triggering emission is the whole premise of lazy mode -- ensure_supplemental
+        // _adjacency already calls materialise_one from inside a proof branch -- so a bare
+        // reference into the memo would be one refactor away from silent proof corruption.
         struct ExactPathTargetData
         {
             std::vector<int> n_t;
             std::vector<std::pair<int, std::vector<int>>> two_away_from_t;
         };
         int _exact_path_target_data_for = -1;
-        ExactPathTargetData _exact_path_target_data;
+        std::shared_ptr<const ExactPathTargetData> _exact_path_target_data;
 
         // t's original-graph row in the loop-stripped form the supplemental builders saw:
         // build_supplemental_graphs strips the g=0 self-loops for the duration of the build
         // and restores them afterwards, so a derivation materialised during search has to
         // strip them again to rebuild the same vectors.
         [[nodiscard]] auto loop_stripped_target_row(int t) const -> SVOBitset;
-        [[nodiscard]] auto exact_path_target_data(int t) -> const ExactPathTargetData &;
+        [[nodiscard]] auto exact_path_target_data(int t) -> std::shared_ptr<const ExactPathTargetData>;
 
         // Rebuild the per-target vectors and run emit_exact_path_graph: the body of a pending
         // exact-path supplemental. between_p_and_q depends only on (p,q,slot) and is shared by

@@ -101,18 +101,18 @@ auto HomomorphismProofs::loop_stripped_target_row(int t) const -> SVOBitset
     return row;
 }
 
-auto HomomorphismProofs::exact_path_target_data(int t) -> const ExactPathTargetData &
+auto HomomorphismProofs::exact_path_target_data(int t) -> shared_ptr<const ExactPathTargetData>
 {
-    if (_exact_path_target_data_for == t)
+    if (_exact_path_target_data_for == t && _exact_path_target_data)
         return _exact_path_target_data;
 
-    ExactPathTargetData data;
+    auto data = std::make_shared<ExactPathTargetData>();
 
     const auto n_t_row = loop_stripped_target_row(t);
     auto walk_n_t = n_t_row;
     for (auto w = walk_n_t.find_first(); w != SVOBitset::npos; w = walk_n_t.find_first()) {
         walk_n_t.reset(w);
-        data.n_t.push_back(int(w));
+        data->n_t.push_back(int(w));
     }
 
     auto n2_t = _exact_path_graphs->target_graph_rows[t * _exact_path_max_graphs + _exact_path_1_slot];
@@ -125,18 +125,20 @@ auto HomomorphismProofs::exact_path_target_data(int t) -> const ExactPathTargetD
             n_t_w.reset(x);
             n_t_w_idx.push_back(int(x));
         }
-        data.two_away_from_t.emplace_back(int(w), move(n_t_w_idx));
+        data->two_away_from_t.emplace_back(int(w), move(n_t_w_idx));
     }
 
-    _exact_path_target_data = move(data);
+    _exact_path_target_data = data;
     _exact_path_target_data_for = t;
-    return _exact_path_target_data;
+    return data;
 }
 
 auto HomomorphismProofs::emit_exact_path_graph_lazily(int slot, int p, int q, int t,
     const shared_ptr<const vector<int>> & between_p_and_q) -> void
 {
-    const auto & data = exact_path_target_data(t);
+    // held for the duration of the emit, so a nested materialisation replacing the memo
+    // entry cannot pull it out from under us
+    const auto data = exact_path_target_data(t);
 
     // t's neighbours in exact-path graph `slot`: the only input that depends on the slot, and
     // a single row walk, so it is not worth memoising alongside the rest.
@@ -147,7 +149,7 @@ auto HomomorphismProofs::emit_exact_path_graph_lazily(int slot, int p, int q, in
         d_n_t.push_back(int(w));
     }
 
-    emit_exact_path_graph(slot, p, q, *between_p_and_q, t, data.n_t, data.two_away_from_t, d_n_t);
+    emit_exact_path_graph(slot, p, q, *between_p_and_q, t, data->n_t, data->two_away_from_t, d_n_t);
 }
 
 auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void
@@ -306,8 +308,17 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
     const unsigned pattern_size = _pattern_names.size();
     const unsigned target_size = _target_names.size();
 
-    // what a pending derivation reads back at materialisation time, instead of carrying a
-    // copy of its per-target vectors in its closure
+    // What a pending derivation reads back at materialisation time, instead of carrying a
+    // copy of its per-target vectors in its closure. Only ever set once per object today --
+    // the shape-graph plan contains at most one ExactPath entry and build_supplemental_graphs
+    // runs once -- but drop the memo anyway, so that this staying true is not a silent
+    // precondition of the memo's correctness. Unconditionally: the memo also depends on
+    // exact_path_1_slot (that is the row two_away_from_t walks), and comparing the graphs
+    // pointer would in any case not catch a fresh ProcessedGraphsData at a recycled address.
+    // This is once-per-solve setup, so there is nothing to save by being clever.
+    _exact_path_target_data.reset();
+    _exact_path_target_data_for = -1;
+
     _exact_path_graphs = &graphs;
     _exact_path_max_graphs = max_graphs;
     _exact_path_1_slot = exact_path_1_slot;

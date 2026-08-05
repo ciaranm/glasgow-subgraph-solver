@@ -146,6 +146,11 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     pattern_size(pattern.size()),
     target_size(target.size())
 {
+    // First: max_graphs is a precondition for everything below, which sizes arrays by it --
+    // active_supplemental_graphs is exactly this wide, so nothing may be written before this.
+    if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
+        throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
+
     _imp->graphs.has_loops = pattern.loopy() || target.loopy();
 
     _imp->graphs.patterns_degrees.resize(max_graphs);
@@ -154,9 +159,6 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     for (unsigned g = 0; g < max_graphs; ++g)
         _imp->active_graphs.push_back(g);
     _sync_active_supplemental_graphs();
-
-    if (max_graphs > 8 * sizeof(PatternAdjacencyBitsType))
-        throw UnsupportedConfiguration{"Supplemental graphs won't fit in the chosen bitset size"};
 
     if (pattern.directed())
         _imp->graphs.directed = true;
