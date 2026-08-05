@@ -58,6 +58,42 @@ namespace gss::innards
         // Run the pending derivation for one key (idempotent); true iff it emitted.
         auto materialise_one(const std::tuple<long, long, long, long> & key) -> bool;
 
+        // The processed graphs the exact-path derivations read, recorded by
+        // prove_exact_path_graphs. A pending derivation rebuilds its per-target vectors from
+        // these at materialisation time rather than capturing a copy of them: the vectors
+        // depend only on (t, slot), so capturing them by value in the per-(p,q,t) closure
+        // retained them once per closure (~290 KB each on a dense target -- the lazy-mode
+        // memory blow-up). Non-owning: ProcessedGraphsData lives on the model, which outlives
+        // the search.
+        const ProcessedGraphsData * _exact_path_graphs = nullptr;
+        unsigned _exact_path_max_graphs = 0, _exact_path_1_slot = 0;
+
+        // The part of an exact-path derivation's input that depends only on t: the neighbours
+        // of t in the original graph, and each vertex two hops from t paired with its common
+        // neighbours with t. One materialisation batch is a single (p,t) antecedent, so a
+        // single-entry memo hits for every key in the batch while retaining only one target's
+        // worth of data (a growing cache would reintroduce the retention we are removing).
+        struct ExactPathTargetData
+        {
+            std::vector<int> n_t;
+            std::vector<std::pair<int, std::vector<int>>> two_away_from_t;
+        };
+        int _exact_path_target_data_for = -1;
+        ExactPathTargetData _exact_path_target_data;
+
+        // t's original-graph row in the loop-stripped form the supplemental builders saw:
+        // build_supplemental_graphs strips the g=0 self-loops for the duration of the build
+        // and restores them afterwards, so a derivation materialised during search has to
+        // strip them again to rebuild the same vectors.
+        [[nodiscard]] auto loop_stripped_target_row(int t) const -> SVOBitset;
+        [[nodiscard]] auto exact_path_target_data(int t) -> const ExactPathTargetData &;
+
+        // Rebuild the per-target vectors and run emit_exact_path_graph: the body of a pending
+        // exact-path supplemental. between_p_and_q depends only on (p,q,slot) and is shared by
+        // every target's closure.
+        auto emit_exact_path_graph_lazily(int slot, int p, int q, int t,
+            const std::shared_ptr<const std::vector<int>> & between_p_and_q) -> void;
+
         // Derive the exact-path (G^[gx2]) adjacency constraint for one head: "p maps to t
         // implies q maps to a vertex reachable from t by enough 2-walks". g is the slot the
         // constraint is recorded under; between_p_and_q are the (capped) common neighbours of

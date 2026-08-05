@@ -93,6 +93,63 @@ auto HomomorphismProofs::has_pending_supplementals() const -> bool
     return ! _pending_supplementals.empty();
 }
 
+auto HomomorphismProofs::loop_stripped_target_row(int t) const -> SVOBitset
+{
+    auto row = _exact_path_graphs->target_graph_rows[t * _exact_path_max_graphs + 0];
+    if (_exact_path_graphs->target_loops[t])
+        row.reset(t);
+    return row;
+}
+
+auto HomomorphismProofs::exact_path_target_data(int t) -> const ExactPathTargetData &
+{
+    if (_exact_path_target_data_for == t)
+        return _exact_path_target_data;
+
+    ExactPathTargetData data;
+
+    const auto n_t_row = loop_stripped_target_row(t);
+    auto walk_n_t = n_t_row;
+    for (auto w = walk_n_t.find_first(); w != SVOBitset::npos; w = walk_n_t.find_first()) {
+        walk_n_t.reset(w);
+        data.n_t.push_back(int(w));
+    }
+
+    auto n2_t = _exact_path_graphs->target_graph_rows[t * _exact_path_max_graphs + _exact_path_1_slot];
+    for (auto w = n2_t.find_first(); w != SVOBitset::npos; w = n2_t.find_first()) {
+        n2_t.reset(w);
+        auto n_t_w = loop_stripped_target_row(int(w));
+        n_t_w &= n_t_row;
+        vector<int> n_t_w_idx;
+        for (auto x = n_t_w.find_first(); x != SVOBitset::npos; x = n_t_w.find_first()) {
+            n_t_w.reset(x);
+            n_t_w_idx.push_back(int(x));
+        }
+        data.two_away_from_t.emplace_back(int(w), move(n_t_w_idx));
+    }
+
+    _exact_path_target_data = move(data);
+    _exact_path_target_data_for = t;
+    return _exact_path_target_data;
+}
+
+auto HomomorphismProofs::emit_exact_path_graph_lazily(int slot, int p, int q, int t,
+    const shared_ptr<const vector<int>> & between_p_and_q) -> void
+{
+    const auto & data = exact_path_target_data(t);
+
+    // t's neighbours in exact-path graph `slot`: the only input that depends on the slot, and
+    // a single row walk, so it is not worth memoising alongside the rest.
+    vector<int> d_n_t;
+    auto nd_t = _exact_path_graphs->target_graph_rows[t * _exact_path_max_graphs + slot];
+    for (auto w = nd_t.find_first(); w != SVOBitset::npos; w = nd_t.find_first()) {
+        nd_t.reset(w);
+        d_n_t.push_back(int(w));
+    }
+
+    emit_exact_path_graph(slot, p, q, *between_p_and_q, t, data.n_t, data.two_away_from_t, d_n_t);
+}
+
 auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const std::vector<int> & permitted) -> void
 {
     std::string adj_label = "@adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
@@ -249,6 +306,12 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
     const unsigned pattern_size = _pattern_names.size();
     const unsigned target_size = _target_names.size();
 
+    // what a pending derivation reads back at materialisation time, instead of carrying a
+    // copy of its per-target vectors in its closure
+    _exact_path_graphs = &graphs;
+    _exact_path_max_graphs = max_graphs;
+    _exact_path_1_slot = exact_path_1_slot;
+
     std::set<std::pair<int, int>> covered;
 
     for (unsigned p = 0; p < pattern_size; ++p) {
@@ -277,48 +340,28 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
             }
 
             for (auto & [g, slot] : emit_for) {
+                // depends only on (p,q,g), so it is built once here and shared by every
+                // target's closure rather than copied into each of them
                 auto n_p_q = graphs.pattern_graph_rows[p * max_graphs + 0];
                 n_p_q &= graphs.pattern_graph_rows[q * max_graphs + 0];
-                vector<int> between_p_and_q;
+                auto between_p_and_q = std::make_shared<vector<int>>();
                 for (auto v = n_p_q.find_first(); v != decltype(n_p_q)::npos; v = n_p_q.find_first()) {
                     n_p_q.reset(v);
-                    between_p_and_q.push_back(int(v));
-                    if (between_p_and_q.size() >= unsigned(g))
+                    between_p_and_q->push_back(int(v));
+                    if (between_p_and_q->size() >= unsigned(g))
                         break;
                 }
 
+                // The rest of the derivation's input depends only on (t, slot), so it is
+                // rebuilt from the graphs at materialisation time (see
+                // emit_exact_path_graph_lazily): building it here would be an O(pattern^2)
+                // rebuild of the same vectors, and capturing it would retain one copy per
+                // pending closure.
                 for (unsigned t = 0; t < target_size; ++t) {
-                    vector<int> n_t, d_n_t;
-                    vector<pair<int, vector<int>>> two_away_from_t;
-                    auto n_t_row = graphs.target_graph_rows[t * max_graphs + 0];
-                    for (auto w = n_t_row.find_first(); w != decltype(n_t_row)::npos; w = n_t_row.find_first()) {
-                        n_t_row.reset(w);
-                        n_t.push_back(int(w));
-                    }
-
-                    auto nd_t = graphs.target_graph_rows[t * max_graphs + slot];
-                    for (auto w = nd_t.find_first(); w != decltype(nd_t)::npos; w = nd_t.find_first()) {
-                        nd_t.reset(w);
-                        d_n_t.push_back(int(w));
-                    }
-
-                    auto n2_t = graphs.target_graph_rows[t * max_graphs + exact_path_1_slot];
-                    for (auto w = n2_t.find_first(); w != decltype(n2_t)::npos; w = n2_t.find_first()) {
-                        n2_t.reset(w);
-                        auto n_t_w = graphs.target_graph_rows[w * max_graphs + 0];
-                        n_t_w &= graphs.target_graph_rows[t * max_graphs + 0];
-                        vector<int> n_t_w_idx;
-                        for (auto x = n_t_w.find_first(); x != decltype(n_t_w)::npos; x = n_t_w.find_first()) {
-                            n_t_w.reset(x);
-                            n_t_w_idx.push_back(int(x));
-                        }
-                        two_away_from_t.emplace_back(int(w), n_t_w_idx);
-                    }
-
                     int slot_i = int(slot), p_i = int(p), q_i = int(q), t_i = int(t);
                     register_supplemental(std::tuple<long, long, long, long>{slot_i, p_i, q_i, t_i}, p_i, t_i,
-                        [this, slot_i, p_i, q_i, t_i, between_p_and_q, n_t, two_away_from_t, d_n_t]() {
-                            emit_exact_path_graph(slot_i, p_i, q_i, between_p_and_q, t_i, n_t, two_away_from_t, d_n_t);
+                        [this, slot_i, p_i, q_i, t_i, between_p_and_q]() {
+                            emit_exact_path_graph_lazily(slot_i, p_i, q_i, t_i, between_p_and_q);
                         });
                 }
             }
