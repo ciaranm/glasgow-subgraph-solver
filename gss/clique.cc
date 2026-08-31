@@ -62,6 +62,17 @@ namespace
         }
     };
 
+    /**
+     * What proof logging needs from a filter pass, kept per search node because the
+     * bound that uses it is only logged once the node's branches are done with. Built
+     * only when we are actually writing a proof.
+     */
+    struct FilterProofRecord
+    {
+        vector<vector<int>> unconflicted_classes;
+        vector<CliqueConflict> conflicts;
+    };
+
     template <typename EntryType_>
     struct FlatWatchTable
     {
@@ -88,6 +99,14 @@ namespace
         mt19937 global_rand;
 
         std::unique_ptr<int[]> space;
+
+        // Scratch for the branching-set filter. The colour classes below the pruning
+        // threshold are held as intrusive singly linked lists, so that moving a vertex
+        // between classes is O(1) and walking a class can bail out early. Only live
+        // during a single filter pass, which finishes before the node recurses, so one
+        // copy for the whole search is enough and nothing is allocated per node.
+        vector<int> cl_next, cl_head;
+        vector<unsigned char> cl_forbidden;
 
         CliqueRunner(const InputGraph & g, const CliqueParams & p) :
             params(p),
@@ -134,6 +153,12 @@ namespace
             // arithmetic keeps it correct for dense graphs where the degree is large.
             int max_degree = degrees.empty() ? 0 : *max_element(degrees.begin(), degrees.end());
             space = std::make_unique<int[]>(std::size_t(2) * size * (max_degree + 2));
+
+            if (params.filter != CliqueFilter::None && ! params.connected) {
+                cl_next.resize(size);
+                cl_head.resize(size + 1);
+                cl_forbidden.resize(size + 1);
+            }
 
             // sort on degree
             if (! params.input_order)
@@ -369,6 +394,179 @@ namespace
             }
         }
 
+        /**
+         * Try to show that vertex v need not be branched on, given the colour classes
+         * below the pruning threshold.
+         *
+         * Both of the tests here hang off the same quantity, C_k1 & N(v), which is why
+         * they are fused: San Segundo et al's FILTER_RECOL_INFRACHROM. If v has no
+         * neighbour in some class, it simply belongs there (one-move recolouring). If it
+         * has exactly one neighbour w there, then either w can be moved out to another
+         * class and v can take its place (double-move recolouring, Tomita's Re-NUMBER),
+         * or no vertex of a third class is adjacent to both v and w -- in which case
+         * ({v}, C_k1, C_k2) admits no triangle with one vertex in each, and contributes
+         * two rather than three to the bound.
+         *
+         * The classes are walked rather than intersected as bitsets on purpose. The
+         * common case is failure, and failure exits after finding a second neighbour of
+         * v, which on a dense graph happens after a couple of tests; a bitset
+         * intersection would pay for every word every time. Prosser's observation that a
+         * vertex of colour k has a neighbour in every class below k means the first
+         * neighbour is always there to be found.
+         */
+        auto filter_one(int v, unsigned k_min, FilterProofRecord * rec) -> bool
+        {
+            for (unsigned k1 = 1; k1 < k_min; ++k1) {
+                if (cl_forbidden[k1])
+                    continue;
+
+                // how many neighbours does v have in class k1? we only care whether it
+                // is none, exactly one, or more than one, so stop counting at two
+                int w = -1, w_prev = -1, prev = -1, hits = 0;
+                for (int u = cl_head[k1]; u != -1; prev = u, u = cl_next[u])
+                    if (adj[v].test(u)) {
+                        if (++hits > 1)
+                            break;
+                        w = u;
+                        w_prev = prev;
+                    }
+
+                if (hits > 1)
+                    continue;
+
+                if (0 == hits) {
+                    // one-move recolouring: nothing in this class conflicts with v, so
+                    // v belongs in it and is bounded by k1 < k_min
+                    cl_next[v] = cl_head[k1];
+                    cl_head[k1] = v;
+                    return true;
+                }
+
+                for (unsigned k2 = 1; k2 < k_min; ++k2) {
+                    if (k2 == k1 || cl_forbidden[k2])
+                        continue;
+
+                    // one walk answers both questions: does w have a neighbour in class
+                    // k2 at all, and does it have one that is also adjacent to v?
+                    bool w_has_neighbour = false, common_neighbour = false;
+                    for (int u = cl_head[k2]; u != -1; u = cl_next[u])
+                        if (adj[w].test(u)) {
+                            w_has_neighbour = true;
+                            if (adj[v].test(u)) {
+                                common_neighbour = true;
+                                break;
+                            }
+                        }
+
+                    if (common_neighbour)
+                        continue;
+
+                    if (! w_has_neighbour) {
+                        // double-move recolouring: w is free to join class k2, which
+                        // leaves class k1 open for v
+                        if (-1 == w_prev)
+                            cl_head[k1] = cl_next[w];
+                        else
+                            cl_next[w_prev] = cl_next[w];
+                        cl_next[w] = cl_head[k2];
+                        cl_head[k2] = w;
+                        cl_next[v] = cl_head[k1];
+                        cl_head[k1] = v;
+                        return true;
+                    }
+
+                    if (CliqueFilter::InfraChromatic != params.filter)
+                        continue;
+
+                    // ({v}, C_k1, C_k2) is conflicting. Both colours are now spent:
+                    // the bound is only sound if the conflicts we collect are disjoint,
+                    // because it is really one at-most-two constraint over the union of
+                    // the three classes replacing three at-most-ones.
+                    if (rec) {
+                        CliqueConflict cf;
+                        cf.filtered_vertex = order[v];
+                        for (auto k : {k1, k2})
+                            for (int u = cl_head[k]; u != -1; u = cl_next[u]) {
+                                (k == k1 ? cf.class1 : cf.class2).push_back(order[u]);
+                                // the part of the two classes v can see is an independent
+                                // set: it is just w from k1, and nothing in k2 adjacent to
+                                // v is adjacent to w
+                                (adj[v].test(u) ? cf.independent_set : cf.non_neighbours).push_back(order[u]);
+                            }
+                        rec->conflicts.push_back(move(cf));
+                    }
+
+                    cl_forbidden[k1] = 1;
+                    cl_forbidden[k2] = 1;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /**
+         * Thin out the branching set. Vertices whose colour is below k_min are already
+         * bounded; for each of the rest, in increasing colour order, see whether
+         * filter_one can dispose of it.
+         *
+         * Once this is done, everything still in p when the bound finally fires is
+         * covered by the (possibly recoloured) classes below k_min together with one
+         * singleton per infra-chromatic conflict, and each conflict knocks one off the
+         * bound. That is why the colours a conflict uses are marked forbidden: the sum
+         * is only k_min - 1 if the conflicts are over disjoint sets of classes.
+         *
+         * Returns the lowest position filtered, or p_end if none were.
+         */
+        auto recolour_and_filter(
+            const int * p_order,
+            int * p_bounds,
+            int p_end,
+            unsigned k_min,
+            FilterProofRecord * rec) -> int
+        {
+            for (unsigned k = 1; k < k_min; ++k) {
+                cl_head[k] = -1;
+                cl_forbidden[k] = 0;
+            }
+
+            int first_branch = 0;
+            while (first_branch < p_end && unsigned(p_bounds[first_branch]) < k_min)
+                ++first_branch;
+
+            // build the class lists, in increasing position order so that the search is
+            // deterministic and matches the colouring
+            for (int i = first_branch - 1; i >= 0; --i) {
+                int v = p_order[i];
+                cl_next[v] = cl_head[p_bounds[i]];
+                cl_head[p_bounds[i]] = v;
+            }
+
+            int min_filtered = p_end;
+            for (int i = first_branch; i < p_end; ++i)
+                if (filter_one(p_order[i], k_min, rec)) {
+                    // negating the colour marks the position as not worth branching on.
+                    // The vertex deliberately stays in p: all we have shown is that we
+                    // need not branch on it here, not that no clique uses it, and a
+                    // clique through some other branching vertex may still need it.
+                    p_bounds[i] = -p_bounds[i];
+                    if (p_end == min_filtered)
+                        min_filtered = i;
+                }
+
+            // the classes as they now stand, minus the ones spent on a conflict: those
+            // reach the proof through the conflicts instead, at two apiece rather than one
+            if (rec)
+                for (unsigned k = 1; k < k_min; ++k)
+                    if (! cl_forbidden[k] && -1 != cl_head[k]) {
+                        rec->unconflicted_classes.emplace_back();
+                        for (int u = cl_head[k]; u != -1; u = cl_next[u])
+                            rec->unconflicted_classes.back().push_back(order[u]);
+                    }
+
+            return min_filtered;
+        }
+
         auto post_nogood(
             const vector<int> & c)
         {
@@ -432,14 +630,59 @@ namespace
                 }
             }
 
+            // Anything coloured below k_min is already bounded; everything at or above it
+            // is a vertex we would otherwise have to branch on. See how many of those we
+            // can dispose of without branching. Filtered positions come back with their
+            // colour negated.
+            int min_filtered_pos = p_end;
+            unsigned filter_k_min = 0;
+            std::unique_ptr<FilterProofRecord> filter_record;
+            if constexpr (! connected_) {
+                if (CliqueFilter::None != params.filter) {
+                    unsigned k_min = incumbent.value >= c.size() ? incumbent.value - c.size() + 1 : 1;
+                    if (k_min >= 2) {
+                        filter_k_min = k_min;
+                        if (proof)
+                            filter_record = std::make_unique<FilterProofRecord>();
+                        min_filtered_pos = recolour_and_filter(p_order, p_bounds, p_end, k_min, filter_record.get());
+                    }
+                }
+            }
+
             // for each v in p... (v comes later)
             for (int n = p_end - 1; n >= 0; --n) {
                 // bound, timeout or early exit?
                 if (params.timeout->should_abort())
                     return SearchResult::Aborted;
 
+                // filtered out by recolouring or an infra-chromatic conflict: do not
+                // branch on it, but leave it in p for the branches that come after
+                if (p_bounds[n] < 0)
+                    continue;
+
                 if (c.size() + p_bounds[n] <= incumbent.value) {
-                    if (proof) {
+                    if (proof && filter_record) {
+                        // The classes below the filter threshold are the recoloured ones,
+                        // and the ones spent on a conflict are left out because the
+                        // conflicts cover them. Above the threshold the colouring is
+                        // untouched, except that filtered vertices are skipped: they have
+                        // already been accounted for, either by having been recoloured
+                        // into a class below the threshold or by being a conflict's
+                        // singleton.
+                        auto colour_classes = filter_record->unconflicted_classes;
+                        int previous_colour = 0;
+                        for (int v = 0; v <= n; ++v) {
+                            if (p_bounds[v] < 0 || unsigned(p_bounds[v]) < filter_k_min)
+                                continue;
+                            if (p_bounds[v] != previous_colour) {
+                                colour_classes.emplace_back();
+                                previous_colour = p_bounds[v];
+                            }
+                            colour_classes.back().push_back(order[p_order[v]]);
+                        }
+                        proof->colour_bound(colour_classes, filter_record->conflicts);
+                    }
+                    else if (proof) {
                         vector<vector<int>> colour_classes;
                         for (int v = 0; v <= n; ++v) {
                             if (0 == v || p_bounds[v - 1] != p_bounds[v])
@@ -454,7 +697,7 @@ namespace
                 // if we've used k colours to colour k vertices, it's a clique. this isn't (I think?) a
                 // valid shortcut in the connected case.
                 if constexpr (! connected_) {
-                    if (p_bounds[n] == n + 1) {
+                    if (n < min_filtered_pos && p_bounds[n] == n + 1) {
                         auto c_save = c;
                         for (; n >= 0; --n)
                             c.push_back(p_order[n]);
@@ -554,8 +797,14 @@ namespace
                         // restore assignments before posting nogoods, it's easier
                         c.pop_back();
 
-                        // post nogoods for everything we've done so far
+                        // post nogoods for everything we've done so far. A filtered
+                        // vertex is not "done": all we know is that the classes below
+                        // k_min plus the filtered vertices cannot beat the incumbent
+                        // between them, which says nothing until the rest of the
+                        // branching set has been dealt with, and here it has not.
                         for (int m = p_end - 1; m > n; --m) {
+                            if (p_bounds[m] < 0)
+                                continue;
                             c.push_back(p_order[m]);
                             post_nogood(c);
                             c.pop_back();

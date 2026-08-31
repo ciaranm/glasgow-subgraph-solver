@@ -615,6 +615,107 @@ auto Proof::backtrack_from_binary_variables(const vector<int> & v) -> void
     }
 }
 
+auto Proof::colour_bound(const vector<vector<int>> & ccs, const vector<CliqueConflict> & conflicts) -> void
+{
+    if (conflicts.empty()) {
+        colour_bound(ccs);
+        return;
+    }
+
+    // "at most one of s", as a reverse polish subexpression. A single vertex needs no
+    // derivation at all, just the literal axiom saying its variable is at most one; a
+    // pair is exactly the non-edge constraint; anything longer is built up a vertex at a
+    // time, multiplying what we have by i and dividing by i + 1 once the i new non-edges
+    // are added. This is what do_one_cc in the plain colour bound does, factored out
+    // because a conflict needs it three times over.
+    auto at_most_one = [&](const vector<int> & s) -> string {
+        stringstream r;
+        if (1 == s.size())
+            r << "~x" << _imp->binary_variable_mappings[s[0]];
+        else {
+            r << _imp->non_edge_constraints[pair{s[0], s[1]}];
+            for (unsigned i = 2; i < s.size(); ++i) {
+                r << " " << i << " *";
+                for (unsigned j = 0; j < i; ++j)
+                    r << " " << _imp->non_edge_constraints[pair{s[i], s[j]}] << " +";
+                r << " " << (i + 1) << " d";
+            }
+        }
+        return r.str();
+    };
+
+    // "at most two of class1 u class2 u {v}", for an inconsistent triple.
+    //
+    // Taking v costs a whole unit of the bound on the two classes: the non-edges from v
+    // knock out everything in them it is not adjacent to, and what remains is an
+    // independent set precisely because no vertex of class2 is adjacent to both v and
+    // the one vertex of class1 that v can see. Adding nbar - 1 copies of the plain
+    // two-class bound only makes every coefficient nbar so that the division is legal;
+    // the right hand side lands one short of 3 * nbar, and the rounding does the rest.
+    auto conflict = [&](const CliqueConflict & cf) -> string {
+        stringstream r;
+        auto within_neighbourhood = at_most_one(cf.independent_set);
+
+        if (cf.non_neighbours.empty()) {
+            // v sees all of both classes, so the independent set is the whole of them
+            // and all that is left to account for is v itself
+            r << within_neighbourhood << " ~x" << _imp->binary_variable_mappings[cf.filtered_vertex] << " +";
+        }
+        else {
+            bool first = true;
+            for (auto & u : cf.non_neighbours) {
+                r << " " << _imp->non_edge_constraints[pair{cf.filtered_vertex, u}];
+                if (! first)
+                    r << " +";
+                first = false;
+            }
+            r << " " << within_neighbourhood << " +";
+            if (cf.non_neighbours.size() > 1)
+                r << " " << at_most_one(cf.class1) << " " << at_most_one(cf.class2) << " + "
+                  << (cf.non_neighbours.size() - 1) << " * + " << cf.non_neighbours.size() << " d";
+        }
+        return r.str();
+    };
+
+    *_imp->proof_stream << "% bound, " << conflicts.size() << " inconsistent triple(s), ccs";
+    for (auto & cc : ccs) {
+        *_imp->proof_stream << " [";
+        for (auto & c : cc)
+            *_imp->proof_stream << " " << c;
+        *_imp->proof_stream << " ]";
+    }
+    for (auto & cf : conflicts) {
+        *_imp->proof_stream << " conflict [ " << cf.filtered_vertex << " |";
+        for (auto & c : cf.class1)
+            *_imp->proof_stream << " " << c;
+        *_imp->proof_stream << " |";
+        for (auto & c : cf.class2)
+            *_imp->proof_stream << " " << c;
+        *_imp->proof_stream << " ]";
+    }
+    *_imp->proof_stream << '\n';
+
+    auto how_many_summands = 0u;
+    *_imp->proof_stream << "pol ";
+
+    for (auto & cc : ccs)
+        if (cc.size() > 1) {
+            *_imp->proof_stream << " " << at_most_one(cc);
+            ++how_many_summands;
+        }
+
+    for (auto & cf : conflicts) {
+        *_imp->proof_stream << " " << conflict(cf);
+        ++how_many_summands;
+    }
+
+    *_imp->proof_stream << " " << _imp->objective_line;
+    for (unsigned n = 0; n < how_many_summands; ++n)
+        *_imp->proof_stream << " +";
+    *_imp->proof_stream << ";\n";
+    ++_imp->proof_line;
+}
+
 auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
 {
     *_imp->proof_stream << "% bound, ccs";
