@@ -3,8 +3,11 @@ name: CMake
 on:
   push:
     branches: [ "main" ]
+  # No branches filter: the filter applies to a pull request's BASE, so restricting it to
+  # main means a PR stacked on another branch gets no CI at all. Every pull request should
+  # be tested, whatever it targets. Pushes still only trigger on main, so a branch with an
+  # open PR is built once (by this trigger), not twice.
   pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
