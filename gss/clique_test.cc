@@ -1,4 +1,5 @@
 #include <gss/clique.hh>
+#include <gss/formats/dimacs.hh>
 #include <gss/formats/input_graph.hh>
 #include <gss/formats/lad.hh>
 #include <gss/restarts.hh>
@@ -255,4 +256,87 @@ TEST_CASE("a graph with loops does not crash the clique solver (issue #38)")
     auto result = solve_clique_problem(g, make_params());
     CHECK(result.clique.size() == 3);
     CHECK(is_clique(g, result.clique));
+}
+
+TEST_CASE("branching-set filters do not change the optimum")
+{
+    // The --filter options prune the branching set; they may only cut work, never change
+    // the answer. PR #76 added them with no test, so this pins the invariant: every filter
+    // agrees with plain colouring on the maximum clique size, and still returns a clique.
+    // (Note the read_dimacs edge list below is the same shape as the other cases here.)
+    auto g = read_dimacs(stringstream{R"(p edge 16 60
+e 1 3
+e 1 5
+e 1 7
+e 1 9
+e 1 11
+e 1 13
+e 2 4
+e 2 6
+e 2 8
+e 2 10
+e 2 12
+e 2 14
+e 3 5
+e 3 8
+e 3 11
+e 3 14
+e 4 7
+e 4 9
+e 4 12
+e 4 15
+e 5 9
+e 5 12
+e 5 16
+e 6 10
+e 6 13
+e 6 16
+e 7 11
+e 7 14
+e 8 12
+e 8 15
+e 9 13
+e 9 16
+e 10 14
+e 11 15
+e 12 16
+e 13 15
+e 1 2
+e 3 4
+e 5 6
+e 7 8
+e 9 10
+e 11 12
+e 13 14
+e 15 16
+e 2 3
+e 4 5
+e 6 7
+e 8 9
+e 10 11
+e 12 13
+e 14 15
+e 1 4
+e 2 5
+e 3 6
+e 4 8
+e 5 10
+e 6 11
+e 7 12
+e 8 13
+)"},
+        "filters");
+
+    unsigned baseline = 0;
+    for (auto filter : {CliqueFilter::None, CliqueFilter::Recolour, CliqueFilter::InfraChromatic}) {
+        auto params = make_params();
+        params.filter = filter;
+        auto result = solve_clique_problem(g, params);
+        CHECK(is_clique(g, result.clique));
+        if (filter == CliqueFilter::None)
+            baseline = unsigned(result.clique.size());
+        else
+            CHECK(unsigned(result.clique.size()) == baseline);
+    }
+    CHECK(baseline > 0);
 }
