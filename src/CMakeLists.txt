@@ -153,6 +153,15 @@ if(VERIPB_EXECUTABLE)
 
     # --- Clique and common-subgraph solver proofs (optimisation, BOUNDS) ---
     gss_add_proof_test(proof_clique glasgow_clique_solver ${GSS_INSTANCES}/clique.clq)
+    # The branching-set filters: --filter recolour exercises the recolouring path, and
+    # --filter infra-chromatic additionally finds an inconsistent triple, which is the only
+    # thing that drives the conflict half of Proof::colour_bound. clique.clq is too small to
+    # make either fire (both give the same search as no filter at all), hence the dedicated
+    # instance -- the smallest random graph found that produces a conflict.
+    gss_add_proof_test(proof_clique_recolour glasgow_clique_solver --filter recolour
+        --format csv ${GSS_INSTANCES}/clique_filter.csv)
+    gss_add_proof_test(proof_clique_infra_chromatic glasgow_clique_solver --filter infra-chromatic
+        --format csv ${GSS_INSTANCES}/clique_filter.csv)
     gss_add_proof_test(proof_mcs glasgow_common_subgraph_solver
         ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
     gss_add_proof_test(proof_mcs_connected glasgow_common_subgraph_solver --connected

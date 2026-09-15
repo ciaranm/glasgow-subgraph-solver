@@ -31,6 +31,24 @@ namespace gss::innards
 
     using NamedVertex = std::pair<int, std::string>;
 
+    /**
+     * An inconsistent triple of colour classes found by the branching-set filter:
+     * there is no triangle with one vertex in each of {filtered_vertex}, class1 and
+     * class2, so the three of them contribute two rather than three to a colour bound.
+     *
+     * The sets beyond the two classes are the ones the cutting planes derivation needs,
+     * and are easier to compute where the graph lives than to recover here.
+     * independent_set is (class1 u class2) n N(filtered_vertex), which the triple
+     * condition makes an independent set; non_neighbours is the rest of the two classes.
+     */
+    struct CliqueConflict
+    {
+        int filtered_vertex;
+        std::vector<int> class1, class2;
+        std::vector<int> independent_set;
+        std::vector<int> non_neighbours;
+    };
+
     class Proof
     {
     private:
@@ -151,6 +169,7 @@ namespace gss::innards
         auto create_non_edge_constraint(const NamedVertex & p, const NamedVertex & q) -> void;
         auto backtrack_from_binary_variables(const std::vector<int> &) -> void;
         auto colour_bound(const std::vector<std::vector<int>> &) -> void;
+        auto colour_bound(const std::vector<std::vector<int>> &, const std::vector<CliqueConflict> &) -> void;
 
         // clique for hom
         auto prepare_hom_clique_proof(const NamedVertex & p,

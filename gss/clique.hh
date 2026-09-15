@@ -24,6 +24,22 @@ namespace gss
         Sorted
     };
 
+    /**
+     * How hard to work at removing vertices from the branching set, once the
+     * candidate set has been coloured.
+     *
+     * Recolour is Tomita's Re-NUMBER (so None -> Recolour is MCSa -> MCSb).
+     * InfraChromatic additionally spots triples of colour classes that cannot
+     * supply a triangle between them, following San Segundo et al. Both tests
+     * need the same quantity, so InfraChromatic runs Recolour for free.
+     */
+    enum class CliqueFilter
+    {
+        None,
+        Recolour,
+        InfraChromatic
+    };
+
     struct CliqueParams
     {
         /// Timeout handler
@@ -49,6 +65,9 @@ namespace gss
 
         /// Colour in input order, rather than degree order
         bool input_order = false;
+
+        /// Which branching-set filter to run after colouring
+        CliqueFilter filter = CliqueFilter::None;
 
         /// For use by the maximum common connected subgraph reduction
         std::function<auto(int, const std::function<auto(int)->int> &)->innards::SVOBitset> connected;

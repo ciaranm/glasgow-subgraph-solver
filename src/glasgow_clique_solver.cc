@@ -50,11 +50,24 @@ auto colour_class_order_from_string(string_view s) -> ColourClassOrder
         throw UnsupportedConfiguration{"Unknown colour class order '" + string(s) + "'"};
 }
 
+auto clique_filter_from_string(string_view s) -> CliqueFilter
+{
+    if (s == "none")
+        return CliqueFilter::None;
+    else if (s == "recolour")
+        return CliqueFilter::Recolour;
+    else if (s == "infra-chromatic")
+        return CliqueFilter::InfraChromatic;
+    else
+        throw UnsupportedConfiguration{"Unknown branching-set filter '" + string(s) + "'"};
+}
+
 auto main(int argc, char * argv[]) -> int
 {
     try {
         cxxopts::Options options("Glasgow Clique Solver", "Get started by using option --help");
 
+        // clang-format off
         options.add_options("Program options")
             ("help", "Display help information")
             ("timeout", "Abort after this many seconds", cxxopts::value<int>())
@@ -62,6 +75,7 @@ auto main(int argc, char * argv[]) -> int
             ("decide", "Solve this decision problem", cxxopts::value<int>());
 
         options.add_options("Advanced configuration options")
+            ("filter", "Filter the branching set after colouring (none / recolour / infra-chromatic)", cxxopts::value<string>())
             ("colour-ordering", "Specify colour-ordering (colour / singletons-first / sorted)", cxxopts::value<string>())
             ("input-order", "Use the input order for colouring (usually a bad idea)")
             ("restarts-constant", "How often to perform restarts (disabled by default)", cxxopts::value<int>())
@@ -73,6 +87,8 @@ auto main(int argc, char * argv[]) -> int
 
         options.add_options()
             ("graph-file", "Specify the graph file", cxxopts::value<string>());
+
+        // clang-format on
 
         options.parse_positional({"graph-file"});
 
@@ -112,6 +128,8 @@ auto main(int argc, char * argv[]) -> int
         else
             params.restarts_schedule = make_unique<NoRestartsSchedule>();
 
+        if (options_vars.count("filter"))
+            params.filter = clique_filter_from_string(options_vars["filter"].as<string>());
         if (options_vars.count("colour-ordering"))
             params.colour_class_order = colour_class_order_from_string(options_vars["colour-ordering"].as<string>());
         params.input_order = options_vars.count("input-order");
