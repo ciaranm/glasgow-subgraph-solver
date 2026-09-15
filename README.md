@@ -101,6 +101,16 @@ third,,square
 fourth,,square
 ```
 
+Labels are all or nothing, separately for vertices and for edges: if any vertex in a file is
+labelled then every vertex must be, and likewise for edges, so a file labelling only some of its
+vertices or only some of its edges is rejected. Labelling the vertices does not oblige you to label
+the edges, or the other way around. There is no way to write "this element has no label constraint"
+in a file that uses labels of that kind, and treating an undeclared label as the empty string would
+quietly restrict that element to unlabelled target elements instead.
+
+Labelling the edges of an undirected graph does not make it directed: use the greater-than delimiter
+for that.
+
 Symmetries
 ----------
 

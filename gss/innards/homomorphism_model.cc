@@ -194,8 +194,11 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
             _imp->graphs.target_graph_rows[f * max_graphs + 0].set(t);
     });
 
-    // if directed, do both directions
-    if (pattern.directed()) {
+    // If directed, do both directions. Edge-labelled graphs need these too, even
+    // when undirected: the searcher's label check has to compare the forward and
+    // reverse labels of each edge separately, so it always takes the directed
+    // branch of propagate_adjacency_constraints() once there are edge labels.
+    if (pattern.directed() || pattern.has_edge_labels()) {
         _imp->graphs.forward_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
         _imp->graphs.reverse_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
         target.for_each_edge([&](int f, int t, string_view l) {

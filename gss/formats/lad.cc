@@ -53,17 +53,22 @@ namespace
                 if (e < 0 || e >= result.size())
                     throw GraphFileError{filename, "edge index out of bounds", true};
 
+                string label;
                 if (edge_labels) {
                     int l = read_word(infile);
                     if (l < 0)
                         throw GraphFileError{filename, "edge label invalid", true};
 
-                    result.add_directed_edge(r, e, to_string(l));
+                    label = to_string(l);
                 }
-                else if (directed)
-                    result.add_directed_edge(r, e, "");
+
+                // Directedness comes from the format being read, not from whether
+                // labels happen to be present: add_directed_edge() for a labelled
+                // undirected graph would mark it directed.
+                if (directed)
+                    result.add_directed_edge(r, e, label);
                 else
-                    result.add_edge(r, e);
+                    result.add_edge(r, e, label);
             }
         }
 

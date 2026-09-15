@@ -82,6 +82,16 @@ auto InputGraph::add_edge(int a, int b) -> void
         _imp->loopy = true;
 }
 
+auto InputGraph::add_edge(int a, int b, string_view label) -> void
+{
+    sanity_check_name(label, "edge label");
+
+    _imp->edges.emplace(make_pair(a, b), label).first->second = label;
+    _imp->edges.emplace(make_pair(b, a), label).first->second = label;
+    if (a == b)
+        _imp->loopy = true;
+}
+
 auto InputGraph::add_directed_edge(int a, int b, string_view label) -> void
 {
     sanity_check_name(label, "edge label");

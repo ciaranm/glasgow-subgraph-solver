@@ -58,7 +58,16 @@ public:
     auto add_edge(int a, int b) -> void;
 
     /**
-     * Add a directed edge from a to b, with a label.
+     * Add an edge from a to b (and from b to a), with a label.
+     *
+     * Unlike add_directed_edge(), this does not make the graph directed: an
+     * undirected graph whose edges happen to be labelled is still undirected.
+     */
+    auto add_edge(int a, int b, std::string_view label) -> void;
+
+    /**
+     * Add a directed edge from a to b, with a label. This makes the graph
+     * directed.
      */
     auto add_directed_edge(int a, int b, std::string_view label) -> void;
 

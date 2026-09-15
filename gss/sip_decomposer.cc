@@ -87,8 +87,17 @@ auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGrap
                 if (r_j == -1)
                     continue;
 
-                if (pattern.adjacent(i, j))
-                    reduced_pattern.add_directed_edge(r_i, r_j, "");
+                // Mirror the edge as it is in the pattern: dropping its label would
+                // silently turn a labelled pattern into one demanding empty labels,
+                // and add_directed_edge() would mark an undirected reduced pattern
+                // directed. (find_removable_isolated_pattern_vertices() declines to
+                // decompose a directed pattern, so only the second arm runs today.)
+                if (pattern.adjacent(i, j)) {
+                    if (pattern.directed())
+                        reduced_pattern.add_directed_edge(r_i, r_j, pattern.edge_label(i, j));
+                    else
+                        reduced_pattern.add_edge(r_i, r_j, pattern.edge_label(i, j));
+                }
             }
         }
         auto result = solve_homomorphism_problem(reduced_pattern, target, params);

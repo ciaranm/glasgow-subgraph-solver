@@ -60,16 +60,74 @@ TEST_CASE("read_csv: vertex labels")
     CHECK(g.vertex_label(id(g, "b")) == "blue");
 }
 
+TEST_CASE("read_csv: partial vertex labelling is an error")
+{
+    // 'b' declares no label. Silently treating that as the empty-string label would
+    // constrain it to unlabelled target vertices, so it has to be rejected instead.
+    CHECK_THROWS_AS(read_csv(stringstream{"a,,X\nb,\na,b\n"}, "g"), GraphFileError);
+
+    // Same thing, but 'b' is only ever mentioned by an edge line.
+    CHECK_THROWS_AS(read_csv(stringstream{"a,,X\na,b\n"}, "g"), GraphFileError);
+}
+
 TEST_CASE("read_csv: edge labels")
 {
     auto g = read_csv(stringstream{"a,b,red\n"}, "g");
     CHECK(g.has_edge_labels());
     CHECK(g.edge_label(id(g, "a"), id(g, "b")) == "red");
     CHECK(g.edge_label(id(g, "b"), id(g, "a")) == "red");
-    // Quirk worth locking in: a labelled *undirected* CSV edge is built from two
-    // add_directed_edge calls, so the graph reports itself as directed.
-    CHECK(g.directed());
+    // A labelled undirected edge is still undirected: adding a label must not flip
+    // directed().
+    CHECK_FALSE(g.directed());
     CHECK(g.number_of_directed_edges() == 2);
+}
+
+TEST_CASE("read_csv: partial edge labelling is an error")
+{
+    // The b--c edge declares no label, which is not the same thing as labelling it
+    // with the empty string, so it can't be quietly read as that.
+    CHECK_THROWS_AS(read_csv(stringstream{"a,b,red\nb,c\n"}, "g"), GraphFileError);
+
+    // Also when the unlabelled edge comes first, and when the edges are directed.
+    CHECK_THROWS_AS(read_csv(stringstream{"a,b\nb,c,red\n"}, "g"), GraphFileError);
+    CHECK_THROWS_AS(read_csv(stringstream{"a>b,red\nb>c\n"}, "g"), GraphFileError);
+}
+
+TEST_CASE("read_csv: labelling one element type does not require labelling the other")
+{
+    // Vertex labels with unlabelled edges...
+    auto vertices_only = read_csv(stringstream{"a,,X\nb,,Y\na,b\n"}, "g");
+    CHECK(vertices_only.has_vertex_labels());
+    CHECK_FALSE(vertices_only.has_edge_labels());
+    CHECK(vertices_only.adjacent(id(vertices_only, "a"), id(vertices_only, "b")));
+
+    // ...and edge labels with unlabelled vertices.
+    auto edges_only = read_csv(stringstream{"a,b,red\n"}, "g");
+    CHECK_FALSE(edges_only.has_vertex_labels());
+    CHECK(edges_only.has_edge_labels());
+}
+
+TEST_CASE("read_csv: labelling an undirected edge changes nothing but the label")
+{
+    auto unlabelled = read_csv(stringstream{"a,b\nb,c\n"}, "g");
+    auto labelled = read_csv(stringstream{"a,b,red\nb,c,red\n"}, "g");
+
+    CHECK(labelled.size() == unlabelled.size());
+    CHECK(labelled.directed() == unlabelled.directed());
+    CHECK(labelled.loopy() == unlabelled.loopy());
+    CHECK(labelled.number_of_directed_edges() == unlabelled.number_of_directed_edges());
+    CHECK(labelled.has_edge_labels());
+    CHECK_FALSE(unlabelled.has_edge_labels());
+}
+
+TEST_CASE("read_csv: directed edges with labels are still directed")
+{
+    auto g = read_csv(stringstream{"a>b,red\n"}, "g");
+    CHECK(g.directed());
+    CHECK(g.has_edge_labels());
+    CHECK(g.edge_label(id(g, "a"), id(g, "b")) == "red");
+    CHECK_FALSE(g.adjacent(id(g, "b"), id(g, "a")));
+    CHECK(g.number_of_directed_edges() == 1);
 }
 
 TEST_CASE("read_csv: self loops")
@@ -141,9 +199,16 @@ TEST_CASE("read_labelled_lad: reads vertex and edge labels")
     auto g = read_labelled_lad(stringstream{"2  5 1 1 9  7 0"}, "g");
     CHECK(g.has_vertex_labels());
     CHECK(g.has_edge_labels());
-    CHECK(g.directed());
+    CHECK(g.directed()); // this format is directed in its own right
     CHECK(g.vertex_label(0) == "5");
     CHECK(g.edge_label(0, 1) == "9");
+}
+
+TEST_CASE("read_vertex_labelled_lad: vertex labels do not make the graph directed")
+{
+    auto g = read_vertex_labelled_lad(stringstream{"2  5 1 1  7 1 0"}, "g");
+    CHECK_FALSE(g.directed());
+    CHECK(g.number_of_directed_edges() == 2);
 }
 
 TEST_CASE("read_lad: an out-of-bounds edge is an error")
