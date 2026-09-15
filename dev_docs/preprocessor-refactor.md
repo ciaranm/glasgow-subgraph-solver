@@ -287,8 +287,10 @@ Exhaustive because of the constraint's shape. A supplemental adjacency constrain
 part in propagation in two ways — the antecedent becomes true, which prunes `dom(q)` (case 2),
 or every consequent is false, which forces `x_p_t` false, i.e. removes `t` from `dom(p)`
 (case 3). Anything else that reads the supplemental rows does so at the root, before search
-(case 1). So every proof line whose RUP check could depend on the constraint is emitted after
-it.
+(case 1). So the constraint is always in the database before any proof line whose RUP check
+could depend on it. (A head with no kept constraint at all — the original graph, or a
+distance-2 / k4 graph, which carry no adjacency lines — has nothing to materialise, and the
+degree/NDS pigeonhole already tolerates the missing term, exactly as it did before elision.)
 
 **Why this is allowed when omit-if-unused is not.** The earlier prohibition is about
 *prediction*: we cannot show ahead of time that a derivation will never be consumed, because
