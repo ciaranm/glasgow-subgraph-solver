@@ -385,7 +385,7 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
     _proof->emit_proof_line(adj_label + " ia " + tidied_up + " " + std::to_string(_proof->current_proof_line()) + " ;");
     adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
     _proof->cache_proof_line(tidied_up, adj_label);
-    _proof->emit_proof_directive("wiplvl " + std::to_string(scratch) + ";");
+    _proof->wipe_level(scratch);
 }
 
 auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs,
@@ -533,7 +533,7 @@ auto HomomorphismProofs::emit_distance3_graph_distance_2(int g, int p, int q, in
     adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
     // self-clean the scratch (lazy ordering means we can't rely on a later supplemental's
     // wiplvl); the @label is at level 0, and the caller restores the search's active level.
-    _proof->emit_proof_directive("wiplvl " + std::to_string(scratch) + ";");
+    _proof->wipe_level(scratch);
 }
 
 auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, int path2, int t,
@@ -582,7 +582,7 @@ auto HomomorphismProofs::emit_distance3_graph(int g, int p, int q, int path1, in
     adjacency.labels.emplace(std::tuple<long, long, long, long>{g, p, q, t}, adj_label);
     // self-clean the scratch (lazy ordering means we can't rely on a later supplemental's
     // wiplvl); the @label is at level 0, and the caller restores the search's active level.
-    _proof->emit_proof_directive("wiplvl " + std::to_string(scratch) + ";");
+    _proof->wipe_level(scratch);
 }
 
 auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned slot,

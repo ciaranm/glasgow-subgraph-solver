@@ -388,6 +388,16 @@ auto Proof::back_up_to_level(int l) -> void
     _imp->active_level = l;
 }
 
+auto Proof::wipe_level(int l) -> void
+{
+    // the wipe removes every constraint tagged at a level >= l, so anything we were
+    // holding for a later checked deletion at those levels is gone: forget it, or the
+    // `del id` we would emit later names an already-deleted constraint.
+    erase_if(_imp->deletable_core_lines_by_level, [&](const auto & e) { return e.first >= l; });
+
+    *_imp->proof_stream << "wiplvl " << l << ";\n";
+}
+
 auto Proof::forget_level(int l) -> void
 {
     // checked-delete the blocking constraints and core nogoods recorded at this
@@ -405,11 +415,22 @@ auto Proof::forget_level(int l) -> void
     }
 
     if (_imp->largest_level_set >= l)
-        *_imp->proof_stream << "wiplvl " << l << ";\n";
+        wipe_level(l);
 }
 
 auto Proof::back_up_to_top() -> void
 {
+    // A restart abandons the whole search tree rather than backtracking out of it level
+    // by level, so the per-level deletion bookkeeping never gets its matching
+    // forget_level calls. Drop it: everything recorded at a search level is removed by
+    // the next wiplvl, and trying to "del id" it afterwards is a double deletion, which
+    // VeriPB rejects ("constraint ... has already been deleted"). Dropping can only
+    // leave a constraint alive longer than necessary, never delete one twice, so it is
+    // safe whether or not a wiplvl follows. (A solution's blocking constraint lives at
+    // level 0 and so survives -- but counting with restarts is rejected under proof, so
+    // at a restart this map holds only backtrack nogoods.)
+    _imp->deletable_core_lines_by_level.clear();
+
     *_imp->proof_stream << "setlvl " << 0 << ";\n";
     _imp->active_level = 0;
 }
@@ -773,7 +794,7 @@ auto Proof::finish_hom_clique_proof(const NamedVertex & p, const NamedVertex & t
     *_imp->proof_stream << "% end clique of size " << size << " around neighbourhood of " << p.second << " but not " << t.second << '\n';
     *_imp->proof_stream << "setlvl 0;\n";
     *_imp->proof_stream << "rup 1 ~x" << _imp->variable_mappings[pair{p.first, t.first}] << " >= 1 ;\n";
-    *_imp->proof_stream << "wiplvl 1;\n";
+    wipe_level(1);
     ++_imp->proof_line;
     _imp->doing_hom_colour_proof = false;
     _imp->clique_for_hom_non_edge_constraints.clear();

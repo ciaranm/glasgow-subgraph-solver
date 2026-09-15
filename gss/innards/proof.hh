@@ -83,6 +83,11 @@ namespace gss::innards
         // middle layer uses this to scratch one level above the search when materialising a
         // supplemental derivation mid-search (wiplvl wipes every level >= its argument).
         [[nodiscard]] auto active_level() const -> int;
+        // Emit a `wiplvl l`, dropping any pending checked-deletion bookkeeping for levels
+        // it wipes. Every wiplvl must go through here: a constraint a wiplvl has removed
+        // must not be named by a later `del id`, which VeriPB rejects as a double
+        // deletion. Prefer this over emit_proof_directive("wiplvl ...").
+        auto wipe_level(int l) -> void;
         [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
         [[nodiscard]] auto is_locally_injective() const -> bool;
 
