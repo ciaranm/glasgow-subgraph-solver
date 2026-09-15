@@ -59,8 +59,6 @@ struct Proof::Imp
     map<tuple<long, long, long>, string> connected_variable_mappings;
     map<tuple<long, long, long, long>, string> connected_variable_mappings_aux;
     map<long, string> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
-    map<pair<long, long>, string> locally_injective_constraints;
-    bool locally_injective = false;
     map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
     stringstream objective_sum;
@@ -143,38 +141,6 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size,
         _imp->model_stream << ">= -1 ;\n";
         ++_imp->nb_constraints;
         _imp->injectivity_constraints.emplace(v, inj_label);
-    }
-}
-
-auto Proof::create_locally_injective_constraints(int pattern_size, int target_size,
-    const function<auto(int, int)->bool> & adjacent,
-    const function<auto(int)->string> & pattern_name,
-    const function<auto(int)->string> & target_name) -> void
-{
-    _imp->locally_injective = true;
-
-    for (int v = 0; v < pattern_size; ++v) {
-        // the neighbourhood of v: if v has a self-loop then v is its own neighbour, so
-        // local injectivity also forces phi(v) to differ from its neighbours' images.
-        vector<int> neighbours;
-        for (int u = 0; u < pattern_size; ++u)
-            if (adjacent(v, u))
-                neighbours.push_back(u);
-
-        // at most one neighbour maps to a given target only bites for |N(v)| >= 2
-        if (neighbours.size() < 2)
-            continue;
-
-        for (int t = 0; t < target_size; ++t) {
-            _imp->model_stream << "* local injectivity on neighbourhood of " << v << " for value " << t << '\n';
-            auto label = "@linj" + pattern_name(v) + "_" + target_name(t);
-            _imp->model_stream << label;
-            for (auto & u : neighbours)
-                _imp->model_stream << " -1 x" << _imp->variable_mappings[pair{u, t}];
-            _imp->model_stream << " >= -1 ;\n";
-            ++_imp->nb_constraints;
-            _imp->locally_injective_constraints.emplace(pair{v, t}, label);
-        }
     }
 }
 
@@ -294,28 +260,6 @@ auto Proof::finish_optimisation_proof(int size) -> void
         << "end pseudo-Boolean proof;\n";
 }
 
-auto Proof::failure_due_to_pattern_bigger_than_target() -> void
-{
-    *_imp->proof_stream << "% failure due to the pattern being bigger than the target\n";
-
-    // we get a hall violator by adding up all of the things
-    *_imp->proof_stream << "pol";
-    bool first = true;
-
-    for (auto & [_, label] : _imp->at_least_one_value_constraints) {
-        if (first) {
-            *_imp->proof_stream << " " << label;
-            first = false;
-        }
-        else
-            *_imp->proof_stream << " " << label << " +";
-    }
-
-    for (auto & [_, label] : _imp->injectivity_constraints)
-        *_imp->proof_stream << " " << label << " +";
-    *_imp->proof_stream << " ;\n";
-    ++_imp->proof_line;
-}
 
 auto Proof::root_propagation_failed() -> void
 {
@@ -327,15 +271,6 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
     *_imp->proof_stream << "% [" << depth << "] guessing " << branch_v.second << "=" << val.second << '\n';
 }
 
-auto Proof::propagation_failure(const vector<pair<int, int>> & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void
-{
-    *_imp->proof_stream << "% [" << decisions.size() << "] propagation failure on " << branch_v.second << "=" << val.second << '\n';
-    *_imp->proof_stream << "rup ";
-    for (auto & [var, val] : decisions)
-        *_imp->proof_stream << " 1 ~x" << _imp->variable_mappings[pair{var, val}];
-    *_imp->proof_stream << " >= 1 ;\n";
-    ++_imp->proof_line;
-}
 
 auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failure) -> void
 {
@@ -355,10 +290,6 @@ auto Proof::out_of_guesses(const vector<pair<int, int>> &) -> void
 {
 }
 
-auto Proof::unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void
-{
-    *_imp->proof_stream << "% unit propagating " << var.second << "=" << val.second << '\n';
-}
 
 auto Proof::start_level(int l) -> void
 {
@@ -477,9 +408,14 @@ auto Proof::variable_name(int p, int t) const -> const string &
     return _imp->variable_mappings.at(pair<long, long>{p, t});
 }
 
-auto Proof::is_locally_injective() const -> bool
+auto Proof::at_least_one_value_labels() const -> const map<long, string> &
 {
-    return _imp->locally_injective;
+    return _imp->at_least_one_value_constraints;
+}
+
+auto Proof::injectivity_labels() const -> const map<long, string> &
+{
+    return _imp->injectivity_constraints;
 }
 
 auto Proof::emit_model_constraint(const string & line) -> void
@@ -496,11 +432,6 @@ auto Proof::emit_model_comment(const string & line) -> void
 auto Proof::injectivity_label(int t) const -> const string &
 {
     return _imp->injectivity_constraints.at(t);
-}
-
-auto Proof::locally_injective_label(int p, int t) const -> const string &
-{
-    return _imp->locally_injective_constraints.at(pair<long, long>{p, t});
 }
 
 auto Proof::at_most_one_value_label(int p) const -> const string &
@@ -933,18 +864,4 @@ auto Proof::super_extra_verbose() const -> bool
     return _imp->super_extra_verbose;
 }
 
-auto Proof::show_domains(const string & s, const vector<pair<NamedVertex, vector<NamedVertex>>> & domains) -> void
-{
-    *_imp->proof_stream << "% " << s << ", domains follow\n";
-    for (auto & [p, ts] : domains) {
-        *_imp->proof_stream << "%    " << p.second << " size " << ts.size() << " = {";
-        for (auto & t : ts)
-            *_imp->proof_stream << " " << t.second;
-        *_imp->proof_stream << " }\n";
-    }
-}
 
-auto Proof::propagated(const NamedVertex & p, const NamedVertex & t, int g, int n_values, const NamedVertex & q) -> void
-{
-    *_imp->proof_stream << "% adjacency propagation from " << p.second << " -> " << t.second << " in graph pairs " << g << " deleted " << n_values << " values from " << q.second << '\n';
-}

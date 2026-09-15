@@ -50,6 +50,12 @@ namespace gss::innards
         // Proof::adjacency_proof_lines(); now owned here directly.
         AdjacencyProofLines _adjacency;
 
+        // Local injectivity is a homomorphism-only encoding, so its constraint labels and
+        // the flag saying we are using it live here rather than in Proof: nothing outside
+        // this layer ever read them.
+        bool _locally_injective = false;
+        std::map<std::pair<int, int>, std::string> _locally_injective_constraints;
+
         // For each pattern edge (p,q) whose supplemental adjacency constraint was emitted
         // under subsumption elision, the slot whose (strongest) constraint we kept. Used to
         // re-derive an elided weaker constraint on demand (see ensure_supplemental_adjacency).
@@ -183,6 +189,38 @@ namespace gss::innards
         // Whether any supplemental is still pending; lets the searcher skip its per-removal
         // bookkeeping once everything has been materialised.
         [[nodiscard]] auto has_pending_supplementals() const -> bool;
+
+        // Local-injectivity analogue of the injectivity constraints: for each pattern vertex
+        // v and target t, at most one neighbour of v maps to t (phi restricted to N(v) is
+        // injective). Emitted into the OPB model; the labels are cited by the degree, NDS
+        // and exact-path derivations in place of the global injectivity ones.
+        auto create_locally_injective_constraints(const InputGraph & pattern, const InputGraph & target) -> void;
+        [[nodiscard]] auto is_locally_injective() const -> bool;
+        [[nodiscard]] auto locally_injective_label(int p, int t) const -> const std::string &;
+
+        // The pattern has more vertices than the target, so injectivity is impossible: a
+        // Hall violator summing every at-least-one-value constraint against every
+        // injectivity constraint. Emitted from here rather than Proof because it is the
+        // homomorphism model's own argument; Proof just owns the labels it cites.
+        auto failure_due_to_pattern_bigger_than_target() -> void;
+
+        // Search-trace logging. These used to live on Proof and take NamedVertex pairs,
+        // which meant every call site marshalled through
+        // HomomorphismModel::pattern_vertex_for_proof / target_vertex_for_proof even though
+        // that mapping is the identity on the index. They are homomorphism-exclusive (the
+        // clique and common-subgraph solvers log their own branches), so they belong here,
+        // where the name tables already are.
+        //
+        // A branch decision, and a value forced by unit propagation: both comments.
+        auto guessing(int depth, int p, int t) -> void;
+        auto unit_propagating(int p, int t) -> void;
+        // Propagation wiped a domain under the current assignments: a comment plus the rup
+        // nogood ruling the decision set out.
+        auto propagation_failure(const std::vector<std::pair<int, int>> & decisions, int p, int t) -> void;
+        // Verbose-proof tracing: what an adjacency propagation deleted, and the domains at
+        // a given point. Only emitted under --verbose-proofs.
+        auto propagated(int p, int t, int g, int n_values, int q) -> void;
+        auto show_domains(const std::string & where, const std::vector<std::pair<int, std::vector<int>>> & domains) -> void;
 
         // Filter-stage conclusions, logged as the domain-initialisation filters fire. These
         // used to be called on the generic Proof directly; routing them through here keeps the
