@@ -18,6 +18,19 @@ target_link_libraries(create_random_graph PRIVATE cxxopts)
 add_executable(convert_to_lad convert_to_lad.cc)
 target_link_libraries(convert_to_lad PRIVATE cxxopts)
 
+# Proof-size metrics over a fixed, representative matrix (see
+# dev_docs/preprocessor-refactor.md). Pure measurement: it emits a TSV of the
+# supplemental-graph count and OPB/PBP line counts per configuration, the baseline that
+# the solve-pipeline refactor's later phases diff against. It needs no VeriPB, so it is
+# registered unconditionally and runs in every lane, doubling as a proof-emission smoke
+# test (under the sanitizers it exercises proof.cc across many feature combinations).
+add_test(NAME proof_metrics
+    COMMAND ${CMAKE_SOURCE_DIR}/test-instances/proof_metrics.bash
+        $<TARGET_FILE:glasgow_subgraph_solver>
+        ${CMAKE_SOURCE_DIR}/test-instances
+        ${CMAKE_CURRENT_BINARY_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/proof_metrics.tsv)
+
 # Proof-verification tests: run the solver with proof logging on a small instance
 # and check the resulting proof with VeriPB. Only registered when VeriPB was found
 # at configure time (find_program in the top-level CMakeLists), so a checkout

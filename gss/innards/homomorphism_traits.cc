@@ -35,7 +35,13 @@ auto gss::innards::supports_distance3_graphs(const HomomorphismParams & params) 
 
 auto gss::innards::might_have_watches(const HomomorphismParams & params) -> bool
 {
-    return params.restarts_schedule->might_restart();
+    // Watches (the nogood store) are only worth maintaining if the search can restart --
+    // otherwise nothing ever consults a posted nogood. Staging always performs at least one
+    // restart (the Stage-1 -> Stage-2 transition), independently of the user's schedule, so
+    // it must enable watches even under a no-restart schedule: the transition's
+    // restart-resumption nogoods are what stop Stage 2 re-exploring (and, when counting,
+    // re-counting) the region Stage 1 already searched.
+    return params.staged || params.restarts_schedule->might_restart();
 }
 
 auto gss::innards::is_nonshrinking(const HomomorphismParams & params) -> bool

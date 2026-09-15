@@ -12,7 +12,10 @@
 # Usage:
 #   random_proof_sweep.bash <solver> <veripb> <create_random_graph> <workdir>
 #
-# Exits 0 iff every generated proof verifies.
+# Exits 0 iff every generated proof verifies. Also records per-instance proof-size
+# metrics (supplemental-graph count, OPB/PBP line counts, solution count) as a TSV at
+# $RPS_METRICS (default <workdir>/proof_sweep_metrics.tsv), for the solve-pipeline
+# refactor baseline; see dev_docs/preprocessor-refactor.md and proof_metrics.bash.
 
 set -u
 
@@ -28,6 +31,15 @@ workdir="$4"
 
 fails=0
 checked=0
+
+# Per-instance proof-size metrics for the solve-pipeline refactor baseline (see
+# dev_docs/preprocessor-refactor.md and proof_metrics.bash). Written as a TSV; the path
+# can be overridden with $RPS_METRICS.
+metrics="${RPS_METRICS:-${workdir}/proof_sweep_metrics.tsv}"
+printf 'family\tseed\topts\tshape_graphs\topb_lines\tpbp_lines\tsolutions\tverify\n' > "${metrics}"
+total_opb=0
+total_pbp=0
+recorded=0
 
 # Two families: loopless (no --loops) and loopy (--loops). Supplemental graphs are on
 # by default in both, so the exact-path / distance-3 / degree / NDS derivations are
@@ -61,14 +73,74 @@ for loops in "" "--loops 0.3"; do
                 continue
             fi
 
+            verify=ok
             if ! "${veripb}" "${proof}.opb" "${proof}.pbp" 2>&1 | grep -q 'VERIFIED'; then
                 echo "loops='${loops}' seed ${seed}, opts '${opts}': proof did NOT verify" 1>&2
                 "${veripb}" "${proof}.opb" "${proof}.pbp" 2>&1 | tail -4 1>&2
                 fails=$((fails + 1))
+                verify=FAIL
             fi
+
+            # record proof-size metrics (see proof_metrics.bash for the fixed-instance baseline)
+            family="loopless"; [ -n "${loops}" ] && family="loopy"
+            opb_lines=$(wc -l < "${proof}.opb")
+            pbp_lines=$(wc -l < "${proof}.pbp")
+            shape=$(sed -n 's/^shape_graphs = //p' "${proof}.log"); shape="${shape:-NA}"
+            sols=$(sed -n 's/^solution_count = //p' "${proof}.log")
+            [ -z "${sols}" ] && sols=$(sed -n 's/^status = //p' "${proof}.log")
+            sols="${sols:-NA}"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "${family}" "${seed}" "${opts:-none}" "${shape}" "${opb_lines}" "${pbp_lines}" "${sols}" "${verify}" \
+                >> "${metrics}"
+            total_opb=$((total_opb + opb_lines))
+            total_pbp=$((total_pbp + pbp_lines))
+            recorded=$((recorded + 1))
+        done
+
+        # Staged solving (Phase 6): cheap filtering first, supplemental graphs built only if a
+        # first bounded search round does not conclude. A tiny first-round budget forces the
+        # Stage-1 -> Stage-2 transition on most of these instances, so the mid-proof
+        # supplemental derivation (at the level-0 restart boundary) is verified here; instances
+        # that conclude in Stage 1 exercise the no-supplemental, smaller-proof path. Staging
+        # uses restarts internally, so counting is not combined with it under proof.
+        for opts in "--staged" "--induced --staged"; do
+            checked=$((checked + 1))
+            proof="${workdir}/rps_proof_${seed}_${checked}"
+
+            # shellcheck disable=SC2086
+            if ! "${solver}" --format csv --no-clique-detection ${opts} --staged-first-round-backtracks 2 --prove "${proof}" \
+                    "${pat}" "${tgt}" > "${proof}.log" 2>&1; then
+                echo "loops='${loops}' seed ${seed}, opts '${opts}': solver failed" 1>&2
+                cat "${proof}.log" 1>&2
+                fails=$((fails + 1))
+                continue
+            fi
+
+            verify=ok
+            if ! "${veripb}" "${proof}.opb" "${proof}.pbp" 2>&1 | grep -q 'VERIFIED'; then
+                echo "loops='${loops}' seed ${seed}, opts '${opts}': proof did NOT verify" 1>&2
+                "${veripb}" "${proof}.opb" "${proof}.pbp" 2>&1 | tail -4 1>&2
+                fails=$((fails + 1))
+                verify=FAIL
+            fi
+
+            family="staged"; [ -n "${loops}" ] && family="staged-loopy"
+            opb_lines=$(wc -l < "${proof}.opb")
+            pbp_lines=$(wc -l < "${proof}.pbp")
+            shape=$(sed -n 's/^shape_graphs = //p' "${proof}.log"); shape="${shape:-NA}"
+            sols=$(sed -n 's/^solution_count = //p' "${proof}.log")
+            [ -z "${sols}" ] && sols=$(sed -n 's/^status = //p' "${proof}.log")
+            sols="${sols:-NA}"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "${family}" "${seed}" "${opts:-none}" "${shape}" "${opb_lines}" "${pbp_lines}" "${sols}" "${verify}" \
+                >> "${metrics}"
+            total_opb=$((total_opb + opb_lines))
+            total_pbp=$((total_pbp + pbp_lines))
+            recorded=$((recorded + 1))
         done
     done
 done
 
 echo "checked ${checked} random proofs, ${fails} failure(s)"
+echo "metrics: ${recorded} rows -> ${metrics} (total opb_lines=${total_opb}, pbp_lines=${total_pbp})"
 [ "${fails}" -eq 0 ]

@@ -74,7 +74,8 @@ auto main(int argc, char * argv[]) -> int
             ("restart-interval", "Specify the restart interval in milliseconds for timed restarts", cxxopts::value<int>())
             ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
             ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
-            ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>());
+            ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
+            ("staged", "Staged preprocessing: cheap filtering first, build supplemental graphs only if a first bounded search round does not solve it (sequential only)");
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")
@@ -111,7 +112,9 @@ auto main(int argc, char * argv[]) -> int
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")
             ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>(shapes))
             ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts))
-            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives));
+            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives))
+            ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)")
+            ("staged-first-round-backtracks", "Staged solving: backtrack budget for the first cheap search round before supplemental graphs are built", cxxopts::value<unsigned long long>());
 
         options.add_options()
             ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
@@ -228,6 +231,10 @@ auto main(int argc, char * argv[]) -> int
             params.number_of_exact_path_graphs = options_vars["n-exact-path-graphs"].as<int>();
         params.no_supplementals = options_vars.count("no-supplementals");
         params.no_nds = options_vars.count("no-nds");
+        params.staged = options_vars.count("staged");
+        if (options_vars.count("staged-first-round-backtracks"))
+            params.staged_first_round_backtracks = options_vars["staged-first-round-backtracks"].as<unsigned long long>();
+        params.prove_supplemental_subsumption = ! options_vars.count("no-proof-supplemental-subsumption");
         params.clique_size_constraints = options_vars.count("cliques");
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 

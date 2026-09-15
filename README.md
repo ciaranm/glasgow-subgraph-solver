@@ -58,6 +58,18 @@ $ ./build/glasgow_subgraph_solver --parallel ...
 
 Note that parallel search, in its default configuration, is non-deterministic.
 
+Preprocessing is normally done in full before search starts. As an experimental alternative,
+staged solving does only the cheap filtering first, and builds the more expensive supplemental
+graphs only if a short first round of search does not solve the instance:
+
+```shell session
+$ ./build/glasgow_subgraph_solver --staged pattern-file target-file
+```
+
+This can help a lot on instances that are easy, and costs a little on instances that are not. It
+is currently sequential only (so it cannot be combined with `--parallel`), and with proof logging
+it cannot yet be combined with `--count-solutions`.
+
 File Formats
 ------------
 
