@@ -244,7 +244,22 @@ Each phase is an independently mergeable PR.
   its translation state lives in `Proof` where the *shared* clique solver's own proof methods read
   it.
 
+- **Phase 3 Option 2, the tail — the search trace and local injectivity.** The derivations
+  moved in steps 2a–3d, but the *trace* did not: `guessing`, `unit_propagating`,
+  `propagation_failure`, `propagated` and `show_domains` still took `NamedVertex` pairs, so
+  every call site marshalled through `pattern_vertex_for_proof` / `target_vertex_for_proof`
+  even though that mapping is the identity on the index — 13 such sites in the searcher, some
+  on the per-node path. Those five (plus `failure_due_to_pattern_bigger_than_target` and
+  `create_locally_injective_constraints`, whose label map and flag nothing outside the middle
+  layer ever read) now live in `HomomorphismProofs` over plain indices; `proof.cc` loses
+  another 83 lines and the searcher is down to 2 marshalling sites. Two things stay in `Proof`
+  deliberately: `guessing`'s `NamedVertex` form, which the clique and common-subgraph solvers
+  use, and **`post_solution` for every solver** — it emits `solx` at level 0 and owns the
+  proof-level bookkeeping that goes with it, so moving the homomorphism path out would quietly
+  detach it from the solution-blocking-constraint deletion in [PR #71]. Byte-identical.
+
 [PR #70]: https://github.com/ciaranm/glasgow-subgraph-solver/pull/70
+[PR #71]: https://github.com/ciaranm/glasgow-subgraph-solver/pull/71
 
 ### Strand → phase
 

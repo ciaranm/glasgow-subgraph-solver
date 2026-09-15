@@ -74,13 +74,6 @@ namespace gss::innards
         auto create_injectivity_constraints(int pattern_size, int target_size,
             const std::function<auto(int)->std::string> & target_name) -> void;
 
-        // Local-injectivity analogue: for each pattern vertex v and target t, at most one
-        // neighbour of v maps to t (phi restricted to N(v) is injective).
-        auto create_locally_injective_constraints(int pattern_size, int target_size,
-            const std::function<auto(int, int)->bool> & adjacent,
-            const std::function<auto(int)->std::string> & pattern_name,
-            const std::function<auto(int)->std::string> & target_name) -> void;
-
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
         auto create_adjacency_constraint(const NamedVertex & p, const NamedVertex & q, const NamedVertex & t,
@@ -107,7 +100,10 @@ namespace gss::innards
         // deletion. Prefer this over emit_proof_directive("wiplvl ...").
         auto wipe_level(int l) -> void;
         [[nodiscard]] auto variable_name(int p, int t) const -> const std::string &;
-        [[nodiscard]] auto is_locally_injective() const -> bool;
+        // The same labels in model order, for the derivations that sum over every pattern
+        // vertex or every target value (the pattern-bigger-than-target Hall violator).
+        [[nodiscard]] auto at_least_one_value_labels() const -> const std::map<long, std::string> &;
+        [[nodiscard]] auto injectivity_labels() const -> const std::map<long, std::string> &;
 
         // The OPB-model analogues: emit_model_constraint writes a constraint into the model
         // (bumping the constraint count); emit_model_comment writes a `*` comment line.
@@ -120,7 +116,6 @@ namespace gss::innards
         // p. Plus the generic dedup cache (keyed by a constraint's text) the supplemental
         // derivations use to reuse an identical line's label instead of re-deriving it.
         [[nodiscard]] auto injectivity_label(int t) const -> const std::string &;
-        [[nodiscard]] auto locally_injective_label(int p, int t) const -> const std::string &;
         [[nodiscard]] auto at_most_one_value_label(int p) const -> const std::string &;
         [[nodiscard]] auto at_least_one_value_label(int p) const -> const std::string &;
         [[nodiscard]] auto cached_proof_line(const std::string & key) const -> std::optional<std::string>;
@@ -145,15 +140,16 @@ namespace gss::innards
         auto finish_enumeration_proof(const loooong & number_of_solutions, bool complete) -> void;
 
         // top of search failures
-        auto failure_due_to_pattern_bigger_than_target() -> void;
 
         // branch logging
         auto root_propagation_failed() -> void;
+        // guessing keeps its NamedVertex form for the clique and common-subgraph solvers;
+        // the homomorphism solver logs its branches through HomomorphismProofs instead,
+        // over plain indices. post_solution deliberately stays here for every solver: it
+        // emits solx at level 0 and owns the proof-level bookkeeping that goes with it.
         auto guessing(int depth, const NamedVertex & branch_v, const NamedVertex & val) -> void;
-        auto propagation_failure(const std::vector<std::pair<int, int>> & decisions, const NamedVertex & branch_v, const NamedVertex & val) -> void;
         auto incorrect_guess(const std::vector<std::pair<int, int>> & decisions, bool was_failure) -> void;
         auto out_of_guesses(const std::vector<std::pair<int, int>> & decisions) -> void;
-        auto unit_propagating(const NamedVertex & var, const NamedVertex & val) -> void;
 
         // proof levels
         auto start_level(int level) -> void;
@@ -211,8 +207,6 @@ namespace gss::innards
         auto new_incumbent(const std::vector<std::tuple<NamedVertex, NamedVertex, bool>> & solution) -> void;
 
         // super extra verbose
-        auto show_domains(const std::string & where, const std::vector<std::pair<NamedVertex, std::vector<NamedVertex>>> & domains) -> void;
-        auto propagated(const NamedVertex & p, const NamedVertex & t, int g, int n_values, const NamedVertex & q) -> void;
     };
 }
 

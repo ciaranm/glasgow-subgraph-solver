@@ -93,6 +93,106 @@ auto HomomorphismProofs::has_pending_supplementals() const -> bool
     return ! _pending_supplementals.empty();
 }
 
+auto HomomorphismProofs::create_locally_injective_constraints(const InputGraph & pattern, const InputGraph & target) -> void
+{
+    _locally_injective = true;
+
+    for (int v = 0; v < pattern.size(); ++v) {
+        // the neighbourhood of v: if v has a self-loop then v is its own neighbour, so
+        // local injectivity also forces phi(v) to differ from its neighbours' images.
+        std::vector<int> neighbours;
+        for (int u = 0; u < pattern.size(); ++u)
+            if (pattern.adjacent(v, u))
+                neighbours.push_back(u);
+
+        // at most one neighbour maps to a given target only bites for |N(v)| >= 2
+        if (neighbours.size() < 2)
+            continue;
+
+        for (int t = 0; t < target.size(); ++t) {
+            _proof->emit_model_comment("* local injectivity on neighbourhood of " + std::to_string(v) + " for value " + std::to_string(t));
+            auto label = "@linj" + _pattern_names[v] + "_" + _target_names[t];
+            std::string line = label;
+            for (auto & u : neighbours)
+                line += " -1 x" + _proof->variable_name(u, t);
+            line += " >= -1 ;";
+            _proof->emit_model_constraint(line);
+            _locally_injective_constraints.emplace(std::pair{v, t}, label);
+        }
+    }
+}
+
+auto HomomorphismProofs::is_locally_injective() const -> bool
+{
+    return _locally_injective;
+}
+
+auto HomomorphismProofs::locally_injective_label(int p, int t) const -> const std::string &
+{
+    return _locally_injective_constraints.at(std::pair{p, t});
+}
+
+auto HomomorphismProofs::failure_due_to_pattern_bigger_than_target() -> void
+{
+    _proof->emit_proof_directive("% failure due to the pattern being bigger than the target");
+
+    // we get a hall violator by adding up all of the things
+    std::string pol = "pol";
+    bool first = true;
+    for (auto & [_, label] : _proof->at_least_one_value_labels()) {
+        if (first) {
+            pol += " " + label;
+            first = false;
+        }
+        else
+            pol += " " + label + " +";
+    }
+
+    for (auto & [_, label] : _proof->injectivity_labels())
+        pol += " " + label + " +";
+    pol += " ;";
+    _proof->emit_proof_line(pol);
+}
+
+auto HomomorphismProofs::guessing(int depth, int p, int t) -> void
+{
+    _proof->emit_proof_directive("% [" + std::to_string(depth) + "] guessing " + _pattern_names[p] + "=" + _target_names[t]);
+}
+
+auto HomomorphismProofs::unit_propagating(int p, int t) -> void
+{
+    _proof->emit_proof_directive("% unit propagating " + _pattern_names[p] + "=" + _target_names[t]);
+}
+
+auto HomomorphismProofs::propagation_failure(const std::vector<std::pair<int, int>> & decisions, int p, int t) -> void
+{
+    _proof->emit_proof_directive("% [" + std::to_string(decisions.size()) + "] propagation failure on " +
+        _pattern_names[p] + "=" + _target_names[t]);
+    std::string line = "rup ";
+    for (auto & [var, val] : decisions)
+        line += " 1 ~x" + _proof->variable_name(var, val);
+    line += " >= 1 ;";
+    _proof->emit_proof_line(line);
+}
+
+auto HomomorphismProofs::propagated(int p, int t, int g, int n_values, int q) -> void
+{
+    _proof->emit_proof_directive("% adjacency propagation from " + _pattern_names[p] + " -> " + _target_names[t] +
+        " in graph pairs " + std::to_string(g) + " deleted " + std::to_string(n_values) + " values from " + _pattern_names[q]);
+}
+
+auto HomomorphismProofs::show_domains(const std::string & where, const std::vector<std::pair<int, std::vector<int>>> & domains) -> void
+{
+    _proof->emit_proof_directive("% " + where + ", domains follow");
+    for (auto & [p, ts] : domains) {
+        std::string line = "%    " + _pattern_names[p] + " size " + std::to_string(ts.size()) + " = {";
+        for (auto & t : ts)
+            line += " " + _target_names[t];
+        line += " }";
+        _proof->emit_proof_directive(line);
+    }
+}
+
 auto HomomorphismProofs::initial_domain_is_empty(int p, const std::string & where) -> void
 {
     _proof->emit_proof_directive("% failure due to domain " + std::to_string(p) + " being empty at " + where);
@@ -169,7 +269,7 @@ auto HomomorphismProofs::incompatible_by_degrees(int g, int p, const std::vector
     // under local injectivity it is the neighbourhood-injectivity of p (phi|N(p) is
     // injective), which is exactly what the degree pigeonhole needs.
     for (auto & n : n_t)
-        pol += " " + (_proof->is_locally_injective() ? _proof->locally_injective_label(p, n) : _proof->injectivity_label(n)) + " +";
+        pol += " " + (is_locally_injective() ? locally_injective_label(p, n) : _proof->injectivity_label(n)) + " +";
 
     pol += " s ;";
     auto sum_line = _proof->emit_proof_line(pol);
@@ -215,7 +315,7 @@ auto HomomorphismProofs::incompatible_by_nds(int g, int p, int t, const std::vec
     // neighbour of p maps to t), exactly as in the degree pigeonhole above.
     for (auto & tsub : t_subsequence) {
         if (tsub != t_subsequence.back())
-            pol += " " + (_proof->is_locally_injective() ? _proof->locally_injective_label(p, tsub) : _proof->injectivity_label(tsub)) + " +";
+            pol += " " + (is_locally_injective() ? locally_injective_label(p, tsub) : _proof->injectivity_label(tsub)) + " +";
     }
 
     // block to the right of the failing square
@@ -318,8 +418,8 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
     // what between_p_and_q holds), so the neighbourhood-injectivity of b forbids them both
     // mapping to t. Either way the constraint cancels the "q maps to t" term.
     {
-        const std::string & inj = _proof->is_locally_injective()
-            ? _proof->locally_injective_label(between_p_and_q.front(), t)
+        const std::string & inj = is_locally_injective()
+            ? locally_injective_label(between_p_and_q.front(), t)
             : _proof->injectivity_label(t);
         _proof->emit_proof_line("pol " + std::to_string(_proof->current_proof_line()) + " " + inj + " + s ;");
     }
@@ -356,7 +456,7 @@ auto HomomorphismProofs::emit_exact_path_graph(int g, int p, int q, const std::v
         // global injectivity on each z, or under local injectivity the neighbourhood-
         // injectivity of p (the between-vertices are all neighbours of p) -- the same pigeonhole.
         for (auto & z : u.second)
-            pol2 += " " + (_proof->is_locally_injective() ? _proof->locally_injective_label(p, z) : _proof->injectivity_label(z)) + " +";
+            pol2 += " " + (is_locally_injective() ? locally_injective_label(p, z) : _proof->injectivity_label(z)) + " +";
         pol2 += " s ;";
         _proof->emit_proof_line(pol2);
 
@@ -757,10 +857,7 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
         // local injectivity: for each pattern vertex and each target, at most one of
         // that vertex's neighbours may map there (so phi restricted to a neighbourhood
         // is injective). The neighbourhood analogue of the injectivity constraints.
-        _proof->create_locally_injective_constraints(pattern.size(), target.size(),
-            [&](int a, int b) { return pattern.adjacent(a, b); },
-            [&](int v) { return pattern.vertex_name(v); },
-            [&](int v) { return target.vertex_name(v); });
+        create_locally_injective_constraints(pattern, target);
 
     // generate edge constraints, and also handle loops here
     for (int p = 0; p < pattern.size(); ++p) {
@@ -855,7 +952,7 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
     // model. The loop-cancelled form relies on global injectivity on t, which local injectivity
     // does not give -- but under local injectivity the pol-summing filters that would need it
     // are disabled anyway (issue #58), so skip the relabelling entirely.
-    if (_proof->is_locally_injective())
+    if (is_locally_injective())
         return;
 
     auto & adjacency = _adjacency;

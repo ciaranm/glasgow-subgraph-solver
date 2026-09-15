@@ -85,16 +85,16 @@ auto HomomorphismSearcher::restarting_search(
     RestartsSchedule & restarts_schedule) -> SearchResult
 {
     if (proof && proof->super_extra_verbose()) {
-        vector<pair<NamedVertex, vector<NamedVertex>>> proof_domains;
+        vector<pair<int, vector<int>>> proof_domains;
         for (auto & d : domains) {
-            proof_domains.push_back(pair{model.pattern_vertex_for_proof(d.v), vector<NamedVertex>{}});
+            proof_domains.push_back(pair{int(d.v), vector<int>{}});
             auto values = d.values;
             for (auto v = values.find_first(); v != decltype(values)::npos; v = values.find_first()) {
                 values.reset(v);
-                proof_domains.back().second.push_back(model.target_vertex_for_proof(v));
+                proof_domains.back().second.push_back(int(v));
             }
         }
-        proof->show_domains("entering depth " + to_string(depth), proof_domains);
+        model.proofs()->show_domains("entering depth " + to_string(depth), proof_domains);
     }
 
     if (params.timeout->should_abort())
@@ -164,11 +164,12 @@ auto HomomorphismSearcher::restarting_search(
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
         if (proof) {
-            proof->guessing(depth, model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
-            // branching on branch_v->*f_v forward-checks using its supplemental adjacency; emit
-            // any still-pending supplemental for this antecedent before the propagation.
-            if (auto hp = model.proofs())
+            if (auto hp = model.proofs()) {
+                hp->guessing(depth, int(branch_domain->v), int(*f_v));
+                // branching on branch_v->*f_v forward-checks using its supplemental adjacency; emit
+                // any still-pending supplemental for this antecedent before the propagation.
                 hp->materialise_adjacency_for(int(branch_domain->v), int(*f_v));
+            }
         }
 
         // modified in-place by appending, we can restore by shrinking
@@ -185,7 +186,7 @@ auto HomomorphismSearcher::restarting_search(
         if (! propagate(false, new_domains, assignments)) {
             // failure? restore assignments and go on to the next thing
             if (proof)
-                proof->propagation_failure(assignments_as_proof_decisions(assignments), model.pattern_vertex_for_proof(branch_domain->v), model.target_vertex_for_proof(*f_v));
+                model.proofs()->propagation_failure(assignments_as_proof_decisions(assignments), int(branch_domain->v), int(*f_v));
 
             assignments.values.resize(assignments_size);
             actually_hit_a_failure = true;
@@ -426,8 +427,8 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 
     if constexpr (verbose_proofs_) {
         if (before.count() != d.values.count())
-            proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
-                0, before.count() - d.values.count(), model.pattern_vertex_for_proof(d.v));
+            model.proofs()->propagated(int(current_assignment.pattern_vertex), int(current_assignment.target_vertex),
+                0, before.count() - d.values.count(), int(d.v));
         before = d.values;
     }
 
@@ -441,8 +442,8 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 
         if constexpr (verbose_proofs_) {
             if (before.count() != d.values.count())
-                proof->propagated(model.pattern_vertex_for_proof(current_assignment.pattern_vertex), model.target_vertex_for_proof(current_assignment.target_vertex),
-                    g, before.count() - d.values.count(), model.pattern_vertex_for_proof(d.v));
+                model.proofs()->propagated(int(current_assignment.pattern_vertex), int(current_assignment.target_vertex),
+                    g, before.count() - d.values.count(), int(d.v));
             before = d.values;
         }
     }
@@ -780,12 +781,11 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             assignments.values.push_back({*current_assignment, false, -1, -1});
 
             if (proof) {
-                proof->unit_propagating(
-                    model.pattern_vertex_for_proof(current_assignment->pattern_vertex),
-                    model.target_vertex_for_proof(current_assignment->target_vertex));
-                // a forced var->val also forward-checks using its supplemental adjacency.
-                if (auto hp = model.proofs())
+                if (auto hp = model.proofs()) {
+                    hp->unit_propagating(int(current_assignment->pattern_vertex), int(current_assignment->target_vertex));
+                    // a forced var->val also forward-checks using its supplemental adjacency.
                     hp->materialise_adjacency_for(int(current_assignment->pattern_vertex), int(current_assignment->target_vertex));
+                }
             }
 
             // propagate watches

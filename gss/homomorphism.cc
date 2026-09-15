@@ -499,7 +499,7 @@ namespace
                 return StepOutcome::Continue;
 
             if (ctx.proof) {
-                ctx.proof->failure_due_to_pattern_bigger_than_target();
+                ctx.hom_proofs->failure_due_to_pattern_bigger_than_target();
                 if (ctx.params.count_solutions)
                     ctx.proof->finish_enumeration_proof(0, true);
                 else
