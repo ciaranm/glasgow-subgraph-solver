@@ -35,8 +35,9 @@ call the matching `solve_*` function, and print the `*Result`.
   ┌───────────────────────────────────────────────────────────────────────────────────────┐
   │ Implementation detail  (gss/innards/*)                                                    │
   │   homomorphism_model · homomorphism_searcher · homomorphism_domain · homomorphism_traits  │
+  │   solve_state · supplemental_graphs · processed_graphs_data · clique_size_constraints      │
   │   cheap_all_different · graph_traits · watches (nogoods) · svo_bitset                      │
-  │   proof (VeriPB logging) · verify · threads                                                │
+  │   homomorphism_proofs · proof (VeriPB logging) · verify · threads                          │
   └───────────────────────────────────────────────────────────────────────────────────────┘
                           │ uses
                           ▼
@@ -59,9 +60,14 @@ homomorphism variants are all configurations of it.
 
 - **`HomomorphismModel`** (`innards/homomorphism_model.{hh,cc}`) turns the two `InputGraph`s plus the
   `HomomorphismParams` into the internal constraint model: it re-encodes the graphs as bitset
-  adjacency, builds the *supplemental graphs* (exact-path / distance-3 / k4 / extra shapes) used for
+  adjacency, owns the *supplemental graphs* (exact-path / distance-3 / k4 / extra shapes) used for
   stronger filtering, precomputes degrees and neighbourhood-degree sequences, and seeds the initial
-  variable domains. The heavy lifting happens in `prepare()`.
+  variable domains. `prepare()` drives this; the graph construction itself is free functions in
+  `innards/supplemental_graphs.{hh,cc}` writing into the `ProcessedGraphsData`
+  (`innards/processed_graphs_data.hh`) the model hands them, from one `ShapeGraphSpec` plan that is
+  the single source of truth for which slot holds what. `build_supplemental_graphs()` and
+  `tighten_domains_with_supplementals()` are split out so staged solving can defer them past a first
+  search round. Clique-size constraints live in `innards/clique_size_constraints.{hh,cc}`.
 - **`HomomorphismDomain`** (`innards/homomorphism_domain.hh`) is one CP variable's domain: an
   `SVOBitset` of still-possible target vertices plus bookkeeping.
 - **`HomomorphismSearcher`** (`innards/homomorphism_searcher.{hh,cc}`) is the backtracking engine:
@@ -70,9 +76,18 @@ homomorphism variants are all configurations of it.
   restarts, and nogood recording via `Watches`. The propagation hot path is templated on
   `<directed, has_edge_labels, induced, verbose_proofs>` so the per-node inner loop has no runtime
   branches on those flags — a deliberate performance choice.
-- **`solve_homomorphism_problem`** (`homomorphism.cc`) wires these together: it sets up optional
-  proof logging, applies cheap early-exit heuristics (pattern bigger than target, the loop shortcut,
-  clique detection), builds the model, and dispatches to a sequential or threaded solver.
+- **`solve_homomorphism_problem`** (`homomorphism.cc`) wires these together as a **pipeline of
+  `SolveStep`s** over a shared `SolveContext`, run in registration order and stopping at the first
+  step that concludes: emit the OPB model, the pattern-bigger-than-target refutation, the
+  target-loop shortcut, the clique-pattern reduction, and then `MainSolveStep`, which builds the
+  model and searches. Search is simply the terminal step — there is no preprocess/search
+  distinction in the control flow. `SolveState` (`innards/solve_state.hh`) is what the pipeline
+  carries: the model, the root domains, and the nogood store, so that steps can grow the model and
+  accumulate nogoods between rounds. `--staged` uses exactly that: a cheap first round (original
+  graph only, degree + Hall, no NDS or supplementals) under a bounded restart schedule, and only if
+  it does not conclude are the supplemental graphs built, the domains re-filtered, and the search
+  resumed unbounded, with the nogoods carried across. Sequential only; see
+  [preprocessor-refactor.md](preprocessor-refactor.md).
 
 `sip_decomposer` offers an alternative top level that solves subgraph isomorphism by decomposing the
 pattern into biconnected components.
@@ -104,7 +119,15 @@ pattern into biconnected components.
   homomorphism and clique searchers.
 - **`RestartsSchedule`** (`gss/restarts.hh`) and **`Timeout`** (`gss/timeout.hh`) are the search
   control knobs. Restart policies: none, Luby, geometric, timed, and a thread-synchronised variant.
-- **`Proof`** (`innards/proof.{hh,cc}`) emits the VeriPB model (`.opb`) and proof log (`.pbp`).
+- **`Proof`** (`innards/proof.{hh,cc}`) emits the VeriPB model (`.opb`) and proof log (`.pbp`). It
+  holds the generic pseudo-Boolean machinery — variable naming, model and proof line emission,
+  levels, the dedup caches — plus the derivations the clique and common-subgraph solvers share.
+  **`HomomorphismProofs`** (`innards/homomorphism_proofs.{hh,cc}`) sits between the homomorphism
+  solver and `Proof` and owns everything homomorphism-exclusive: the OPB model emission, the
+  adjacency / exact-path / distance-3 / extra-shape derivations, the degree / NDS / Hall filter
+  proofs, and the proof-size economies (subsumption elision, deferral, and the lazy
+  materialisation the searcher drives). Keeping it out of `Proof` is what stops the bottom layer
+  from having to know what an exact-path graph is.
 
 ## Build and tests
 

@@ -37,9 +37,11 @@ A telling observation: the current code *already* concludes the problem during
 loop shortcut and clique reduction return SAT — they are just special-cased as early
 returns in `solve_homomorphism_problem`. The preprocess/search distinction is artificial.
 
-## Two economies that are NOT available
+## Two tempting economies, and what is actually available
 
-Before the design, two tempting ideas that do not work, so we do not attempt them:
+Before the design, two ideas that look like free wins. The first never works; the second
+does not work as stated, but a restricted form of it does, and that restriction is what
+the branch eventually implements (see [Lazy supplemental emission](#lazy-supplemental-emission)).
 
 - **Minimal / lazy OPB — no.** The OPB is the trusted encoding. A checker has no
   independent way to confirm that a partial OPB is still a faithful, complete model of
@@ -47,10 +49,17 @@ Before the design, two tempting ideas that do not work, so we do not attempt the
   (silently making the instance over-permissive). The OPB always contains the complete
   encoding — adjacency, (local-)injectivity, domains — no more and no less. (Counterpart
   rule: do not *add* derived consequences to the OPB either; derive them in the proof.)
-- **Lazy-on-cite proof emission — no.** RUP steps record nothing about which constraints
+- **Omit-if-unused proof emission — no.** RUP steps record nothing about which constraints
   they consume; VeriPB unit-propagates over the whole database. Once a derived constraint
   exists, any later RUP — every search nogood included — can silently rely on it. We can
-  never prove a derived constraint is unused, so we cannot defer or omit it on demand.
+  never *predict* that a derived constraint will go unused, so we can never decide up front
+  to leave one out. (Measurement bears this out: Phase 4 found the supplemental derivations
+  are ~92–100% never *explicitly* cited, yet still RUP-load-bearing in search.)
+- **Defer-until-first-use proof emission — yes, with care.** Deciding statically that a
+  constraint is never needed is impossible; noticing dynamically that it is needed *now*,
+  at the moment the solver consults the corresponding information, is not. That turns the
+  question from prediction into instrumentation, and it is what the lazy emission below
+  does.
 
 So **S2a is achieved by static subsumption / inertness elimination**: do not *generate*
 the useless supplementals in the first place. This is decidable, result-preserving, and
@@ -215,7 +224,27 @@ Each phase is an independently mergeable PR.
   multi-tier schedules; expressing the bounded round as a first-class composable `SolveStep`;
   making `--staged` the default. (Aside, found while testing: the decision-mode clique and
   target-loop shortcut steps ignore `--induced` on loopy targets — a *pre-existing* bug,
-  orthogonal to staging.)
+  orthogonal to staging, now fixed on its own branch as [PR #70].)
+- **Phase 3 Option 2 — lean the bottom `Proof` API.** *Done (commits 746b76f…d282913).* Phase 3
+  put a `HomomorphismProofs` middle layer between the solver and `Proof`, but the middle layer was
+  still marshalling `vector<NamedVertex>` in order to call homomorphism-specific methods *on
+  `Proof`*, so the bottom layer still knew what an exact-path graph was. Option 2 inverts that:
+  `Proof` grows generic emit primitives (`emit_proof_line` / `emit_proof_directive`,
+  `emit_model_constraint` / `emit_model_comment`, `variable_name`, the injectivity / at-most-one
+  label and dedup-cache accessors) plus the shared `AdjacencyProofLines` cache, and every
+  homomorphism-exclusive derivation is emitted *from* `HomomorphismProofs` over plain indices.
+  Migrated in order: the adjacency managers (step 1), exact-path (2a), distance-3 (2b), the model
+  adjacency constraints (2c), extra shapes (2d), the empty-domain conclusion (3a), the Hall set /
+  violator (3b), the degree / NDS / loop filters (3c), and the adjacency-line cache itself (3d).
+  Each step is byte-identical — it moves *where* a line is emitted, not *what*.
+  `create_adjacency_constraint` / `start_adjacency_constraints_for` stay in `Proof` deliberately:
+  the clique and common-subgraph solvers still use them, and only the homomorphism solver drives
+  its own path. Deliberately *not* migrated: the model-driven filter proofs
+  (`incompatible_by_degrees` / `_nds`, `emit_hall`) and the clique-size proof, the latter because
+  its translation state lives in `Proof` where the *shared* clique solver's own proof methods read
+  it.
+
+[PR #70]: https://github.com/ciaranm/glasgow-subgraph-solver/pull/70
 
 ### Strand → phase
 
@@ -226,6 +255,76 @@ Each phase is an independently mergeable PR.
 | S2b (shortcut obvious unsat) | Phase 5 |
 | S3 (reorder + stage) | Phase 5 (reorder) + Phase 6 (stage) |
 | S4 (sequencing clarity) | Phases 1, 3 |
+
+## Lazy supplemental emission
+
+*Done (commit 51575ba).* This is the branch's one genuinely delicate change, so the argument
+is written out in full.
+
+**What it does.** After Phase 4 has chosen, per head, the strongest supplemental adjacency
+constraint to keep, the kept derivations are no longer emitted during model build. Each is
+registered as a closure keyed by `(g, p, q, t)` and indexed by its *antecedent* `(p, t)`
+(`register_supplemental`), and emitted the first time something needs it
+(`materialise_one` / `materialise_adjacency_for`). A head that search never touches is never
+emitted at all.
+
+**Where "first time something needs it" is hooked.** Three places, and the claim is that they
+are exhaustive:
+
+1. **Root filtering.** The degree / NDS checks that read a supplemental row materialise it
+   directly (via `ensure_supplemental_adjacency`, which also covers the Phase 4 case where the
+   constraint it wants was elided and has to be re-derived as a weakening of the kept one — the
+   kept one may itself still be pending, so it is materialised first).
+2. **Assignment of `p → t`.** `HomomorphismSearcher::guessing` (branch) and the
+   unit-propagation path both call `materialise_adjacency_for(p, t)` before the propagation
+   that follows.
+3. **Forward-check removal of `t` from `dom(p)`.** `propagate_adjacency_constraints` snapshots
+   `dom(d.v)`, and for every value the forward-check removes calls
+   `materialise_adjacency_for(d.v, removed)`.
+
+Exhaustive because of the constraint's shape. A supplemental adjacency constraint is
+`x_p_t → ⋁_{u ∈ N_g(t)} x_q_u`: a single positive antecedent over `(p, t)`. It can only take
+part in propagation in two ways — the antecedent becomes true, which prunes `dom(q)` (case 2),
+or every consequent is false, which forces `x_p_t` false, i.e. removes `t` from `dom(p)`
+(case 3). Anything else that reads the supplemental rows does so at the root, before search
+(case 1). So every proof line whose RUP check could depend on the constraint is emitted after
+it.
+
+**Why this is allowed when omit-if-unused is not.** The earlier prohibition is about
+*prediction*: we cannot show ahead of time that a derivation will never be consumed, because
+RUP steps record nothing about what they consume. Lazy emission never predicts. It observes —
+the hook fires at the exact moment the solver's own propagator consults the corresponding
+adjacency information, so "needed" is decided by the search, at the point of need, and the
+constraint is in the database before the line that might use it. The economy is real because
+most heads are never touched, but nothing is ever *declined*.
+
+**Failure mode, if a hook is ever missed.** Under-materialising cannot produce a wrong
+`VERIFIED`. VeriPB checks each step against the constraints present at that point; a *smaller*
+database can only make a RUP check fail, never succeed where it would otherwise have failed.
+So a missing hook shows up as a proof that does not verify — loudly, in the sweeps and the
+`proof_*` ctests — and never as a proof that verifies something false. Over-materialising costs
+proof size and nothing else. That asymmetry is what makes the scheme safe to maintain.
+
+**The obligation it creates.** Proof *completeness* (not soundness) is now coupled to the
+structure of propagation: any future route by which search consults supplemental adjacency rows
+needs a matching `materialise_adjacency_for` call. A new propagator, a new filter that reads
+`target_graph_row(g, …)` mid-search, or a reordering that prunes before the assignment hook
+fires would each need one. This is the price of the economy, and it is why the hooks live in
+the searcher next to the propagation they shadow rather than in a wrapper somewhere.
+
+**Mechanics.** Mid-search materialisation emits at `active_level() + 1` — one level *above* the
+search, since `wipelvl N` wipes every level `>= N`, so scratch work must not sit where the
+search will wipe it — while the persistent `@label` goes to level 0. `materialise_adjacency_for`
+restores the search's active level once per batch rather than once per constraint.
+
+**Cost when not proving.** The searcher's per-removal bookkeeping is gated on
+`proof && model.proofs() && has_pending_supplementals()`, so with proof logging off it is a null
+check in the propagator and the `SVOBitset` snapshot is never taken. Node counts are identical
+to `main` and runtime is within noise (see below); the templated hot loop is otherwise untouched.
+
+**Effect.** On top of Phase 4's subsumption this roughly halves the supplemental count and the
+PBP line count again — e.g. the seed-31 distance-3 instance goes 279 → 117 supplementals and
+3479 → 1423 lines. The OPB is byte-identical and the search tree is unchanged.
 
 ## Risks and invariants
 
@@ -245,3 +344,49 @@ Each phase is an independently mergeable PR.
 - Preserve the locally-injective / loops gating (issues #56, #58) exactly when the
   `supports_*` traits become `applicable()`. `extra_shapes` re-enters
   `solve_homomorphism_problem` and is simply another step.
+
+## Reproducing the guardrails
+
+The claims above are all checkable, but the measurement scripts live *on this branch* (Phase 0
+added `proof_metrics.bash`), so comparing against `main` means running this branch's script
+against a `main`-built binary. Two worktrees, one script:
+
+```shell session
+$ git worktree add ../gss-main origin/main
+$ cmake -S ../gss-main -B ../gss-main/build && cmake --build ../gss-main/build -j8
+$ cmake -S . -B build && cmake --build build -j8
+
+$ ./test-instances/proof_metrics.bash ../gss-main/build/glasgow_subgraph_solver \
+    ./test-instances /tmp/wd-main /tmp/metrics-main.tsv
+$ ./test-instances/proof_metrics.bash ./build/glasgow_subgraph_solver \
+    ./test-instances /tmp/wd-branch /tmp/metrics-branch.tsv
+$ diff /tmp/metrics-main.tsv /tmp/metrics-branch.tsv
+```
+
+The `main` run exits 1 and omits the `staged` row, because `--staged` does not exist there; every
+other row should match on `opb_lines`, `solutions` and `nodes`, and differ only in `pbp_lines`
+(and only for the configurations Phases 4–6 deliberately change). What this currently shows:
+
+| config | PBP lines on `main` | here | note |
+| --- | --- | --- | --- |
+| `decision`, `count`, `nds`, `cliques`, `locally_injective` | 136 / 356 / 208 / 136 / 378 | unchanged | no supplemental derivations to economise |
+| `induced_unsat` | 2439 | **9** | Phase 5: the refutation no longer pays for `loop_fix_adjacencies` |
+| `supplementals` | 2168 | **1015** | Phase 4 subsumption + lazy emission |
+| `distance3` | 5396 | **1857** | ditto, where it bites hardest |
+| `loopy_supplementals` | 531 | **186** | ditto |
+| `staged` | — | 136 | concludes in Stage 1, so none of its 5 supplementals is ever derived |
+
+`opb_lines`, `solutions` and `nodes` are identical in every shared row — the economies are all
+in the proof, never in the model or the search.
+
+For the correctness and verification sweeps (these need `veripb` on `$PATH`):
+
+```shell session
+$ ctest --test-dir build                    # 49 tests: unit, proof_*, cake_* and the sweeps
+$ ./test-instances/random_proof_sweep.bash ./build/glasgow_subgraph_solver \
+    $(command -v veripb) ./build/create_random_graph /tmp/sweep
+```
+
+`ctest` registers 42 without `cake_pb_iso` installed and 49 with it (the 7 `cake_*` tests); the
+`proof_*` and `random_proof_sweep` tests are skipped entirely if `veripb` was not found at
+configure time, so a green `ctest` on a machine without either proves much less than CI does.

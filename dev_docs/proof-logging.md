@@ -44,6 +44,11 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | `--no-clique-detection` | the clique-detection shortcut is not yet logged |
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
+| not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
+
+`--staged` on its own *is* supported: the supplemental graphs are derived mid-proof at the level-0
+restart boundary, and an instance that concludes in the cheap first round emits no supplemental
+derivations at all.
 
 Injective and non-injective proofs support supplemental graphs, distance-3 (`--distance3`),
 neighbourhood degree sequences, and clique-size constraints (`--cliques`), on both loopless and
@@ -68,8 +73,8 @@ graphs are only built under full injectivity, so they never arise under local in
 Loops used to be incompatible with supplemental graphs ([issue #56], now fixed). The adjacency
 constraint keeps the target's self-loop term (so a loop→loop mapping satisfies the model, see
 [issue #49]), but that term is a stray when the constraint is summed into a pseudo-Boolean
-derivation. So before any such derivation, `Proof::loop_fix_adjacencies` derives the loop-cancelled
-form of each loop-bearing adjacency constraint — `~x_p_t` together with the neighbours of `t` other
+derivation. So before any such derivation, `HomomorphismProofs::derive_loop_fixed_adjacencies` derives the
+loop-cancelled form of each loop-bearing adjacency constraint — `~x_p_t` together with the neighbours of `t` other
 than `t` itself, which follows from the constraint plus injectivity on `t` — and the degree,
 supplemental-graph and distance-3 pols sum *that* in its place. The induced encoding additionally
 forbids a non-loopy pattern vertex from mapping to a loopy target (the `q == p` case of induced
@@ -125,6 +130,18 @@ the solution count sound. VeriPB checks the claimed count `<n>` against the numb
   keep the proof linear in the search depth (by moving the subsuming backtrack nogoods into the core)
   was tried, but `core id`-ing those nogoods triggered an upstream VeriPB bug that made later steps
   fail to verify, so it was reverted. See [issue #59] for the tracking issue and how to re-enable it.
+
+- **Supplemental derivations are emitted lazily, and only the strongest per head.** The adjacency
+  constraints for the supplemental graphs nest (`distance3` ⊇ `exact-path-1` ⊇ `exact-path-2` …,
+  same head), so only the set-minimal one per head is derived; anything that needs an elided one
+  re-derives it as a one-step weakening and deletes it again. On top of that, the kept derivations
+  are not emitted during model build but *materialised on first use* — a root degree/NDS read, an
+  assignment of `p → t`, or a forward-check removal of `t` from `dom(p)` — so a head search never
+  touches is never derived. Together these cut the proof by roughly 2–3x on supplemental-heavy
+  configurations, with the OPB and the search tree unchanged. The reasoning for why deferral is
+  admissible where omission is not, and the maintenance obligation it creates, is in
+  [preprocessor-refactor.md](preprocessor-refactor.md#lazy-supplemental-emission). Pass
+  `--no-proof-supplemental-subsumption` to emit everything, for studying the effect.
 
 [issue #49]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/49
 [issue #59]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/59
