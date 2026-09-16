@@ -1,6 +1,7 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/innards/clique_size_constraints.hh>
+#include <gss/innards/filter_activations.hh>
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_traits.hh>
@@ -68,7 +69,7 @@ namespace
         const std::tuple<std::unique_ptr<InputGraph>, bool, int> * extra_shape = nullptr;
     };
 
-    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops) -> vector<ShapeGraphSpec>
+    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops, bool directed) -> vector<ShapeGraphSpec>
     {
         vector<ShapeGraphSpec> plan;
         if (supports_exact_path_graphs(params, has_loops))
@@ -77,7 +78,7 @@ namespace
             plan.push_back({ShapeGraphSpec::Kind::Distance2, 1});
         if (supports_distance3_graphs(params))
             plan.push_back({ShapeGraphSpec::Kind::Distance3, 1});
-        if (supports_k4_graphs(params, has_loops))
+        if (supports_k4_graphs(params, has_loops, directed))
             plan.push_back({ShapeGraphSpec::Kind::K4, 1});
         for (auto & shape : params.extra_shapes)
             plan.push_back({ShapeGraphSpec::Kind::ExtraShape, 1, &shape});
@@ -86,10 +87,10 @@ namespace
 
     // The original graph plus every slot the plan allocates: this is the bitset stride
     // (max_graphs), computed once at construction so the graph rows can be sized.
-    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops) -> unsigned
+    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops, bool directed) -> unsigned
     {
         unsigned n = 1;
-        for (const auto & spec : make_shape_graph_plan(params, has_loops))
+        for (const auto & spec : make_shape_graph_plan(params, has_loops, directed))
             n += spec.slot_count;
         return n;
     }
@@ -115,18 +116,24 @@ struct HomomorphismModel::Imp
     // sizes are computed lazily during the const domain-compatibility checks.
     mutable CliqueSizeData clique_data;
 
-    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr) :
+    // What the initial-domain filters removed (see filter_activations.hh). Mutable for the
+    // same reason, and only written when params.record_filter_activations is set.
+    mutable FilterActivations filter_activations;
+
+    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr, unsigned max_graphs) :
         params(p),
         proof(r),
-        proofs(pr)
+        proofs(pr),
+        filter_activations(max_graphs)
     {
     }
 };
 
 HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
     const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs) :
-    _imp(make_unique<Imp>(params, proof, proofs)),
-    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy())),
+    _imp(make_unique<Imp>(params, proof, proofs,
+        number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed()))),
+    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed())),
     pattern_size(pattern.size()),
     target_size(target.size())
 {
@@ -140,6 +147,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     if (pattern.directed())
         _imp->graphs.directed = true;
+    _imp->graphs.either_graph_directed = pattern.directed() || target.directed();
 
     // recode pattern to a bit graph, and strip out loops
     _imp->graphs.pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
@@ -301,7 +309,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     }
 
     // set up the clique-size filtering caches
-    init_clique_size_data(_imp->clique_data, params, max_graphs, pattern.size(), target.size());
+    init_clique_size_data(_imp->clique_data, params, _imp->graphs.has_loops, max_graphs, pattern.size(), target.size());
 }
 
 HomomorphismModel::~HomomorphismModel() = default;
@@ -310,8 +318,13 @@ auto HomomorphismModel::_check_label_compatibility(int p, int t) const -> bool
 {
     if (! has_vertex_labels())
         return true;
-    else
-        return pattern_vertex_label(p) == target_vertex_label(t);
+    else if (pattern_vertex_label(p) == target_vertex_label(t))
+        return true;
+    else {
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.vertex_labels;
+        return false;
+    }
 }
 
 auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
@@ -319,18 +332,37 @@ auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
     if (pattern_has_loop(p) && ! target_has_loop(t)) {
         if (_imp->proof)
             _imp->proofs->incompatible_by_loops(p, t);
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.loops;
         return false;
     }
-    else if (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t)))
+    else if (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t))) {
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.loops;
         return false;
+    }
+    else if (pattern_has_loop(p) && has_edge_labels() && pattern_edge_label(p, p) != target_edge_label(t, t)) {
+        // A self-loop is an edge, and its label has to match like any other edge's. The
+        // searcher's edge-label check never sees one: loops are stripped out of the
+        // adjacency rows, and forward checking only ever compares a pair of *distinct*
+        // pattern vertices. So this is where a loop's label gets checked (issue #92).
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.loops;
+        return false;
+    }
 
     return true;
 }
 
 auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
 {
-    return check_clique_compatibility(_imp->clique_data, _imp->graphs, max_graphs, pattern_size, target_size,
-        _imp->params, _imp->proofs, p, t);
+    if (check_clique_compatibility(_imp->clique_data, _imp->graphs, max_graphs, pattern_size, target_size,
+            _imp->params, _imp->proofs, p, t))
+        return true;
+
+    if (_imp->params.record_filter_activations)
+        ++_imp->filter_activations.cliques;
+    return false;
 }
 
 auto HomomorphismModel::_check_degree_compatibility(
@@ -373,10 +405,14 @@ auto HomomorphismModel::_check_degree_compatibility(
                 if (_imp->params.prove_supplemental_subsumption)
                     _imp->proofs->forget_transient_supplemental_adjacencies();
             }
+            if (_imp->params.record_filter_activations)
+                ++_imp->filter_activations.degree[g];
             return false;
         }
         else if (degree_and_nds_are_exact(_imp->params, pattern_size, target_size) && target_degree(g, t) != pattern_degree(g, p)) {
             // not ok, degrees must be exactly the same
+            if (_imp->params.record_filter_activations)
+                ++_imp->filter_activations.degree[g];
             return false;
         }
     }
@@ -439,10 +475,15 @@ auto HomomorphismModel::_check_degree_compatibility(
                     if (_imp->params.prove_supplemental_subsumption)
                         _imp->proofs->forget_transient_supplemental_adjacencies();
                 }
+                if (_imp->params.record_filter_activations)
+                    ++_imp->filter_activations.nds;
                 return false;
             }
-            else if (degree_and_nds_are_exact(_imp->params, pattern_size, target_size) && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x))
+            else if (degree_and_nds_are_exact(_imp->params, pattern_size, target_size) && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x)) {
+                if (_imp->params.record_filter_activations)
+                    ++_imp->filter_activations.nds;
                 return false;
+            }
         }
     }
 
@@ -719,6 +760,8 @@ auto HomomorphismModel::prepare() -> bool
 
                     _imp->proofs->emit_hall_set_or_violator(patterns, targets);
                 }
+                if (_imp->params.record_filter_activations)
+                    ++_imp->filter_activations.global_degree;
                 return false;
             }
     }
@@ -735,6 +778,31 @@ auto HomomorphismModel::prepare() -> bool
     for (unsigned i = 0; i < target_size; ++i)
         if (_imp->graphs.target_loops[i])
             _imp->graphs.target_graph_rows[i * max_graphs + 0].set(i);
+
+    // The forward and reverse target rows need them too, and for the same reason: they are
+    // what the directed and edge-labelled instantiations of propagate_adjacency_constraints()
+    // read in place of the g=0 row. Without this a pattern edge could never be mapped onto a
+    // target self-loop on a directed or edge-labelled instance, so every solution that
+    // collapses an edge onto a loop went missing (issue #95).
+    if (! _imp->graphs.forward_target_graph_rows.empty())
+        for (unsigned i = 0; i < target_size; ++i)
+            if (_imp->graphs.target_loops[i]) {
+                _imp->graphs.forward_target_graph_rows[i].set(i);
+                _imp->graphs.reverse_target_graph_rows[i].set(i);
+            }
+
+    // The pattern's in-neighbourhoods, which local injectivity needs (issue #96) and which
+    // only a directed pattern needs stored: an undirected row is its own reverse. Built here
+    // rather than at recoding time so that the self-loops just restored above are in it --
+    // a loop at u puts u into its own out-neighbourhood, so it constrains u's image against
+    // its neighbours'.
+    if (_imp->graphs.directed) {
+        _imp->graphs.pattern_in_neighbour_rows.resize(pattern_size, SVOBitset{pattern_size, 0});
+        for (unsigned i = 0; i < pattern_size; ++i)
+            for (unsigned j = 0; j < pattern_size; ++j)
+                if (_imp->graphs.pattern_graph_rows[i * max_graphs + 0].test(j))
+                    _imp->graphs.pattern_in_neighbour_rows[j].set(i);
+    }
 
     // pattern adjacencies, compressed -- the original graph (g=0) now; the supplemental
     // graphs OR in their own bits in build_supplemental_graphs (which may run later, under
@@ -775,7 +843,7 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
     // next free slot(s), then (when proving) derive it through the solver-proofs layer.
     // The plan also fixes max_graphs, so the bump counters land exactly on max_graphs at
     // the end (checked below).
-    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops)) {
+    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops, _imp->graphs.either_graph_directed)) {
         switch (spec.kind) {
         case ShapeGraphSpec::Kind::ExactPath:
             build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);
@@ -864,6 +932,12 @@ auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdj
 auto HomomorphismModel::pattern_graph_row(int g, int p) const -> const SVOBitset &
 {
     return _imp->graphs.pattern_graph_rows[p * max_graphs + g];
+}
+
+auto HomomorphismModel::pattern_in_neighbour_row(int p) const -> const SVOBitset &
+{
+    return _imp->graphs.directed ? _imp->graphs.pattern_in_neighbour_rows[p]
+                                 : _imp->graphs.pattern_graph_rows[p * max_graphs + 0];
 }
 
 auto HomomorphismModel::target_graph_row(int g, int t) const -> const SVOBitset &
@@ -974,4 +1048,7 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
     }
 
     x.emplace_back(join("supplemental_graph_names =", _imp->graphs.supplemental_graph_names));
+
+    if (_imp->params.record_filter_activations)
+        _imp->filter_activations.add_initial_stats(x);
 }

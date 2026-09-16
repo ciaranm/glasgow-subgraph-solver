@@ -19,6 +19,7 @@ add_library(glasgow_subgraphs
         timeout.cc
         innards/cheap_all_different.cc
         innards/clique_size_constraints.cc
+        innards/filter_activations.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc
         innards/homomorphism_model.cc
@@ -95,6 +96,14 @@ add_test(NAME homomorphism_matrix_test COMMAND $<TARGET_FILE:homomorphism_matrix
 add_executable(random_homomorphism_test random_homomorphism_test.cc)
 target_link_libraries(random_homomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME random_homomorphism_test COMMAND $<TARGET_FILE:random_homomorphism_test>)
+
+add_executable(option_sweep_test option_sweep_test.cc)
+target_link_libraries(option_sweep_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+# The sweep checks its per-cell outcomes against a table checked in next to it; see
+# dev_docs/option-compatibility.md for what the table is for and how to regenerate it.
+target_compile_definitions(option_sweep_test PRIVATE
+        GSS_OPTION_SWEEP_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/option_sweep_golden.tsv")
+add_test(NAME option_sweep_test COMMAND $<TARGET_FILE:option_sweep_test>)
 
 add_executable(extra_shapes_test extra_shapes_test.cc)
 target_link_libraries(extra_shapes_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)

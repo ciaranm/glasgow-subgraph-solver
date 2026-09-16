@@ -25,6 +25,7 @@ covering what you are about to change *before* you change it.
 | getting oriented anywhere in the tree | [`dev_docs/architecture.md`](dev_docs/architecture.md) — the layer map, and what each component is for |
 | touching a format reader, a writer, or `InputGraph` | [`dev_docs/file-formats.md`](dev_docs/file-formats.md) |
 | writing or debugging proof logging | [`dev_docs/proof-logging.md`](dev_docs/proof-logging.md) — including which option combinations are supported, which is not all of them |
+| touching an option, a filter, or the traits layer | [`dev_docs/option-compatibility.md`](dev_docs/option-compatibility.md) — which combinations are legal, which are silently disabled rather than refused, and what the sweeps cover |
 | changing anything the solver does before search | [`dev_docs/preprocessor-refactor.md`](dev_docs/preprocessor-refactor.md) — where that code is going, which is not where it is |
 | looking for what an option does, or a file format | [`README.md`](README.md) |
 | about to commit | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
@@ -75,13 +76,29 @@ without following the link.
   `ColumnLimit: 0` clang-format packs it onto a single line hundreds of characters
   long; a trailing comment cannot be joined with what follows it, so the marker pins
   the break. Keep them, and see the comment in `.clang-format`.
-- **The randomised correctness oracle does not cover directed or labelled graphs.**
-  `random_homomorphism_test.cc` generates random *undirected, unlabelled* instances
-  and checks the solver against an independent verifier, which is the strongest test
-  here — and it says nothing at all about the directed and labelled paths, which rest
-  entirely on a handful of fixed instances. That is precisely where #86, #87 and #88
-  were hiding. If you change something that only those paths reach, the oracle
-  staying green is not evidence; add a fixed instance that exercises it.
+- **A filter that needs k *distinct* images needs injectivity, or a loopless target.**
+  Nothing collapses two adjacent pattern vertices onto one image unless that image
+  carries a self-loop — so the clique-size filter and the clique reduction are sound
+  without injectivity right up until a target loop turns up, which is why both went
+  years without the premise being stated (#91, #94). The supplemental graphs need a
+  different premise again. Before adding a filter, write its condition down in
+  [`option-compatibility.md`](dev_docs/option-compatibility.md) next to the others.
+- **A builder that reads adjacency rows must ask whether *either* graph is directed.**
+  A row is a vertex's out-neighbours, so anything written for undirected rows is wrong
+  on an asymmetric one, whichever graph it came from: the k4 builder marked pairs in an
+  orientation it never checked (#97), the clique solver held "cliques" together with
+  one-way arcs (#93), and local injectivity asked about common successors when it meant
+  common predecessors (#96). `ProcessedGraphsData::directed` follows the *pattern*,
+  because that is what picks the searcher's propagation path; `either_graph_directed` is
+  the question a builder wants.
+- **The randomised oracle now covers directed and labelled graphs, and the sweep covers
+  the filtering options.** `random_homomorphism_test.cc` enumerates all sixteen
+  combinations of loops × directed × vertex labels × edge labels against a brute-force
+  verifier, and `option_sweep_test.cc` multiplies a pairwise array over the options by
+  nineteen instance families. Green there is real evidence — for everything except
+  threads, proof logging (covered by `test-instances/random_proof_sweep.bash`),
+  `--shape`, and instances whose pattern and target have different shapes. For those,
+  add a fixed instance.
 - **A stale build can lie to you, particularly when checking that a test catches a
   bug.** Reverting a fix with `git stash push <file>` and rebuilding does not
   reliably recompile the restored file, and `touch` is not always enough either; the

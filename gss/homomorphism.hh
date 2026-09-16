@@ -112,6 +112,14 @@ namespace gss
         /// on proof trimming). Has no effect when proof logging is disabled.
         bool prove_supplemental_subsumption = true;
 
+        /// Record how much each filter actually removed, and report it in the result's
+        /// extra stats (see innards/filter_activations.hh). Off by default and off in every
+        /// normal solve: it costs a popcount per graph pair in the forward-checking loop.
+        /// The option sweep needs it to tell a filter that is correct here from one that did
+        /// nothing here; the hidden --record-filter-activations flag exposes it for
+        /// diagnosing by hand.
+        bool record_filter_activations = false;
+
         /// Less pattern constraints
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
 
