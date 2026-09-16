@@ -174,3 +174,13 @@ GSS_SWEEP_REGENERATE=1 ./build/option_sweep_test
 that mode the activation column is read as a floor, since extra instances can wake a filter up
 but never silence one. A thousand per cell takes about half a minute, and was clean once #97 was
 fixed.
+
+A table that only reproduces on the machine that made it would be worse than no table, so two
+things are deliberate and worth keeping if you add a family or a column. The instance generator
+uses raw `rng()` arithmetic and integer percentages: `std::mt19937` is specified exactly, but
+`std::uniform_real_distribution` is not, and libstdc++ and libc++ consume the generator
+differently. And the activation reading comes from a probe solve with the value ordering forced
+to `None`, because `Biased` — the default — and `Random` drive the search from
+`std::uniform_int_distribution` and `std::shuffle`. The *answers* do not depend on search
+order, which is why no outcome ever differed between platforms; how much each filter removes
+along the way does.
