@@ -71,7 +71,7 @@ auto main(int argc, char * argv[]) -> int
         options.add_options("Program options")
             ("help", "Display help information")
             ("timeout", "Abort after this many seconds", cxxopts::value<int>())
-            ("format", "Specify input file format (auto, lad, labelledlad, dimacs)", cxxopts::value<string>())
+            ("format", "Specify input file format (auto, lad, labelledlad, dimacs, csv, json)", cxxopts::value<string>())
             ("decide", "Solve this decision problem", cxxopts::value<int>());
 
         options.add_options("Advanced configuration options")

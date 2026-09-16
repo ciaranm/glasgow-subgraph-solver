@@ -81,7 +81,7 @@ $ ./build/glasgow_subgraph_solver --format lad pattern-file target-file
 
 In particular, note that auto-detection can easily fail if, for example, the first vertex in the
 graph has no neighbours.  We can read LAD, Labelled LAD (labels on vertices, and optionally also on
-edges), CSV, and DIMACS 2 formatted graphs. [The LAD
+edges), CSV, DIMACS 2, and [the gss-graph JSON format](#the-gss-graph-json-format) formatted graphs. [The LAD
 format](https://perso.liris.cnrs.fr/christine.solnon/SIP.html) is a nice simple choice. If you need
 to support named vertices, labels on vertices and / or edges, or directed edges, consider using the
 CSV format. To specify a directed edge, use a greater-than sign rather than a comma as the delimiter
@@ -110,6 +110,80 @@ quietly restrict that element to unlabelled target elements instead.
 
 Labelling the edges of an undirected graph does not make it directed: use the greater-than delimiter
 for that.
+
+### The gss-graph JSON format
+
+Every format above works out what kind of graph it is holding from whichever syntax happens to turn
+up in the file. That is unavoidably ambiguous in places: whether a graph is directed depends on
+whether any line used `>`, an isolated vertex needs the trailing-comma idiom, and auto-detection
+cannot always tell LAD from Labelled LAD. The `json` format instead *declares* those properties, and
+validates strictly, so that anything ambiguous is an error rather than a guess:
+
+```json
+{"format": "gss-graph", "version": 1, "directed": false,
+ "vertices": 4, "edges": [[0, 1], [1, 2], [2, 3]]}
+```
+
+Named and labelled, with a self-loop:
+
+```json
+{
+  "format": "gss-graph", "version": 1,
+  "directed": false,
+  "vertices": [
+    {"name": "c1", "label": "C"},
+    {"name": "n1", "label": "N"},
+    {"name": "o1", "label": "O"}
+  ],
+  "edges": [
+    ["c1", "n1", "single"],
+    ["n1", "o1", "double"],
+    ["c1", "c1", "single"]
+  ]
+}
+```
+
+`vertices` is either a count, giving that many anonymous vertices, or an array whose entries are
+names (`["a", "b"]`, exact sugar for `[{"name": "a"}, {"name": "b"}]`) or objects with an optional
+`name` and `label`. `edges` entries are either `[from, to]` / `[from, to, label]` or objects with
+`from`, `to` and an optional `label`. The array form is fixed at two or three elements permanently:
+every key added in future will live only in the object form, so the compact spelling can never come
+to mean something new.
+
+The rules, each of which is a hard failure naming what was wrong:
+
+- `format` and `version` are required. A reader refuses a version above the one it knows, naming both.
+- `directed` is required and never inferred. This is the rule that stops a labelled undirected graph
+  turning into a directed one.
+- In an undirected graph `[u, v]` and `[v, u]` are the same edge, so giving both is a duplicate
+  rather than being quietly idempotent as it is in CSV. A self-loop `[v, v]` is exactly one edge in
+  directed and undirected graphs alike, never implicitly doubled.
+- Labels are all or nothing per element type, as for CSV above, and `""` is a real label rather than
+  an absent one.
+- An endpoint addresses a vertex by index when it is an integer and by name when it is a string, and
+  a file has to pick one and keep to it. This is where JSON beats every text format here: the vertex
+  named `"1"` and the vertex at index `1` are different tokens, so numeric vertex names stop being a
+  trap.
+- Any unrecognised key is an error, so a misspelled `"wieght"` fails loudly instead of being
+  silently dropped. Keys beginning `x-` are reserved for third-party annotation and always ignored.
+- Vertex names are unique, and an isolated vertex is simply one listed in `vertices` and absent from
+  `edges`, with no special syntax.
+
+Parallel edges are expressible — an edge object takes a `multiplicity`, and `"multigraph": true`
+switches the uniqueness rule from the `(from, to)` pair to the `(from, to, label)` triple — but the
+solver cannot represent them, so this build refuses both rather than quietly merging them.
+
+`convert_to_json` writes any graph the other readers accept into this format, and unlike
+`convert_to_lad` it has nothing to refuse, since the format carries directedness, names and both
+kinds of label:
+
+```shell session
+$ ./build/convert_to_json --format lad my-graph.lad > my-graph.json
+```
+
+Its output is canonical, so converting it again gives the same bytes. Reading a file and writing it
+back preserves every property the format carries, which is what makes the claim that the format is
+unambiguous something that can be tested rather than just asserted.
 
 Symmetries
 ----------

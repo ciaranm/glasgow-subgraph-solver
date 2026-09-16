@@ -18,6 +18,19 @@ target_link_libraries(create_random_graph PRIVATE cxxopts)
 add_executable(convert_to_lad convert_to_lad.cc)
 target_link_libraries(convert_to_lad PRIVATE cxxopts)
 
+add_executable(convert_to_json convert_to_json.cc)
+target_link_libraries(convert_to_json PRIVATE cxxopts)
+
+# The JSON format over the real corpus: convert each instance, check the solver gets
+# the same answer through JSON as through the original format, and check the writer's
+# output is a fixed point. Needs no external tools, so it runs in every lane.
+add_test(NAME json_round_trip
+    COMMAND ${CMAKE_SOURCE_DIR}/test-instances/json_round_trip.bash
+        $<TARGET_FILE:glasgow_subgraph_solver>
+        $<TARGET_FILE:convert_to_json>
+        ${CMAKE_SOURCE_DIR}/test-instances
+        ${CMAKE_CURRENT_BINARY_DIR}/json_round_trip)
+
 # Proof-size metrics over a fixed, representative matrix (see
 # dev_docs/preprocessor-refactor.md). Pure measurement: it emits a TSV of the
 # supplemental-graph count and OPB/PBP line counts per configuration, the baseline that

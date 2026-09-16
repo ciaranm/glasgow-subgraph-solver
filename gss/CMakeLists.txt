@@ -35,6 +35,7 @@ add_library(glasgow_subgraphs
         formats/dimacs.cc
         formats/graph_file_error.cc
         formats/input_graph.cc
+        formats/json_graph.cc
         formats/lad.cc
         formats/read_file_format.cc
         formats/vfmcs.cc
@@ -47,6 +48,9 @@ target_link_libraries(glasgow_subgraphs PUBLIC
         ${GMP_LIBRARY}
         ${GMPXX_LIBRARY}
 )
+# PRIVATE: nlohmann/json is slow to compile and is confined to json_graph.cc, so it
+# must not leak into anything that merely links the library.
+target_link_libraries(glasgow_subgraphs PRIVATE nlohmann_json::nlohmann_json)
 
 add_executable(subgraph_isomorphism_test subgraph_isomorphism_test.cc)
 target_link_libraries(subgraph_isomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
@@ -67,6 +71,10 @@ add_test(NAME loooong_test COMMAND $<TARGET_FILE:loooong_test>)
 add_executable(svo_bitset_test innards/svo_bitset_test.cc)
 target_link_libraries(svo_bitset_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME svo_bitset_test COMMAND $<TARGET_FILE:svo_bitset_test>)
+
+add_executable(json_graph_test formats/json_graph_test.cc)
+target_link_libraries(json_graph_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME json_graph_test COMMAND $<TARGET_FILE:json_graph_test>)
 
 add_executable(formats_test formats/formats_test.cc)
 target_link_libraries(formats_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)

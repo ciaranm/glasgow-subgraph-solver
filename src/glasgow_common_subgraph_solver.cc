@@ -52,7 +52,7 @@ auto main(int argc, char * argv[]) -> int
             ("clique", "Use the clique solver");
 
         options.add_options("Input file options")
-            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)",  cxxopts::value<string>())
+            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs, csv, json)",  cxxopts::value<string>())
             ("first-format", "Specify input file format just for the first graph", cxxopts::value<string>())
             ("second-format", "Specify input file format just for the second graph", cxxopts::value<string>());
 

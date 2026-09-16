@@ -63,7 +63,7 @@ auto main(int argc, char * argv[]) -> int
             ("solution-limit", "Stop after finding this many solutions (implies counting)", cxxopts::value<unsigned long long>());
 
         options.add_options("Input file options")
-            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
+            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs, csv, json)", cxxopts::value<string>())
             ("pattern-format", "Specify input file format just for the pattern graph", cxxopts::value<string>())
             ("target-format", "Specify input file format just for the target graph", cxxopts::value<string>());
 
