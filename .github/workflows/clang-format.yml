@@ -1,0 +1,41 @@
+name: clang-format
+
+on:
+  push:
+    branches: [ "main" ]
+  # No branches filter, for the same reason as in cmake.yml: the filter applies to a
+  # pull request's BASE, so restricting it to main would leave a PR stacked on another
+  # branch unchecked.
+  pull_request:
+
+jobs:
+  format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    # Pinned to the exact version the tree is formatted with. Output differs between
+    # clang-format releases -- 18 and 21 disagree about the continuation indent of a
+    # multi-line `for` header, for one -- so an unpinned binary would report changes
+    # that have nothing to do with the contribution. The PyPI wheel ships the upstream
+    # LLVM binary, versioned to match.
+    - name: Install clang-format
+      run: pip install clang-format==21.1.8
+
+    - name: Check formatting
+      run: git ls-files '*.cc' '*.hh' | xargs -r clang-format --dry-run --Werror
+
+    - name: How to fix
+      if: failure()
+      run: |
+        echo "Source is not clang-formatted. Run this locally and commit the result:"
+        echo "  pip install clang-format==21.1.8"
+        echo "  git ls-files '*.cc' '*.hh' | xargs clang-format -i"
