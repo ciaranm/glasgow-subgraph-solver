@@ -35,7 +35,6 @@ using std::pair;
 using std::string;
 using std::to_string;
 using std::tuple;
-using std::uniform_real_distribution;
 using std::vector;
 
 using std::chrono::operator""s;
@@ -326,11 +325,20 @@ namespace
         return (rng() % 2) ? "x" : "y";
     }
 
-    auto random_graph(int n, double edge_probability, double loop_probability,
+    // mt19937 is specified exactly, but the standard's *distributions* are not: libstdc++ and
+    // libc++ consume its output differently, so a uniform_real_distribution here would build
+    // different instances on different platforms, and a checked-in table would only be
+    // reproducible on the one that generated it. Everything here is raw rng() arithmetic, and
+    // densities are integer percentages for the same reason.
+    auto chance(mt19937 & rng, int percent) -> bool
+    {
+        return int(rng() % 100) < percent;
+    }
+
+    auto random_graph(int n, int edge_percent, int loop_percent,
         bool directed, bool vertex_labels, bool edge_labels, mt19937 & rng) -> InputGraph
     {
         InputGraph g{n, vertex_labels, edge_labels, directed};
-        uniform_real_distribution<double> dist{0.0, 1.0};
 
         auto add = [&](int a, int b) {
             if (directed)
@@ -344,10 +352,10 @@ namespace
         for (int v = 0; v < n; ++v) {
             if (vertex_labels)
                 g.set_vertex_label(v, random_label(rng));
-            if (loop_probability > 0.0 && dist(rng) < loop_probability)
+            if (loop_percent > 0 && chance(rng, loop_percent))
                 add(v, v);
             for (int w = (directed ? 0 : v + 1); w < n; ++w)
-                if (v != w && dist(rng) < edge_probability)
+                if (v != w && chance(rng, edge_percent))
                     add(v, w);
         }
 
@@ -401,14 +409,14 @@ namespace
                                                       bool filter_friendly = (0 == index % 2);
                                                       int np = filter_friendly ? 5 + int(rng() % 2) : 4 + int(rng() % 2);
                                                       int nt = filter_friendly ? 9 + int(rng() % 3) : 7 + int(rng() % 2);
-                                                      double pattern_density = (filter_friendly ? 0.45 : 0.4) + (rng() % 15) / 100.0;
-                                                      double target_density = (filter_friendly ? 0.2 : 0.45) + (rng() % 15) / 100.0;
+                                                      int pattern_percent = (filter_friendly ? 45 : 40) + int(rng() % 15);
+                                                      int target_percent = (filter_friendly ? 20 : 45) + int(rng() % 15);
                                                       // The target is loopier than the pattern on purpose: a pattern
                                                       // loop needs somewhere to go, and an instance nothing can satisfy
                                                       // for a structural reason never reaches a filter at all.
                                                       return Instance{
-                                                          random_graph(np, pattern_density, loops ? 0.15 : 0.0, directed, vertex_labels, edge_labels, rng),
-                                                          random_graph(nt, target_density, loops ? 0.4 : 0.0, directed, vertex_labels, edge_labels, rng)};
+                                                          random_graph(np, pattern_percent, loops ? 15 : 0, directed, vertex_labels, edge_labels, rng),
+                                                          random_graph(nt, target_percent, loops ? 40 : 0, directed, vertex_labels, edge_labels, rng)};
                                                   }});
                     }
 
@@ -418,25 +426,25 @@ namespace
                                       // fires CliqueShortcutStep, and gives the clique-size filters something to bite
                                       // on: a target this sparse has plenty of vertices in no clique that big
                                       int k = 4 + int(rng() % 2);
-                                      return Instance{clique(k), random_graph(10, 0.4 + (rng() % 15) / 100.0, 0.0, false, false, false, rng)};
+                                      return Instance{clique(k), random_graph(10, 40 + int(rng() % 15), 0, false, false, false, rng)};
                                   }});
 
         families.push_back(Family{"pattern-bigger-than-target", [](mt19937 & rng, int) -> Instance {
                                       // fires PatternBiggerThanTargetStep under injectivity, and is a plain hard
                                       // instance without it
                                       return Instance{
-                                          random_graph(8, 0.4, 0.0, false, false, false, rng),
-                                          random_graph(5, 0.5, 0.0, false, false, false, rng)};
+                                          random_graph(8, 40, 0, false, false, false, rng),
+                                          random_graph(5, 50, 0, false, false, false, rng)};
                                   }});
 
         families.push_back(Family{"equal-size", [](mt19937 & rng, int) -> Instance {
                                       // equal sizes make degree_and_nds_are_exact() true under induced injectivity,
                                       // which is a different filter from the usual inequality
                                       int n = 5 + int(rng() % 2);
-                                      double density = 0.35 + (rng() % 20) / 100.0;
+                                      int density = 35 + int(rng() % 20);
                                       return Instance{
-                                          random_graph(n, density, 0.0, false, false, false, rng),
-                                          random_graph(n, density, 0.0, false, false, false, rng)};
+                                          random_graph(n, density, 0, false, false, false, rng),
+                                          random_graph(n, density, 0, false, false, false, rng)};
                                   }});
 
         return families;
@@ -592,25 +600,14 @@ TEST_CASE("option sweep: filtering options do not change the answer")
                 const auto & [pattern, target] = instances[f][i];
                 const auto & baseline = baseline_for(f, i, row);
 
-                auto params = make_params(row);
-                // The filter-friendly instances are solved with the instrumentation on, which
-                // is where the cell's activation reading comes from -- they are the ones where
-                // a filter having nothing to do means something. The rest go through the
-                // ordinary path, because recording selects a different instantiation of the
-                // propagation template and the sweep should mostly be testing the real one;
-                // the first instance is solved both ways to pin down that the two agree.
-                params.record_filter_activations = (0 == i % 2);
-
                 Answer answer;
                 try {
-                    answer = solve(pattern, target, params);
+                    answer = solve(pattern, target, make_params(row));
                 }
                 catch (const UnsupportedConfiguration &) {
                     cell.outcome = Outcome::Unsupported;
                     break;
                 }
-
-                cell.active = cell.active || answer.any_optional_filter_fired;
 
                 std::ostringstream where;
                 where << "config " << config << " (" << describe(row) << ")"
@@ -641,13 +638,30 @@ TEST_CASE("option sweep: filtering options do not change the answer")
                     }
                 }
 
-                if (i == 0) {
-                    // recording must not change what comes back
-                    params.record_filter_activations = false;
-                    auto unrecorded = solve(pattern, target, params);
-                    ok = ok && unrecorded.satisfiable == answer.satisfiable && unrecorded.count == answer.count;
-                    CHECK(unrecorded.satisfiable == answer.satisfiable);
-                    CHECK(unrecorded.count == answer.count);
+                // Where the cell's activation reading comes from: the filter-friendly
+                // instances, which are the ones on which a filter having nothing to do means
+                // something. It is a solve of its own, with two deliberate differences from
+                // the row above. Recording is on, which selects a different instantiation of
+                // the propagation template -- so the row itself is solved without it, and the
+                // sweep is mostly testing the real one. And the value ordering is forced to
+                // None, because Biased and Random drive the search from a
+                // uniform_int_distribution, whose output is not the same across standard
+                // libraries: the answer does not depend on search order, but how much each
+                // filter removes along the way does, and the checked-in table has to be
+                // reproducible everywhere.
+                //
+                // That it agrees with the row is then worth checking in itself -- neither
+                // recording nor the value-ordering heuristic may change the answer.
+                if (0 == i % 2) {
+                    auto probe_params = make_params(row);
+                    probe_params.record_filter_activations = true;
+                    probe_params.value_ordering_heuristic = ValueOrdering::None;
+                    auto probe = solve(pattern, target, probe_params);
+                    cell.active = cell.active || probe.any_optional_filter_fired;
+
+                    ok = ok && probe.satisfiable == answer.satisfiable && probe.count == answer.count;
+                    CHECK(probe.satisfiable == answer.satisfiable);
+                    CHECK(probe.count == answer.count);
                 }
 
                 if (! ok)
