@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <sstream>
+#include <string>
 #include <utility>
 
 using namespace gss;
@@ -13,6 +14,7 @@ using namespace gss;
 using std::chrono::operator""s;
 using std::make_shared;
 using std::make_unique;
+using std::string;
 using std::stringstream;
 
 TEST_CASE("subgraph isomorphism no edges")
@@ -198,4 +200,28 @@ R"(1,2,red
     auto decomposed = solve_sip_by_decomposition(pattern, target, params);
     CHECK(decomposed.complete);
     CHECK(decomposed.solution_count == undecomposed.solution_count);
+}
+
+TEST_CASE("subgraph isomorphism with an edge labelled 'unlabelled'")
+{
+    // "unlabelled" was once the sentinel label given to the reverse half of a
+    // directed edge, back when add_directed_edge() inserted one. It has not been for
+    // years, so it is an ordinary label and must behave like any other.
+    auto count_with_label = [](const string & label) {
+        auto pattern = read_csv(stringstream{"a>b," + label + "\n"}, "pattern");
+        auto target = read_csv(stringstream{"1>2," + label + "\n2>3," + label + "\n"}, "target");
+
+        HomomorphismParams params;
+        params.timeout = make_shared<Timeout>(0s);
+        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+        params.count_solutions = true;
+
+        auto result = solve_homomorphism_problem(pattern, target, params);
+        CHECK(result.complete);
+        return result.solution_count;
+    };
+
+    // The pattern's single arc maps to either arc of the two-arc directed path.
+    CHECK(count_with_label("red") == 2);
+    CHECK(count_with_label("unlabelled") == count_with_label("red"));
 }
