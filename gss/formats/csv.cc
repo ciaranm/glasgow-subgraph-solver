@@ -6,12 +6,14 @@
 #include <optional>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 using std::ifstream;
 using std::istream;
 using std::nullopt;
 using std::optional;
+using std::pair;
 using std::string;
 using std::tuple;
 using std::unordered_map;
@@ -28,6 +30,7 @@ namespace
         unordered_map<string, string> vertex_labels;
         vector<tuple<int, int, string>> edges;
         bool seen_vertex_label = false, seen_edge_label = false, seen_directed_edge = false;
+        optional<pair<string, string>> first_unlabelled_edge;
 
         string line;
 
@@ -59,6 +62,8 @@ namespace
 
                 if (! label.empty())
                     seen_edge_label = true;
+                else if (! first_unlabelled_edge)
+                    first_unlabelled_edge = pair{left, right};
 
                 if (delim == '>') {
                     seen_directed_edge = true;
@@ -71,17 +76,44 @@ namespace
             }
         }
 
+        // Labels are all or nothing, per element type: an element with no declared
+        // label is not the same thing as one labelled with the empty string, and
+        // since label matching is exact, quietly treating it as the latter would
+        // silently constrain it to unlabelled target elements.
+
+        // For vertices, report the lowest-numbered offender, so the message doesn't
+        // depend on hash order. A vertex mentioned only by an edge line declares no
+        // label either, so this has to look at every vertex rather than at the
+        // declaration lines.
+        if (seen_vertex_label) {
+            optional<pair<int, string>> unlabelled;
+            for (auto & [v, idx] : vertices)
+                if (! vertex_labels.contains(v))
+                    if ((! unlabelled) || idx < unlabelled->first)
+                        unlabelled = pair{idx, v};
+
+            if (unlabelled)
+                throw GraphFileError{filename, "vertex '" + unlabelled->second + "' has no label, but other vertices do: vertex labels must be given for every vertex, or for none",
+                    true};
+        }
+
+        // Every edge comes from a line of its own, so for edges this is the first
+        // offending line, named as it was written.
+        if (seen_edge_label && first_unlabelled_edge)
+            throw GraphFileError{filename, "the edge between '" + first_unlabelled_edge->first + "' and '" + first_unlabelled_edge->second + "' has no label, but other edges do: edge labels must be given for every edge, or for none",
+                true};
+
         InputGraph result{int(vertices.size()), seen_vertex_label, seen_edge_label};
 
+        // Note that the undirected case has both (f, t) and (t, f) in edges already,
+        // so add_edge() is called once for each direction: harmless, and it keeps
+        // labelled and unlabelled undirected edges on the same path. Using
+        // add_directed_edge() here instead would mark the graph directed.
         for (auto & [f, t, l] : edges)
             if (seen_directed_edge)
                 result.add_directed_edge(f, t, l);
-            else if (seen_edge_label) {
-                result.add_directed_edge(f, t, l);
-                result.add_directed_edge(t, f, l);
-            }
             else
-                result.add_edge(f, t);
+                result.add_edge(f, t, l);
 
         auto rename = [&](const string & s) -> string {
             if (rename_map) {
@@ -99,7 +131,7 @@ namespace
 
         if (seen_vertex_label)
             for (auto & [v, l] : vertices)
-                result.set_vertex_label(l, vertex_labels[v]);
+                result.set_vertex_label(l, vertex_labels.at(v));
 
         return result;
     }
