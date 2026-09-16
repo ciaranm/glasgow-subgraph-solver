@@ -103,7 +103,7 @@ namespace
             throw GraphFileError{filename, "the edge between '" + first_unlabelled_edge->first + "' and '" + first_unlabelled_edge->second + "' has no label, but other edges do: edge labels must be given for every edge, or for none",
                 true};
 
-        InputGraph result{int(vertices.size()), seen_vertex_label, seen_edge_label};
+        InputGraph result{int(vertices.size()), seen_vertex_label, seen_edge_label, seen_directed_edge};
 
         // Note that the undirected case has both (f, t) and (t, f) in edges already,
         // so add_edge() is called once for each direction: harmless, and it keeps

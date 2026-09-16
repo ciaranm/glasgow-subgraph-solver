@@ -6,6 +6,7 @@
 #include <iterator>
 #include <limits>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@ using std::distance;
 using std::find;
 using std::function;
 using std::isgraph;
+using std::logic_error;
 using std::make_optional;
 using std::make_pair;
 using std::map;
@@ -52,13 +54,13 @@ struct InputGraph::Imp
     bool loopy = false, directed = false;
 };
 
-InputGraph::InputGraph(int size, bool v, bool e) :
+InputGraph::InputGraph(int size, bool v, bool e, bool d) :
     _imp(std::make_unique<Imp>())
 {
     _imp->has_vertex_labels = v;
     _imp->has_edge_labels = e;
     _imp->loopy = false;
-    _imp->directed = false;
+    _imp->directed = d;
 
     if (0 != size)
         resize(size);
@@ -96,7 +98,11 @@ auto InputGraph::add_directed_edge(int a, int b, string_view label) -> void
 {
     sanity_check_name(label, "edge label");
 
-    _imp->directed = true;
+    // Directedness is declared, not acquired. Adding a one-way edge to a graph that
+    // says it is undirected would leave an asymmetric edge set behind a directed()
+    // of false, which is the kind of quiet disagreement that shows up far from here.
+    if (! _imp->directed)
+        throw logic_error{"add_directed_edge() on a graph that was not declared directed: pass directed = true to the InputGraph constructor, or use add_edge()"};
 
     _imp->edges.emplace(make_pair(a, b), label).first->second = label;
     if (a == b)
@@ -155,6 +161,11 @@ auto InputGraph::vertex_name(int v) const -> string
         return to_string(v);
     else
         return it->second;
+}
+
+auto InputGraph::vertex_has_name(int v) const -> bool
+{
+    return _imp->vertex_names.find_left(v) != _imp->vertex_names.id_to_name.end();
 }
 
 auto InputGraph::vertex_from_name(string_view n) const -> optional<int>

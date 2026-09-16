@@ -23,8 +23,14 @@ private:
 public:
     /**
      * \param initial_size can be 0, if resize() is called afterwards.
+     * \param directed declares whether this is a directed graph. It is never
+     *     inferred from which edges get added: add_directed_edge() requires it to
+     *     have been declared, and an undirected graph stays undirected however its
+     *     edges are labelled. Defaults to false, the reading under which a caller
+     *     that should have declared it gets an error rather than a graph that
+     *     quietly means something else.
      */
-    InputGraph(int initial_size, bool has_vertex_labels, bool has_edge_labels);
+    InputGraph(int initial_size, bool has_vertex_labels, bool has_edge_labels, bool directed = false);
 
     InputGraph(const InputGraph &) = delete;
 
@@ -66,8 +72,9 @@ public:
     auto add_edge(int a, int b, std::string_view label) -> void;
 
     /**
-     * Add a directed edge from a to b, with a label. This makes the graph
-     * directed.
+     * Add a directed edge from a to b, with a label.
+     *
+     * \throw std::logic_error if the graph was not declared directed.
      */
     auto add_directed_edge(int a, int b, std::string_view label) -> void;
 
@@ -102,6 +109,13 @@ public:
      * What is the name associated with a given vertex (for output purposes)?
      */
     auto vertex_name(int v) const -> std::string;
+
+    /**
+     * Has a name actually been set for this vertex? vertex_name() falls back to the
+     * index when one hasn't, which a writer needs to tell apart from a vertex
+     * genuinely named for its index.
+     */
+    auto vertex_has_name(int v) const -> bool;
 
     /**
      * Find a given vertex by name.

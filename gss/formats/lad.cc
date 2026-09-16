@@ -26,7 +26,7 @@ namespace
         bool vertex_labels,
         bool edge_labels) -> InputGraph
     {
-        InputGraph result{0, vertex_labels, edge_labels};
+        InputGraph result{0, vertex_labels, edge_labels, directed};
 
         result.resize(read_word(infile));
         if (! infile)

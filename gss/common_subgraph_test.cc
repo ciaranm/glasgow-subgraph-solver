@@ -256,11 +256,9 @@ TEST_CASE("edge labels constrain the association")
     SECTION("matching edge labels allow the edge to be mapped")
     {
         InputGraph f{2, false, true};
-        f.add_directed_edge(0, 1, "a");
-        f.add_directed_edge(1, 0, "a");
+        f.add_edge(0, 1, "a");
         InputGraph s{2, false, true};
-        s.add_directed_edge(0, 1, "a");
-        s.add_directed_edge(1, 0, "a");
+        s.add_edge(0, 1, "a");
 
         auto result = solve_common_subgraph_problem(f, s, make_params());
         CHECK(result.mapping.size() == 2);
@@ -269,11 +267,9 @@ TEST_CASE("edge labels constrain the association")
     SECTION("differing edge labels prevent the edge being mapped")
     {
         InputGraph f{2, false, true};
-        f.add_directed_edge(0, 1, "a");
-        f.add_directed_edge(1, 0, "a");
+        f.add_edge(0, 1, "a");
         InputGraph s{2, false, true};
-        s.add_directed_edge(0, 1, "b");
-        s.add_directed_edge(1, 0, "b");
+        s.add_edge(0, 1, "b");
 
         auto result = solve_common_subgraph_problem(f, s, make_params());
         CHECK(result.mapping.size() == 1); // the "a" edge has no "a" edge to map to
