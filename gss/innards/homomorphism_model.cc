@@ -201,8 +201,8 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     if (pattern.directed() || pattern.has_edge_labels()) {
         _imp->graphs.forward_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
         _imp->graphs.reverse_target_graph_rows.resize(target_size, SVOBitset{target_size, 0});
-        target.for_each_edge([&](int f, int t, string_view l) {
-            if (f != t && l != "unlabelled") {
+        target.for_each_edge([&](int f, int t, string_view) {
+            if (f != t) {
                 _imp->graphs.forward_target_graph_rows[f].set(t);
                 _imp->graphs.reverse_target_graph_rows[t].set(f);
             }
@@ -822,9 +822,8 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
     // Defensive invariant: every plan slot has now been built, so the bump counters must
     // land on max_graphs (derived from the same plan) and match the recorded names.
     if (next_pattern_supplemental != max_graphs || next_target_supplemental != max_graphs ||
-            next_pattern_supplemental != _imp->graphs.supplemental_graph_names.size())
-        throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) + " "
-        + to_string(_imp->graphs.supplemental_graph_names.size())};
+        next_pattern_supplemental != _imp->graphs.supplemental_graph_names.size())
+        throw UnsupportedConfiguration{"something has gone wrong with supplemental graph indexing: " + to_string(next_pattern_supplemental) + " " + to_string(next_target_supplemental) + " " + to_string(max_graphs) + " " + to_string(_imp->graphs.supplemental_graph_names.size())};
 
     // pattern and target degrees, for supplemental graphs
     for (unsigned g = 1; g < max_graphs; ++g) {
