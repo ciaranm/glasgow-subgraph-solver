@@ -775,6 +775,18 @@ auto HomomorphismModel::prepare() -> bool
         if (_imp->graphs.target_loops[i])
             _imp->graphs.target_graph_rows[i * max_graphs + 0].set(i);
 
+    // The forward and reverse target rows need them too, and for the same reason: they are
+    // what the directed and edge-labelled instantiations of propagate_adjacency_constraints()
+    // read in place of the g=0 row. Without this a pattern edge could never be mapped onto a
+    // target self-loop on a directed or edge-labelled instance, so every solution that
+    // collapses an edge onto a loop went missing (issue #95).
+    if (! _imp->graphs.forward_target_graph_rows.empty())
+        for (unsigned i = 0; i < target_size; ++i)
+            if (_imp->graphs.target_loops[i]) {
+                _imp->graphs.forward_target_graph_rows[i].set(i);
+                _imp->graphs.reverse_target_graph_rows[i].set(i);
+            }
+
     // pattern adjacencies, compressed -- the original graph (g=0) now; the supplemental
     // graphs OR in their own bits in build_supplemental_graphs (which may run later, under
     // staging). The array is zero-initialised, so the two passes compose.

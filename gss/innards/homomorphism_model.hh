@@ -69,6 +69,7 @@ namespace gss::innards
 
         auto pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType;
         auto pattern_graph_row(int g, int p) const -> const SVOBitset &;
+
         auto target_graph_row(int g, int t) const -> const SVOBitset &;
 
         auto forward_target_graph_row(int t) const -> const SVOBitset &;

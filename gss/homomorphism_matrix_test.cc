@@ -118,6 +118,32 @@ TEST_CASE("directed edges must be mapped respecting orientation")
     CHECK(solve_homomorphism_problem(arc, dipath, params).solution_count == 2);
 }
 
+// A target self-loop is an edge like any other, and two adjacent pattern vertices may be
+// mapped onto it once injectivity is dropped. The directed and edge-labelled propagation
+// paths read the forward and reverse target rows, which were left with no loops in them,
+// so on those paths no pattern edge could reach a loop at all (issue #95).
+TEST_CASE("a pattern edge can be mapped onto a target self-loop")
+{
+    auto params = make_params();
+    params.injectivity = Injectivity::NonInjective;
+
+    SECTION("undirected and unlabelled: the path that always worked")
+    {
+        CHECK(solve_homomorphism_problem(csv("a,b\n"), csv("1,1\n"), params).solution_count == 1);
+    }
+
+    SECTION("directed")
+    {
+        CHECK(solve_homomorphism_problem(csv("a>b\n"), csv("1>1\n"), params).solution_count == 1);
+    }
+
+    SECTION("edge-labelled, which takes the directed path too")
+    {
+        CHECK(solve_homomorphism_problem(csv("a,b,x\n"), csv("1,1,x\n"), params).solution_count == 1);
+        CHECK(solve_homomorphism_problem(csv("a,b,x\n"), csv("1,1,y\n"), params).solution_count == 0);
+    }
+}
+
 // The clique shortcut hands the target to the clique solver, which has no notion of edge
 // direction and would hold a "clique" together with one-way arcs (issue #93). It only fires
 // in decision mode, so this checks satisfiability rather than a count.
