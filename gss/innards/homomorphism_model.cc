@@ -301,7 +301,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     }
 
     // set up the clique-size filtering caches
-    init_clique_size_data(_imp->clique_data, params, max_graphs, pattern.size(), target.size());
+    init_clique_size_data(_imp->clique_data, params, _imp->graphs.has_loops, max_graphs, pattern.size(), target.size());
 }
 
 HomomorphismModel::~HomomorphismModel() = default;

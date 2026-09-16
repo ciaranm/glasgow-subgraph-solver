@@ -143,6 +143,68 @@ TEST_CASE("edge labels constrain the mapping")
 }
 
 // ---------------------------------------------------------------------------
+// Clique-size constraints
+// ---------------------------------------------------------------------------
+
+// The clique-size filter (--cliques) maps a pattern vertex in a k-clique only to a target
+// vertex in a k-clique, which needs the k pattern vertices to reach k distinct targets.
+// Injectivity gives that, and so -- on the original graph pair only -- does a loopless
+// target, since collapsing two adjacent vertices would need a self-loop on the image. Both
+// arguments had been taken for granted rather than checked, so the filter silently deleted
+// solutions in the two cases below (issue #91).
+TEST_CASE("clique-size constraints do not change the solution count")
+{
+    SECTION("non-injective into a target with a loop")
+    {
+        auto edge = csv("a,b\n");
+        auto oneloop = csv("1,1\n"); // one vertex, self-loop
+
+        auto params = make_params();
+        params.injectivity = Injectivity::NonInjective;
+        params.clique_size_constraints = true;
+        // both pattern vertices onto the loop
+        CHECK(solve_homomorphism_problem(edge, oneloop, params).solution_count == 1);
+    }
+
+    SECTION("non-injective with clique sizes on the supplemental graphs, no loops anywhere")
+    {
+        auto star = csv("b,a\nb,c\nb,d\n"); // K_{1,3}, centre b
+        auto edge = csv("1,2\n");
+
+        auto params = make_params();
+        params.injectivity = Injectivity::NonInjective;
+        params.clique_size_constraints = true;
+        params.clique_size_constraints_on_supplementals = true;
+        // the three leaves are a triangle in the pattern's distance-2 graph, but they may
+        // legitimately share an image: centre on either end of the edge, leaves on the other
+        CHECK(solve_homomorphism_problem(star, edge, params).solution_count == 2);
+    }
+
+    SECTION("injective: the filter still fires, and still counts the same")
+    {
+        auto triangle = csv("a,b\nb,c\na,c\n");
+        auto triangle_and_c4 = csv("1,2\n2,3\n1,3\n4,5\n5,6\n6,7\n7,4\n");
+
+        // supplementals and NDS off, so that what is left to prune the triangle-free half of
+        // the target is the clique-size filter itself
+        auto without = make_params();
+        without.no_supplementals = true;
+        without.no_nds = true;
+        auto without_result = solve_homomorphism_problem(triangle, triangle_and_c4, without);
+
+        auto with = make_params();
+        with.no_supplementals = true;
+        with.no_nds = true;
+        with.clique_size_constraints = true;
+        auto with_result = solve_homomorphism_problem(triangle, triangle_and_c4, with);
+
+        CHECK(with_result.solution_count == without_result.solution_count);
+        CHECK(with_result.solution_count == 6);
+        CHECK(with_result.nodes < without_result.nodes);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Search-configuration invariants
 // ---------------------------------------------------------------------------
 

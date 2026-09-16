@@ -1,6 +1,7 @@
 #include <gss/clique.hh>
 #include <gss/innards/clique_size_constraints.hh>
 #include <gss/innards/homomorphism_proofs.hh>
+#include <gss/innards/homomorphism_traits.hh>
 
 #include <chrono>
 #include <memory>
@@ -113,12 +114,12 @@ namespace
 }
 
 auto gss::innards::init_clique_size_data(CliqueSizeData & data, const HomomorphismParams & params,
-    unsigned max_graphs, unsigned pattern_size, unsigned target_size) -> void
+    bool has_loops, unsigned max_graphs, unsigned pattern_size, unsigned target_size) -> void
 {
-    if (! params.clique_size_constraints)
+    if (! supports_clique_size_constraints(params, has_loops))
         return;
 
-    data.max_graphs_for_clique_size_constraints = (params.clique_size_constraints_on_supplementals ? max_graphs : 1);
+    data.max_graphs_for_clique_size_constraints = (supports_clique_size_constraints_on_supplementals(params, has_loops) ? max_graphs : 1);
     for (unsigned g = 0; g < data.max_graphs_for_clique_size_constraints; ++g) {
         data.pattern_cliques_sizes.push_back(vector<int>(pattern_size, 0));
         data.target_cliques_sizes.push_back(vector<int>(target_size, 0));
@@ -132,7 +133,9 @@ auto gss::innards::check_clique_compatibility(CliqueSizeData & data, const Proce
     unsigned max_graphs, unsigned pattern_size, unsigned target_size, const HomomorphismParams & params,
     HomomorphismProofs * proofs, int p, int t) -> bool
 {
-    if (! params.clique_size_constraints)
+    // The same predicate init_clique_size_data() used, so that the caches this reads are
+    // exactly the ones that were sized.
+    if (! supports_clique_size_constraints(params, graphs.has_loops))
         return true;
 
     if (! data.has_pattern_cliques_sizes)

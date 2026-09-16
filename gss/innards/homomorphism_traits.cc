@@ -70,6 +70,21 @@ auto gss::innards::global_degree_is_preserved(const HomomorphismParams & params)
     return params.injectivity == Injectivity::Injective;
 }
 
+auto gss::innards::supports_clique_size_constraints(const HomomorphismParams & params, bool has_loops) -> bool
+{
+    return params.clique_size_constraints && (params.injectivity == Injectivity::Injective || ! has_loops);
+}
+
+auto gss::innards::supports_clique_size_constraints_on_supplementals(const HomomorphismParams & params, bool has_loops) -> bool
+{
+    // Locally injective plus loops has already disabled every supplemental graph
+    // (loop_breaks_filtering), so the has_loops case here is carried entirely by the
+    // predicate above.
+    return supports_clique_size_constraints(params, has_loops) &&
+        params.clique_size_constraints_on_supplementals &&
+        params.injectivity != Injectivity::NonInjective;
+}
+
 auto gss::innards::can_use_clique(const HomomorphismParams & params) -> bool
 {
     return (! params.count_solutions) && params.clique_detection && (! params.proof_options);

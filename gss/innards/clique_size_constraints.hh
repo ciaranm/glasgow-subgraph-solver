@@ -27,15 +27,17 @@ namespace gss::innards
         std::list<std::string> target_cliques_build_times, target_cliques_solve_times, target_cliques_solve_find_nodes, target_cliques_solve_prove_nodes;
     };
 
-    // Size the caches for the configured number of graph pairs. No-op unless
-    // params.clique_size_constraints is set.
+    // Size the caches for the configured number of graph pairs. No-op unless clique-size
+    // constraints are both requested and sound here -- see supports_clique_size_constraints()
+    // and supports_clique_size_constraints_on_supplementals() in homomorphism_traits.hh, which
+    // decide the second part and which check_clique_compatibility() below consults too.
     auto init_clique_size_data(CliqueSizeData & data, const HomomorphismParams & params,
-        unsigned max_graphs, unsigned pattern_size, unsigned target_size) -> void;
+        bool has_loops, unsigned max_graphs, unsigned pattern_size, unsigned target_size) -> void;
 
     // Is mapping pattern vertex p to target vertex t permitted by the clique-size bound?
     // Lazily computes the clique sizes it needs; on a violation it emits the no-clique
     // proof through `proofs` (when non-null). Returns true (allowed) when clique-size
-    // constraints are off.
+    // constraints are off, or when they are not sound for this configuration.
     auto check_clique_compatibility(CliqueSizeData & data, const ProcessedGraphsData & graphs,
         unsigned max_graphs, unsigned pattern_size, unsigned target_size, const HomomorphismParams & params,
         HomomorphismProofs * proofs, int p, int t) -> bool;
