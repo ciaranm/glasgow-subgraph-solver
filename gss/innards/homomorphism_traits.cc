@@ -23,9 +23,10 @@ auto gss::innards::supports_distance2_graphs(const HomomorphismParams & params, 
     return (! params.no_supplementals) && (! supports_exact_path_graphs(params, has_loops)) && (! loop_breaks_filtering(params, has_loops));
 }
 
-auto gss::innards::supports_k4_graphs(const HomomorphismParams & params, bool has_loops) -> bool
+auto gss::innards::supports_k4_graphs(const HomomorphismParams & params, bool has_loops, bool directed) -> bool
 {
-    return (! params.no_supplementals) && params.k4 && (params.injectivity != Injectivity::NonInjective) && (! loop_breaks_filtering(params, has_loops));
+    return (! params.no_supplementals) && params.k4 && (params.injectivity != Injectivity::NonInjective) &&
+        (! loop_breaks_filtering(params, has_loops)) && (! directed);
 }
 
 auto gss::innards::supports_distance3_graphs(const HomomorphismParams & params) -> bool

@@ -69,7 +69,7 @@ namespace
         const std::tuple<std::unique_ptr<InputGraph>, bool, int> * extra_shape = nullptr;
     };
 
-    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops) -> vector<ShapeGraphSpec>
+    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops, bool directed) -> vector<ShapeGraphSpec>
     {
         vector<ShapeGraphSpec> plan;
         if (supports_exact_path_graphs(params, has_loops))
@@ -78,7 +78,7 @@ namespace
             plan.push_back({ShapeGraphSpec::Kind::Distance2, 1});
         if (supports_distance3_graphs(params))
             plan.push_back({ShapeGraphSpec::Kind::Distance3, 1});
-        if (supports_k4_graphs(params, has_loops))
+        if (supports_k4_graphs(params, has_loops, directed))
             plan.push_back({ShapeGraphSpec::Kind::K4, 1});
         for (auto & shape : params.extra_shapes)
             plan.push_back({ShapeGraphSpec::Kind::ExtraShape, 1, &shape});
@@ -87,10 +87,10 @@ namespace
 
     // The original graph plus every slot the plan allocates: this is the bitset stride
     // (max_graphs), computed once at construction so the graph rows can be sized.
-    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops) -> unsigned
+    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops, bool directed) -> unsigned
     {
         unsigned n = 1;
-        for (const auto & spec : make_shape_graph_plan(params, has_loops))
+        for (const auto & spec : make_shape_graph_plan(params, has_loops, directed))
             n += spec.slot_count;
         return n;
     }
@@ -131,8 +131,9 @@ struct HomomorphismModel::Imp
 
 HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
     const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs) :
-    _imp(make_unique<Imp>(params, proof, proofs, number_of_shape_graphs(params, pattern.loopy() || target.loopy()))),
-    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy())),
+    _imp(make_unique<Imp>(params, proof, proofs,
+        number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed()))),
+    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed())),
     pattern_size(pattern.size()),
     target_size(target.size())
 {
@@ -146,6 +147,7 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
 
     if (pattern.directed())
         _imp->graphs.directed = true;
+    _imp->graphs.either_graph_directed = pattern.directed() || target.directed();
 
     // recode pattern to a bit graph, and strip out loops
     _imp->graphs.pattern_graph_rows.resize(pattern_size * max_graphs, SVOBitset(pattern_size, 0));
@@ -841,7 +843,7 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
     // next free slot(s), then (when proving) derive it through the solver-proofs layer.
     // The plan also fixes max_graphs, so the bump counters land exactly on max_graphs at
     // the end (checked below).
-    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops)) {
+    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops, _imp->graphs.either_graph_directed)) {
         switch (spec.kind) {
         case ShapeGraphSpec::Kind::ExactPath:
             build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);

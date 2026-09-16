@@ -118,6 +118,28 @@ TEST_CASE("directed edges must be mapped respecting orientation")
     CHECK(solve_homomorphism_problem(arc, dipath, params).solution_count == 2);
 }
 
+// The k4 supplemental graph marks a pair of adjacent vertices that sit in a 4-clique, which
+// is an undirected notion: its builder looks at one orientation of each pair, picked by
+// vertex numbering, and then asserts the relation symmetrically. On a directed instance that
+// deletes solutions, so the graph is not built there at all (issue #97).
+TEST_CASE("the k4 filter does not delete solutions on a directed instance")
+{
+    auto pattern = csv("0>3\n1>0\n1>2\n1>3\n2>0\n3>0\n3>2\n");
+    auto target = csv("0>1\n0>2\n0>3\n1>3\n2>1\n3>1\n3>2\n");
+
+    auto without = make_params();
+    without.no_supplementals = true;
+    without.no_nds = true;
+    auto baseline = solve_homomorphism_problem(pattern, target, without).solution_count;
+    REQUIRE(baseline == 1);
+
+    auto with = make_params();
+    with.k4 = true;
+    with.number_of_exact_path_graphs = 0; // so that k4 is the only supplemental graph
+    with.no_nds = true;
+    CHECK(solve_homomorphism_problem(pattern, target, with).solution_count == baseline);
+}
+
 // A target self-loop is an edge like any other, and two adjacent pattern vertices may be
 // mapped onto it once injectivity is dropped. The directed and edge-labelled propagation
 // paths read the forward and reverse target rows, which were left with no loops in them,

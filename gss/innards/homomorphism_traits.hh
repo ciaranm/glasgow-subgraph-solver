@@ -14,7 +14,12 @@ namespace gss::innards
 
     auto supports_distance2_graphs(const HomomorphismParams & params, bool has_loops) -> bool;
 
-    auto supports_k4_graphs(const HomomorphismParams & params, bool has_loops) -> bool;
+    // directed is whether *either* graph is directed. The k4 graph is an undirected notion --
+    // being in a 4-clique -- and its builder is written for undirected rows: it looks at one
+    // arbitrary orientation of each pair, chosen by vertex numbering, and then asserts the
+    // relation symmetrically, which a homomorphism does not preserve (issue #97). A sound
+    // directed version would build it on the underlying undirected graphs of both sides.
+    auto supports_k4_graphs(const HomomorphismParams & params, bool has_loops, bool directed) -> bool;
 
     auto supports_distance3_graphs(const HomomorphismParams & params) -> bool;
 

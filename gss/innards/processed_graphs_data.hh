@@ -40,7 +40,12 @@ namespace gss::innards
         std::vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
         std::vector<int> pattern_loops, target_loops;
         bool has_loops = false;
-        bool directed = false;
+
+        // directed follows the *pattern*, because that is what selects the searcher's
+        // propagation path. either_graph_directed is the weaker question a supplemental-graph
+        // builder has to ask: a builder written for undirected rows is wrong on an asymmetric
+        // row whichever graph it came from (issue #97).
+        bool directed = false, either_graph_directed = false;
 
         std::list<std::string> supplemental_graph_names;
     };
