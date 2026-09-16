@@ -142,6 +142,19 @@ TEST_CASE("edge labels constrain the mapping")
     CHECK(solve_homomorphism_problem(labelled_edge, two_labels, params).solution_count == 2);
 }
 
+// A self-loop is an edge, so its label has to match like any other edge's. This is the one
+// edge label the searcher's label check cannot see: loops are stripped out of the adjacency
+// rows, and forward checking only ever compares a pair of distinct pattern vertices, so it
+// is the loop-compatibility check that has to do it (issue #92).
+TEST_CASE("edge labels on self-loops constrain the mapping")
+{
+    auto red_loop = csv("a,a,red\n");
+
+    auto params = make_params();
+    CHECK(solve_homomorphism_problem(red_loop, csv("1,1,blue\n"), params).solution_count == 0);
+    CHECK(solve_homomorphism_problem(red_loop, csv("1,1,red\n"), params).solution_count == 1);
+}
+
 // ---------------------------------------------------------------------------
 // Clique-size constraints
 // ---------------------------------------------------------------------------

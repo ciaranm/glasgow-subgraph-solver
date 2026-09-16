@@ -339,6 +339,15 @@ auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
             ++_imp->filter_activations.loops;
         return false;
     }
+    else if (pattern_has_loop(p) && has_edge_labels() && pattern_edge_label(p, p) != target_edge_label(t, t)) {
+        // A self-loop is an edge, and its label has to match like any other edge's. The
+        // searcher's edge-label check never sees one: loops are stripped out of the
+        // adjacency rows, and forward checking only ever compares a pair of *distinct*
+        // pattern vertices. So this is where a loop's label gets checked (issue #92).
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.loops;
+        return false;
+    }
 
     return true;
 }
