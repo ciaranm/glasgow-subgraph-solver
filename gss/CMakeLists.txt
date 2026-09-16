@@ -97,6 +97,14 @@ add_executable(random_homomorphism_test random_homomorphism_test.cc)
 target_link_libraries(random_homomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME random_homomorphism_test COMMAND $<TARGET_FILE:random_homomorphism_test>)
 
+add_executable(option_sweep_test option_sweep_test.cc)
+target_link_libraries(option_sweep_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+# The sweep checks its per-cell outcomes against a table checked in next to it; see
+# dev_docs/option-compatibility.md for what the table is for and how to regenerate it.
+target_compile_definitions(option_sweep_test PRIVATE
+        GSS_OPTION_SWEEP_GOLDEN="${CMAKE_CURRENT_SOURCE_DIR}/option_sweep_golden.tsv")
+add_test(NAME option_sweep_test COMMAND $<TARGET_FILE:option_sweep_test>)
+
 add_executable(extra_shapes_test extra_shapes_test.cc)
 target_link_libraries(extra_shapes_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME extra_shapes_test COMMAND $<TARGET_FILE:extra_shapes_test>)
