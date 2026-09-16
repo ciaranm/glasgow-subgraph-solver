@@ -29,6 +29,10 @@ namespace gss::innards
         unsigned long long vertex_labels = 0, loops = 0, nds = 0, cliques = 0;
         std::vector<unsigned long long> degree;
 
+        // The whole-instance degree-sequence check in prepare(), which refutes before any
+        // domain exists, so it is counted in instances rather than in pairs: at most one.
+        unsigned long long global_degree = 0;
+
         // Forward checking during search: values removed from a domain, by graph pair, plus
         // the edge-label check that follows them.
         std::vector<unsigned long long> search;

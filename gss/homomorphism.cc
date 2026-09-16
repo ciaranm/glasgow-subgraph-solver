@@ -627,6 +627,10 @@ namespace
             if (! model.prepare()) {
                 HomomorphismResult result;
                 result.extra_stats.emplace_back("model_consistent = false");
+                // The model's own stats belong here as much as on any other path: this is
+                // where the whole-instance degree-sequence refutation concludes, and
+                // dropping them made that filter invisible to anything reading the result.
+                model.add_extra_stats(result.extra_stats);
                 result.complete = true;
                 if (proof) {
                     if (params.count_solutions)

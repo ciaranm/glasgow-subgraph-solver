@@ -758,6 +758,8 @@ auto HomomorphismModel::prepare() -> bool
 
                     _imp->proofs->emit_hall_set_or_violator(patterns, targets);
                 }
+                if (_imp->params.record_filter_activations)
+                    ++_imp->filter_activations.global_degree;
                 return false;
             }
     }
