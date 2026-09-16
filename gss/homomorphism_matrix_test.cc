@@ -132,6 +132,20 @@ TEST_CASE("clique detection does not fire on directed graphs")
     CHECK(solve_homomorphism_problem(digon, transitive_triangle, params).mapping.empty());
 }
 
+// The clique reduction looks for k pairwise-adjacent -- hence distinct -- target vertices, so
+// it needs the mapping to be forced injective. Both ends of an edge may sit on one self-loop
+// locally injectively, since each end has only the other as a neighbour (issue #94).
+TEST_CASE("clique detection does not fire when a loop can collapse the pattern")
+{
+    auto edge = csv("a,b\n"); // K_2, which is a clique
+    auto oneloop = csv("1,1\n");
+
+    auto params = make_params();
+    params.count_solutions = false; // decision mode: where the shortcut lives
+    params.injectivity = Injectivity::LocallyInjective;
+    CHECK(! solve_homomorphism_problem(edge, oneloop, params).mapping.empty());
+}
+
 // ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------

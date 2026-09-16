@@ -47,7 +47,12 @@ namespace gss::innards
     // local injectivity forces apart (issue #91).
     auto supports_clique_size_constraints_on_supplementals(const HomomorphismParams & params, bool has_loops) -> bool;
 
-    auto can_use_clique(const HomomorphismParams & params) -> bool;
+    // The clique shortcut: replace a clique pattern with a search for k pairwise-adjacent
+    // target vertices. Those are distinct, so this is the same counting argument as
+    // supports_clique_size_constraints() above and it needs the same premise -- full
+    // injectivity, or a loopless target, without which two adjacent pattern vertices may
+    // collapse onto one looped image and the reduction misses the solution (issue #94).
+    auto can_use_clique(const HomomorphismParams & params, bool target_has_loops) -> bool;
 }
 
 #endif

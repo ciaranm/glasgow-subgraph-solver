@@ -85,7 +85,12 @@ auto gss::innards::supports_clique_size_constraints_on_supplementals(const Homom
         params.injectivity != Injectivity::NonInjective;
 }
 
-auto gss::innards::can_use_clique(const HomomorphismParams & params) -> bool
+auto gss::innards::can_use_clique(const HomomorphismParams & params, bool target_has_loops) -> bool
 {
-    return (! params.count_solutions) && params.clique_detection && (! params.proof_options);
+    // Conservative under local injectivity: for a pattern clique on three or more vertices,
+    // local injectivity does force the images apart, since any two clique vertices are both
+    // neighbours of a third. Only K_2 actually needs excluding, which is not worth a special
+    // case.
+    return (! params.count_solutions) && params.clique_detection && (! params.proof_options) &&
+        (params.injectivity == Injectivity::Injective || ! target_has_loops);
 }

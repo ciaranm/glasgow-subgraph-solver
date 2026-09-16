@@ -567,7 +567,11 @@ namespace
             // clique solver, which has no notion of edge direction and would hold a "clique"
             // together with one-way arcs (issue #93). is_simple_clique() rules out a directed
             // pattern for the same reason.
-            if (! (can_use_clique(params) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy())))
+            //
+            // can_use_clique() carries the injectivity premise the reduction needs (#94),
+            // rather than leaving it to the fact that TargetLoopShortcutStep usually gets
+            // there first.
+            if (! (can_use_clique(params, target.loopy()) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy())))
                 return StepOutcome::Continue;
 
             CliqueParams clique_params;
