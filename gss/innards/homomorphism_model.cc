@@ -1,6 +1,7 @@
 #include <gss/clique.hh>
 #include <gss/configuration.hh>
 #include <gss/innards/clique_size_constraints.hh>
+#include <gss/innards/filter_activations.hh>
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_traits.hh>
@@ -115,17 +116,22 @@ struct HomomorphismModel::Imp
     // sizes are computed lazily during the const domain-compatibility checks.
     mutable CliqueSizeData clique_data;
 
-    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr) :
+    // What the initial-domain filters removed (see filter_activations.hh). Mutable for the
+    // same reason, and only written when params.record_filter_activations is set.
+    mutable FilterActivations filter_activations;
+
+    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr, unsigned max_graphs) :
         params(p),
         proof(r),
-        proofs(pr)
+        proofs(pr),
+        filter_activations(max_graphs)
     {
     }
 };
 
 HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
     const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs) :
-    _imp(make_unique<Imp>(params, proof, proofs)),
+    _imp(make_unique<Imp>(params, proof, proofs, number_of_shape_graphs(params, pattern.loopy() || target.loopy()))),
     max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy())),
     pattern_size(pattern.size()),
     target_size(target.size())
@@ -310,8 +316,13 @@ auto HomomorphismModel::_check_label_compatibility(int p, int t) const -> bool
 {
     if (! has_vertex_labels())
         return true;
-    else
-        return pattern_vertex_label(p) == target_vertex_label(t);
+    else if (pattern_vertex_label(p) == target_vertex_label(t))
+        return true;
+    else {
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.vertex_labels;
+        return false;
+    }
 }
 
 auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
@@ -319,18 +330,28 @@ auto HomomorphismModel::_check_loop_compatibility(int p, int t) const -> bool
     if (pattern_has_loop(p) && ! target_has_loop(t)) {
         if (_imp->proof)
             _imp->proofs->incompatible_by_loops(p, t);
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.loops;
         return false;
     }
-    else if (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t)))
+    else if (_imp->params.induced && (pattern_has_loop(p) != target_has_loop(t))) {
+        if (_imp->params.record_filter_activations)
+            ++_imp->filter_activations.loops;
         return false;
+    }
 
     return true;
 }
 
 auto HomomorphismModel::_check_clique_compatibility(int p, int t) const -> bool
 {
-    return check_clique_compatibility(_imp->clique_data, _imp->graphs, max_graphs, pattern_size, target_size,
-        _imp->params, _imp->proofs, p, t);
+    if (check_clique_compatibility(_imp->clique_data, _imp->graphs, max_graphs, pattern_size, target_size,
+            _imp->params, _imp->proofs, p, t))
+        return true;
+
+    if (_imp->params.record_filter_activations)
+        ++_imp->filter_activations.cliques;
+    return false;
 }
 
 auto HomomorphismModel::_check_degree_compatibility(
@@ -373,10 +394,14 @@ auto HomomorphismModel::_check_degree_compatibility(
                 if (_imp->params.prove_supplemental_subsumption)
                     _imp->proofs->forget_transient_supplemental_adjacencies();
             }
+            if (_imp->params.record_filter_activations)
+                ++_imp->filter_activations.degree[g];
             return false;
         }
         else if (degree_and_nds_are_exact(_imp->params, pattern_size, target_size) && target_degree(g, t) != pattern_degree(g, p)) {
             // not ok, degrees must be exactly the same
+            if (_imp->params.record_filter_activations)
+                ++_imp->filter_activations.degree[g];
             return false;
         }
     }
@@ -439,10 +464,15 @@ auto HomomorphismModel::_check_degree_compatibility(
                     if (_imp->params.prove_supplemental_subsumption)
                         _imp->proofs->forget_transient_supplemental_adjacencies();
                 }
+                if (_imp->params.record_filter_activations)
+                    ++_imp->filter_activations.nds;
                 return false;
             }
-            else if (degree_and_nds_are_exact(_imp->params, pattern_size, target_size) && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x))
+            else if (degree_and_nds_are_exact(_imp->params, pattern_size, target_size) && targets_ndss.at(g).at(t)->at(x) != patterns_ndss.at(g).at(p).at(x)) {
+                if (_imp->params.record_filter_activations)
+                    ++_imp->filter_activations.nds;
                 return false;
+            }
         }
     }
 
@@ -974,4 +1004,7 @@ auto HomomorphismModel::add_extra_stats(list<string> & x) const -> void
     }
 
     x.emplace_back(join("supplemental_graph_names =", _imp->graphs.supplemental_graph_names));
+
+    if (_imp->params.record_filter_activations)
+        _imp->filter_activations.add_initial_stats(x);
 }

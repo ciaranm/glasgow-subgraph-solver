@@ -3,13 +3,10 @@
 #include <gss/innards/homomorphism_searcher.hh>
 
 #include <optional>
-#include <tuple>
-#include <type_traits>
 
 using namespace gss;
 using namespace gss::innards;
 
-using std::conditional_t;
 using std::make_optional;
 using std::max;
 using std::move;
@@ -20,7 +17,6 @@ using std::pair;
 using std::string;
 using std::swap;
 using std::to_string;
-using std::tuple;
 using std::uniform_int_distribution;
 using std::vector;
 
@@ -31,6 +27,10 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
     params(p),
     _duplicate_solution_filterer(d),
     proof(f),
+    _record_filter_activations(p.record_filter_activations),
+    _verbose_proof_comments(f && f->super_extra_verbose()),
+    _track_removals(p.record_filter_activations || (f && f->super_extra_verbose())),
+    _filter_activations(m.max_graphs),
     watches(w)
 {
     if (might_have_watches(params)) {
@@ -73,6 +73,12 @@ auto HomomorphismSearcher::save_result(const HomomorphismAssignments & assignmen
     for (auto & a : assignments.values)
         where.append(" " + to_string(a.discrepancy_count) + "/" + to_string(a.choice_count));
     result.extra_stats.push_back(where);
+}
+
+auto HomomorphismSearcher::add_extra_stats(std::list<std::string> & stats) const -> void
+{
+    if (_record_filter_activations)
+        _filter_activations.add_search_stats(stats);
 }
 
 auto HomomorphismSearcher::restarting_search(
@@ -366,7 +372,7 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const 
     return result;
 }
 
-template <bool directed_, bool has_edge_labels_, bool induced_, bool verbose_proofs_>
+template <bool directed_, bool has_edge_labels_, bool induced_, bool track_removals_>
 auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void
 {
     const auto & graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
@@ -380,10 +386,29 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
     if (lazy_proof)
         lazy_proof_before = d.values;
 
-    [[maybe_unused]] conditional_t<verbose_proofs_, SVOBitset, tuple<>> before;
-    if constexpr (verbose_proofs_) {
-        before = d.values;
-    }
+    // Attributing a removal to the graph pair that made it costs a popcount per graph pair,
+    // which is why it is a template parameter rather than a runtime flag: measured on a
+    // 2-million-node unsatisfiable instance, a perfectly predicted branch here still costs
+    // 3.5%. Two things want the attribution -- verbose proof comments and filter-activation
+    // recording -- and neither is on in a normal solve, so they share the one instantiation
+    // (see _track_removals).
+    [[maybe_unused]] unsigned long long remaining = 0;
+    if constexpr (track_removals_)
+        remaining = d.values.count();
+
+    [[maybe_unused]] const auto track = [&](unsigned g, unsigned long long & activation_counter) {
+        if constexpr (track_removals_) {
+            auto now = d.values.count();
+            if (now != remaining) {
+                if (_verbose_proof_comments)
+                    model.proofs()->propagated(int(current_assignment.pattern_vertex), int(current_assignment.target_vertex),
+                        int(g), remaining - now, int(d.v));
+                if (_record_filter_activations)
+                    activation_counter += remaining - now;
+                remaining = now;
+            }
+        }
+    };
 
     if constexpr (! directed_) {
         // for the original graph pair, if we're adjacent...
@@ -425,12 +450,7 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
         }
     }
 
-    if constexpr (verbose_proofs_) {
-        if (before.count() != d.values.count())
-            model.proofs()->propagated(int(current_assignment.pattern_vertex), int(current_assignment.target_vertex),
-                0, before.count() - d.values.count(), int(d.v));
-        before = d.values;
-    }
+    track(0, _filter_activations.search[0]);
 
     // and for each remaining graph pair...
     for (unsigned g = 1; g < model.max_graphs; ++g) {
@@ -440,12 +460,7 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
             d.values &= model.target_graph_row(g, current_assignment.target_vertex);
         }
 
-        if constexpr (verbose_proofs_) {
-            if (before.count() != d.values.count())
-                model.proofs()->propagated(int(current_assignment.pattern_vertex), int(current_assignment.target_vertex),
-                    g, before.count() - d.values.count(), int(d.v));
-            before = d.values;
-        }
+        track(g, _filter_activations.search[g]);
     }
 
     if constexpr (has_edge_labels_) {
@@ -476,6 +491,13 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
                     d.values.reset(c);
             }
         }
+    }
+
+    if constexpr (has_edge_labels_ && track_removals_) {
+        // no proof comment for this one: the edge-label check has never had one, and the
+        // proof's propagated() line is indexed by graph pair, which this is not
+        if (_record_filter_activations)
+            _filter_activations.search_edge_labels += remaining - d.values.count();
     }
 
     if (lazy_proof) {
@@ -521,13 +543,13 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         if (! model.has_edge_labels()) {
             if (params.induced) {
                 if (model.directed()) {
-                    if ((! proof) || (! proof->super_extra_verbose()))
+                    if (! _track_removals)
                         propagate_adjacency_constraints<true, false, true, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<true, false, true, true>(d, current_assignment);
                 }
                 else {
-                    if ((! proof) || (! proof->super_extra_verbose()))
+                    if (! _track_removals)
                         propagate_adjacency_constraints<false, false, true, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<false, false, true, true>(d, current_assignment);
@@ -535,13 +557,13 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
             }
             else {
                 if (model.directed()) {
-                    if ((! proof) || (! proof->super_extra_verbose()))
+                    if (! _track_removals)
                         propagate_adjacency_constraints<true, false, false, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<true, false, false, true>(d, current_assignment);
                 }
                 else {
-                    if ((! proof) || (! proof->super_extra_verbose()))
+                    if (! _track_removals)
                         propagate_adjacency_constraints<false, false, false, false>(d, current_assignment);
                     else
                         propagate_adjacency_constraints<false, false, false, true>(d, current_assignment);
@@ -551,13 +573,13 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         else {
             // edge labels are always directed
             if (params.induced) {
-                if ((! proof) || (! proof->super_extra_verbose()))
+                if (! _track_removals)
                     propagate_adjacency_constraints<true, true, true, false>(d, current_assignment);
                 else
                     propagate_adjacency_constraints<true, true, true, true>(d, current_assignment);
             }
             else {
-                if ((! proof) || (! proof->super_extra_verbose()))
+                if (! _track_removals)
                     propagate_adjacency_constraints<true, true, false, false>(d, current_assignment);
                 else
                     propagate_adjacency_constraints<true, true, false, true>(d, current_assignment);

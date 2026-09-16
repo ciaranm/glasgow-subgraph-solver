@@ -222,6 +222,7 @@ namespace
                 result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
             }
 
+            searcher.add_extra_stats(result.extra_stats);
             model.add_extra_stats(result.extra_stats);
             return result;
         }
@@ -409,6 +410,8 @@ namespace
                 if (params.delay_thread_creation && 0 == t)
                     for (auto & th : threads)
                         th.join();
+
+                searchers[t]->add_extra_stats(thread_result.extra_stats);
 
                 unique_lock<mutex> lock{common_result_mutex};
                 if (! thread_result.mapping.empty())

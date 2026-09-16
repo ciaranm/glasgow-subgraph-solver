@@ -111,7 +111,8 @@ auto main(int argc, char * argv[]) -> int
             ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts)) //
             ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives)) //
             ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)") //
-            ("staged-first-round-backtracks", "Staged solving: backtrack budget for the first cheap search round before supplemental graphs are built", cxxopts::value<unsigned long long>());
+            ("staged-first-round-backtracks", "Staged solving: backtrack budget for the first cheap search round before supplemental graphs are built", cxxopts::value<unsigned long long>()) //
+            ("record-filter-activations", "Report how much each filter actually removed, in the extra stats (slows down propagation)");
 
         options.add_options() //
             ("pattern-file", "specify the pattern file", cxxopts::value<std::string>()) //
@@ -232,6 +233,7 @@ auto main(int argc, char * argv[]) -> int
         if (options_vars.count("staged-first-round-backtracks"))
             params.staged_first_round_backtracks = options_vars["staged-first-round-backtracks"].as<unsigned long long>();
         params.prove_supplemental_subsumption = ! options_vars.count("no-proof-supplemental-subsumption");
+        params.record_filter_activations = options_vars.count("record-filter-activations");
         params.clique_size_constraints = options_vars.count("cliques");
         params.clique_size_constraints_on_supplementals = options_vars.count("cliques-on-supplementals");
 
