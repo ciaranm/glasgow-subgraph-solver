@@ -787,6 +787,19 @@ auto HomomorphismModel::prepare() -> bool
                 _imp->graphs.reverse_target_graph_rows[i].set(i);
             }
 
+    // The pattern's in-neighbourhoods, which local injectivity needs (issue #96) and which
+    // only a directed pattern needs stored: an undirected row is its own reverse. Built here
+    // rather than at recoding time so that the self-loops just restored above are in it --
+    // a loop at u puts u into its own out-neighbourhood, so it constrains u's image against
+    // its neighbours'.
+    if (_imp->graphs.directed) {
+        _imp->graphs.pattern_in_neighbour_rows.resize(pattern_size, SVOBitset{pattern_size, 0});
+        for (unsigned i = 0; i < pattern_size; ++i)
+            for (unsigned j = 0; j < pattern_size; ++j)
+                if (_imp->graphs.pattern_graph_rows[i * max_graphs + 0].test(j))
+                    _imp->graphs.pattern_in_neighbour_rows[j].set(i);
+    }
+
     // pattern adjacencies, compressed -- the original graph (g=0) now; the supplemental
     // graphs OR in their own bits in build_supplemental_graphs (which may run later, under
     // staging). The array is zero-initialised, so the two passes compose.
@@ -915,6 +928,12 @@ auto HomomorphismModel::pattern_adjacency_bits(int p, int q) const -> PatternAdj
 auto HomomorphismModel::pattern_graph_row(int g, int p) const -> const SVOBitset &
 {
     return _imp->graphs.pattern_graph_rows[p * max_graphs + g];
+}
+
+auto HomomorphismModel::pattern_in_neighbour_row(int p) const -> const SVOBitset &
+{
+    return _imp->graphs.directed ? _imp->graphs.pattern_in_neighbour_rows[p]
+                                 : _imp->graphs.pattern_graph_rows[p * max_graphs + 0];
 }
 
 auto HomomorphismModel::target_graph_row(int g, int t) const -> const SVOBitset &

@@ -514,8 +514,13 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 
 auto HomomorphismSearcher::both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool
 {
-    auto i = model.pattern_graph_row(0, v);
-    i &= model.pattern_graph_row(0, w);
+    // Is there a pattern vertex u with u -> v and u -> w? That is what local injectivity
+    // asks about, and it is what the verifier and the proof encoding both mean by it. On an
+    // undirected pattern the in-neighbourhood is just the row, so this is unchanged there;
+    // on a directed one, intersecting the rows would ask the unrelated question of whether v
+    // and w share a successor (issue #96).
+    auto i = model.pattern_in_neighbour_row(v);
+    i &= model.pattern_in_neighbour_row(w);
     return i.any();
 }
 

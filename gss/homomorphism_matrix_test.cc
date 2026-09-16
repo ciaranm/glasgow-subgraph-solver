@@ -144,6 +144,28 @@ TEST_CASE("a pattern edge can be mapped onto a target self-loop")
     }
 }
 
+// Local injectivity asks that the images of a pattern vertex's out-neighbours be distinct --
+// what verify_homomorphism and the proof encoding both mean by it. Intersecting two
+// adjacency rows instead asks whether the two vertices share a *successor*, which on a
+// directed pattern is an unrelated question, and was wrong in both directions (issue #96).
+TEST_CASE("local injectivity on a directed pattern")
+{
+    auto params = make_params();
+    params.injectivity = Injectivity::LocallyInjective;
+
+    SECTION("two arcs into the same vertex may come from the same source")
+    {
+        // a -> c and b -> c: nothing points at both a and b, so a and b may share an image
+        CHECK(solve_homomorphism_problem(csv("a>c\nb>c\n"), csv("1>2\n"), params).solution_count == 1);
+    }
+
+    SECTION("a self-loop puts a vertex into its own out-neighbourhood")
+    {
+        // a -> a and a -> b, so a and b are both out-neighbours of a and cannot collide
+        CHECK(solve_homomorphism_problem(csv("a>a\na>b\n"), csv("1>1\n"), params).solution_count == 0);
+    }
+}
+
 // The clique shortcut hands the target to the clique solver, which has no notion of edge
 // direction and would hold a "clique" together with one-way arcs (issue #93). It only fires
 // in decision mode, so this checks satisfiability rather than a count.

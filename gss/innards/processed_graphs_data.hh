@@ -28,6 +28,12 @@ namespace gss::innards
         std::vector<SVOBitset> pattern_graph_rows;
         std::vector<SVOBitset> target_graph_rows, forward_target_graph_rows, reverse_target_graph_rows;
 
+        // The pattern's in-neighbourhoods, for local injectivity, which asks whether two
+        // pattern vertices share a *predecessor*. Only populated for a directed pattern: an
+        // undirected row already answers that question, being its own reverse. See
+        // HomomorphismModel::pattern_in_neighbour_row().
+        std::vector<SVOBitset> pattern_in_neighbour_rows;
+
         std::vector<std::vector<int>> patterns_degrees, targets_degrees;
         int largest_target_degree = 0;
 
