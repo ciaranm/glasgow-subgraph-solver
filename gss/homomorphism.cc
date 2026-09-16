@@ -562,7 +562,12 @@ namespace
             // Not for an induced mapping into a target with loops: a simple-clique pattern is
             // loopless, so an induced mapping must avoid self-looped target vertices, but the
             // clique algorithm ignores loops and may map a pattern vertex onto one.
-            if (! (can_use_clique(params) && is_simple_clique(pattern) && ! (params.induced && target.loopy())))
+            //
+            // Not for a directed target either: it is the target that gets handed to the
+            // clique solver, which has no notion of edge direction and would hold a "clique"
+            // together with one-way arcs (issue #93). is_simple_clique() rules out a directed
+            // pattern for the same reason.
+            if (! (can_use_clique(params) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy())))
                 return StepOutcome::Continue;
 
             CliqueParams clique_params;

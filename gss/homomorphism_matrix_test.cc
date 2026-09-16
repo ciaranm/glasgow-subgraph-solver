@@ -118,6 +118,20 @@ TEST_CASE("directed edges must be mapped respecting orientation")
     CHECK(solve_homomorphism_problem(arc, dipath, params).solution_count == 2);
 }
 
+// The clique shortcut hands the target to the clique solver, which has no notion of edge
+// direction and would hold a "clique" together with one-way arcs (issue #93). It only fires
+// in decision mode, so this checks satisfiability rather than a count.
+TEST_CASE("clique detection does not fire on directed graphs")
+{
+    auto digon = csv("a>b\nb>a\n"); // the complete digraph on two vertices
+    auto transitive_triangle = csv("1>2\n2>3\n1>3\n"); // no arc goes back
+
+    auto params = make_params();
+    params.count_solutions = false; // decision mode: where the shortcut lives
+    REQUIRE(params.clique_detection);
+    CHECK(solve_homomorphism_problem(digon, transitive_triangle, params).mapping.empty());
+}
+
 // ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------
