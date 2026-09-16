@@ -37,7 +37,7 @@ namespace
 
 TEST_CASE("induced mapping must preserve non-edges")
 {
-    auto p3 = csv("a,b\nb,c\n");      // path a-b-c (a-c is a non-edge)
+    auto p3 = csv("a,b\nb,c\n"); // path a-b-c (a-c is a non-edge)
     auto k3 = csv("1,2\n2,3\n1,3\n"); // triangle (no non-edges)
 
     SECTION("non-induced: all six injective placements work")
@@ -57,7 +57,7 @@ TEST_CASE("induced mapping must preserve non-edges")
 TEST_CASE("induced mapping into a graph that has non-edges")
 {
     auto two_isolated = csv("a,\nb,\n"); // two vertices, no edge
-    auto p3 = csv("1,2\n2,3\n");         // path: only non-adjacent pair is {1,3}
+    auto p3 = csv("1,2\n2,3\n"); // path: only non-adjacent pair is {1,3}
 
     SECTION("non-induced: any two distinct targets")
     {
@@ -110,7 +110,7 @@ TEST_CASE("injectivity modes on a path-into-triangle")
 
 TEST_CASE("directed edges must be mapped respecting orientation")
 {
-    auto arc = csv("a>b\n");         // single directed edge a -> b
+    auto arc = csv("a>b\n"); // single directed edge a -> b
     auto dipath = csv("1>2\n2>3\n"); // directed path 1 -> 2 -> 3
 
     auto params = make_params();
@@ -134,7 +134,7 @@ TEST_CASE("vertex labels constrain the mapping")
 
 TEST_CASE("edge labels constrain the mapping")
 {
-    auto labelled_edge = csv("a,b,x\n");     // edge a-b with label x
+    auto labelled_edge = csv("a,b,x\n"); // edge a-b with label x
     auto two_labels = csv("1,2,x\n2,3,y\n"); // edge 1-2 labelled x, 2-3 labelled y
 
     auto params = make_params();

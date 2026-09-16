@@ -1,6 +1,17 @@
 AccessModifierOffset: -4
 AlignAfterOpenBracket: DontAlign
 AlignOperands: false
+# Off because ColumnLimit is 0: aligning trailing comments across a block of long
+# lines pushes them a very long way right. It also keeps the empty // markers in the
+# cxxopts option blocks in src/ unpadded. Those markers are there because a chain of
+# calls like
+#     options.add_options("Group")
+#         ("flag", "help")
+#         ("other", "help");
+# is one expression, which clang-format would otherwise pack onto a single line; a
+# trailing comment cannot be joined with what follows it, so an empty // pins the
+# break. Keep them when editing those blocks.
+AlignTrailingComments: false
 AllowAllArgumentsOnNextLine: true
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: None

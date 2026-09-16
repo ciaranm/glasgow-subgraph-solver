@@ -42,26 +42,26 @@ auto main(int argc, char * argv[]) -> int
     try {
         cxxopts::Options options("Glasgow Subgraph Solver - but different???", "Get started by using option --help");
 
-        options.add_options("Program options")
-            ("help", "Display help information")
-            ("timeout", "Abort after this many seconds", cxxopts::value<int>())
-            ("decide", "Solve this decision problem", cxxopts::value<int>())
-            ("count-solutions", "Count the number of solutions (--decide only)")
-            ("print-all-solutions", "Print out every solution, rather than one (--decide only)")
-            ("connected", "Only find connected graphs")
+        options.add_options("Program options") //
+            ("help", "Display help information") //
+            ("timeout", "Abort after this many seconds", cxxopts::value<int>()) //
+            ("decide", "Solve this decision problem", cxxopts::value<int>()) //
+            ("count-solutions", "Count the number of solutions (--decide only)") //
+            ("print-all-solutions", "Print out every solution, rather than one (--decide only)") //
+            ("connected", "Only find connected graphs") //
             ("clique", "Use the clique solver");
 
-        options.add_options("Input file options")
-            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs, csv, json)",  cxxopts::value<string>())
-            ("first-format", "Specify input file format just for the first graph", cxxopts::value<string>())
+        options.add_options("Input file options") //
+            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs, csv, json)", cxxopts::value<string>()) //
+            ("first-format", "Specify input file format just for the first graph", cxxopts::value<string>()) //
             ("second-format", "Specify input file format just for the second graph", cxxopts::value<string>());
 
-        options.add_options("Proof Logging Options")
-            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
+        options.add_options("Proof Logging Options") //
+            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>()) //
             ("verbose-proofs", "Write lots of comments to the proof, for tracing");
 
-        options.add_options()
-            ("first-file", "Specify the first graph file", cxxopts::value<string>())
+        options.add_options() //
+            ("first-file", "Specify the first graph file", cxxopts::value<string>()) //
             ("second-file", "Specify the second graph file", cxxopts::value<string>());
 
         options.parse_positional({"first-file", "second-file"});
@@ -113,7 +113,7 @@ auto main(int argc, char * argv[]) -> int
         cout << "first_file = " << options_vars["first-file"].as<string>() << endl;
         cout << "second_file = " << options_vars["second-file"].as<string>() << endl;
 
-        auto describe = [&] (const InputGraph & g) {
+        auto describe = [&](const InputGraph & g) {
             if (g.directed())
                 cout << " directed";
             if (g.loopy())

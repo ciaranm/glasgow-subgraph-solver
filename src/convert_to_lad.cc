@@ -15,11 +15,11 @@ auto main(int argc, char * argv[]) -> int
     try {
         cxxopts::Options options("Convert graph to lad format", "Get started by using option --help");
 
-        options.add_options("Program options")
-            ("help", "Display help information")
+        options.add_options("Program options") //
+            ("help", "Display help information") //
             ("format", "Specify input file format (auto, lad, labelledlad, dimacs, csv, json)", cxxopts::value<string>());
 
-        options.add_options()
+        options.add_options() //
             ("graph-file", "Specify the graph file", cxxopts::value<string>());
 
         options.parse_positional({"graph-file"});
@@ -64,7 +64,7 @@ auto main(int argc, char * argv[]) -> int
             cerr << "Maybe try specifying --format?" << endl;
         return EXIT_FAILURE;
     }
-    catch (const cxxopts::exceptions::exception& e) {
+    catch (const cxxopts::exceptions::exception & e) {
         cerr << "Error: " << e.what() << endl;
         cerr << "Try " << argv[0] << " --help" << endl;
         return EXIT_FAILURE;

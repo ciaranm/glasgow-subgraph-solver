@@ -16,11 +16,11 @@ auto main(int argc, char * argv[]) -> int
     try {
         cxxopts::Options options("Convert graph to the gss-graph JSON format", "Get started by using option --help");
 
-        options.add_options("Program options")
-            ("help", "Display help information")
+        options.add_options("Program options") //
+            ("help", "Display help information") //
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, directedlad, dimacs, csv, json)", cxxopts::value<string>());
 
-        options.add_options()
+        options.add_options() //
             ("graph-file", "Specify the graph file", cxxopts::value<string>());
 
         options.parse_positional({"graph-file"});

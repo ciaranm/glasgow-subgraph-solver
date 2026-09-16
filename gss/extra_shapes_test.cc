@@ -46,7 +46,7 @@ namespace
 // --shape option was silently ignored; this guards the underlying feature.)
 TEST_CASE("an extra shape preserves the solution count")
 {
-    auto pattern = read_csv(stringstream{"a,b\nb,c\n"}, "p");     // path a-b-c
+    auto pattern = read_csv(stringstream{"a,b\nb,c\n"}, "p"); // path a-b-c
     auto target = read_csv(stringstream{"1,2\n2,3\n3,4\n"}, "t"); // path 1-2-3-4
 
     auto baseline = solve_homomorphism_problem(pattern, target, make_params()).solution_count;
