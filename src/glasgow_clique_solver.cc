@@ -68,24 +68,24 @@ auto main(int argc, char * argv[]) -> int
         cxxopts::Options options("Glasgow Clique Solver", "Get started by using option --help");
 
         // clang-format off
-        options.add_options("Program options")
-            ("help", "Display help information")
-            ("timeout", "Abort after this many seconds", cxxopts::value<int>())
-            ("format", "Specify input file format (auto, lad, labelledlad, dimacs)", cxxopts::value<string>())
+        options.add_options("Program options") //
+            ("help", "Display help information") //
+            ("timeout", "Abort after this many seconds", cxxopts::value<int>()) //
+            ("format", "Specify input file format (auto, lad, labelledlad, dimacs, csv, json)", cxxopts::value<string>()) //
             ("decide", "Solve this decision problem", cxxopts::value<int>());
 
-        options.add_options("Advanced configuration options")
-            ("filter", "Filter the branching set after colouring (none / recolour / infra-chromatic)", cxxopts::value<string>())
-            ("colour-ordering", "Specify colour-ordering (colour / singletons-first / sorted)", cxxopts::value<string>())
-            ("input-order", "Use the input order for colouring (usually a bad idea)")
-            ("restarts-constant", "How often to perform restarts (disabled by default)", cxxopts::value<int>())
+        options.add_options("Advanced configuration options") //
+            ("filter", "Filter the branching set after colouring (none / recolour / infra-chromatic)", cxxopts::value<string>()) //
+            ("colour-ordering", "Specify colour-ordering (colour / singletons-first / sorted)", cxxopts::value<string>()) //
+            ("input-order", "Use the input order for colouring (usually a bad idea)") //
+            ("restarts-constant", "How often to perform restarts (disabled by default)", cxxopts::value<int>()) //
             ("geometric-restarts", "Use geometric restarts with the specified multiplier (default is Luby)", cxxopts::value<double>());
 
-        options.add_options("Proof logging options")
-            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
+        options.add_options("Proof logging options") //
+            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>()) //
             ("verbose-proofs", "Write lots of comments to the proof, for tracing");
 
-        options.add_options()
+        options.add_options() //
             ("graph-file", "Specify the graph file", cxxopts::value<string>());
 
         // clang-format on
@@ -209,7 +209,7 @@ auto main(int argc, char * argv[]) -> int
             cerr << "Maybe try specifying --format?" << endl;
         return EXIT_FAILURE;
     }
-    catch (const cxxopts::exceptions::exception& e) {
+    catch (const cxxopts::exceptions::exception & e) {
         cerr << "Error: " << e.what() << endl;
         cerr << "Try " << argv[0] << " --help" << endl;
         return EXIT_FAILURE;

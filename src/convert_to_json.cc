@@ -1,3 +1,4 @@
+#include <gss/formats/json_graph.hh>
 #include <gss/formats/read_file_format.hh>
 
 #include <iostream>
@@ -13,11 +14,11 @@ using std::string;
 auto main(int argc, char * argv[]) -> int
 {
     try {
-        cxxopts::Options options("Convert graph to lad format", "Get started by using option --help");
+        cxxopts::Options options("Convert graph to the gss-graph JSON format", "Get started by using option --help");
 
         options.add_options("Program options") //
             ("help", "Display help information") //
-            ("format", "Specify input file format (auto, lad, labelledlad, dimacs, csv, json)", cxxopts::value<string>());
+            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, directedlad, dimacs, csv, json)", cxxopts::value<string>());
 
         options.add_options() //
             ("graph-file", "Specify the graph file", cxxopts::value<string>());
@@ -26,35 +27,22 @@ auto main(int argc, char * argv[]) -> int
 
         auto options_vars = options.parse(argc, argv);
 
-        /* --help? Show a message, and exit. */
         if (options_vars.count("help")) {
             cout << options.help() << endl;
             return EXIT_SUCCESS;
         }
 
-        /* No input file specified? Show a message and exit. */
         if (! options_vars.count("graph-file")) {
             cout << "Usage: " << argv[0] << " [options] graph-file" << endl;
             return EXIT_FAILURE;
         }
 
-        /* Read in the graphs */
-        string pattern_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
-        auto graph = read_file_format(pattern_format_name, options_vars["graph-file"].as<string>());
+        string format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
+        auto graph = read_file_format(format_name, options_vars["graph-file"].as<string>());
 
-        if (graph.has_vertex_labels() || graph.has_edge_labels()) {
-            cerr << "Error: unsupported graph features" << endl;
-            return EXIT_FAILURE;
-        }
-
-        cout << graph.size() << endl;
-        for (int i = 0; i < graph.size(); ++i) {
-            cout << graph.degree(i);
-            for (int j = 0; j < graph.size(); ++j)
-                if (graph.adjacent(i, j))
-                    cout << " " << j;
-            cout << endl;
-        }
+        // Unlike convert_to_lad, nothing has to be refused here: the format carries
+        // directedness, names and both kinds of label, which is the point of it.
+        write_json_graph(cout, graph);
 
         return EXIT_SUCCESS;
     }

@@ -10,7 +10,7 @@ namespace
     // ("long") beyond that. Every behavioural test is run at a small size (<= 1024
     // bits, inline) and a large size (> 1024 bits, heap) so both representations and
     // the boundary between them are exercised.
-    constexpr unsigned small_bits = 128;  // 2 words, inline
+    constexpr unsigned small_bits = 128; // 2 words, inline
     constexpr unsigned large_bits = 2048; // 32 words, heap
 
     auto check_basic_ops(unsigned size) -> void

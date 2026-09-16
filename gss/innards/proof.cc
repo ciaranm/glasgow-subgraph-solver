@@ -227,8 +227,8 @@ auto Proof::finish_unsat_proof() -> void
 auto Proof::finish_sat_proof() -> void
 {
     *_imp->proof_stream << "output NONE;\n"
-        << "conclusion SAT;\n"
-        << "end pseudo-Boolean proof;\n";
+                        << "conclusion SAT;\n"
+                        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::finish_enumeration_proof(const loooong & number_of_solutions, bool complete) -> void
@@ -256,18 +256,17 @@ auto Proof::finish_enumeration_proof(const loooong & number_of_solutions, bool c
 auto Proof::finish_unknown_proof() -> void
 {
     *_imp->proof_stream << "output NONE;\n"
-        << "conclusion NONE;\n"
-        << "end pseudo-Boolean proof;\n";
+                        << "conclusion NONE;\n"
+                        << "end pseudo-Boolean proof;\n";
 }
 
 auto Proof::finish_optimisation_proof(int size) -> void
 {
     *_imp->proof_stream << "rup" << _imp->objective_sum.str() << " >= " << size << ";\n";
     *_imp->proof_stream << "output NONE;\n"
-        << "conclusion BOUNDS " << size << " " << size << ";\n"
-        << "end pseudo-Boolean proof;\n";
+                        << "conclusion BOUNDS " << size << " " << size << ";\n"
+                        << "end pseudo-Boolean proof;\n";
 }
-
 
 auto Proof::root_propagation_failed() -> void
 {
@@ -278,7 +277,6 @@ auto Proof::guessing(int depth, const NamedVertex & branch_v, const NamedVertex 
 {
     *_imp->proof_stream << "% [" << depth << "] guessing " << branch_v.second << "=" << val.second << '\n';
 }
-
 
 auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failure) -> void
 {
@@ -303,7 +301,6 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
 auto Proof::out_of_guesses(const vector<pair<int, int>> &) -> void
 {
 }
-
 
 auto Proof::start_level(int l) -> void
 {
@@ -916,7 +913,7 @@ auto Proof::create_connected_constraints(int p, int t, const function<auto(int, 
         }
 
     int last_k = 0;
-    for (int k = 2 ; ; k *= 2) {
+    for (int k = 2;; k *= 2) {
         last_k = k;
         _imp->model_stream << "* selected vertices must be connected, walk " << k << '\n';
         for (int v = 0; v < p; ++v)
@@ -1017,5 +1014,3 @@ auto Proof::super_extra_verbose() const -> bool
 {
     return _imp->super_extra_verbose;
 }
-
-

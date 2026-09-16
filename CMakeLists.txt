@@ -113,6 +113,20 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(cxxopts)
 
+# nlohmann/json, for the JSON graph format. Prefer a prebuilt one the same way as
+# Catch2; otherwise fetch the release archive rather than cloning, because the
+# upstream repository carries a very large test corpus and this asset is ~110KB.
+find_package(nlohmann_json 3 QUIET)
+if(NOT nlohmann_json_FOUND)
+    set(JSON_Install OFF CACHE INTERNAL "")
+    FetchContent_Declare(
+            nlohmann_json
+            URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+            URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    )
+    FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
 SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
 
 # VeriPB, if present, is used by the proof-verification tests (see gss/CMakeLists.txt).

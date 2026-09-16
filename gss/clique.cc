@@ -188,7 +188,7 @@ namespace
             int & p_end) -> void
         {
             SVOBitset p_left = p; // not coloured yet
-            unsigned colour = 0;  // current colour
+            unsigned colour = 0; // current colour
             p_end = 0;
 
             // while we've things left to colour
@@ -289,7 +289,7 @@ namespace
             int & p_end) -> void
         {
             SVOBitset p_left = p; // not coloured yet
-            unsigned colour = 0;  // current colour
+            unsigned colour = 0; // current colour
             p_end = 0;
 
             unsigned d = 0; // number deferred
@@ -342,7 +342,7 @@ namespace
             int & p_end) -> void
         {
             SVOBitset p_left = p; // not coloured yet
-            unsigned colour = 0;  // current colour
+            unsigned colour = 0; // current colour
             p_end = 0;
 
             vector<int> p_order_prelim(size);

@@ -48,76 +48,73 @@ auto main(int argc, char * argv[]) -> int
     try {
         cxxopts::Options options("Glasgow Subgraph Solver", "Get started by using option --help");
 
-        options.add_options("Program options")
-            ("help", "Display help information")
-            ("timeout", "Abort after this many seconds", cxxopts::value<int>())
+        options.add_options("Program options") //
+            ("help", "Display help information") //
+            ("timeout", "Abort after this many seconds", cxxopts::value<int>()) //
             ("parallel", "Use auto-configured parallel search (highly nondeterministic runtimes)");
 
-
-        options.add_options("Program options")
-            ("noninjective", "Drop the injectivity requirement")
-            ("locally-injective", "Require only local injectivity")
-            ("induced", "Find an induced mapping")
-            ("count-solutions", "Count the number of solutions")
-            ("print-all-solutions", "Print out every solution, rather than one")
+        options.add_options("Program options") //
+            ("noninjective", "Drop the injectivity requirement") //
+            ("locally-injective", "Require only local injectivity") //
+            ("induced", "Find an induced mapping") //
+            ("count-solutions", "Count the number of solutions") //
+            ("print-all-solutions", "Print out every solution, rather than one") //
             ("solution-limit", "Stop after finding this many solutions (implies counting)", cxxopts::value<unsigned long long>());
 
-        options.add_options("Input file options")
-            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs)", cxxopts::value<string>())
-            ("pattern-format", "Specify input file format just for the pattern graph", cxxopts::value<string>())
+        options.add_options("Input file options") //
+            ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs, csv, json)", cxxopts::value<string>()) //
+            ("pattern-format", "Specify input file format just for the pattern graph", cxxopts::value<string>()) //
             ("target-format", "Specify input file format just for the target graph", cxxopts::value<string>());
 
-        options.add_options("Advanced search configuration options")
-            ("restarts", "Specify restart policy (luby / geometric / timed / none)", cxxopts::value<string>())
-            ("geometric-multiplier", "Specify multiplier for geometric restarts", cxxopts::value<double>())
-            ("geometric-constant", "Specify starting constant for geometric restarts", cxxopts::value<double>())
-            ("restart-interval", "Specify the restart interval in milliseconds for timed restarts", cxxopts::value<int>())
-            ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>())
-            ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>())
-            ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>())
+        options.add_options("Advanced search configuration options") //
+            ("restarts", "Specify restart policy (luby / geometric / timed / none)", cxxopts::value<string>()) //
+            ("geometric-multiplier", "Specify multiplier for geometric restarts", cxxopts::value<double>()) //
+            ("geometric-constant", "Specify starting constant for geometric restarts", cxxopts::value<double>()) //
+            ("restart-interval", "Specify the restart interval in milliseconds for timed restarts", cxxopts::value<int>()) //
+            ("restart-minimum", "Specify a minimum number of backtracks before a timed restart can trigger", cxxopts::value<int>()) //
+            ("luby-constant", "Specify the starting constant / multiplier for Luby restarts", cxxopts::value<int>()) //
+            ("value-ordering", "Specify value-ordering heuristic (biased / degree / antidegree / random / none)", cxxopts::value<string>()) //
             ("staged", "Staged preprocessing: cheap filtering first, build supplemental graphs only if a first bounded search round does not solve it (sequential only)");
 
-        options.add_options("Advanced input processing options")
-            ("no-clique-detection", "Disable clique / independent set detection")
-            ("no-supplementals", "Do not use supplemental graphs")
+        options.add_options("Advanced input processing options") //
+            ("no-clique-detection", "Disable clique / independent set detection") //
+            ("no-supplementals", "Do not use supplemental graphs") //
             ("no-nds", "Do not use neighbourhood degree sequences");
 
-        options.add_options("Advanced parallelism options")
-            ("threads", "Use threaded search, with this many threads (0 to auto-detect)", cxxopts::value<unsigned>())
-            ("triggered-restarts", "Have one thread trigger restarts (more nondeterminism, better performance)")
+        options.add_options("Advanced parallelism options") //
+            ("threads", "Use threaded search, with this many threads (0 to auto-detect)", cxxopts::value<unsigned>()) //
+            ("triggered-restarts", "Have one thread trigger restarts (more nondeterminism, better performance)") //
             ("delay-thread-creation", "Do not create threads until after the first restart");
 
         vector<string> pattern_less_thans, target_occur_less_thans;
-        options.add_options("Manual symmetry options")
+        options.add_options("Manual symmetry options") //
             ("pattern-less-than", "Specify a pattern less than constraint, in the form v<w",
-                cxxopts::value<vector<string>>(pattern_less_thans))
-            ("pattern-automorphism-group-size", "Specify the size of the pattern graph automorphism group", cxxopts::value<string>())
+                cxxopts::value<vector<string>>(pattern_less_thans))("pattern-automorphism-group-size", "Specify the size of the pattern graph automorphism group", cxxopts::value<string>()) //
             ("target-occurs-less-than", "Specify a target occurs less than constraint, in the form v<w",
-                cxxopts::value<vector<string>>(target_occur_less_thans))
-            ("target-automorphism-group-size", "Specify the size of the target graph automorphism group", cxxopts::value<string>());
+                cxxopts::value<vector<string>>(target_occur_less_thans))("target-automorphism-group-size", "Specify the size of the target graph automorphism group", cxxopts::value<string>());
 
-        options.add_options("Proof logging options")
-            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>())
+        options.add_options("Proof logging options") //
+            ("prove", "Write unsat proofs to this filename (suffixed with .opb and .pbp)", cxxopts::value<string>()) //
             ("verbose-proofs", "Write lots of comments to the proof, for tracing");
 
         vector<string> shapes;
         vector<int> shape_counts, shape_injectives;
-        options.add_options("Hidden")
-            ("enumerate", "Alias for --count-solutions (backwards compatibility)")
-            ("distance3", "Use distance 3 filtering (experimental)")
-            ("k4", "Use 4-clique filtering (experimental)")
-            ("n-exact-path-graphs", "Specify number of exact path graphs", cxxopts::value<int>())
-            ("decomposition", "Use decomposition")
-            ("cliques", "Use clique size constraints")
-            ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too")
-            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>(shapes))
-            ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts))
-            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives))
-            ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)")
+        options.add_options("Hidden") //
+            ("enumerate", "Alias for --count-solutions (backwards compatibility)") //
+            ("distance3", "Use distance 3 filtering (experimental)") //
+            ("k4", "Use 4-clique filtering (experimental)") //
+            ("n-exact-path-graphs", "Specify number of exact path graphs", cxxopts::value<int>()) //
+            ("decomposition", "Use decomposition") //
+            ("cliques", "Use clique size constraints") //
+            ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
+            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>(shapes)) //
+            ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts)) //
+            ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives)) //
+            ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)") //
             ("staged-first-round-backtracks", "Staged solving: backtrack budget for the first cheap search round before supplemental graphs are built", cxxopts::value<unsigned long long>());
 
-        options.add_options()
-            ("pattern-file", "specify the pattern file", cxxopts::value<std::string>())
+        options.add_options() //
+            ("pattern-file", "specify the pattern file", cxxopts::value<std::string>()) //
             ("target-file", "specify the target file", cxxopts::value<std::string>());
 
         options.parse_positional({"pattern-file", "target-file"});
@@ -332,7 +329,7 @@ auto main(int argc, char * argv[]) -> int
             cout << "proof_log = " << fn << ".pbp" << endl;
         }
 
-        auto describe = [&] (const InputGraph & g) {
+        auto describe = [&](const InputGraph & g) {
             if (g.directed())
                 cout << " directed";
             if (g.loopy())

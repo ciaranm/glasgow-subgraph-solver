@@ -8,6 +8,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 using std::string;
@@ -23,6 +24,53 @@ namespace
         REQUIRE(v.has_value());
         return *v;
     }
+}
+
+// ---------------------------------------------------------------------------
+// InputGraph
+// ---------------------------------------------------------------------------
+
+TEST_CASE("InputGraph: directedness is declared, not inferred")
+{
+    // A directed graph with no edges at all is still directed. Nothing about the
+    // edges can tell you that, which is why the constructor has to be told.
+    InputGraph empty_directed{3, false, false, true};
+    CHECK(empty_directed.directed());
+    CHECK(empty_directed.number_of_directed_edges() == 0);
+
+    InputGraph undirected{3, false, false};
+    CHECK_FALSE(undirected.directed());
+
+    // Labelling an undirected edge does not change that.
+    undirected.add_edge(0, 1, "red");
+    CHECK_FALSE(undirected.directed());
+    CHECK(undirected.adjacent(1, 0));
+}
+
+TEST_CASE("InputGraph: add_directed_edge needs the graph declared directed")
+{
+    InputGraph undirected{2, false, false};
+    CHECK_THROWS_AS(undirected.add_directed_edge(0, 1, ""), std::logic_error);
+
+    InputGraph directed{2, false, false, true};
+    CHECK_NOTHROW(directed.add_directed_edge(0, 1, ""));
+    CHECK(directed.adjacent(0, 1));
+    CHECK_FALSE(directed.adjacent(1, 0));
+}
+
+TEST_CASE("InputGraph: vertex_has_name tells a set name from the index fallback")
+{
+    InputGraph g{2, false, false};
+    CHECK_FALSE(g.vertex_has_name(0));
+    CHECK(g.vertex_name(0) == "0"); // the fallback, not a name
+
+    g.set_vertex_name(0, "alice");
+    CHECK(g.vertex_has_name(0));
+    CHECK(g.vertex_name(0) == "alice");
+
+    // A vertex named for its own index is still a named vertex.
+    g.set_vertex_name(1, "1");
+    CHECK(g.vertex_has_name(1));
 }
 
 // ---------------------------------------------------------------------------

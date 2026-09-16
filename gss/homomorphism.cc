@@ -710,11 +710,11 @@ auto gss::solve_homomorphism_problem(
     SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}};
 
     vector<unique_ptr<SolveStep>> steps;
-    steps.push_back(make_unique<EmitProofModelStep>());          // emit the OPB model
+    steps.push_back(make_unique<EmitProofModelStep>()); // emit the OPB model
     steps.push_back(make_unique<PatternBiggerThanTargetStep>()); // trivial size refutation
-    steps.push_back(make_unique<TargetLoopShortcutStep>());      // non-injective target-loop shortcut
-    steps.push_back(make_unique<CliqueShortcutStep>());          // clique-pattern reduction
-    steps.push_back(make_unique<MainSolveStep>());               // build model + search (terminal)
+    steps.push_back(make_unique<TargetLoopShortcutStep>()); // non-injective target-loop shortcut
+    steps.push_back(make_unique<CliqueShortcutStep>()); // clique-pattern reduction
+    steps.push_back(make_unique<MainSolveStep>()); // build model + search (terminal)
 
     for (auto & step : steps)
         if (step->run(ctx) == StepOutcome::Concluded)

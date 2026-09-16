@@ -1,5 +1,6 @@
 #include <gss/formats/csv.hh>
 #include <gss/formats/dimacs.hh>
+#include <gss/formats/json_graph.hh>
 #include <gss/formats/lad.hh>
 #include <gss/formats/read_file_format.hh>
 #include <gss/formats/vfmcs.hh>
@@ -34,6 +35,12 @@ auto detect_format(ifstream & infile, const string & filename) -> string
         lad_zero_unlabelled_line{R"(0)"},
         lad_line{R"(\d+\s+(\d+\s+)*\d+\s*)"},
         csv_problem{R"(\S+[,>]\S+)"};
+
+    // A leading '{' can only be JSON: no other format we read permits it anywhere,
+    // let alone first. This has to be tested before csv_problem, which a one-line
+    // JSON document would otherwise match on its commas.
+    if (auto first = line.find_first_not_of(" \t\r"); first != string::npos && line.at(first) == '{')
+        return "json";
 
     smatch match;
     if (regex_match(line, match, dimacs_comment)) {
@@ -114,6 +121,8 @@ auto read_file_format(const string & format, const string & filename) -> InputGr
         return read_vertex_labelled_lad(move(infile), filename);
     else if (actual_format == "csv")
         return read_csv(move(infile), filename);
+    else if (actual_format == "json")
+        return read_json_graph(move(infile), filename);
     else if (actual_format == "vfmcs")
         return read_unlabelled_undirected_vfmcs(move(infile), filename);
     else if (actual_format == "vfmcsv")

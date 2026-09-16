@@ -101,8 +101,8 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
         bool induced = (rng() % 2);
         int injectivity_choice = rng() % 3;
         auto injectivity = injectivity_choice == 0 ? Injectivity::Injective
-            : injectivity_choice == 1 ? Injectivity::NonInjective
-                                      : Injectivity::LocallyInjective;
+            : injectivity_choice == 1              ? Injectivity::NonInjective
+                                                   : Injectivity::LocallyInjective;
         bool injective = (injectivity == Injectivity::Injective);
         bool locally_injective = (injectivity == Injectivity::LocallyInjective);
 

@@ -15,16 +15,16 @@ auto main(int argc, char * argv[]) -> int
     try {
         cxxopts::Options options("Create a random graph", "Get started by using option --help");
 
-        options.add_options("Program options")
+        options.add_options("Program options") //
             ("help", "Display help information");
 
-        options.add_options("Graph options")
-            ("seed", "Specify a random seed", cxxopts::value<int>())
-            ("directed", "Generate a directed graph")
+        options.add_options("Graph options") //
+            ("seed", "Specify a random seed", cxxopts::value<int>()) //
+            ("directed", "Generate a directed graph") //
             ("loops", "Generate loops with this probability", cxxopts::value<double>());
 
-        options.add_options()
-            ("vertices", "Specify the number of vertices", cxxopts::value<int>())
+        options.add_options() //
+            ("vertices", "Specify the number of vertices", cxxopts::value<int>()) //
             ("edge-probability", "Specify the edge probability", cxxopts::value<double>());
 
         options.parse_positional({"vertices", "edge-probability"});
@@ -68,7 +68,7 @@ auto main(int argc, char * argv[]) -> int
 
         return EXIT_SUCCESS;
     }
-    catch (const cxxopts::exceptions::exception& e) {
+    catch (const cxxopts::exceptions::exception & e) {
         cerr << "Error: " << e.what() << endl;
         cerr << "Try " << argv[0] << " --help" << endl;
         return EXIT_FAILURE;
