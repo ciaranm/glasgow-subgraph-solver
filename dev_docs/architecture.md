@@ -22,7 +22,7 @@ call the matching `solve_*` function, and print the `*Result`.
 
 ```
             src/glasgow_subgraph_solver.cc   glasgow_clique_solver.cc   glasgow_common_subgraph_solver.cc
-                          │                          │                          │   (also create_random_graph, convert_to_lad)
+                          │                          │                          │   (also create_random_graph, convert_to_lad, convert_to_json)
                           ▼                          ▼                          ▼
   ┌───────────────────────────────────────────────────────────────────────────────────────┐
   │ Public API  (gss/*.hh)                                                                   │
@@ -43,7 +43,7 @@ call the matching `solve_*` function, and print the `*Result`.
                           ▼
   ┌───────────────────────────────────────────────────────────────────────────────────────┐
   │ Graph input  (gss/formats/*)            Utilities  (gss/utils/*)                          │
-  │   InputGraph  +  readers: csv, lad, dimacs, vfmcs, read_file_format                       │
+  │   InputGraph  +  readers: csv, json, lad, dimacs, vfmcs, read_file_format                 │
   │   graph_file_error                       hashing_utils · vertex_name_map                   │
   └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -107,10 +107,15 @@ pattern into biconnected components.
 
 - **`InputGraph`** (`formats/input_graph.{hh,cc}`) is the format-agnostic graph the readers produce
   and the solvers consume: a pimpl over an edge map, with vertex names/labels and edge labels. It is
-  deliberately not performance-tuned — the solvers re-encode it into bitsets.
+  deliberately not performance-tuned — the solvers re-encode it into bitsets. Directedness is
+  *declared* to the constructor, not inferred from which edges get added: `add_directed_edge`
+  requires it, and `add_edge` keeps an undirected graph undirected however its edges are labelled.
+  See [file-formats.md](file-formats.md) for why that matters.
 - **Format readers** (`formats/`) all take a `std::istream` and a filename and return an
   `InputGraph`; `read_file_format` dispatches by name and can auto-detect. Supported: CSV, LAD,
-  directed/vertex-labelled/labelled LAD, DIMACS, and VFMCS.
+  directed/vertex-labelled/labelled LAD, DIMACS, VFMCS, and the `gss-graph` JSON format. Only the
+  last of those declares its graph-level properties rather than inferring them, and only it has a
+  writer; see [file-formats.md](file-formats.md).
 - **`SVOBitset`** (`innards/svo_bitset.hh`) is the small-vector-optimised bitset used everywhere for
   domains and adjacency: inline storage for up to 16 64-bit words, heap beyond that.
 - **`loooong`** (`gss/loooong.hh`) is a thin GMP `mpz_t` wrapper for solution counts, which overflow
@@ -131,9 +136,9 @@ pattern into biconnected components.
 
 ## Build and tests
 
-CMake with three presets — `release`, `debug`, and `sanitize` (ASan + UBSan) — see
-`CMakePresets.json`. The library and drivers need GMP; Catch2 and cxxopts are fetched via
-`FetchContent`. Unit tests live next to the code they cover (`gss/**/<name>_test.cc`, registered in
+CMake with four presets — `release`, `debug`, `sanitize` (ASan + UBSan) and `coverage` (gcov) — see
+`CMakePresets.json`. The library and drivers need GMP; Catch2, cxxopts and nlohmann/json are fetched
+via `FetchContent` when not already installed. Unit tests live next to the code they cover (`gss/**/<name>_test.cc`, registered in
 `gss/CMakeLists.txt`) and run under `ctest`. Proof-verification tests (`src/CMakeLists.txt`,
 `test-instances/verify_proof.bash`) run the solver under VeriPB and are only registered when `veripb`
 is found. `run-tests.bash` is a small end-to-end smoke test over the binaries.
