@@ -80,8 +80,9 @@ namespace
             plan.push_back({ShapeGraphSpec::Kind::Distance3, 1});
         if (supports_k4_graphs(params, has_loops, directed))
             plan.push_back({ShapeGraphSpec::Kind::K4, 1});
-        for (auto & shape : params.extra_shapes)
-            plan.push_back({ShapeGraphSpec::Kind::ExtraShape, 1, &shape});
+        if (supports_extra_shapes(params))
+            for (auto & shape : params.extra_shapes)
+                plan.push_back({ShapeGraphSpec::Kind::ExtraShape, 1, &shape});
         return plan;
     }
 

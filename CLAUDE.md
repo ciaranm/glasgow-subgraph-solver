@@ -85,10 +85,10 @@ without following the link.
   [`option-compatibility.md`](dev_docs/option-compatibility.md) next to the others.
 - **A builder that reads adjacency rows must ask whether *either* graph is directed.**
   A row is a vertex's out-neighbours, so anything written for undirected rows is wrong
-  on an asymmetric one, whichever graph it came from: the k4 builder marked pairs in an
-  orientation it never checked (#97), the clique solver held "cliques" together with
-  one-way arcs (#93), and local injectivity asked about common successors when it meant
-  common predecessors (#96). `ProcessedGraphsData::directed` follows the *pattern*,
+  on an asymmetric one, whichever graph it came from: the k4 and extra-shape builders
+  marked pairs in an orientation they never checked (#97, #99), the clique solver held
+  "cliques" together with one-way arcs (#93), and local injectivity asked about common
+  successors when it meant common predecessors (#96). `ProcessedGraphsData::directed` follows the *pattern*,
   because that is what picks the searcher's propagation path; `either_graph_directed` is
   the question a builder wants.
 - **The randomised oracle now covers directed and labelled graphs, and the sweep covers
