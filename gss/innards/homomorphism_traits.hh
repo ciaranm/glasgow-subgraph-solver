@@ -23,6 +23,14 @@ namespace gss::innards
 
     auto supports_distance3_graphs(const HomomorphismParams & params) -> bool;
 
+    // An extra shape graph (--shape) relates v and w when the shape embeds with its "from"
+    // vertex on v and its "to" vertex on w. Composing a pattern embedding of the shape with
+    // the mapping gives a target embedding only if the mapping keeps the shape's vertices
+    // apart: that is what makes the relation preserved, and nothing weaker than full
+    // injectivity does it for an arbitrary shape (issue #99). Direction is handled by
+    // building the relation on the underlying undirected graphs rather than by a guard here.
+    auto supports_extra_shapes(const HomomorphismParams & params) -> bool;
+
     auto might_have_watches(const HomomorphismParams & params) -> bool;
 
     auto is_nonshrinking(const HomomorphismParams & params) -> bool;

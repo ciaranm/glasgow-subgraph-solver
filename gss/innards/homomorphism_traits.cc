@@ -34,6 +34,11 @@ auto gss::innards::supports_distance3_graphs(const HomomorphismParams & params) 
     return (! params.no_supplementals) && params.distance3 && (params.injectivity == Injectivity::Injective);
 }
 
+auto gss::innards::supports_extra_shapes(const HomomorphismParams & params) -> bool
+{
+    return (! params.no_supplementals) && (params.injectivity == Injectivity::Injective);
+}
+
 auto gss::innards::might_have_watches(const HomomorphismParams & params) -> bool
 {
     // Watches (the nogood store) are only worth maintaining if the search can restart --

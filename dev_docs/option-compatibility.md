@@ -51,6 +51,7 @@ place to look. `has_loops` means *either* graph has a self-loop.
 | distance-2 graph | supplementals on, no exact-path graphs, not (locally injective and loops) | as above |
 | distance-3 graph (`--distance3`) | supplementals on, fully injective | |
 | k4 graph (`--k4`) | supplementals on, not non-injective, not (locally injective and loops), **neither graph directed** | #97 |
+| extra shape graphs (`--shape`) | supplementals on, fully injective | #99 |
 | degree and NDS | not non-injective, not (locally injective and loops) | #58 |
 | degree and NDS *exactly* | induced, equal sizes, fully injective | a bijection is forced only then |
 | whole-instance degree sequence | fully injective | |
@@ -144,10 +145,15 @@ Not covered, and worth deciding on separately:
 - **Threads.** Nondeterministic, so a cell's outcome would not be reproducible.
 - **Proof logging.** Much slower, needs VeriPB, and covered separately by
   `test-instances/random_proof_sweep.bash`.
-- **`--shape`.** `build_extra_shape()` builds its master graph with `add_edge` and sets vertex
-  labels of its own, so it ignores edge direction and labels the same way `build_k4_graphs()`
-  did before #97. Sweeping the directed and labelled families would be testing a path already
-  known to be incomplete; it probably wants the same guard k4 got.
+- **`--shape`.** Each shape is its own graph file, so it does not fit a covering-array column,
+  and every pair of vertices costs a child search, so it is slow. `extra_shapes_test.cc` has a
+  fixed instance for each of the three ways it went wrong (#99): it saw an orientation of each
+  directed pair chosen by vertex numbering, it saw only one end-to-end orientation of a shape
+  that is not symmetric in its ends, and it had no injectivity guard. It now embeds the shape in
+  the underlying undirected loopless graph, in both orientations, and only under full
+  injectivity. Under anything weaker the images of two shape vertices can collide, even in a
+  loopless target: a locally injective mapping can fold a four-vertex path so that its two
+  ends meet, and then the target pair is no pair at all.
 - **Timed restarts.** Wall-clock dependent.
 - **`--decomposition`** (`sip_decomposer`), the clique solver and the common-subgraph solver:
   different top levels, each with its own option space.

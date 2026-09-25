@@ -107,7 +107,7 @@ auto main(int argc, char * argv[]) -> int
             ("decomposition", "Use decomposition") //
             ("cliques", "Use clique size constraints") //
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
-            ("shape", "Specify an extra shape graph (slow, experimental)", cxxopts::value<std::vector<std::string>>(shapes)) //
+            ("shape", "Specify an extra shape graph, as a CSV file with one vertex labelled from and one labelled to, and any other labels on the rest (slow, experimental, injective only)", cxxopts::value<std::vector<std::string>>(shapes)) //
             ("shape-count", "Specify how many times the shape must occur", cxxopts::value<std::vector<int>>(shape_counts)) //
             ("shape-injective", "Specify whether the shape must occur injectively", cxxopts::value<std::vector<int>>(shape_injectives)) //
             ("no-proof-supplemental-subsumption", "Emit every supplemental adjacency proof constraint, including ones subsumed by a stronger one (disables a proof-size optimisation; for proof-trimming analysis)") //
