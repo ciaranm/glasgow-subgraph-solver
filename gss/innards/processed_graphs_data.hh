@@ -28,13 +28,24 @@ namespace gss::innards
         std::vector<SVOBitset> pattern_graph_rows;
         std::vector<SVOBitset> target_graph_rows, forward_target_graph_rows, reverse_target_graph_rows;
 
+        // The pattern's in-neighbourhoods, for local injectivity, which asks whether two
+        // pattern vertices share a *predecessor*. Only populated for a directed pattern: an
+        // undirected row already answers that question, being its own reverse. See
+        // HomomorphismModel::pattern_in_neighbour_row().
+        std::vector<SVOBitset> pattern_in_neighbour_rows;
+
         std::vector<std::vector<int>> patterns_degrees, targets_degrees;
         int largest_target_degree = 0;
 
         std::vector<int> pattern_vertex_labels, target_vertex_labels, pattern_edge_labels, target_edge_labels;
         std::vector<int> pattern_loops, target_loops;
         bool has_loops = false;
-        bool directed = false;
+
+        // directed follows the *pattern*, because that is what selects the searcher's
+        // propagation path. either_graph_directed is the weaker question a supplemental-graph
+        // builder has to ask: a builder written for undirected rows is wrong on an asymmetric
+        // row whichever graph it came from (issue #97).
+        bool directed = false, either_graph_directed = false;
 
         std::list<std::string> supplemental_graph_names;
     };

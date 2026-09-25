@@ -2,6 +2,7 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_SEARCHER_HH 1
 
 #include <gss/homomorphism.hh>
+#include <gss/innards/filter_activations.hh>
 #include <gss/innards/homomorphism_domain.hh>
 #include <gss/innards/homomorphism_model.hh>
 #include <gss/innards/homomorphism_traits.hh>
@@ -85,11 +86,20 @@ namespace gss::innards
 
         std::mt19937 global_rand;
 
+        // Filter-activation accounting (see filter_activations.hh), and whether anything at
+        // all wants to know which graph pair removed which value: verbose proof comments do,
+        // and so does activation recording. Neither is on in a normal solve, and attributing
+        // a removal costs a popcount per graph pair, so this selects the instantiation of
+        // propagate_adjacency_constraints() that does the attributing rather than being
+        // tested inside its loop.
+        const bool _record_filter_activations, _verbose_proof_comments, _track_removals;
+        FilterActivations _filter_activations;
+
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
         auto solution_in_proof_form(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<NamedVertex, NamedVertex>>;
 
-        template <bool directed_, bool has_edge_labels_, bool induced_, bool verbose_proofs_>
+        template <bool directed_, bool has_edge_labels_, bool induced_, bool track_removals_>
         auto propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void;
 
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool;
@@ -138,6 +148,9 @@ namespace gss::innards
             RestartsSchedule & restarts_schedule) -> SearchResult;
 
         auto save_result(const HomomorphismAssignments & assignments, HomomorphismResult & result) -> void;
+
+        // Append this searcher's filter-activation counts, if it was recording any.
+        auto add_extra_stats(std::list<std::string> & stats) const -> void;
 
         auto set_seed(int n) -> void;
 

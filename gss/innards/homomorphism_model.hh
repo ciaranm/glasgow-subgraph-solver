@@ -69,6 +69,11 @@ namespace gss::innards
 
         auto pattern_adjacency_bits(int p, int q) const -> PatternAdjacencyBitsType;
         auto pattern_graph_row(int g, int p) const -> const SVOBitset &;
+
+        // The pattern vertices that have an edge *to* p, in the original graph: the row for
+        // an undirected pattern, its reverse for a directed one. Local injectivity is the
+        // caller -- it asks whether two pattern vertices share a predecessor (issue #96).
+        auto pattern_in_neighbour_row(int p) const -> const SVOBitset &;
         auto target_graph_row(int g, int t) const -> const SVOBitset &;
 
         auto forward_target_graph_row(int t) const -> const SVOBitset &;

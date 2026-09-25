@@ -36,7 +36,7 @@ call the matching `solve_*` function, and print the `*Result`.
   │ Implementation detail  (gss/innards/*)                                                    │
   │   homomorphism_model · homomorphism_searcher · homomorphism_domain · homomorphism_traits  │
   │   solve_state · supplemental_graphs · processed_graphs_data · clique_size_constraints      │
-  │   cheap_all_different · graph_traits · watches (nogoods) · svo_bitset                      │
+  │   cheap_all_different · graph_traits · watches (nogoods) · svo_bitset · filter_activations │
   │   homomorphism_proofs · proof (VeriPB logging) · verify · threads                          │
   └───────────────────────────────────────────────────────────────────────────────────────┘
                           │ uses
@@ -74,8 +74,11 @@ homomorphism variants are all configurations of it.
   variable/value ordering, constraint propagation (adjacency, all-different via
   `cheap_all_different`, less-than / occurs-less symmetry constraints),
   restarts, and nogood recording via `Watches`. The propagation hot path is templated on
-  `<directed, has_edge_labels, induced, verbose_proofs>` so the per-node inner loop has no runtime
-  branches on those flags — a deliberate performance choice.
+  `<directed, has_edge_labels, induced, track_removals>` so the per-node inner loop has no runtime
+  branches on those flags — a deliberate performance choice, and a measurable one: attributing a
+  removal to the graph pair that made it costs a popcount per graph pair, so the two things that
+  want that attribution (verbose proof comments and filter-activation recording) share the one
+  instantiation rather than adding a branch.
 - **`solve_homomorphism_problem`** (`homomorphism.cc`) wires these together as a **pipeline of
   `SolveStep`s** over a shared `SolveContext`, run in registration order and stopping at the first
   step that concludes: emit the OPB model, the pattern-bigger-than-target refutation, the
@@ -122,6 +125,11 @@ pattern into biconnected components.
   64 bits readily.
 - **`Watches`** (`innards/watches.hh`) is a generic two-watched-literal nogood store shared by the
   homomorphism and clique searchers.
+- **`FilterActivations`** (`innards/filter_activations.hh`) counts what each filter actually
+  removed, when `HomomorphismParams::record_filter_activations` asks for it, and reports it in
+  the result's extra stats. Nothing in a normal solve touches it; it is what lets the option
+  sweep tell a filter that is correct here from one that did nothing here. See
+  [option-compatibility.md](option-compatibility.md).
 - **`RestartsSchedule`** (`gss/restarts.hh`) and **`Timeout`** (`gss/timeout.hh`) are the search
   control knobs. Restart policies: none, Luby, geometric, timed, and a thread-synchronised variant.
 - **`Proof`** (`innards/proof.{hh,cc}`) emits the VeriPB model (`.opb`) and proof log (`.pbp`). It
@@ -142,3 +150,13 @@ via `FetchContent` when not already installed. Unit tests live next to the code 
 `gss/CMakeLists.txt`) and run under `ctest`. Proof-verification tests (`src/CMakeLists.txt`,
 `test-instances/verify_proof.bash`) run the solver under VeriPB and are only registered when `veripb`
 is found. `run-tests.bash` is a small end-to-end smoke test over the binaries.
+
+Two of the tests are sweeps rather than fixed cases, and between them they are what most of the
+correctness confidence rests on. `random_homomorphism_test` checks the solver against a
+brute-force oracle, exhaustively over the problem axes, on all sixteen combinations of loops ×
+directed × vertex labels × edge labels. `option_sweep_test` needs no oracle — its reference is
+the same instance solved with the filtering off — so it can afford instances big enough for the
+filters to fire, and runs a pairwise covering array over the option space against nineteen
+instance families, checking its per-cell outcomes against `gss/option_sweep_golden.tsv`. Which
+option combinations are legal, which are silently disabled, and what neither sweep covers is in
+[option-compatibility.md](option-compatibility.md).

@@ -94,6 +94,16 @@ auto gss::innards::verify_homomorphism(
             else if (induced && ! pattern.adjacent(i, j) && target.adjacent(t, u))
                 throw BuggySolution{"Non-edge " + pattern.vertex_name(i) + " -/- " + pattern.vertex_name(j) +
                     " mapped to edge " + target.vertex_name(t) + " -- " + target.vertex_name(u)};
+            // Edge labels were not checked here at all, despite the heading. The pairs
+            // with i == j are in this cross product, so this covers a loop's label too --
+            // which is the one the solver itself can miss, loops being stripped out of its
+            // adjacency rows (issue #92).
+            else if (pattern.has_edge_labels() && pattern.adjacent(i, j) &&
+                pattern.edge_label(i, j) != target.edge_label(t, u))
+                throw BuggySolution{"Edge " + pattern.vertex_name(i) + " -- " + pattern.vertex_name(j) +
+                    " labelled '" + string{pattern.edge_label(i, j)} + "' mapped to edge " +
+                    target.vertex_name(t) + " -- " + target.vertex_name(u) + " labelled '" +
+                    string{target.edge_label(t, u)} + "'"};
         }
     }
 }

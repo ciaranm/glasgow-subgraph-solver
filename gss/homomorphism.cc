@@ -222,6 +222,7 @@ namespace
                 result.extra_stats.emplace_back("nogoods_lengths =" + nogoods_lengths_str);
             }
 
+            searcher.add_extra_stats(result.extra_stats);
             model.add_extra_stats(result.extra_stats);
             return result;
         }
@@ -410,6 +411,8 @@ namespace
                     for (auto & th : threads)
                         th.join();
 
+                searchers[t]->add_extra_stats(thread_result.extra_stats);
+
                 unique_lock<mutex> lock{common_result_mutex};
                 if (! thread_result.mapping.empty())
                     common_result.mapping = move(thread_result.mapping);
@@ -559,7 +562,16 @@ namespace
             // Not for an induced mapping into a target with loops: a simple-clique pattern is
             // loopless, so an induced mapping must avoid self-looped target vertices, but the
             // clique algorithm ignores loops and may map a pattern vertex onto one.
-            if (! (can_use_clique(params) && is_simple_clique(pattern) && ! (params.induced && target.loopy())))
+            //
+            // Not for a directed target either: it is the target that gets handed to the
+            // clique solver, which has no notion of edge direction and would hold a "clique"
+            // together with one-way arcs (issue #93). is_simple_clique() rules out a directed
+            // pattern for the same reason.
+            //
+            // can_use_clique() carries the injectivity premise the reduction needs (#94),
+            // rather than leaving it to the fact that TargetLoopShortcutStep usually gets
+            // there first.
+            if (! (can_use_clique(params, target.loopy()) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy())))
                 return StepOutcome::Continue;
 
             CliqueParams clique_params;
@@ -615,6 +627,10 @@ namespace
             if (! model.prepare()) {
                 HomomorphismResult result;
                 result.extra_stats.emplace_back("model_consistent = false");
+                // The model's own stats belong here as much as on any other path: this is
+                // where the whole-instance degree-sequence refutation concludes, and
+                // dropping them made that filter invisible to anything reading the result.
+                model.add_extra_stats(result.extra_stats);
                 result.complete = true;
                 if (proof) {
                     if (params.count_solutions)

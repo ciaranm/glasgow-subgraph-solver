@@ -108,7 +108,9 @@ Architectural notes on individual subsystems live in `dev_docs/`:
 [`architecture.md`](dev_docs/architecture.md) for the layer map,
 [`file-formats.md`](dev_docs/file-formats.md) for graph input and `InputGraph`,
 [`proof-logging.md`](dev_docs/proof-logging.md) for the VeriPB machinery and
-which option combinations support it, and
+which option combinations support it,
+[`option-compatibility.md`](dev_docs/option-compatibility.md) for which option
+combinations are legal at all and what the sweeps cover, and
 [`preprocessor-refactor.md`](dev_docs/preprocessor-refactor.md) for where the
 pre-search code is going.
 

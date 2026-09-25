@@ -118,6 +118,104 @@ TEST_CASE("directed edges must be mapped respecting orientation")
     CHECK(solve_homomorphism_problem(arc, dipath, params).solution_count == 2);
 }
 
+// The k4 supplemental graph marks a pair of adjacent vertices that sit in a 4-clique, which
+// is an undirected notion: its builder looks at one orientation of each pair, picked by
+// vertex numbering, and then asserts the relation symmetrically. On a directed instance that
+// deletes solutions, so the graph is not built there at all (issue #97).
+TEST_CASE("the k4 filter does not delete solutions on a directed instance")
+{
+    auto pattern = csv("0>3\n1>0\n1>2\n1>3\n2>0\n3>0\n3>2\n");
+    auto target = csv("0>1\n0>2\n0>3\n1>3\n2>1\n3>1\n3>2\n");
+
+    auto without = make_params();
+    without.no_supplementals = true;
+    without.no_nds = true;
+    auto baseline = solve_homomorphism_problem(pattern, target, without).solution_count;
+    REQUIRE(baseline == 1);
+
+    auto with = make_params();
+    with.k4 = true;
+    with.number_of_exact_path_graphs = 0; // so that k4 is the only supplemental graph
+    with.no_nds = true;
+    CHECK(solve_homomorphism_problem(pattern, target, with).solution_count == baseline);
+}
+
+// A target self-loop is an edge like any other, and two adjacent pattern vertices may be
+// mapped onto it once injectivity is dropped. The directed and edge-labelled propagation
+// paths read the forward and reverse target rows, which were left with no loops in them,
+// so on those paths no pattern edge could reach a loop at all (issue #95).
+TEST_CASE("a pattern edge can be mapped onto a target self-loop")
+{
+    auto params = make_params();
+    params.injectivity = Injectivity::NonInjective;
+
+    SECTION("undirected and unlabelled: the path that always worked")
+    {
+        CHECK(solve_homomorphism_problem(csv("a,b\n"), csv("1,1\n"), params).solution_count == 1);
+    }
+
+    SECTION("directed")
+    {
+        CHECK(solve_homomorphism_problem(csv("a>b\n"), csv("1>1\n"), params).solution_count == 1);
+    }
+
+    SECTION("edge-labelled, which takes the directed path too")
+    {
+        CHECK(solve_homomorphism_problem(csv("a,b,x\n"), csv("1,1,x\n"), params).solution_count == 1);
+        CHECK(solve_homomorphism_problem(csv("a,b,x\n"), csv("1,1,y\n"), params).solution_count == 0);
+    }
+}
+
+// Local injectivity asks that the images of a pattern vertex's out-neighbours be distinct --
+// what verify_homomorphism and the proof encoding both mean by it. Intersecting two
+// adjacency rows instead asks whether the two vertices share a *successor*, which on a
+// directed pattern is an unrelated question, and was wrong in both directions (issue #96).
+TEST_CASE("local injectivity on a directed pattern")
+{
+    auto params = make_params();
+    params.injectivity = Injectivity::LocallyInjective;
+
+    SECTION("two arcs into the same vertex may come from the same source")
+    {
+        // a -> c and b -> c: nothing points at both a and b, so a and b may share an image
+        CHECK(solve_homomorphism_problem(csv("a>c\nb>c\n"), csv("1>2\n"), params).solution_count == 1);
+    }
+
+    SECTION("a self-loop puts a vertex into its own out-neighbourhood")
+    {
+        // a -> a and a -> b, so a and b are both out-neighbours of a and cannot collide
+        CHECK(solve_homomorphism_problem(csv("a>a\na>b\n"), csv("1>1\n"), params).solution_count == 0);
+    }
+}
+
+// The clique shortcut hands the target to the clique solver, which has no notion of edge
+// direction and would hold a "clique" together with one-way arcs (issue #93). It only fires
+// in decision mode, so this checks satisfiability rather than a count.
+TEST_CASE("clique detection does not fire on directed graphs")
+{
+    auto digon = csv("a>b\nb>a\n"); // the complete digraph on two vertices
+    auto transitive_triangle = csv("1>2\n2>3\n1>3\n"); // no arc goes back
+
+    auto params = make_params();
+    params.count_solutions = false; // decision mode: where the shortcut lives
+    REQUIRE(params.clique_detection);
+    CHECK(solve_homomorphism_problem(digon, transitive_triangle, params).mapping.empty());
+}
+
+// The clique reduction looks for k pairwise-adjacent -- hence distinct -- target vertices, so
+// it needs the mapping to be forced injective. Both ends of an edge may sit on one self-loop
+// locally injectively, since each end has only the other as a neighbour (issue #94).
+TEST_CASE("clique detection does not fire when a loop can collapse the pattern")
+{
+    auto edge = csv("a,b\n"); // K_2, which is a clique
+    auto oneloop = csv("1,1\n");
+
+    auto params = make_params();
+    params.count_solutions = false; // decision mode: where the shortcut lives
+    params.injectivity = Injectivity::LocallyInjective;
+    CHECK(! solve_homomorphism_problem(edge, oneloop, params).mapping.empty());
+}
+
 // ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------
@@ -140,6 +238,81 @@ TEST_CASE("edge labels constrain the mapping")
     auto params = make_params();
     // a-b can only map onto the x-labelled edge, in either direction.
     CHECK(solve_homomorphism_problem(labelled_edge, two_labels, params).solution_count == 2);
+}
+
+// A self-loop is an edge, so its label has to match like any other edge's. This is the one
+// edge label the searcher's label check cannot see: loops are stripped out of the adjacency
+// rows, and forward checking only ever compares a pair of distinct pattern vertices, so it
+// is the loop-compatibility check that has to do it (issue #92).
+TEST_CASE("edge labels on self-loops constrain the mapping")
+{
+    auto red_loop = csv("a,a,red\n");
+
+    auto params = make_params();
+    CHECK(solve_homomorphism_problem(red_loop, csv("1,1,blue\n"), params).solution_count == 0);
+    CHECK(solve_homomorphism_problem(red_loop, csv("1,1,red\n"), params).solution_count == 1);
+}
+
+// ---------------------------------------------------------------------------
+// Clique-size constraints
+// ---------------------------------------------------------------------------
+
+// The clique-size filter (--cliques) maps a pattern vertex in a k-clique only to a target
+// vertex in a k-clique, which needs the k pattern vertices to reach k distinct targets.
+// Injectivity gives that, and so -- on the original graph pair only -- does a loopless
+// target, since collapsing two adjacent vertices would need a self-loop on the image. Both
+// arguments had been taken for granted rather than checked, so the filter silently deleted
+// solutions in the two cases below (issue #91).
+TEST_CASE("clique-size constraints do not change the solution count")
+{
+    SECTION("non-injective into a target with a loop")
+    {
+        auto edge = csv("a,b\n");
+        auto oneloop = csv("1,1\n"); // one vertex, self-loop
+
+        auto params = make_params();
+        params.injectivity = Injectivity::NonInjective;
+        params.clique_size_constraints = true;
+        // both pattern vertices onto the loop
+        CHECK(solve_homomorphism_problem(edge, oneloop, params).solution_count == 1);
+    }
+
+    SECTION("non-injective with clique sizes on the supplemental graphs, no loops anywhere")
+    {
+        auto star = csv("b,a\nb,c\nb,d\n"); // K_{1,3}, centre b
+        auto edge = csv("1,2\n");
+
+        auto params = make_params();
+        params.injectivity = Injectivity::NonInjective;
+        params.clique_size_constraints = true;
+        params.clique_size_constraints_on_supplementals = true;
+        // the three leaves are a triangle in the pattern's distance-2 graph, but they may
+        // legitimately share an image: centre on either end of the edge, leaves on the other
+        CHECK(solve_homomorphism_problem(star, edge, params).solution_count == 2);
+    }
+
+    SECTION("injective: the filter still fires, and still counts the same")
+    {
+        auto triangle = csv("a,b\nb,c\na,c\n");
+        auto triangle_and_c4 = csv("1,2\n2,3\n1,3\n4,5\n5,6\n6,7\n7,4\n");
+
+        // supplementals and NDS off, so that what is left to prune the triangle-free half of
+        // the target is the clique-size filter itself
+        auto without = make_params();
+        without.no_supplementals = true;
+        without.no_nds = true;
+        auto without_result = solve_homomorphism_problem(triangle, triangle_and_c4, without);
+
+        auto with = make_params();
+        with.no_supplementals = true;
+        with.no_nds = true;
+        with.clique_size_constraints = true;
+        auto with_result = solve_homomorphism_problem(triangle, triangle_and_c4, with);
+
+        CHECK(with_result.solution_count == without_result.solution_count);
+        CHECK(with_result.solution_count == 6);
+        CHECK(with_result.nodes < without_result.nodes);
+    }
 }
 
 // ---------------------------------------------------------------------------

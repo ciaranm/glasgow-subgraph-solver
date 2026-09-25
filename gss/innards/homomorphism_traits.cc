@@ -23,9 +23,10 @@ auto gss::innards::supports_distance2_graphs(const HomomorphismParams & params, 
     return (! params.no_supplementals) && (! supports_exact_path_graphs(params, has_loops)) && (! loop_breaks_filtering(params, has_loops));
 }
 
-auto gss::innards::supports_k4_graphs(const HomomorphismParams & params, bool has_loops) -> bool
+auto gss::innards::supports_k4_graphs(const HomomorphismParams & params, bool has_loops, bool directed) -> bool
 {
-    return (! params.no_supplementals) && params.k4 && (params.injectivity != Injectivity::NonInjective) && (! loop_breaks_filtering(params, has_loops));
+    return (! params.no_supplementals) && params.k4 && (params.injectivity != Injectivity::NonInjective) &&
+        (! loop_breaks_filtering(params, has_loops)) && (! directed);
 }
 
 auto gss::innards::supports_distance3_graphs(const HomomorphismParams & params) -> bool
@@ -70,7 +71,27 @@ auto gss::innards::global_degree_is_preserved(const HomomorphismParams & params)
     return params.injectivity == Injectivity::Injective;
 }
 
-auto gss::innards::can_use_clique(const HomomorphismParams & params) -> bool
+auto gss::innards::supports_clique_size_constraints(const HomomorphismParams & params, bool has_loops) -> bool
 {
-    return (! params.count_solutions) && params.clique_detection && (! params.proof_options);
+    return params.clique_size_constraints && (params.injectivity == Injectivity::Injective || ! has_loops);
+}
+
+auto gss::innards::supports_clique_size_constraints_on_supplementals(const HomomorphismParams & params, bool has_loops) -> bool
+{
+    // Locally injective plus loops has already disabled every supplemental graph
+    // (loop_breaks_filtering), so the has_loops case here is carried entirely by the
+    // predicate above.
+    return supports_clique_size_constraints(params, has_loops) &&
+        params.clique_size_constraints_on_supplementals &&
+        params.injectivity != Injectivity::NonInjective;
+}
+
+auto gss::innards::can_use_clique(const HomomorphismParams & params, bool target_has_loops) -> bool
+{
+    // Conservative under local injectivity: for a pattern clique on three or more vertices,
+    // local injectivity does force the images apart, since any two clique vertices are both
+    // neighbours of a third. Only K_2 actually needs excluding, which is not worth a special
+    // case.
+    return (! params.count_solutions) && params.clique_detection && (! params.proof_options) &&
+        (params.injectivity == Injectivity::Injective || ! target_has_loops);
 }
