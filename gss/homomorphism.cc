@@ -8,6 +8,7 @@
 #include <gss/innards/homomorphism_searcher.hh>
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/proof.hh>
+#include <gss/innards/reification.hh>
 #include <gss/innards/solve_state.hh>
 #include <gss/innards/thread_utils.hh>
 
@@ -66,6 +67,9 @@ namespace
         const HomomorphismParams & params;
         const std::shared_ptr<Proof> proof;
 
+        // Set when minimising cost.
+        const CostData * cost_data = nullptr;
+
         HomomorphismSolver(SolveState & s, const HomomorphismParams & p,
             const std::shared_ptr<Proof> & r) :
             state(s),
@@ -106,7 +110,7 @@ namespace
             unsigned number_of_restarts = 0;
 
             HomomorphismSearcher searcher(
-                model, params, [](const HomomorphismAssignments &) -> bool { return true; }, proof, state.watches);
+                model, params, [](const HomomorphismAssignments &) -> bool { return true; }, proof, state.watches, cost_data);
 
             // Staging: Stage 1 searches under a small fixed backtrack-budget schedule; at its
             // first restart we build the supplemental graphs (deriving them at the level-0
@@ -198,6 +202,13 @@ namespace
                 }
 
                 round_schedule->did_a_restart();
+            }
+
+            // Minimising: the search ran to the end (or out of time) without stopping at a
+            // solution, and what it leaves is the best it saw.
+            if (cost_data && searcher.incumbent()) {
+                searcher.save_result(*searcher.incumbent(), result);
+                result.cost = searcher.incumbent_cost();
             }
 
             if (params.restarts_schedule->might_restart())
@@ -470,6 +481,7 @@ namespace
         HomomorphismProofs * hom_proofs = nullptr;
         SolveState state;
         HomomorphismResult result;
+        const CostData * cost_data = nullptr;
     };
 
     struct SolveStep
@@ -571,7 +583,9 @@ namespace
             // can_use_clique() carries the injectivity premise the reduction needs (#94),
             // rather than leaving it to the fact that TargetLoopShortcutStep usually gets
             // there first.
-            if (! (can_use_clique(params, target.loopy()) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy())))
+            //
+            // And not when minimising cost, since the clique solver knows nothing of costs.
+            if (params.minimise_cost || ! (can_use_clique(params, target.loopy()) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy())))
                 return StepOutcome::Continue;
 
             CliqueParams clique_params;
@@ -645,6 +659,7 @@ namespace
             HomomorphismResult result;
             if (1 == params.n_threads) {
                 SequentialSolver solver(ctx.state, params, proof);
+                solver.cost_data = ctx.cost_data;
                 result = solver.solve();
             }
             else {
@@ -675,66 +690,155 @@ namespace
     };
 }
 
+namespace
+{
+    // Refuse what minimising cost and reifying a multigraph cannot yet do, before anything
+    // else looks at the graphs. See dev_docs/option-compatibility.md.
+    auto check_costs_and_multigraphs(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void
+    {
+        // The objective is what the target's vertices and edges cost; a cost on a pattern
+        // element could mean several things, and quietly ignoring it would be worse.
+        if (pattern.has_vertex_costs() || pattern.has_edge_costs())
+            throw UnsupportedConfiguration{"Costs on the pattern are not supported: the cost of a mapping is the cost of the target vertices and edges it uses"};
+
+        if (params.minimise_cost) {
+            if (! (target.has_vertex_costs() || target.has_edge_costs()))
+                throw UnsupportedConfiguration{"Minimising cost needs a target with vertex or edge costs"};
+            if (1 != params.n_threads)
+                throw UnsupportedConfiguration{"Minimising cost cannot yet be used with threads"};
+            if (params.proof_options)
+                throw UnsupportedConfiguration{"Minimising cost cannot yet be used with proof logging"};
+            if (params.count_solutions || params.enumerate_callback)
+                throw UnsupportedConfiguration{"Minimising cost cannot be combined with counting or enumerating solutions"};
+            if (params.staged)
+                throw UnsupportedConfiguration{"Minimising cost cannot yet be used with staged solving"};
+            if (params.injectivity != Injectivity::Injective)
+                throw UnsupportedConfiguration{"Minimising cost needs an injective mapping"};
+            if (params.induced)
+                throw UnsupportedConfiguration{"Minimising cost cannot yet be used with induced mappings"};
+            if (params.restarts_schedule && params.restarts_schedule->might_restart())
+                throw UnsupportedConfiguration{"Minimising cost cannot yet be used with restarts, use --restarts none"};
+            if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
+                throw UnsupportedConfiguration{"Minimising cost cannot be used with less-constraints, which may remove every cheapest mapping"};
+        }
+
+        // Reifying turns every edge into a vertex, which only means the same thing for an
+        // injective, non-induced mapping: see reification.hh.
+        if (needs_reification(pattern, target, params.minimise_cost)) {
+            if (params.injectivity != Injectivity::Injective)
+                throw UnsupportedConfiguration{"Multigraphs and edge costs need an injective mapping"};
+            if (params.induced)
+                throw UnsupportedConfiguration{"Multigraphs and edge costs cannot yet be used with induced mappings"};
+            if (params.proof_options)
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used with multigraphs or edge costs"};
+            // The search sees the reified mapping, edge-vertices and all, and without
+            // pattern edge labels one original mapping may extend to several of those.
+            if (params.count_solutions || params.enumerate_callback)
+                throw UnsupportedConfiguration{"Counting and enumerating solutions cannot yet be used with multigraphs or edge costs"};
+        }
+    }
+
+    auto solve_prepared(
+        const InputGraph & pattern,
+        const InputGraph & target,
+        const HomomorphismParams & params,
+        const CostData * cost_data) -> HomomorphismResult
+    {
+        // Staged solving uses an internal bounded search round (a restart) as its budget, so it
+        // only makes sense for the sequential engine; threaded staging is a later refinement.
+        if (params.staged && 1 != params.n_threads)
+            throw UnsupportedConfiguration{"Staged solving requires sequential search, use --threads 1"};
+        // (Staged counting works without proof: the Stage-1 -> Stage-2 transition is a restart,
+        // and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1 already
+        // counted -- as long as the watch machinery is enabled under staging, see
+        // might_have_watches. Under *proof* it is still unsupported, guarded with the other proof
+        // restrictions below, because logging an enumeration across a restart is not yet handled.)
+
+        // start by setting up proof logging, if necessary
+        shared_ptr<Proof> proof;
+        if (params.proof_options) {
+            // proof logging is currently incompatible with a whole load of "extra" features,
+            // but can be adapted to support most of them
+            if (1 != params.n_threads)
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used with threads"};
+            if (params.staged && params.count_solutions)
+                // the transition restart fires mid-enumeration; the enumeration proof cannot yet
+                // survive a restart (same restriction as counting with restarts, below)
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used with staged counting, drop --staged or --count-solutions"};
+            if (params.clique_detection)
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
+            if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
+            if (pattern.has_vertex_labels() || pattern.has_edge_labels())
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
+            if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
+            proof = make_shared<Proof>(*params.proof_options);
+        }
+
+        // The solver-proofs middle layer (owns vertex naming + the homomorphism-specific
+        // derivations). Created here so it spans the whole solve: the OPB model emission
+        // step below and the model's later supplemental / filter proofs share this one
+        // instance. Null when proof logging is off.
+        unique_ptr<HomomorphismProofs> hom_proofs;
+        if (proof)
+            hom_proofs = make_unique<HomomorphismProofs>(proof, pattern, target);
+
+        // The solve runs as a pipeline of steps over a shared context, in registration
+        // order, stopping at the first step that concludes the problem; the search is the
+        // terminal step (see dev_docs/preprocessor-refactor.md).
+        SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}, cost_data};
+
+        vector<unique_ptr<SolveStep>> steps;
+        steps.push_back(make_unique<EmitProofModelStep>()); // emit the OPB model
+        steps.push_back(make_unique<PatternBiggerThanTargetStep>()); // trivial size refutation
+        steps.push_back(make_unique<TargetLoopShortcutStep>()); // non-injective target-loop shortcut
+        steps.push_back(make_unique<CliqueShortcutStep>()); // clique-pattern reduction
+        steps.push_back(make_unique<MainSolveStep>()); // build model + search (terminal)
+
+        for (auto & step : steps)
+            if (step->run(ctx) == StepOutcome::Concluded)
+                break;
+
+        return move(ctx.result);
+    }
+}
+
 auto gss::solve_homomorphism_problem(
     const InputGraph & pattern,
     const InputGraph & target,
     const HomomorphismParams & params) -> HomomorphismResult
 {
-    // Staged solving uses an internal bounded search round (a restart) as its budget, so it
-    // only makes sense for the sequential engine; threaded staging is a later refinement.
-    if (params.staged && 1 != params.n_threads)
-        throw UnsupportedConfiguration{"Staged solving requires sequential search, use --threads 1"};
-    // (Staged counting works without proof: the Stage-1 -> Stage-2 transition is a restart,
-    // and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1 already
-    // counted -- as long as the watch machinery is enabled under staging, see
-    // might_have_watches. Under *proof* it is still unsupported, guarded with the other proof
-    // restrictions below, because logging an enumeration across a restart is not yet handled.)
+    check_costs_and_multigraphs(pattern, target, params);
 
-    // start by setting up proof logging, if necessary
-    shared_ptr<Proof> proof;
-    if (params.proof_options) {
-        // proof logging is currently incompatible with a whole load of "extra" features,
-        // but can be adapted to support most of them
-        if (1 != params.n_threads)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with threads"};
-        if (params.staged && params.count_solutions)
-            // the transition restart fires mid-enumeration; the enumeration proof cannot yet
-            // survive a restart (same restriction as counting with restarts, below)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with staged counting, drop --staged or --count-solutions"};
-        if (params.clique_detection)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
-        if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
-        if (pattern.has_vertex_labels() || pattern.has_edge_labels())
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
-        if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
-        proof = make_shared<Proof>(*params.proof_options);
+    if (needs_reification(pattern, target, params.minimise_cost)) {
+        auto reified = reify(pattern, target);
+
+        optional<CostData> cost_data;
+        if (params.minimise_cost)
+            cost_data = CostData{reified.target_costs, reified.pattern_original_size, reified.target_original_size,
+                reified.pattern_edge_vertices, reified.target_edge_vertices, reified.directed};
+
+        auto result = solve_prepared(reified.pattern, reified.target, params, cost_data ? &*cost_data : nullptr);
+
+        // The original vertices keep their numbers, so the mapping of the originals is
+        // what is left after dropping the edge-vertices.
+        VertexToVertexMapping mapping;
+        for (auto & [p, t] : result.mapping)
+            if (p < reified.pattern_original_size)
+                mapping.emplace(p, t);
+        result.mapping = move(mapping);
+        result.extra_stats.emplace_back("reified_sizes = " + to_string(reified.pattern.size()) + " " + to_string(reified.target.size()));
+        return result;
     }
 
-    // The solver-proofs middle layer (owns vertex naming + the homomorphism-specific
-    // derivations). Created here so it spans the whole solve: the OPB model emission
-    // step below and the model's later supplemental / filter proofs share this one
-    // instance. Null when proof logging is off.
-    unique_ptr<HomomorphismProofs> hom_proofs;
-    if (proof)
-        hom_proofs = make_unique<HomomorphismProofs>(proof, pattern, target);
+    if (params.minimise_cost) {
+        // Vertex costs only, on simple graphs: no edge-vertices, just a unary cost.
+        CostData cost_data{{}, pattern.size(), target.size(), {}, {}, pattern.directed() || target.directed()};
+        for (int t = 0; t < target.size(); ++t)
+            cost_data.target_costs.push_back(target.vertex_cost(t));
+        return solve_prepared(pattern, target, params, &cost_data);
+    }
 
-    // The solve runs as a pipeline of steps over a shared context, in registration
-    // order, stopping at the first step that concludes the problem; the search is the
-    // terminal step (see dev_docs/preprocessor-refactor.md).
-    SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}};
-
-    vector<unique_ptr<SolveStep>> steps;
-    steps.push_back(make_unique<EmitProofModelStep>()); // emit the OPB model
-    steps.push_back(make_unique<PatternBiggerThanTargetStep>()); // trivial size refutation
-    steps.push_back(make_unique<TargetLoopShortcutStep>()); // non-injective target-loop shortcut
-    steps.push_back(make_unique<CliqueShortcutStep>()); // clique-pattern reduction
-    steps.push_back(make_unique<MainSolveStep>()); // build model + search (terminal)
-
-    for (auto & step : steps)
-        if (step->run(ctx) == StepOutcome::Concluded)
-            break;
-
-    return move(ctx.result);
+    return solve_prepared(pattern, target, params, nullptr);
 }

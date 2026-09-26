@@ -14,6 +14,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -138,6 +139,12 @@ HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph
     pattern_size(pattern.size()),
     target_size(target.size())
 {
+    // Everything below reads edge labels pairwise, which a multigraph cannot answer.
+    // solve_homomorphism_problem reifies one before building a model, so reaching here
+    // with one is a bug in the caller, not a user error.
+    if (pattern.multigraph() || target.multigraph())
+        throw std::logic_error{"HomomorphismModel given a multigraph: reify it first (see reification.hh)"};
+
     _imp->graphs.has_loops = pattern.loopy() || target.loopy();
 
     _imp->graphs.patterns_degrees.resize(max_graphs);

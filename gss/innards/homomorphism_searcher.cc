@@ -8,9 +8,11 @@ using namespace gss;
 using namespace gss::innards;
 
 using std::make_optional;
+using std::make_unique;
 using std::max;
 using std::move;
 using std::mt19937;
+using std::nullopt;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
@@ -22,7 +24,8 @@ using std::vector;
 
 HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
     const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f,
-    Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & w) :
+    Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & w,
+    const CostData * cost_data) :
     model(m),
     params(p),
     _duplicate_solution_filterer(d),
@@ -37,6 +40,29 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.target_size = model.target_size;
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
+
+    if (cost_data)
+        _cost_bound = make_unique<CostBound>(*cost_data, model.pattern_size, model.target_size);
+}
+
+auto HomomorphismSearcher::incumbent() const -> const optional<HomomorphismAssignments> &
+{
+    return _incumbent;
+}
+
+auto HomomorphismSearcher::incumbent_cost() const -> long long
+{
+    return _incumbent_cost;
+}
+
+auto HomomorphismSearcher::assigned_targets(const HomomorphismAssignments & assignments) const -> vector<int>
+{
+    // A decision appears in assignments twice, once as the guess and once when
+    // propagation fixes its unit domain, so this is what to sum over, not assignments.
+    vector<int> result(model.pattern_size, -1);
+    for (auto & a : assignments.values)
+        result[a.assignment.pattern_vertex] = a.assignment.target_vertex;
+    return result;
 }
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
@@ -79,6 +105,8 @@ auto HomomorphismSearcher::add_extra_stats(std::list<std::string> & stats) const
 {
     if (_record_filter_activations)
         _filter_activations.add_search_stats(stats);
+    if (_cost_bound)
+        _cost_bound->add_extra_stats(stats);
 }
 
 auto HomomorphismSearcher::restarting_search(
@@ -114,6 +142,17 @@ auto HomomorphismSearcher::restarting_search(
         if (proof)
             proof->post_solution(solution_in_proof_form(assignments));
 
+        // Propagation refuses anything not cheaper than the incumbent, so this is a new
+        // best. Keep going to look for a cheaper one.
+        if (_cost_bound) {
+            auto cost = _cost_bound->cost_of(assigned_targets(assignments));
+            if (cost < _incumbent_cost) {
+                _incumbent_cost = cost;
+                _incumbent = assignments;
+            }
+            return SearchResult::SatisfiableButKeepGoing;
+        }
+
         if (params.count_solutions) {
             // we could be finding duplicate solutions, in threaded search
             if (_duplicate_solution_filterer(assignments)) {
@@ -143,26 +182,34 @@ auto HomomorphismSearcher::restarting_search(
         branch_v[branch_v_end++] = f_v;
     }
 
-    switch (params.value_ordering_heuristic) {
-    case ValueOrdering::None:
-        break;
-
-    case ValueOrdering::Degree:
-        degree_sort(branch_v, branch_v_end, false);
-        break;
-
-    case ValueOrdering::AntiDegree:
-        degree_sort(branch_v, branch_v_end, true);
-        break;
-
-    case ValueOrdering::Biased:
-        softmax_shuffle(branch_v, branch_v_end);
-        break;
-
-    case ValueOrdering::Random:
-        shuffle(branch_v.begin(), branch_v.begin() + branch_v_end, global_rand);
-        break;
+    // When minimising, the bound's per-value costs are what to try first: finding a cheap
+    // mapping early is what lets the bound prune.
+    if (_cost_bound) {
+        stable_sort(branch_v.begin(), branch_v.begin() + branch_v_end, [&](int a, int b) {
+            return _cost_bound->score(branch_domain->v, a) < _cost_bound->score(branch_domain->v, b);
+        });
     }
+    else
+        switch (params.value_ordering_heuristic) {
+        case ValueOrdering::None:
+            break;
+
+        case ValueOrdering::Degree:
+            degree_sort(branch_v, branch_v_end, false);
+            break;
+
+        case ValueOrdering::AntiDegree:
+            degree_sort(branch_v, branch_v_end, true);
+            break;
+
+        case ValueOrdering::Biased:
+            softmax_shuffle(branch_v, branch_v_end);
+            break;
+
+        case ValueOrdering::Random:
+            shuffle(branch_v.begin(), branch_v.begin() + branch_v_end, global_rand);
+            break;
+        }
 
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
@@ -362,14 +409,26 @@ auto HomomorphismSearcher::copy_nonfixed_domains_and_make_assignment(
 
 auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const HomomorphismDomain *
 {
-    const HomomorphismDomain * result = nullptr;
-    for (auto & d : domains)
-        if (! d.fixed)
-            if ((! result) ||
-                (d.count < result->count) ||
-                (d.count == result->count && model.pattern_degree(0, d.v) > model.pattern_degree(0, result->v)))
-                result = &d;
-    return result;
+    // When minimising over a reified instance, branch only on original vertices: once
+    // both endpoints of an edge-vertex are decided, adjacency leaves it at most one value,
+    // so edge-vertices are never worth a decision of their own. If only edge-vertices were
+    // left, which should not happen, fall back to branching on them.
+    auto branchable = [&](const HomomorphismDomain & d) {
+        return (! _cost_bound) || _cost_bound->is_original_pattern_vertex(d.v);
+    };
+
+    for (bool restrict : {true, false}) {
+        const HomomorphismDomain * result = nullptr;
+        for (auto & d : domains)
+            if ((! d.fixed) && ((! restrict) || branchable(d)))
+                if ((! result) ||
+                    (d.count < result->count) ||
+                    (d.count == result->count && model.pattern_degree(0, d.v) > model.pattern_degree(0, result->v)))
+                    result = &d;
+        if (result || ! _cost_bound)
+            return result;
+    }
+    return nullptr;
 }
 
 template <bool directed_, bool has_edge_labels_, bool induced_, bool track_removals_>
@@ -852,11 +911,25 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         if (model.has_occur_less_thans() && ! propagate_occur_less_thans(current_assignment, assignments, new_domains))
             return false;
 
-        // propagate all different
+        // propagate all different, which when minimising over a reified instance need
+        // only look at the original vertices
         if (params.injectivity == Injectivity::Injective)
-            if (! cheap_all_different(model.target_size, new_domains, proof, &model))
+            if (! cheap_all_different(model.target_size, new_domains, proof, &model,
+                    _cost_bound ? optional<unsigned>{_cost_bound->pattern_original_size()} : nullopt))
                 return false;
         done_globals_at_least_once = true;
+
+        // the cost bound, which may remove values, and if it does, everything above
+        // gets another go. It is by far the most expensive thing here, and assigning one
+        // original vertex usually makes many edge-vertices unit, so it waits until unit
+        // propagation has nothing left to do rather than running once per unit.
+        if (_cost_bound && find_unit_domain() == new_domains.end()) {
+            bool changed = false;
+            if (! _cost_bound->propagate(assigned_targets(assignments), new_domains, _incumbent_cost, changed))
+                return false;
+            if (changed)
+                done_globals_at_least_once = false;
+        }
     }
 
     return true;
