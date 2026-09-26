@@ -177,15 +177,17 @@ CostBound::CostBound(const CostData & data, unsigned pattern_size, unsigned targ
     _target_size(target_size),
     _dual_sweeps(dual_sweeps)
 {
-    // Every sum the bound forms is at most the pattern size times the largest cost, with
-    // the dual messages bounded by the same, so this keeps all of them far from inf.
+    // A reparametrised unary cost is at most the pattern size times the largest cost (it
+    // gathers messages from pairs, each at most a pair's cost), and the assignment step's
+    // potentials at most the number of columns times that, so this keeps every sum the
+    // bound forms far from inf.
     long long largest = 0;
     for (auto c : _data.target_costs) {
         if (c == std::numeric_limits<long long>::min())
             throw UnsupportedConfiguration{"Target costs are too large to sum safely"};
         largest = max(largest, std::llabs(c));
     }
-    if (largest != 0 && (inf / 64) / largest < (long long)(pattern_size) + 1)
+    if (largest != 0 && ((inf / 64) / largest) / ((long long)(pattern_size) + 1) < (long long)(target_size) + 1)
         throw UnsupportedConfiguration{"Target costs are too large to sum safely over a mapping of this pattern: the largest is " + to_string(largest)};
 
     _scores.resize(_data.pattern_original_size);
@@ -305,6 +307,15 @@ auto CostBound::propagate_timed(const vector<int> & assigned, vector<Homomorphis
 
     // Edge-vertices: a loop is a unary cost on its vertex, and anything else a pairwise
     // cost on its endpoints.
+    //
+    // For proofs, these costs must be exactly the model's: P(x, y) must be the cost of
+    // z(a, b, x, y) for every pair of live candidates, so an edge-vertex's domain must
+    // still hold every label-compatible target edge-vertex whose endpoints are both still
+    // candidates. That is true because nothing prunes an edge-vertex's domain otherwise
+    // under proof logging (injectivity on edge-vertices, the degree filters and the
+    // supplemental graphs are all off then). Something that did would leave a positive
+    // coefficient on a z that propagation cannot falsify, and the proof would fail to
+    // verify rather than be wrong.
     map<pair<unsigned, unsigned>, unsigned> pair_index;
     vector<PairTerm> pairs;
     for (unsigned k = 0; k < _data.pattern_edge_vertices.size(); ++k) {
