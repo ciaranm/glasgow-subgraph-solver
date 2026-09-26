@@ -351,6 +351,9 @@ namespace
 auto gss::solve_common_subgraph_problem(const InputGraph & first, const InputGraph & second,
     const CommonSubgraphParams & params) -> CommonSubgraphResult
 {
+    if (first.multigraph() || second.multigraph())
+        throw UnsupportedConfiguration{"The common subgraph solver cannot be used on a multigraph"};
+
     if (params.count_solutions && ! params.decide)
         throw UnsupportedConfiguration{"Solution counting only makes sense for decision problems"};
 

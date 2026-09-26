@@ -8,6 +8,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -924,6 +925,205 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
 
     // output the model file
     _proof->finalise_model();
+}
+
+auto HomomorphismProofs::emit_reified_model(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void
+{
+    // Names by index, since vertex names may contain anything.
+    auto pattern_name = [](int v) { return "p" + std::to_string(v); };
+    auto target_name = [](int v) { return "t" + std::to_string(v); };
+
+    // As reification and the model do: a pattern without labels of a kind ignores the
+    // target's, and if either graph is directed, an undirected edge is two arcs.
+    bool use_vertex_labels = pattern.has_vertex_labels();
+    bool use_edge_labels = pattern.has_edge_labels();
+    bool directed = pattern.directed() || target.directed();
+
+    // The target's edges, by ordered endpoint pair, then label, with their costs.
+    map<pair<int, int>, map<string, long long>> target_edges;
+    target.for_each_edge_and_cost([&](int f, int t, std::string_view l, optional<long long> c) {
+        target_edges[{f, t}][string{l}] = c.value_or(0);
+    });
+
+    // The cheapest target edge from x to y that a pattern edge with this label may use.
+    auto edge_cost = [&](int x, int y, const string & label) -> optional<long long> {
+        auto it = target_edges.find({x, y});
+        if (it == target_edges.end())
+            return nullopt;
+        if (use_edge_labels) {
+            auto l = it->second.find(label);
+            if (l == it->second.end())
+                return nullopt;
+            return l->second;
+        }
+        optional<long long> best;
+        for (auto & [_, c] : it->second)
+            if ((! best) || c < *best)
+                best = c;
+        return best;
+    };
+
+    vector<vector<int>> values(pattern.size());
+    for (int p = 0; p < pattern.size(); ++p) {
+        for (int t = 0; t < target.size(); ++t)
+            if ((! use_vertex_labels) || pattern.vertex_label(p) == target.vertex_label(t))
+                values[p].push_back(t);
+        _proof->create_cp_variable(p, values[p], pattern_name, target_name);
+    }
+
+    _proof->create_injectivity_constraints(pattern.size(), target.size(), target_name);
+
+    vector<pair<string, long long>> objective;
+    map<pair<int, int>, long long> unary_cost;
+    if (target.has_vertex_costs())
+        for (int p = 0; p < pattern.size(); ++p)
+            for (auto t : values[p])
+                unary_cost[{p, t}] += target.vertex_cost(t);
+
+    // The pattern's edges: a loop is a requirement on one vertex's image, and every other
+    // edge belongs to the pair of its endpoints.
+    struct PatternEdge
+    {
+        int from, to;
+        string label;
+    };
+    map<pair<int, int>, vector<PatternEdge>> pairs;
+    vector<PatternEdge> loops;
+    pattern.for_each_edge([&](int f, int t, std::string_view l) {
+        if ((! directed) && t < f)
+            return;
+        if (f == t)
+            loops.push_back(PatternEdge{f, t, string{l}});
+        else
+            pairs[{std::min(f, t), std::max(f, t)}].push_back(PatternEdge{f, t, string{l}});
+    });
+
+    for (auto & loop : loops)
+        for (auto t : values[loop.from]) {
+            auto c = edge_cost(t, t, loop.label);
+            if (! c) {
+                _proof->emit_model_comment("* no loop " + loop.label + " on " + target_name(t));
+                _proof->emit_model_constraint("1 ~x" + _proof->variable_name(loop.from, t) + " >= 1 ;");
+            }
+            else
+                unary_cost[{loop.from, t}] += *c;
+        }
+
+    for (auto & [key, c] : unary_cost)
+        if (c != 0)
+            objective.emplace_back("x" + _proof->variable_name(key.first, key.second), c);
+
+    long extra_variables = 0;
+    for (auto & [ab, edges] : pairs) {
+        auto [a, b] = ab;
+        _proof->emit_model_comment("* pair " + pattern_name(a) + " " + pattern_name(b));
+
+        // z(a, b, x, y) for every x, y whose images carry all of the pair's edges.
+        map<int, vector<string>> by_x, by_y;
+        for (auto x : values[a])
+            for (auto y : values[b]) {
+                if (x == y)
+                    continue;
+                long long cost = 0;
+                bool ok = true;
+                for (auto & e : edges) {
+                    auto c = (e.from == a) ? edge_cost(x, y, e.label) : edge_cost(y, x, e.label);
+                    if (! c) {
+                        ok = false;
+                        break;
+                    }
+                    cost += *c;
+                }
+                if (! ok)
+                    continue;
+
+                auto z = "z" + pattern_name(a) + "_" + pattern_name(b) + "_" + target_name(x) + "_" + target_name(y);
+                ++extra_variables;
+                by_x[x].push_back(z);
+                by_y[y].push_back(z);
+                if (cost != 0)
+                    objective.emplace_back(z, cost);
+            }
+
+        // sum_y z(a, b, x, y) = x(a, x) and sum_x z(a, b, x, y) = x(b, y), each as two
+        // inequalities with labels, for derivations to cite.
+        auto link = [&](int p, int t, const vector<string> & zs, const string & side) {
+            auto label = "@lnk" + pattern_name(a) + "_" + pattern_name(b) + "_" + side + target_name(t);
+            string ge = label + "ge", le = label + "le";
+            for (auto & z : zs) {
+                ge += " 1 " + z;
+                le += " -1 " + z;
+            }
+            ge += " -1 x" + _proof->variable_name(p, t) + " >= 0 ;";
+            le += " 1 x" + _proof->variable_name(p, t) + " >= 0 ;";
+            _proof->emit_model_constraint(ge);
+            _proof->emit_model_constraint(le);
+        };
+        for (auto x : values[a])
+            link(a, x, by_x[x], "a");
+        for (auto y : values[b])
+            link(b, y, by_y[y], "b");
+    }
+
+    _proof->declare_extra_variables(extra_variables);
+    if (params.minimise_cost)
+        _proof->create_weighted_objective(objective);
+
+    _proof->emit_preserved_assignment_variables();
+    _proof->finalise_model();
+}
+
+auto HomomorphismProofs::cost_bound(const std::vector<std::pair<int, int>> & decisions, const CostBoundCertificate & certificate, bool failed) -> void
+{
+    _proof->emit_proof_directive("% cost bound " + std::string(failed ? "failed" : "removed values") + " at depth " + std::to_string(decisions.size()));
+
+    switch (certificate.kind) {
+    case CostBoundCertificate::Kind::None:
+        // Anything done for lack of support follows by propagation over the linking
+        // equalities.
+        break;
+
+    case CostBoundCertificate::Kind::HallViolator: {
+        vector<int> rows(certificate.hall_rows.begin(), certificate.hall_rows.end());
+        vector<int> columns(certificate.hall_columns.begin(), certificate.hall_columns.end());
+        emit_hall_set_or_violator(rows, columns);
+        break;
+    }
+
+    case CostBoundCertificate::Kind::Bound: {
+        // The objective-improving constraint, plus each certificate constraint times its
+        // multiplier, using the other half of an equality for a negative one.
+        std::string pol = "pol " + std::to_string(_proof->objective_line());
+        auto term = [&](const std::string & label, long long multiplier) {
+            pol += " " + label;
+            if (multiplier != 1)
+                pol += " " + std::to_string(multiplier) + " *";
+            pol += " +";
+        };
+        for (auto & [p, m] : certificate.exactly_one)
+            if (m > 0)
+                term(_proof->at_least_one_value_label(p), m);
+            else
+                term(_proof->at_most_one_value_label(p), -m);
+        for (auto & [t, m] : certificate.at_most_one)
+            term(_proof->injectivity_label(t), m);
+        for (auto & l : certificate.links) {
+            auto label = "@lnkp" + std::to_string(l.a) + "_p" + std::to_string(l.b) + "_" + (l.on_a ? "a" : "b") + "t" + std::to_string(l.value);
+            if (l.multiplier > 0)
+                term(label + "ge", l.multiplier);
+            else
+                term(label + "le", -l.multiplier);
+        }
+        pol += " ;";
+        _proof->emit_proof_line(pol);
+        break;
+    }
+    }
+
+    // Nothing more is needed. At this node the derived constraint conflicts, or
+    // propagates exactly the values the bound removed, so the search's own nogoods follow
+    // from it by RUP, as do later steps relying on the removals. (Checking each removal
+    // with its own RUP here found no failures, and cost only size.)
 }
 
 auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void

@@ -70,6 +70,26 @@ This can help a lot on instances that are easy, and costs a little on instances 
 is currently sequential only (so it cannot be combined with `--parallel`), and with proof logging
 it cannot yet be combined with `--count-solutions`.
 
+If the target's vertices or edges carry costs, the solver can find a mapping of least total cost,
+where a mapping costs the sum of the costs of the target vertices and target edges it uses:
+
+```shell session
+$ ./build/glasgow_subgraph_solver --minimise-cost --format json pattern.json target.json
+```
+
+It reports `cost = ...`, and `optimal = true` if the search finished. Costs, and pairs of vertices
+joined by several edges with different labels, can only be given in the [JSON
+format](#the-gss-graph-json-format). A multigraph works without `--minimise-cost` too, as a
+decision problem. Both need an injective, non-induced mapping; minimising also needs sequential
+search without restarts (the default when minimising), and cannot be combined with counting. Both
+can be proof logged (`--prove`, with `--no-clique-detection`), including the cost bound; see
+[the proof logging notes](dev_docs/proof-logging.md#minimising-cost-and-multigraphs). The supplemental graphs are not used on these instances, since every edge
+becomes a vertex in the graphs the solver searches.
+
+`tools/scene_graph_csv_to_json.py` converts scene graphs in the CSV dialect of the graph3
+benchmark (a fourth column of confidences, and parallel edges with different labels) into this
+JSON format, with costs of `round(-log(confidence) × 10^6)`.
+
 File Formats
 ------------
 
@@ -145,8 +165,8 @@ Named and labelled, with a self-loop:
 
 `vertices` is either a count, giving that many anonymous vertices, or an array whose entries are
 names (`["a", "b"]`, exact sugar for `[{"name": "a"}, {"name": "b"}]`) or objects with an optional
-`name` and `label`. `edges` entries are either `[from, to]` / `[from, to, label]` or objects with
-`from`, `to` and an optional `label`. The array form is fixed at two or three elements permanently:
+`name`, `label` and `cost`. `edges` entries are either `[from, to]` / `[from, to, label]` or objects
+with `from`, `to` and an optional `label` and `cost`. The array form is fixed at two or three elements permanently:
 every key added in future will live only in the object form, so the compact spelling can never come
 to mean something new.
 
@@ -169,9 +189,15 @@ The rules, each of which is a hard failure naming what was wrong:
 - Vertex names are unique, and an isolated vertex is simply one listed in `vertices` and absent from
   `edges`, with no special syntax.
 
-Parallel edges are expressible — an edge object takes a `multiplicity`, and `"multigraph": true`
-switches the uniqueness rule from the `(from, to)` pair to the `(from, to, label)` triple — but the
-solver cannot represent them, so this build refuses both rather than quietly merging them.
+`"multigraph": true` allows parallel edges with different labels, by switching the uniqueness rule
+from the `(from, to)` pair to the `(from, to, label)` triple. Several edges with the *same* label
+between one pair would need an edge object's `multiplicity`, which this build refuses rather than
+quietly merging them. Only the homomorphism solver accepts a multigraph.
+
+A `cost` is a 64-bit signed integer. Like labels, costs are all or nothing per element type, since an
+absent cost is not the same as 0, and a cost can only appear in the object form. Costs are what
+`--minimise-cost` minimises; without it they are read and ignored. A scene graph whose weights are
+probabilities, for instance, would give each element the cost `round(-log(p) × 10^6)`.
 
 `convert_to_json` writes any graph the other readers accept into this format, and unlike
 `convert_to_lad` it has nothing to refuse, since the format carries directedness, names and both

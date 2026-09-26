@@ -111,6 +111,9 @@ whether the search completed:
 | decision | no mapping, search exhausted | `UNSAT` |
 | counting / enumeration | search exhausted | `ENUMERATION_COMPLETE <n>` |
 | counting / enumeration | stopped early (timeout or `--solution-limit`) | `ENUMERATION_PARTIAL <n>` |
+| `--minimise-cost` | search exhausted, a mapping found | `BOUNDS c c` (each improvement logged with `soli`) |
+| `--minimise-cost` | no mapping at all | `BOUNDS INF INF` (VeriPB does not accept `UNSAT` with an objective) |
+| `--minimise-cost` | stopped early | `NONE` |
 
 Each solution is logged with the `solx` rule at the *top* proof level, so the blocking constraint it
 introduces survives the `wiplvl` cleanup of the search subtree on backtrack — this is what keeps the
@@ -122,6 +125,97 @@ constraints (and the now-subsumed deeper core nogoods) recorded at that level ar
 backtrack past its own level. This matters most for counting, where the per-solution blocking
 constraints would otherwise accumulate and make the proof linear in the number of solutions; deleting
 them keeps it linear in the search *depth* instead.
+
+## Minimising cost and multigraphs
+
+A multigraph, or a target with costs when minimising, is reified before search (see
+`gss/innards/reification.hh`): every edge becomes a vertex. Under `--prove`, minimising always
+reifies, even with vertex costs only. The OPB model is **not** written from the reified graphs.
+`HomomorphismProofs::emit_reified_model` writes it from the *original* graphs, independently of the
+reification code, so that a reification bug shows up as a proof that does not check rather than
+being faithfully encoded. The model has:
+
+- a variable `x` for each original pattern vertex and each target vertex with a compatible label,
+  with the usual `@al1`, `@am1` and `@inj` constraints. These are exactly the search's values for
+  original vertices;
+- a variable `z` for each pair of adjacent pattern vertices and each ordered pair of target vertices
+  that carries every edge the pattern pair needs (each label, in the right direction), so at most
+  one `z` for each pair of a pattern edge and a target edge. A missing `z` is what forbids a pair of
+  images: there are no adjacency constraints;
+- linking equalities in both directions, `sum_y z(a, b, x, y) = x(a, x)` and likewise for `b`,
+  labelled `@lnk...ge` and `@lnk...le`, which make each `z` the conjunction of its two `x`. This is
+  the local-polytope encoding, whose linear relaxation is the one the cost bound works in;
+- a pattern loop as a requirement on its vertex's image;
+- when minimising, an objective of the target costs of the `x` and `z` variables.
+
+Variables are named by index (`xp3_t17`, `zp0_p1_t4_t9`), since vertex names may contain anything.
+The search's edge-vertices have no variables: their values follow from the `z`, so no proof line may
+mention one. Three things keep it that way, and each is sound on its own terms:
+
+- Branching is on original vertices only, and a solution (`solx` or `soli`) lists only their values.
+  The case where search would branch on an edge-vertex, a pattern edge without a label with
+  several parallel target edges to choose from, is refused under proof.
+- All-different, and the initial Hall check, look only at original vertices; injectivity on
+  edge-vertices follows from it.
+- Under proof, the simple injectivity propagation skips edge-vertex assignments too. Two pattern
+  edges wanting the one target edge is a pigeonhole argument over the original vertices in the
+  model, which unit propagation cannot see, so search is made to reach it through a Hall
+  violator over the original vertices instead.
+
+The degree and NDS filters, and the whole-instance degree check, are off for a reified instance
+under proof, since their derivations cite adjacency constraints this model does not have. So is the
+pattern-bigger-than-target refutation, unless the *original* pattern is bigger: a reified pattern can
+outnumber a reified target when the originals do not, and the model only has injectivity on
+originals. Search refutes those instead. (Reaching search with more pattern vertices than target
+vertices exposed a sizing bug in `cheap_all_different`, whose bucket arrays were sized by the
+target; they are now sized by the number of domains.)
+
+Each new best mapping is logged with `soli` at the top level, and the cost bound
+(`gss/innards/cost_bound.hh`) prunes against the objective-improving constraint it adds. **Each
+call of the bound that fails or removes values by the bound emits one `pol`**, which adds up:
+
+- the latest objective-improving constraint, `obj <= U - 1`;
+- each original vertex's `@al1` (or `@am1`, for a negative multiplier) times its row potential
+  from the assignment step, plus the residual of every pair where it is the smaller vertex;
+- each target vertex's `@inj` times its column potential, which is never negative;
+- each linking inequality, `ge` or `le` according to sign, times the dual-ascent message on that
+  value, plus the pair's residual on the smaller vertex's side.
+
+The result is `sum(-reduced cost * variable) >= bound - (U - 1)`. Every live candidate's
+coefficient is minus its reduced cost, never positive, and every other variable with a positive
+coefficient is false at the node by propagation. So at the node the constraint conflicts, when
+`bound >= U`, or propagates exactly the values with `bound + reduced cost >= U`, which are the
+ones the bound removed. Nothing else is written: the search's own backtrack nogoods then follow by
+RUP. Values the bound removes because no pair of images supports them need no derivation, since
+propagation over the linking equalities finds them. An assignment step with no finite solution at
+all writes the Hall violator the Hungarian algorithm's alternating tree gives.
+
+Two things about the bound are there to make that exact. Every original vertex is a row, with a
+single candidate once it has a value, and every pattern pair is one pairwise term, so each
+quantity in the bound is a multiplier on one model-B constraint. And the assignment step solves
+the square problem padded with zero-cost rows, whose dual, shifted, is an exact dual of the
+rectangular one; the unpadded Hungarian algorithm's potentials fall short of the assignment's cost
+when there are more columns than rows, and cost plus a reduced cost is then not even a valid bound.
+The bound is the dual's value, so it is exactly what the `pol` proves. The messages are rounded down
+to integers, so every multiplier is an integer.
+
+This was developed by first writing each conclusion as an `a` (assumption) rule, to check that the
+rest of the proof holds together, then replacing each with its derivation followed by a RUP of the
+same conclusion, and finally dropping those RUPs once they had all checked.
+
+With the bound certified, proofs have the same search as without them. On the graph3 benchmark, the
+largest supplied pattern (10 people, 76 edges) proves in 11 nodes with a 3.4 MB proof that
+verifies in under three seconds; a random 10-person query (781 nodes) writes 238 MB, almost all of
+it these `pol` lines, averaging about 700 terms, and takes three minutes to verify. Their size is
+the next thing to work on.
+
+`test-instances/weighted` has fixed instances for each case above, registered as `proof_weighted_*`
+and `proof_multigraph_*`. `test-instances/weighted_proof_sweep.py`, registered as
+`proof_weighted_random_sweep` when Python is available, checks 150 random instances across
+directedness, loops, labels, parallel edges and vertex and edge costs, negative costs included.
+Planting a bug in the reifier (a wrong cost on one label, or a reversed direction on one label in
+the target only) made the proofs of the affected instances fail to verify, even with the driver's
+own cost and solution checks switched off.
 
 ## Current status and known limitations
 

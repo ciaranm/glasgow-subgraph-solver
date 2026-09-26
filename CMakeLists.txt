@@ -133,6 +133,8 @@ SET(CATCH_CONFIG_ENABLE_ALL_STRINGMAKERS ON)
 # Tests that need it are only registered when it is found, so a checkout without
 # VeriPB still builds and runs the rest of the suite.
 find_program(VERIPB_EXECUTABLE veripb)
+# Only for the weighted proof sweep, which generates its instances in Python.
+find_program(PYTHON3_EXECUTABLE python3)
 
 # cake_pb_iso (the formally verified CakePB checker for subgraph isomorphism), if
 # present, is used by the end-to-end verified-pipeline tests: VeriPB elaborates the

@@ -71,8 +71,22 @@ namespace gss::innards
             const std::function<auto(int)->std::string> & pattern_name,
             const std::function<auto(int)->std::string> & target_name) -> void;
 
+        // As above, but with only the given values: a pattern vertex whose label rules the
+        // other values out has no variable for them at all.
+        auto create_cp_variable(int pattern_vertex, const std::vector<int> & values,
+            const std::function<auto(int)->std::string> & pattern_name,
+            const std::function<auto(int)->std::string> & target_name) -> void;
+
         auto create_injectivity_constraints(int pattern_size, int target_size,
             const std::function<auto(int)->std::string> & target_name) -> void;
+
+        // Declare a weighted objective to minimise, over named variables (written
+        // without the leading x the assignment variables' names take).
+        auto create_weighted_objective(const std::vector<std::pair<std::string, long long>> & terms) -> void;
+
+        // Count variables that a derivation-free model introduced by name, through
+        // emit_model_constraint, towards the OPB header's variable count.
+        auto declare_extra_variables(long n) -> void;
 
         auto create_forbidden_assignment_constraint(int p, int t) -> void;
         auto start_adjacency_constraints_for(int p, int t) -> void;
@@ -90,6 +104,9 @@ namespace gss::innards
         auto emit_proof_line(const std::string & line) -> long;
         auto emit_proof_directive(const std::string & line) -> void;
         [[nodiscard]] auto current_proof_line() const -> long;
+        // The line of the latest objective-improving constraint, from soli, or 0 if there
+        // has not been one.
+        [[nodiscard]] auto objective_line() const -> long;
         // The currently active proof level (0 at the root, depth+2 during search). The
         // middle layer uses this to scratch one level above the search when materialising a
         // supplemental derivation mid-search (wiplvl wipes every level >= its argument).
@@ -133,7 +150,10 @@ namespace gss::innards
         auto finish_unsat_proof() -> void;
         auto finish_sat_proof() -> void;
         auto finish_unknown_proof() -> void;
-        auto finish_optimisation_proof(int size) -> void;
+        auto finish_optimisation_proof(long long size) -> void;
+        // An optimisation problem with no solution at all, which VeriPB wants stated as
+        // bounds of infinity rather than as UNSAT.
+        auto finish_infeasible_optimisation_proof() -> void;
 
         // Conclude a counting / enumeration proof: ENUMERATION_COMPLETE if the
         // whole search space was exhausted, otherwise ENUMERATION_PARTIAL.
@@ -148,6 +168,12 @@ namespace gss::innards
         // over plain indices. post_solution deliberately stays here for every solver: it
         // emits solx at level 0 and owns the proof-level bookkeeping that goes with it.
         auto guessing(int depth, const NamedVertex & branch_v, const NamedVertex & val) -> void;
+
+        // Log a new best solution of a homomorphism search with soli, given every
+        // pattern vertex's value (the other variables follow by propagation). Logged at
+        // the top level, like post_solution's solx, so that the objective-improving
+        // constraint it adds survives the cleanup of the search subtree it was found in.
+        auto new_homomorphism_incumbent(const std::vector<std::pair<int, int>> & assignment) -> void;
         auto incorrect_guess(const std::vector<std::pair<int, int>> & decisions, bool was_failure) -> void;
         auto out_of_guesses(const std::vector<std::pair<int, int>> & decisions) -> void;
 

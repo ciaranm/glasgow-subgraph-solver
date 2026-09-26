@@ -59,7 +59,8 @@ auto main(int argc, char * argv[]) -> int
             ("induced", "Find an induced mapping") //
             ("count-solutions", "Count the number of solutions") //
             ("print-all-solutions", "Print out every solution, rather than one") //
-            ("solution-limit", "Stop after finding this many solutions (implies counting)", cxxopts::value<unsigned long long>());
+            ("solution-limit", "Stop after finding this many solutions (implies counting)", cxxopts::value<unsigned long long>()) //
+            ("minimise-cost", "Find a mapping of least total cost, using the costs on the target's vertices and edges (JSON format only)");
 
         options.add_options("Input file options") //
             ("format", "Specify input file format (auto, lad, vertexlabelledlad, labelledlad, dimacs, csv, json)", cxxopts::value<string>()) //
@@ -149,6 +150,7 @@ auto main(int argc, char * argv[]) -> int
             params.injectivity = Injectivity::Injective;
 
         params.induced = options_vars.count("induced");
+        params.minimise_cost = options_vars.count("minimise-cost");
         params.count_solutions = options_vars.count("count-solutions") || options_vars.count("enumerate") || options_vars.count("print-all-solutions") || options_vars.count("solution-limit");
 
         params.triggered_restarts = options_vars.count("triggered-restarts") || options_vars.count("parallel");
@@ -196,7 +198,7 @@ auto main(int argc, char * argv[]) -> int
             }
         }
         else {
-            if (params.count_solutions && ! options_vars.count("parallel"))
+            if ((params.count_solutions || params.minimise_cost) && ! options_vars.count("parallel"))
                 params.restarts_schedule = make_unique<NoRestartsSchedule>();
             else if (options_vars.count("parallel"))
                 params.restarts_schedule = make_unique<TimedRestartsSchedule>(TimedRestartsSchedule::default_duration, TimedRestartsSchedule::default_minimum_backtracks);
@@ -381,6 +383,12 @@ auto main(int argc, char * argv[]) -> int
         if (params.count_solutions)
             cout << "solution_count = " << result.solution_count << endl;
 
+        if (params.minimise_cost) {
+            if (result.cost)
+                cout << "cost = " << *result.cost << endl;
+            cout << "optimal = " << ((result.complete && result.cost) ? "true" : "false") << endl;
+        }
+
         cout << "nodes = " << result.nodes << endl;
         cout << "propagations = " << result.propagations << endl;
 
@@ -398,6 +406,9 @@ auto main(int argc, char * argv[]) -> int
 
         innards::verify_homomorphism(pattern, target, params.injectivity == Injectivity::Injective,
             params.injectivity == Injectivity::LocallyInjective, params.induced, result.mapping);
+
+        if (result.cost && innards::cost_of_mapping(pattern, target, result.mapping) != *result.cost)
+            throw innards::BuggySolution{"Reported cost " + std::to_string(*result.cost) + " is not the cost of the mapping, which is " + std::to_string(innards::cost_of_mapping(pattern, target, result.mapping))};
 
         return EXIT_SUCCESS;
     }

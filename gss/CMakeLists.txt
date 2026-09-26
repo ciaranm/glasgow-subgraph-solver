@@ -19,6 +19,7 @@ add_library(glasgow_subgraphs
         timeout.cc
         innards/cheap_all_different.cc
         innards/clique_size_constraints.cc
+        innards/cost_bound.cc
         innards/filter_activations.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc
@@ -27,6 +28,7 @@ add_library(glasgow_subgraphs
         innards/homomorphism_searcher.cc
         innards/homomorphism_traits.cc
         innards/proof.cc
+        innards/reification.cc
         innards/supplemental_graphs.cc
         innards/svo_bitset.cc
         innards/thread_utils.cc
@@ -56,6 +58,10 @@ target_link_libraries(glasgow_subgraphs PRIVATE nlohmann_json::nlohmann_json)
 add_executable(subgraph_isomorphism_test subgraph_isomorphism_test.cc)
 target_link_libraries(subgraph_isomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME subgraph_isomorphism_test COMMAND $<TARGET_FILE:subgraph_isomorphism_test>)
+
+add_executable(weighted_homomorphism_test weighted_homomorphism_test.cc)
+target_link_libraries(weighted_homomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME weighted_homomorphism_test COMMAND $<TARGET_FILE:weighted_homomorphism_test>)
 
 add_executable(homomorphism_test homomorphism_test.cc)
 target_link_libraries(homomorphism_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)

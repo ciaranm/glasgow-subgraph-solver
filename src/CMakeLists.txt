@@ -191,6 +191,41 @@ if(VERIPB_EXECUTABLE)
             $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
             $<TARGET_FILE:create_random_graph> ${CMAKE_CURRENT_BINARY_DIR})
 
+    # --- Minimising cost, and multigraphs ---
+    # These solve the reified instance, and check the proof against a model written from
+    # the original graphs (HomomorphismProofs::emit_reified_model), and the cost bound's
+    # reasoning is certified by one pol per call that prunes.
+    set(W ${GSS_INSTANCES}/weighted)
+    gss_add_proof_test(proof_weighted_optimal ${SUB} --minimise-cost --format json
+        ${W}/scene_pattern.json ${W}/scene_target.json)
+    gss_add_proof_test(proof_weighted_loops_negative_costs ${SUB} --minimise-cost --format json
+        ${W}/loopy_pattern.json ${W}/loopy_target.json)
+    gss_add_proof_test(proof_weighted_vertex_costs_only ${SUB} --minimise-cost --format json
+        ${W}/path_pattern.json ${W}/vertex_costs_target.json)
+    # The reified pattern is bigger than the reified target but the originals are not,
+    # which only search may refute under proof (and which reached all-different with
+    # more domains than target vertices, which it used not to size for).
+    gss_add_proof_test(proof_weighted_infeasible_reified_bigger ${SUB} --minimise-cost --format json
+        ${W}/triangle_pattern.json ${W}/one_reciprocated_pair_target.json)
+    # Two pattern edges wanting the one target edge: refuted over the original vertices,
+    # not by injectivity on edge-vertices, which the model has no variables for.
+    gss_add_proof_test(proof_weighted_infeasible_shared_edge ${SUB} --minimise-cost --format json
+        ${W}/two_x_edges_pattern.json ${W}/one_x_edge_target.json)
+    # The bound removes a value by its reduced cost, rather than failing, so the pol's
+    # propagation is what the later nogoods rely on.
+    gss_add_proof_test(proof_weighted_bound_removes_values ${SUB} --minimise-cost --format json
+        ${W}/bound_removes_pattern.json ${W}/bound_removes_target.json)
+    gss_add_proof_test(proof_multigraph_sat ${SUB} --format json
+        ${W}/scene_pattern.json ${W}/scene_target.json)
+    gss_add_proof_test(proof_multigraph_unsat ${SUB} --format json
+        ${W}/two_x_edges_pattern.json ${W}/one_x_edge_target.json)
+
+    if(PYTHON3_EXECUTABLE)
+        add_test(NAME proof_weighted_random_sweep
+            COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test-instances/weighted_proof_sweep.py
+                $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR} 1 150)
+    endif()
+
     # End-to-end verified-pipeline tests through the CakePB checker. Only registered
     # when cake_pb_iso was found (see CAKE_PB_ISO_EXECUTABLE in the top-level
     # CMakeLists); a checkout without it just skips these. The pipeline checks the

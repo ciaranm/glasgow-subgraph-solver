@@ -909,6 +909,9 @@ namespace
 
 auto gss::solve_clique_problem(const InputGraph & graph, const CliqueParams & params) -> CliqueResult
 {
+    if (graph.multigraph())
+        throw UnsupportedConfiguration{"The clique solver cannot be used on a multigraph"};
+
     CliqueRunner runner{graph, params};
     return params.connected ? runner.run<true>() : runner.run<false>();
 }

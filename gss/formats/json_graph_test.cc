@@ -7,9 +7,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using std::string;
 using std::string_view;
@@ -49,24 +52,33 @@ namespace
         stringstream s;
         s << "size=" << g.size()
           << " directed=" << g.directed()
+          << " multigraph=" << g.multigraph()
           << " loopy=" << g.loopy()
           << " directed_edges=" << g.number_of_directed_edges();
         if (g.size() != 0)
-            s << " vertex_labels=" << g.has_vertex_labels();
+            s << " vertex_labels=" << g.has_vertex_labels() << " vertex_costs=" << g.has_vertex_costs();
         if (g.number_of_directed_edges() != 0)
-            s << " edge_labels=" << g.has_edge_labels();
+            s << " edge_labels=" << g.has_edge_labels() << " edge_costs=" << g.has_edge_costs();
         s << "\n";
 
         for (int v = 0; v < g.size(); ++v) {
             s << "  vertex " << v << " named=" << g.vertex_has_name(v) << " name=" << g.vertex_name(v);
             if (g.size() != 0 && g.has_vertex_labels())
                 s << " label=" << g.vertex_label(v);
+            if (g.has_vertex_costs())
+                s << " cost=" << g.vertex_cost(v);
             s << "\n";
         }
 
-        g.for_each_edge([&](int f, int t, string_view l) {
-            s << "  edge " << f << " -> " << t << " label=" << l << "\n";
+        // Sorted, so that two multigraphs whose parallel edges were added in different
+        // orders describe the same.
+        std::vector<string> edges;
+        g.for_each_edge_and_cost([&](int f, int t, string_view l, std::optional<long long> c) {
+            edges.push_back("  edge " + std::to_string(f) + " -> " + std::to_string(t) + " label=" + string{l} + (c ? " cost=" + std::to_string(*c) : "") + "\n");
         });
+        std::sort(edges.begin(), edges.end());
+        for (auto & e : edges)
+            s << e;
 
         return s.str();
     }
@@ -348,10 +360,70 @@ TEST_CASE("read_json_graph: the positional edge form is frozen at two or three e
         "[from, to] or [from, to, label]");
 }
 
-TEST_CASE("read_json_graph: multi-edges are expressible but refused by this build")
+TEST_CASE("read_json_graph: a multigraph's edges are unique by endpoints and label")
 {
-    check_rejected(R"({"format":"gss-graph","version":1,"directed":false,"multigraph":true,"vertices":2,"edges":[[0,1]]})",
-        "not supported by this build");
+    auto g = parse(R"({"format":"gss-graph","version":1,"directed":true,"multigraph":true,
+                       "vertices":["a","b"],"edges":[["a","b","left"],["a","b","near"],["b","a","left"]]})");
+    CHECK(g.multigraph());
+    CHECK(g.number_of_directed_edges() == 3);
+    check_round_trip(g);
+
+    // The same label twice between one pair is still a repeat.
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":true,"multigraph":true,
+                       "vertices":2,"edges":[[0,1,"x"],[0,1,"x"]]})",
+        "an edge is its endpoints and its label");
+
+    // Undirected: [u, v, l] and [v, u, l] are the same edge, but a different label is not.
+    auto u = parse(R"({"format":"gss-graph","version":1,"directed":false,"multigraph":true,
+                       "vertices":2,"edges":[[0,1,"x"],[1,0,"y"]]})");
+    CHECK(u.number_of_directed_edges() == 4);
+    check_round_trip(u);
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":false,"multigraph":true,
+                       "vertices":2,"edges":[[0,1,"x"],[1,0,"x"]]})",
+        "[u, v] and [v, u] are the same edge");
+
+    // Without "multigraph", two labels on one pair are a repeat, as they always were.
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":true,
+                       "vertices":2,"edges":[[0,1,"x"],[0,1,"y"]]})",
+        "repeats the edge already given as edge 0");
+}
+
+TEST_CASE("read_json_graph: costs are integers, all or nothing per element type")
+{
+    auto g = parse(R"({"format":"gss-graph","version":1,"directed":true,"multigraph":true,
+                       "vertices":[{"name":"a","cost":0},{"name":"b","cost":-3}],
+                       "edges":[{"from":"a","to":"b","label":"x","cost":9223372036854775807},{"from":"a","to":"b","label":"y","cost":5}]})");
+    CHECK(g.has_vertex_costs());
+    CHECK(g.has_edge_costs());
+    CHECK(g.vertex_cost(1) == -3);
+    check_round_trip(g);
+
+    // Either kind may be given without the other.
+    auto vertex_only = parse(R"({"format":"gss-graph","version":1,"directed":false,
+                                 "vertices":[{"cost":1},{"cost":2}],"edges":[[0,1]]})");
+    CHECK(vertex_only.has_vertex_costs());
+    CHECK_FALSE(vertex_only.has_edge_costs());
+    check_round_trip(vertex_only);
+
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":false,
+                       "vertices":[{"cost":1},{"name":"b"}],"edges":[]})",
+        "1 of 2 vertices carry a \"cost\"");
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":false,
+                       "vertices":3,"edges":[{"from":0,"to":1,"cost":1},[1,2]]})",
+        "1 of 2 edges carry a \"cost\"");
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":false,
+                       "vertices":2,"edges":[{"from":0,"to":1,"cost":1.5}]})",
+        "must be an integer");
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":false,
+                       "vertices":2,"edges":[{"from":0,"to":1,"cost":"1"}]})",
+        "must be an integer");
+    check_rejected(R"({"format":"gss-graph","version":1,"directed":false,
+                       "vertices":2,"edges":[{"from":0,"to":1,"cost":9223372036854775808}]})",
+        "does not fit in a 64-bit signed integer");
+}
+
+TEST_CASE("read_json_graph: several edges with one label between one pair are refused")
+{
     check_rejected(R"({"format":"gss-graph","version":1,"directed":false,
                        "vertices":2,"edges":[{"from":0,"to":1,"multiplicity":3}]})",
         "not supported by this build");
