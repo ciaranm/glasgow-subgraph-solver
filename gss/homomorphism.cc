@@ -482,7 +482,18 @@ namespace
         SolveState state;
         HomomorphismResult result;
         const CostData * cost_data = nullptr;
-        bool reified = false;
+
+        // When the graphs above were reified, the originals they came from: the proof's
+        // model is written from these, independently of the reification.
+        const InputGraph * original_pattern = nullptr;
+        const InputGraph * original_target = nullptr;
+
+        auto reified_original_sizes() const -> optional<pair<unsigned, unsigned>>
+        {
+            if (original_pattern)
+                return pair<unsigned, unsigned>(original_pattern->size(), original_target->size());
+            return std::nullopt;
+        }
     };
 
     struct SolveStep
@@ -499,8 +510,12 @@ namespace
     {
         auto run(SolveContext & ctx) -> StepOutcome override
         {
-            if (ctx.hom_proofs)
-                ctx.hom_proofs->emit_model(ctx.pattern, ctx.target, ctx.params);
+            if (ctx.hom_proofs) {
+                if (ctx.original_pattern)
+                    ctx.hom_proofs->emit_reified_model(*ctx.original_pattern, *ctx.original_target, ctx.params);
+                else
+                    ctx.hom_proofs->emit_model(ctx.pattern, ctx.target, ctx.params);
+            }
             return StepOutcome::Continue;
         }
     };
@@ -514,10 +529,18 @@ namespace
             if (! (is_nonshrinking(ctx.params) && (ctx.pattern.size() > ctx.target.size())))
                 return StepOutcome::Continue;
 
+            // A reified pattern can outnumber a reified target when the originals do not,
+            // and the model written for a proof has injectivity on original vertices only,
+            // so when proving, only a count of those concludes here.
+            if (ctx.proof && ctx.original_pattern && ! (ctx.original_pattern->size() > ctx.original_target->size()))
+                return StepOutcome::Continue;
+
             if (ctx.proof) {
                 ctx.hom_proofs->failure_due_to_pattern_bigger_than_target();
                 if (ctx.params.count_solutions)
                     ctx.proof->finish_enumeration_proof(0, true);
+                else if (ctx.params.minimise_cost)
+                    ctx.proof->finish_infeasible_optimisation_proof();
                 else
                     ctx.proof->finish_unsat_proof();
             }
@@ -629,7 +652,7 @@ namespace
             // Build the model now -- after the cheap shortcut steps have had their
             // chance to conclude -- into the carried state, where the search steps
             // (and, later, staged builder / filter steps) read it.
-            ctx.state.model = make_unique<HomomorphismModel>(target, pattern, params, proof, ctx.hom_proofs, ctx.reified);
+            ctx.state.model = make_unique<HomomorphismModel>(target, pattern, params, proof, ctx.hom_proofs, ctx.reified_original_sizes());
             auto & model = *ctx.state.model;
 
             // The loop-cancelled adjacency derivations were deferred out of the model
@@ -650,6 +673,8 @@ namespace
                 if (proof) {
                     if (params.count_solutions)
                         proof->finish_enumeration_proof(0, true);
+                    else if (params.minimise_cost)
+                        proof->finish_infeasible_optimisation_proof();
                     else
                         proof->finish_unsat_proof();
                 }
@@ -673,7 +698,17 @@ namespace
             }
 
             if (proof) {
-                if (params.count_solutions)
+                if (params.minimise_cost) {
+                    // the last soli's objective constraint has been refuted, so the
+                    // cheapest found is optimal
+                    if (result.complete && result.cost)
+                        proof->finish_optimisation_proof(*result.cost);
+                    else if (result.complete)
+                        proof->finish_infeasible_optimisation_proof();
+                    else
+                        proof->finish_unknown_proof();
+                }
+                else if (params.count_solutions)
                     // counting / enumeration: a complete search yields ENUMERATION_COMPLETE,
                     // otherwise (timeout or solution limit) ENUMERATION_PARTIAL
                     proof->finish_enumeration_proof(result.solution_count, result.complete);
@@ -693,6 +728,13 @@ namespace
 
 namespace
 {
+    // Minimising under proof always reifies, even with vertex costs only, so that the
+    // proof's model is always the one emit_reified_model writes.
+    auto reifying(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> bool
+    {
+        return needs_reification(pattern, target, params.minimise_cost) || (params.minimise_cost && params.proof_options);
+    }
+
     // Refuse what minimising cost and reifying a multigraph cannot yet do, before anything
     // else looks at the graphs. See dev_docs/option-compatibility.md.
     auto check_costs_and_multigraphs(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void
@@ -707,8 +749,6 @@ namespace
                 throw UnsupportedConfiguration{"Minimising cost needs a target with vertex or edge costs"};
             if (1 != params.n_threads)
                 throw UnsupportedConfiguration{"Minimising cost cannot yet be used with threads"};
-            if (params.proof_options)
-                throw UnsupportedConfiguration{"Minimising cost cannot yet be used with proof logging"};
             if (params.count_solutions || params.enumerate_callback)
                 throw UnsupportedConfiguration{"Minimising cost cannot be combined with counting or enumerating solutions"};
             if (params.staged)
@@ -725,13 +765,16 @@ namespace
 
         // Reifying turns every edge into a vertex, which only means the same thing for an
         // injective, non-induced mapping: see reification.hh.
-        if (needs_reification(pattern, target, params.minimise_cost)) {
+        if (reifying(pattern, target, params)) {
             if (params.injectivity != Injectivity::Injective)
                 throw UnsupportedConfiguration{"Multigraphs and edge costs need an injective mapping"};
             if (params.induced)
                 throw UnsupportedConfiguration{"Multigraphs and edge costs cannot yet be used with induced mappings"};
-            if (params.proof_options)
-                throw UnsupportedConfiguration{"Proof logging cannot yet be used with multigraphs or edge costs"};
+            // Without pattern edge labels, a pattern edge may land on any of several parallel
+            // target edges, and search then chooses between them; the proof's model has
+            // one variable per pair of pattern vertices, so there is no such choice to log.
+            if (params.proof_options && target.multigraph() && ! pattern.has_edge_labels())
+                throw UnsupportedConfiguration{"Proof logging cannot yet be used for a pattern without edge labels on a multigraph target"};
             // A shape would be looked for in the reified target, where it means something
             // else, and supplemental graphs are off there anyway.
             if (! params.extra_shapes.empty())
@@ -748,7 +791,8 @@ namespace
         const InputGraph & target,
         const HomomorphismParams & params,
         const CostData * cost_data,
-        bool reified) -> HomomorphismResult
+        const InputGraph * original_pattern,
+        const InputGraph * original_target) -> HomomorphismResult
     {
         // Staged solving uses an internal bounded search round (a restart) as its budget, so it
         // only makes sense for the sequential engine; threaded staging is a later refinement.
@@ -775,7 +819,8 @@ namespace
                 throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
             if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
                 throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
-            if (pattern.has_vertex_labels() || pattern.has_edge_labels())
+            // A reified instance's proof model handles labels itself.
+            if ((pattern.has_vertex_labels() || pattern.has_edge_labels()) && ! original_pattern)
                 throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
             if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
                 throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
@@ -793,7 +838,7 @@ namespace
         // The solve runs as a pipeline of steps over a shared context, in registration
         // order, stopping at the first step that concludes the problem; the search is the
         // terminal step (see dev_docs/preprocessor-refactor.md).
-        SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}, cost_data, reified};
+        SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}, cost_data, original_pattern, original_target};
 
         vector<unique_ptr<SolveStep>> steps;
         steps.push_back(make_unique<EmitProofModelStep>()); // emit the OPB model
@@ -817,7 +862,7 @@ auto gss::solve_homomorphism_problem(
 {
     check_costs_and_multigraphs(pattern, target, params);
 
-    if (needs_reification(pattern, target, params.minimise_cost)) {
+    if (reifying(pattern, target, params)) {
         auto reified = reify(pattern, target);
 
         optional<CostData> cost_data;
@@ -825,7 +870,7 @@ auto gss::solve_homomorphism_problem(
             cost_data = CostData{reified.target_costs, reified.pattern_original_size, reified.target_original_size,
                 reified.pattern_edge_vertices, reified.target_edge_vertices, reified.directed};
 
-        auto result = solve_prepared(reified.pattern, reified.target, params, cost_data ? &*cost_data : nullptr, true);
+        auto result = solve_prepared(reified.pattern, reified.target, params, cost_data ? &*cost_data : nullptr, &pattern, &target);
 
         // The original vertices keep their numbers, so the mapping of the originals is
         // what is left after dropping the edge-vertices.
@@ -843,8 +888,8 @@ auto gss::solve_homomorphism_problem(
         CostData cost_data{{}, pattern.size(), target.size(), {}, {}, pattern.directed() || target.directed()};
         for (int t = 0; t < target.size(); ++t)
             cost_data.target_costs.push_back(target.vertex_cost(t));
-        return solve_prepared(pattern, target, params, &cost_data, false);
+        return solve_prepared(pattern, target, params, &cost_data, nullptr, nullptr);
     }
 
-    return solve_prepared(pattern, target, params, nullptr, false);
+    return solve_prepared(pattern, target, params, nullptr, nullptr, nullptr);
 }

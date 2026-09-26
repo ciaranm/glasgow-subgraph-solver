@@ -58,6 +58,7 @@ namespace gss::innards
         const CostData & _data;
         unsigned _pattern_size, _target_size;
         int _dual_sweeps;
+        bool _pruning;
 
         // From the last successful propagate(): per original pattern vertex, per original
         // target vertex, its reparametrised unary cost.
@@ -71,10 +72,13 @@ namespace gss::innards
 
     public:
         /**
+         * \param pruning if false, propagate() does nothing, which is what proof logging
+         *     needs until the bound's reasoning can be certified; the searcher still uses
+         *     the object for the costs of mappings.
          * \throw UnsupportedConfiguration if the costs are large enough that summing them
          *     over a mapping could overflow.
          */
-        CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps = 5);
+        CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps = 5, bool pruning = true);
 
         /**
          * \param assigned the target vertex of each assigned pattern vertex, or -1.

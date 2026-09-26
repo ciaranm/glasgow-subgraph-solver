@@ -125,11 +125,12 @@ namespace
     };
 }
 
-CostBound::CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps) :
+CostBound::CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps, bool pruning) :
     _data(data),
     _pattern_size(pattern_size),
     _target_size(target_size),
-    _dual_sweeps(dual_sweeps)
+    _dual_sweeps(dual_sweeps),
+    _pruning(pruning)
 {
     // Every sum the bound forms is at most the pattern size times the largest cost, with
     // the dual messages bounded by the same, so this keeps all of them far from inf.
@@ -188,6 +189,9 @@ auto CostBound::add_extra_stats(std::list<std::string> & stats) const -> void
 auto CostBound::propagate(const vector<int> & assigned, vector<HomomorphismDomain> & domains,
     long long upper_bound, bool & changed) -> bool
 {
+    if (! _pruning)
+        return true;
+
     ++_calls;
     auto start = std::chrono::steady_clock::now();
     struct AddTime

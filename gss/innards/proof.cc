@@ -62,6 +62,7 @@ struct Proof::Imp
     map<pair<long, long>, string> non_edge_constraints;
     long objective_line = 0;
     stringstream objective_sum;
+    long extra_variables = 0;
 
     unordered_map<string, string> cached_proof_lines;
 
@@ -133,6 +134,51 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     _imp->at_most_one_value_constraints.emplace(pattern_vertex, am1_label);
 }
 
+auto Proof::create_cp_variable(int pattern_vertex, const vector<int> & values,
+    const function<auto(int)->string> & pattern_name,
+    const function<auto(int)->string> & target_name) -> void
+{
+    for (auto i : values)
+        _imp->variable_mappings.emplace(pair{pattern_vertex, i}, pattern_name(pattern_vertex) + "_" + target_name(i));
+
+    _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
+    auto al1_label = "@al1" + pattern_name(pattern_vertex);
+    stringstream al1_constraint;
+    al1_constraint << al1_label << " ";
+    for (auto i : values)
+        al1_constraint << "1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
+    al1_constraint << ">= 1";
+    _imp->model_stream << al1_constraint.str() << " ;\n";
+    ++_imp->nb_constraints;
+    _imp->at_least_one_value_constraints.emplace(pattern_vertex, al1_label);
+
+    auto am1_label = "@am1" + pattern_name(pattern_vertex);
+    stringstream am1_constraint;
+    am1_constraint << am1_label << " ";
+    for (auto i : values)
+        am1_constraint << "-1 x" << _imp->variable_mappings[{pattern_vertex, i}] << " ";
+    am1_constraint << ">= -1";
+    _imp->model_stream << am1_constraint.str() << " ;\n";
+    ++_imp->nb_constraints;
+    _imp->at_most_one_value_constraints.emplace(pattern_vertex, am1_label);
+}
+
+auto Proof::create_weighted_objective(const vector<pair<string, long long>> & terms) -> void
+{
+    _imp->model_prelude_stream << "min:";
+    for (auto & [name, c] : terms)
+        _imp->model_prelude_stream << " " << c << " " << name;
+    _imp->model_prelude_stream << " ;\n";
+
+    for (auto & [name, c] : terms)
+        _imp->objective_sum << " " << c << " " << name;
+}
+
+auto Proof::declare_extra_variables(long n) -> void
+{
+    _imp->extra_variables += n;
+}
+
 auto Proof::create_injectivity_constraints(int pattern_size, int target_size,
     const function<auto(int)->string> & target_name) -> void
 {
@@ -193,7 +239,7 @@ auto Proof::finalise_model() -> void
 {
     unique_ptr<ostream> f = make_unique<ofstream>(_imp->opb_filename);
 
-    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
+    *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size() + _imp->extra_variables)
        << " #constraint= " << _imp->nb_constraints << ";\n";
     copy(istreambuf_iterator<char>{_imp->model_prelude_stream}, istreambuf_iterator<char>{}, ostreambuf_iterator<char>{*f});
     _imp->model_prelude_stream.clear();
@@ -221,6 +267,16 @@ auto Proof::finish_unsat_proof() -> void
     ++_imp->proof_line;
     *_imp->proof_stream << "output NONE;\n"
                         << "conclusion UNSAT : -1;\n"
+                        << "end pseudo-Boolean proof;\n";
+}
+
+auto Proof::finish_infeasible_optimisation_proof() -> void
+{
+    *_imp->proof_stream << "% asserting that there is no solution at all\n";
+    *_imp->proof_stream << "rup >= 1 ;\n";
+    ++_imp->proof_line;
+    *_imp->proof_stream << "output NONE;\n"
+                        << "conclusion BOUNDS INF INF;\n"
                         << "end pseudo-Boolean proof;\n";
 }
 
@@ -260,7 +316,7 @@ auto Proof::finish_unknown_proof() -> void
                         << "end pseudo-Boolean proof;\n";
 }
 
-auto Proof::finish_optimisation_proof(int size) -> void
+auto Proof::finish_optimisation_proof(long long size) -> void
 {
     *_imp->proof_stream << "rup" << _imp->objective_sum.str() << " >= " << size << ";\n";
     *_imp->proof_stream << "output NONE;\n"
@@ -397,6 +453,22 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
     // remember to checked-delete this blocking constraint once we backtrack out
     // of the level it was found at (it is then subsumed by a backtrack nogood)
     _imp->deletable_core_lines_by_level[_imp->active_level].push_back(_imp->proof_line);
+
+    if (0 != _imp->active_level)
+        *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
+}
+
+auto Proof::new_homomorphism_incumbent(const vector<pair<int, int>> & assignment) -> void
+{
+    *_imp->proof_stream << "% new incumbent\n";
+    if (0 != _imp->active_level)
+        *_imp->proof_stream << "setlvl 0;\n";
+
+    *_imp->proof_stream << "soli";
+    for (auto & [var, val] : assignment)
+        *_imp->proof_stream << " x" << _imp->variable_mappings.at(pair{var, val});
+    *_imp->proof_stream << ";\n";
+    _imp->objective_line = ++_imp->proof_line;
 
     if (0 != _imp->active_level)
         *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";

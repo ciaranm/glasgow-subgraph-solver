@@ -1,0 +1,3 @@
+{"format": "gss-graph", "version": 1, "directed": false, "multigraph": true,
+ "vertices": [{"name": "a", "label": "A"}, {"name": "b", "label": "B"}],
+ "edges": [{"from": "a", "to": "a", "label": "x"}, {"from": "a", "to": "b", "label": "x"}, {"from": "a", "to": "b", "label": "y"}]}

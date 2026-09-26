@@ -1,0 +1,2 @@
+{"format": "gss-graph", "version": 1, "directed": false,
+ "vertices": ["a", "b", "c"], "edges": [["a", "b"], ["b", "c"]]}

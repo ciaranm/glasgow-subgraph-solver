@@ -41,8 +41,9 @@ apart matters:
 | a cycle in the `--pattern-less-than` constraints | Pattern less than constraints form a loop |
 | costs on the pattern, with or without `--minimise-cost` | Costs on the pattern are not supported… |
 | `--minimise-cost` on a target with no costs | Minimising cost needs a target with vertex or edge costs |
-| `--minimise-cost` with threads, proof logging, counting or enumeration, `--staged`, `--noninjective` or `--locally-injective`, `--induced`, restarts, or less-constraints | Minimising cost cannot yet be used with… |
-| a multigraph, or edge costs when minimising, with `--noninjective`, `--locally-injective`, `--induced`, proof logging, or counting and enumeration | Multigraphs and edge costs need an injective mapping, and so on |
+| `--minimise-cost` with threads, counting or enumeration, `--staged`, `--noninjective` or `--locally-injective`, `--induced`, restarts, or less-constraints | Minimising cost cannot yet be used with… |
+| a multigraph, or edge costs when minimising, with `--noninjective`, `--locally-injective`, `--induced`, or counting and enumeration | Multigraphs and edge costs need an injective mapping, and so on |
+| proof logging, a pattern without edge labels, and a multigraph target | Proof logging cannot yet be used for a pattern without edge labels on a multigraph target |
 | `--shape` with a multigraph, or with edge costs when minimising | Extra shape graphs cannot be used with multigraphs or edge costs |
 | `--decomposition` on a multigraph or with `--minimise-cost` | Decomposition cannot be used on multigraphs or when minimising cost |
 | the clique or common-subgraph solver on a multigraph | …cannot be used on a multigraph |
@@ -67,6 +68,8 @@ place to look. `has_loops` means *either* graph has a self-loop.
 | clique detection (`--clique-detection`) | not counting, no proof, and fully injective **or** a loopless target | #94 |
 | nogood recording | `--staged`, or the restart schedule might restart | nothing consults a nogood without a restart |
 | every supplemental graph | the instance was not reified | slow to build on a reified target, and no help on the data that motivated it; see below |
+| degree, NDS and whole-instance degree | not proving a reified instance | their derivations cite adjacency constraints that the reified proof model does not have ([proof-logging.md](proof-logging.md#minimising-cost-and-multigraphs)) |
+| the cost bound's pruning | not proving | nothing certifies it yet |
 
 Two conditions recur, and it is worth seeing why they are the same argument twice. Both the
 clique-size filter and the clique reduction need k pattern vertices to reach k *distinct*

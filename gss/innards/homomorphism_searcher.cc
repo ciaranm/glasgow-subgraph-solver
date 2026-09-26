@@ -41,8 +41,11 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
 
+    // Under proof logging the bound does no pruning yet, since nothing certifies it: the
+    // search finds cheaper and cheaper mappings, and the proof's objective-improving
+    // constraints refute the rest.
     if (cost_data)
-        _cost_bound = make_unique<CostBound>(*cost_data, model.pattern_size, model.target_size);
+        _cost_bound = make_unique<CostBound>(*cost_data, model.pattern_size, model.target_size, 5, ! proof);
 }
 
 auto HomomorphismSearcher::incumbent() const -> const optional<HomomorphismAssignments> &
@@ -76,12 +79,16 @@ auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssi
 
 auto HomomorphismSearcher::solution_in_proof_form(const HomomorphismAssignments & assignments) const -> vector<pair<NamedVertex, NamedVertex>>
 {
+    // On a reified instance the proof's model has variables for original vertices only,
+    // and the rest follows from them by propagation.
+    auto original = model.original_pattern_size();
     vector<pair<NamedVertex, NamedVertex>> solution;
     for (auto & a : assignments.values)
-        if (solution.end() == find_if(solution.begin(), solution.end(), [&](const auto & t) { return unsigned(t.first.first) == a.assignment.pattern_vertex; }))
-            solution.emplace_back(
-                model.pattern_vertex_for_proof(a.assignment.pattern_vertex),
-                model.target_vertex_for_proof(a.assignment.target_vertex));
+        if ((! original) || a.assignment.pattern_vertex < *original)
+            if (solution.end() == find_if(solution.begin(), solution.end(), [&](const auto & t) { return unsigned(t.first.first) == a.assignment.pattern_vertex; }))
+                solution.emplace_back(
+                    model.pattern_vertex_for_proof(a.assignment.pattern_vertex),
+                    model.target_vertex_for_proof(a.assignment.target_vertex));
     return solution;
 }
 
@@ -139,19 +146,26 @@ auto HomomorphismSearcher::restarting_search(
     // find ourselves a domain, or succeed if we're all assigned
     const HomomorphismDomain * branch_domain = find_branch_domain(domains);
     if (! branch_domain) {
-        if (proof)
-            proof->post_solution(solution_in_proof_form(assignments));
-
         // Propagation refuses anything not cheaper than the incumbent, so this is a new
-        // best. Keep going to look for a cheaper one.
+        // best, unless the bound is not pruning (under proof logging), in which case a
+        // mapping no cheaper is simply a failure. Keep going to look for a cheaper one.
         if (_cost_bound) {
             auto cost = _cost_bound->cost_of(assigned_targets(assignments));
-            if (cost < _incumbent_cost) {
-                _incumbent_cost = cost;
-                _incumbent = assignments;
+            if (cost >= _incumbent_cost)
+                return SearchResult::Unsatisfiable;
+            _incumbent_cost = cost;
+            _incumbent = assignments;
+            if (proof) {
+                vector<pair<int, int>> solution;
+                for (auto & [p, t] : solution_in_proof_form(assignments))
+                    solution.emplace_back(p.first, t.first);
+                proof->new_homomorphism_incumbent(solution);
             }
             return SearchResult::SatisfiableButKeepGoing;
         }
+
+        if (proof)
+            proof->post_solution(solution_in_proof_form(assignments));
 
         if (params.count_solutions) {
             // we could be finding duplicate solutions, in threaded search
@@ -413,8 +427,9 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const 
     // both endpoints of an edge-vertex are decided, adjacency leaves it at most one value,
     // so edge-vertices are never worth a decision of their own. If only edge-vertices were
     // left, which should not happen, fall back to branching on them.
+    auto original = model.original_pattern_size();
     auto branchable = [&](const HomomorphismDomain & d) {
-        return (! _cost_bound) || _cost_bound->is_original_pattern_vertex(d.v);
+        return (! original) || d.v < *original;
     };
 
     for (bool restrict : {true, false}) {
@@ -425,7 +440,7 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const 
                     (d.count < result->count) ||
                     (d.count == result->count && model.pattern_degree(0, d.v) > model.pattern_degree(0, result->v)))
                     result = &d;
-        if (result || ! _cost_bound)
+        if (result || ! original)
             return result;
     }
     return nullptr;
@@ -585,6 +600,15 @@ auto HomomorphismSearcher::both_in_the_neighbourhood_of_some_vertex(unsigned v, 
 
 auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> bool
 {
+    // On a reified instance, injectivity between edge-vertices follows from injectivity
+    // on the original vertices, so it is redundant. When proving, it is also something
+    // the proof's model cannot justify by propagation, having no variables for
+    // edge-vertices (two pattern edges wanting the one target edge is a pigeonhole
+    // argument over the originals there), so it is left out; the Hall reasoning over the
+    // original vertices then reaches the same conclusions in a form the proof can cite.
+    auto original = model.original_pattern_size();
+    bool skip_injectivity = proof && original && current_assignment.pattern_vertex >= *original;
+
     // propagate for each remaining domain...
     for (auto & d : new_domains) {
         if (d.fixed)
@@ -593,7 +617,8 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         // injectivity
         switch (params.injectivity) {
         case Injectivity::Injective:
-            d.values.reset(current_assignment.target_vertex);
+            if (! skip_injectivity)
+                d.values.reset(current_assignment.target_vertex);
             break;
         case Injectivity::LocallyInjective:
             if (both_in_the_neighbourhood_of_some_vertex(current_assignment.pattern_vertex, d.v))
@@ -914,8 +939,7 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         // propagate all different, which when minimising over a reified instance need
         // only look at the original vertices
         if (params.injectivity == Injectivity::Injective)
-            if (! cheap_all_different(model.target_size, new_domains, proof, &model,
-                    _cost_bound ? optional<unsigned>{_cost_bound->pattern_original_size()} : nullopt))
+            if (! cheap_all_different(model.target_size, new_domains, proof, &model, model.original_pattern_size()))
                 return false;
         done_globals_at_least_once = true;
 
