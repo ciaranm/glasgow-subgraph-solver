@@ -1,6 +1,7 @@
 #include <gss/innards/cheap_all_different.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 
+#include <algorithm>
 #include <tuple>
 #include <type_traits>
 
@@ -28,8 +29,10 @@ namespace
         // Any domain with a count greater than domains.size() is put
         // int the "count==domains.size()" bucket.
         // The "first" array is sized to be able to hold domains.size()+1
-        // elements
-        vector<int> first(target_size + 1, -1), next(target_size, -1);
+        // elements, and "next" has one entry per domain. (Both used to be sized by
+        // target_size, which is only enough while there are no more domains than target
+        // vertices: more, and the bucket loop below read past the end of "first".)
+        vector<int> first(std::max<size_t>(target_size, domains.size()) + 1, -1), next(domains.size(), -1);
 
         [[maybe_unused]] conditional_t<proof_, vector<int>, tuple<>> lhs, hall_lhs, hall_rhs;
 
