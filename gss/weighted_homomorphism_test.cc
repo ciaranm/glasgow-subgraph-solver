@@ -358,6 +358,13 @@ TEST_CASE("weighted: what cannot yet be combined with a multigraph is refused")
     refused([](HomomorphismParams & p) { p.injectivity = Injectivity::NonInjective; });
     refused([](HomomorphismParams & p) { p.induced = true; });
     refused([](HomomorphismParams & p) { p.count_solutions = true; });
+    refused([](HomomorphismParams & p) {
+        auto shape = make_unique<InputGraph>(2, true, false);
+        shape->set_vertex_label(0, "from");
+        shape->set_vertex_label(1, "to");
+        shape->add_edge(0, 1);
+        p.extra_shapes.emplace_back(std::move(shape), true, 1);
+    });
 
     // And the plain injective decision problem works.
     auto params = make_params();

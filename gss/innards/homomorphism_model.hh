@@ -43,8 +43,12 @@ namespace gss::innards
         auto has_occur_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
+        /**
+         * \param reified the graphs were reified from multigraphs or edge costs (see
+         *     reification.hh), which turns the supplemental graphs off.
+         */
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-            const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs);
+            const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs, bool reified = false);
         ~HomomorphismModel();
 
         auto pattern_vertex_for_proof(int v) const -> NamedVertex;

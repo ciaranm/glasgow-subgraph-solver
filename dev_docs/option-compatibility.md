@@ -43,6 +43,7 @@ apart matters:
 | `--minimise-cost` on a target with no costs | Minimising cost needs a target with vertex or edge costs |
 | `--minimise-cost` with threads, proof logging, counting or enumeration, `--staged`, `--noninjective` or `--locally-injective`, `--induced`, restarts, or less-constraints | Minimising cost cannot yet be used with… |
 | a multigraph, or edge costs when minimising, with `--noninjective`, `--locally-injective`, `--induced`, proof logging, or counting and enumeration | Multigraphs and edge costs need an injective mapping, and so on |
+| `--shape` with a multigraph, or with edge costs when minimising | Extra shape graphs cannot be used with multigraphs or edge costs |
 | `--decomposition` on a multigraph or with `--minimise-cost` | Decomposition cannot be used on multigraphs or when minimising cost |
 | the clique or common-subgraph solver on a multigraph | …cannot be used on a multigraph |
 
@@ -65,6 +66,7 @@ place to look. `has_loops` means *either* graph has a self-loop.
 | …on supplementals | as above, and not non-injective | #91 |
 | clique detection (`--clique-detection`) | not counting, no proof, and fully injective **or** a loopless target | #94 |
 | nogood recording | `--staged`, or the restart schedule might restart | nothing consults a nogood without a restart |
+| every supplemental graph | the instance was not reified | slow to build on a reified target, and no help on the data that motivated it; see below |
 
 Two conditions recur, and it is worth seeing why they are the same argument twice. Both the
 clique-size filter and the clique reduction need k pattern vertices to reach k *distinct*
@@ -107,9 +109,13 @@ Three things change when minimising, all of them sound rather than disabled:
   value, except when an unlabelled pattern edge has several parallel target edges to choose
   from, and then search falls back to branching on it.
 
-The supplemental graphs are not disabled, but on a reified target they are slow to build, and
-on the scene-graph data they remove nothing: every pair of people is joined through an
-edge-vertex. `--no-supplementals` takes a graph3 run from about 7.5 s to under 0.4 s.
+**The supplemental graphs are off for a reified instance**, in `make_shape_graph_plan()`. They
+would be sound, but a reified target has a vertex for every edge, and every pair of its original
+vertices is at distance two through an edge-vertex. On the graph3 scene-graph benchmark, the
+100 patterns took 480 s in total with them and 3.6 s without, and although they removed a few
+values on some patterns, every one of the 100 had the same node count and the same optimum
+either way. This is a decision made on one dataset, and worth revisiting when there is
+another. `--shape` is refused rather than dropped, since asking for one is explicit.
 
 `gss/weighted_homomorphism_test.cc` is the oracle test for all of this. It runs every
 combination of per-graph directedness, loops, vertex labels, edge labels, multigraph, and

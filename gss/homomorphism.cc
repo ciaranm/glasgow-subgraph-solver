@@ -482,6 +482,7 @@ namespace
         SolveState state;
         HomomorphismResult result;
         const CostData * cost_data = nullptr;
+        bool reified = false;
     };
 
     struct SolveStep
@@ -628,7 +629,7 @@ namespace
             // Build the model now -- after the cheap shortcut steps have had their
             // chance to conclude -- into the carried state, where the search steps
             // (and, later, staged builder / filter steps) read it.
-            ctx.state.model = make_unique<HomomorphismModel>(target, pattern, params, proof, ctx.hom_proofs);
+            ctx.state.model = make_unique<HomomorphismModel>(target, pattern, params, proof, ctx.hom_proofs, ctx.reified);
             auto & model = *ctx.state.model;
 
             // The loop-cancelled adjacency derivations were deferred out of the model
@@ -731,6 +732,10 @@ namespace
                 throw UnsupportedConfiguration{"Multigraphs and edge costs cannot yet be used with induced mappings"};
             if (params.proof_options)
                 throw UnsupportedConfiguration{"Proof logging cannot yet be used with multigraphs or edge costs"};
+            // A shape would be looked for in the reified target, where it means something
+            // else, and supplemental graphs are off there anyway.
+            if (! params.extra_shapes.empty())
+                throw UnsupportedConfiguration{"Extra shape graphs cannot be used with multigraphs or edge costs"};
             // The search sees the reified mapping, edge-vertices and all, and without
             // pattern edge labels one original mapping may extend to several of those.
             if (params.count_solutions || params.enumerate_callback)
@@ -742,7 +747,8 @@ namespace
         const InputGraph & pattern,
         const InputGraph & target,
         const HomomorphismParams & params,
-        const CostData * cost_data) -> HomomorphismResult
+        const CostData * cost_data,
+        bool reified) -> HomomorphismResult
     {
         // Staged solving uses an internal bounded search round (a restart) as its budget, so it
         // only makes sense for the sequential engine; threaded staging is a later refinement.
@@ -787,7 +793,7 @@ namespace
         // The solve runs as a pipeline of steps over a shared context, in registration
         // order, stopping at the first step that concludes the problem; the search is the
         // terminal step (see dev_docs/preprocessor-refactor.md).
-        SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}, cost_data};
+        SolveContext ctx{pattern, target, params, proof, hom_proofs.get(), {}, {}, cost_data, reified};
 
         vector<unique_ptr<SolveStep>> steps;
         steps.push_back(make_unique<EmitProofModelStep>()); // emit the OPB model
@@ -819,7 +825,7 @@ auto gss::solve_homomorphism_problem(
             cost_data = CostData{reified.target_costs, reified.pattern_original_size, reified.target_original_size,
                 reified.pattern_edge_vertices, reified.target_edge_vertices, reified.directed};
 
-        auto result = solve_prepared(reified.pattern, reified.target, params, cost_data ? &*cost_data : nullptr);
+        auto result = solve_prepared(reified.pattern, reified.target, params, cost_data ? &*cost_data : nullptr, true);
 
         // The original vertices keep their numbers, so the mapping of the originals is
         // what is left after dropping the edge-vertices.
@@ -837,8 +843,8 @@ auto gss::solve_homomorphism_problem(
         CostData cost_data{{}, pattern.size(), target.size(), {}, {}, pattern.directed() || target.directed()};
         for (int t = 0; t < target.size(); ++t)
             cost_data.target_costs.push_back(target.vertex_cost(t));
-        return solve_prepared(pattern, target, params, &cost_data);
+        return solve_prepared(pattern, target, params, &cost_data, false);
     }
 
-    return solve_prepared(pattern, target, params, nullptr);
+    return solve_prepared(pattern, target, params, nullptr, false);
 }

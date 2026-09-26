@@ -74,7 +74,7 @@ If the target's vertices or edges carry costs, the solver can find a mapping of 
 where a mapping costs the sum of the costs of the target vertices and target edges it uses:
 
 ```shell session
-$ ./build/glasgow_subgraph_solver --minimise-cost --no-supplementals --format json pattern.json target.json
+$ ./build/glasgow_subgraph_solver --minimise-cost --format json pattern.json target.json
 ```
 
 It reports `cost = ...`, and `optimal = true` if the search finished. Costs, and pairs of vertices
@@ -82,8 +82,12 @@ joined by several edges with different labels, can only be given in the [JSON
 format](#the-gss-graph-json-format). A multigraph works without `--minimise-cost` too, as a
 decision problem. Both need an injective, non-induced mapping; minimising also needs sequential
 search without restarts (the default when minimising), and cannot yet be combined with proof
-logging or counting. `--no-supplementals` is not required, but on a graph with many edges the
-supplemental graphs are slow to build and usually do not help.
+logging or counting. The supplemental graphs are not used on these instances, since every edge
+becomes a vertex in the graphs the solver searches.
+
+`tools/scene_graph_csv_to_json.py` converts scene graphs in the CSV dialect of the graph3
+benchmark (a fourth column of confidences, and parallel edges with different labels) into this
+JSON format, with costs of `round(-log(confidence) × 10^6)`.
 
 File Formats
 ------------

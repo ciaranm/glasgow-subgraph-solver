@@ -70,9 +70,18 @@ namespace
         const std::tuple<std::unique_ptr<InputGraph>, bool, int> * extra_shape = nullptr;
     };
 
-    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops, bool directed) -> vector<ShapeGraphSpec>
+    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops, bool directed, bool reified) -> vector<ShapeGraphSpec>
     {
         vector<ShapeGraphSpec> plan;
+
+        // On a reified instance every edge is a vertex, so the target is large and every
+        // pair of its original vertices is at distance two through an edge-vertex. On the
+        // scene-graph data that motivated reification, building the supplemental graphs
+        // took about five seconds per instance and left every node count unchanged, so
+        // they are off. See dev_docs/option-compatibility.md.
+        if (reified)
+            return plan;
+
         if (supports_exact_path_graphs(params, has_loops))
             plan.push_back({ShapeGraphSpec::Kind::ExactPath, unsigned(params.number_of_exact_path_graphs)});
         if (supports_distance2_graphs(params, has_loops))
@@ -89,10 +98,10 @@ namespace
 
     // The original graph plus every slot the plan allocates: this is the bitset stride
     // (max_graphs), computed once at construction so the graph rows can be sized.
-    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops, bool directed) -> unsigned
+    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops, bool directed, bool reified) -> unsigned
     {
         unsigned n = 1;
-        for (const auto & spec : make_shape_graph_plan(params, has_loops, directed))
+        for (const auto & spec : make_shape_graph_plan(params, has_loops, directed, reified))
             n += spec.slot_count;
         return n;
     }
@@ -122,20 +131,24 @@ struct HomomorphismModel::Imp
     // same reason, and only written when params.record_filter_activations is set.
     mutable FilterActivations filter_activations;
 
-    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr, unsigned max_graphs) :
+    // Were these graphs reified from multigraphs or edge costs (see reification.hh)?
+    bool reified;
+
+    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr, unsigned max_graphs, bool re) :
         params(p),
         proof(r),
         proofs(pr),
-        filter_activations(max_graphs)
+        filter_activations(max_graphs),
+        reified(re)
     {
     }
 };
 
 HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-    const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs) :
+    const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs, bool reified) :
     _imp(make_unique<Imp>(params, proof, proofs,
-        number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed()))),
-    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed())),
+        number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed(), reified), reified)),
+    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed(), reified)),
     pattern_size(pattern.size()),
     target_size(target.size())
 {
@@ -851,7 +864,7 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
     // next free slot(s), then (when proving) derive it through the solver-proofs layer.
     // The plan also fixes max_graphs, so the bump counters land exactly on max_graphs at
     // the end (checked below).
-    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops, _imp->graphs.either_graph_directed)) {
+    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops, _imp->graphs.either_graph_directed, _imp->reified)) {
         switch (spec.kind) {
         case ShapeGraphSpec::Kind::ExactPath:
             build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);
