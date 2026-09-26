@@ -193,8 +193,8 @@ if(VERIPB_EXECUTABLE)
 
     # --- Minimising cost, and multigraphs ---
     # These solve the reified instance, and check the proof against a model written from
-    # the original graphs (HomomorphismProofs::emit_reified_model). The cost bound does
-    # no pruning under proof logging yet.
+    # the original graphs (HomomorphismProofs::emit_reified_model), and the cost bound's
+    # reasoning is certified by one pol per call that prunes.
     set(W ${GSS_INSTANCES}/weighted)
     gss_add_proof_test(proof_weighted_optimal ${SUB} --minimise-cost --format json
         ${W}/scene_pattern.json ${W}/scene_target.json)
@@ -211,6 +211,10 @@ if(VERIPB_EXECUTABLE)
     # not by injectivity on edge-vertices, which the model has no variables for.
     gss_add_proof_test(proof_weighted_infeasible_shared_edge ${SUB} --minimise-cost --format json
         ${W}/two_x_edges_pattern.json ${W}/one_x_edge_target.json)
+    # The bound removes a value by its reduced cost, rather than failing, so the pol's
+    # propagation is what the later nogoods rely on.
+    gss_add_proof_test(proof_weighted_bound_removes_values ${SUB} --minimise-cost --format json
+        ${W}/bound_removes_pattern.json ${W}/bound_removes_target.json)
     gss_add_proof_test(proof_multigraph_sat ${SUB} --format json
         ${W}/scene_pattern.json ${W}/scene_target.json)
     gss_add_proof_test(proof_multigraph_unsat ${SUB} --format json

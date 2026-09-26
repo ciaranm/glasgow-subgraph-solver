@@ -174,6 +174,11 @@ auto Proof::create_weighted_objective(const vector<pair<string, long long>> & te
         _imp->objective_sum << " " << c << " " << name;
 }
 
+auto Proof::objective_line() const -> long
+{
+    return _imp->objective_line;
+}
+
 auto Proof::declare_extra_variables(long n) -> void
 {
     _imp->extra_variables += n;

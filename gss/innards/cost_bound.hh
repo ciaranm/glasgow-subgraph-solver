@@ -27,6 +27,55 @@ namespace gss::innards
     };
 
     /**
+     * Why the last call of CostBound::propagate() failed or removed values, as multipliers
+     * on the constraints of the proof's model (HomomorphismProofs::emit_reified_model).
+     * Adding up the objective-improving constraint and, with these multipliers, each
+     * original vertex's exactly-one, each target vertex's at-most-one, and the linking
+     * equalities, gives sum(-reduced cost * variable) >= bound - (upper bound - 1): at the
+     * node that conflicts, or propagates every value the bound removed. Values removed for
+     * lack of support need no certificate, since propagation over the linking equalities
+     * finds them.
+     */
+    struct CostBoundCertificate
+    {
+        // Whether there is anything to certify, and if so, what: a bound reaching the
+        // incumbent (or removing values), or an assignment step with no injective
+        // assignment at all, which is a Hall violator.
+        enum class Kind
+        {
+            None,
+            Bound,
+            HallViolator
+        };
+        Kind kind = Kind::None;
+
+        long long bound = 0;
+
+        // Multipliers, of any sign, on sum_t x(u, t) = 1 for original pattern vertex u.
+        std::vector<std::pair<unsigned, long long>> exactly_one;
+        // Non-negative multipliers on sum_u x(u, t) <= 1 for original target vertex t.
+        std::vector<std::pair<unsigned, long long>> at_most_one;
+
+        // Multipliers, of any sign, on sum_y z(a, b, x, y) = x(a, x) (on_a) or on
+        // sum_x z(a, b, x, y) = x(b, y) (not on_a), for a < b.
+        struct Link
+        {
+            unsigned a, b;
+            bool on_a;
+            unsigned value;
+            long long multiplier;
+        };
+        std::vector<Link> links;
+
+        // For a Hall violator: original pattern vertices whose candidates, together, are
+        // fewer than they are.
+        std::vector<unsigned> hall_rows, hall_columns;
+
+        // Every (pattern vertex, target vertex) the call removed, whatever the reason.
+        std::vector<std::pair<unsigned, unsigned>> removed;
+    };
+
+    /**
      * A lower bound on the cost of any completion of a partial mapping, which prunes
      * the values of original pattern vertices that cannot be part of a mapping cheaper
      * than the incumbent.
@@ -34,14 +83,18 @@ namespace gss::innards
      * The objective is the sum of the costs of the target vertices used, which is a
      * unary cost on each pattern vertex's image. Taken at face value that gives a weak
      * bound, since an unassigned edge-vertex could take the cheapest edge anywhere. So
-     * the bound puts the pairwise structure back: each edge-vertex whose endpoints are
-     * both unassigned becomes a cost on the pair of their images, read off the values
-     * still in its domain, and one with a single endpoint assigned becomes a cost on the
-     * other endpoint. That is a problem with unary and pairwise costs over the original
-     * pattern vertices. Its local-polytope relaxation is tightened by a few sweeps of dual
-     * block-coordinate ascent (in the style of MPLP), and the reparametrised unary costs
-     * are then combined by a minimum-cost assignment, which accounts for injectivity and
-     * whose reduced costs say which values to remove.
+     * the bound puts the pairwise structure back. Every original pattern vertex is a row,
+     * with its current candidates (just its value, once it has one), and every pair of
+     * adjacent original vertices is a pairwise cost on their candidates, the sum over the
+     * edge-vertices between them of the cost of the one each would use, read off the
+     * values still in its domain. A pair with a single candidate on one side folds its
+     * costs into the other side exactly; the rest have their local-polytope relaxation
+     * tightened by a few sweeps of dual block-coordinate ascent (in the style of MPLP).
+     * The reparametrised unary costs are then combined by a minimum-cost assignment,
+     * which accounts for injectivity, solved as a square problem padded with zero-cost
+     * rows so that its dual is exact, and whose reduced costs say which values to remove.
+     * The bound used is exactly the value of the dual, so that the multipliers it records
+     * (see CostBoundCertificate) prove it.
      *
      * Everything is exact integer arithmetic. The dual messages are rounded down, which
      * keeps the reparametrisation exact (any messages give a valid bound, provided the
@@ -58,7 +111,6 @@ namespace gss::innards
         const CostData & _data;
         unsigned _pattern_size, _target_size;
         int _dual_sweeps;
-        bool _pruning;
 
         // From the last successful propagate(): per original pattern vertex, per original
         // target vertex, its reparametrised unary cost.
@@ -67,18 +119,18 @@ namespace gss::innards
         unsigned long long _calls = 0, _removals = 0;
         std::chrono::nanoseconds _time{0};
 
+        bool _want_certificates = false;
+        CostBoundCertificate _certificate;
+
         auto propagate_timed(const std::vector<int> & assigned, std::vector<HomomorphismDomain> & domains,
             long long upper_bound, bool & changed) -> bool;
 
     public:
         /**
-         * \param pruning if false, propagate() does nothing, which is what proof logging
-         *     needs until the bound's reasoning can be certified; the searcher still uses
-         *     the object for the costs of mappings.
          * \throw UnsupportedConfiguration if the costs are large enough that summing them
          *     over a mapping could overflow.
          */
-        CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps = 5, bool pruning = true);
+        CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps = 5);
 
         /**
          * \param assigned the target vertex of each assigned pattern vertex, or -1.
@@ -106,6 +158,16 @@ namespace gss::innards
         auto is_original_pattern_vertex(unsigned pattern_vertex) const -> bool;
 
         auto pattern_original_size() const -> unsigned;
+
+        /**
+         * Record a CostBoundCertificate for each call from now on, for proof logging.
+         */
+        auto want_certificates() -> void;
+
+        /**
+         * After a call of propagate() that failed or removed values, why.
+         */
+        auto certificate() const -> const CostBoundCertificate &;
 
         static auto infinity() -> long long;
 

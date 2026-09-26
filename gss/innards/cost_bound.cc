@@ -43,34 +43,51 @@ namespace
         return a >= 0 ? a / 2 : -((-a + 1) / 2);
     }
 
-    // Rectangular minimum-cost assignment of rows to distinct columns (rows <= columns),
-    // by the Hungarian algorithm with potentials, in exact integers. Returns inf if every
-    // assignment uses an infinite entry. On success the potentials are dual feasible:
-    // row_potential[i] + column_potential[j] <= cost[i][j] wherever that is finite, and
-    // every column potential is at most 0. Note that a column left unmatched may have a
-    // negative potential, so the assignment's cost plus a reduced cost is *not* a bound
-    // on forcing an entry; see the filtering in propagate() for one that is.
+    // Minimum-cost assignment of rows to distinct columns (rows <= columns), by the
+    // Hungarian algorithm on the square problem padded with zero-cost rows, in exact
+    // integers. Returns false if every assignment uses an infinite entry, and then
+    // hall_rows and hall_columns are a Hall violator: rows whose finite entries all lie
+    // in fewer columns than there are rows. Otherwise it gives an exact dual of the
+    // rectangular problem, row potentials alpha of any sign and column potentials
+    // beta >= 0, with alpha[i] - beta[j] <= cost[i][j] wherever that is finite: the dual
+    // value, sum alpha - sum beta, is then a lower bound on any assignment, and
+    // cost[i][j] - alpha[i] + beta[j] >= 0 a lower bound on how much forcing i onto j
+    // adds to it.
+    //
+    // (The unpadded algorithm gives potentials whose unmatched columns may be negative,
+    // and then the dual value falls short of the assignment's cost, and cost plus a
+    // reduced cost is not a valid forced bound. Padding is what makes it exact.)
     auto assign(const vector<vector<long long>> & cost, unsigned columns,
-        vector<long long> & row_potential, vector<long long> & column_potential) -> long long
+        vector<long long> & alpha, vector<long long> & beta,
+        vector<unsigned> & hall_rows, vector<unsigned> & hall_columns) -> bool
     {
-        unsigned rows = cost.size();
-        if (rows > columns)
-            return inf;
+        unsigned rows = cost.size(), n = columns;
+        if (rows > n) {
+            for (unsigned i = 0; i < rows; ++i)
+                hall_rows.push_back(i);
+            for (unsigned j = 0; j < n; ++j)
+                hall_columns.push_back(j);
+            return false;
+        }
 
-        vector<long long> u(rows + 1, 0), v(columns + 1, 0);
-        vector<unsigned> p(columns + 1, 0), way(columns + 1, 0);
-        for (unsigned i = 1; i <= rows; ++i) {
+        auto entry = [&](unsigned i, unsigned j) -> long long {
+            return i < rows ? cost[i][j] : 0;
+        };
+
+        vector<long long> u(n + 1, 0), v(n + 1, 0);
+        vector<unsigned> p(n + 1, 0), way(n + 1, 0);
+        for (unsigned i = 1; i <= n; ++i) {
             p[0] = i;
             unsigned j0 = 0;
-            vector<long long> minv(columns + 1, inf);
-            vector<char> used(columns + 1, false);
+            vector<long long> minv(n + 1, inf);
+            vector<char> used(n + 1, false);
             do {
                 used[j0] = true;
                 unsigned i0 = p[j0], j1 = 0;
                 long long delta = inf;
-                for (unsigned j = 1; j <= columns; ++j)
+                for (unsigned j = 1; j <= n; ++j)
                     if (! used[j]) {
-                        long long c = cost[i0 - 1][j - 1];
+                        long long c = entry(i0 - 1, j - 1);
                         if (! is_inf(c)) {
                             long long cur = c - u[i0] - v[j];
                             if (cur < minv[j]) {
@@ -84,11 +101,21 @@ namespace
                         }
                     }
 
-                // Nothing finite left to reach: no assignment avoids an infinite entry.
-                if (is_inf(delta))
-                    return inf;
+                // Nothing finite left to reach. The real rows come first and a padding
+                // row reaches everything, so this is a real row, and the rows of the
+                // alternating tree only reach the columns in it, each already matched
+                // to one of them.
+                if (is_inf(delta)) {
+                    for (unsigned j = 0; j <= n; ++j)
+                        if (used[j]) {
+                            hall_rows.push_back(p[j] - 1);
+                            if (j != 0)
+                                hall_columns.push_back(j - 1);
+                        }
+                    return false;
+                }
 
-                for (unsigned j = 0; j <= columns; ++j)
+                for (unsigned j = 0; j <= n; ++j)
                     if (used[j]) {
                         u[p[j]] += delta;
                         v[j] -= delta;
@@ -105,32 +132,50 @@ namespace
             } while (j0);
         }
 
-        long long result = 0;
-        for (unsigned j = 1; j <= columns; ++j)
-            if (p[j])
-                result = add(result, cost[p[j] - 1][j - 1]);
+        // Shift to the rectangular problem's dual: alpha = u + s and beta = s - v, which
+        // keeps alpha - beta = u + v. beta >= 0 needs v <= s: with padding rows, every
+        // padding potential w has w + v <= 0, so s = -(the largest) will do; without,
+        // s is the largest v.
+        long long s;
+        if (rows < n) {
+            long long largest = std::numeric_limits<long long>::min();
+            for (unsigned i = rows + 1; i <= n; ++i)
+                largest = max(largest, u[i]);
+            s = -largest;
+        }
+        else {
+            s = std::numeric_limits<long long>::min();
+            for (unsigned j = 1; j <= n; ++j)
+                s = max(s, v[j]);
+        }
 
-        row_potential.assign(u.begin() + 1, u.end());
-        column_potential.assign(v.begin() + 1, v.end());
-        return result;
+        alpha.assign(rows, 0);
+        beta.assign(n, 0);
+        for (unsigned i = 0; i < rows; ++i)
+            alpha[i] = u[i + 1] + s;
+        for (unsigned j = 0; j < n; ++j)
+            beta[j] = s - v[j + 1];
+        return true;
     }
 
-    // One pair of unassigned original pattern vertices joined by at least one
-    // edge-vertex, and the cost of each pair of their candidate images.
+    // A pair of adjacent original pattern vertices, and the cost of each pair of their
+    // candidate images: the sum over the edge-vertices between them of the cheapest image
+    // consistent with those, or inf if one has none.
     struct PairTerm
     {
-        unsigned row_a, row_b;
+        unsigned a, b; // pattern vertices, a < b, also their rows
         vector<long long> cost; // candidates of a by candidates of b
         vector<long long> message_a, message_b;
+        long long residual = 0;
+        bool folded = false; // one side has a single candidate, so it is not a dual variable
     };
 }
 
-CostBound::CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps, bool pruning) :
+CostBound::CostBound(const CostData & data, unsigned pattern_size, unsigned target_size, int dual_sweeps) :
     _data(data),
     _pattern_size(pattern_size),
     _target_size(target_size),
-    _dual_sweeps(dual_sweeps),
-    _pruning(pruning)
+    _dual_sweeps(dual_sweeps)
 {
     // Every sum the bound forms is at most the pattern size times the largest cost, with
     // the dual messages bounded by the same, so this keeps all of them far from inf.
@@ -189,9 +234,6 @@ auto CostBound::add_extra_stats(std::list<std::string> & stats) const -> void
 auto CostBound::propagate(const vector<int> & assigned, vector<HomomorphismDomain> & domains,
     long long upper_bound, bool & changed) -> bool
 {
-    if (! _pruning)
-        return true;
-
     ++_calls;
     auto start = std::chrono::steady_clock::now();
     struct AddTime
@@ -207,137 +249,102 @@ auto CostBound::propagate(const vector<int> & assigned, vector<HomomorphismDomai
     return propagate_timed(assigned, domains, upper_bound, changed);
 }
 
+auto CostBound::want_certificates() -> void
+{
+    _want_certificates = true;
+}
+
+auto CostBound::certificate() const -> const CostBoundCertificate &
+{
+    return _certificate;
+}
+
 auto CostBound::propagate_timed(const vector<int> & assigned, vector<HomomorphismDomain> & domains,
     long long upper_bound, bool & changed) -> bool
 {
     const int pattern_original = _data.pattern_original_size;
     const int target_original = _data.target_original_size;
 
+    _certificate = CostBoundCertificate{};
+
     vector<HomomorphismDomain *> domain_of(_pattern_size, nullptr);
     for (auto & d : domains)
         if (! d.fixed)
             domain_of[d.v] = &d;
 
-    // The cost of what is already decided.
-    long long fixed_cost = 0;
-    for (unsigned p = 0; p < _pattern_size; ++p)
+    // The values a pattern vertex might still take: its value, if it has one, else its
+    // domain.
+    auto values_of = [&](unsigned p, auto && f) {
         if (assigned[p] != -1)
-            fixed_cost = add(fixed_cost, _data.target_costs[assigned[p]]);
+            f(unsigned(assigned[p]));
+        else if (domain_of[p])
+            domain_of[p]->values.for_each(f);
+    };
 
-    // Rows: the unassigned original pattern vertices, each with its candidate images,
-    // and for each candidate the unary cost it carries so far.
-    vector<unsigned> rows;
-    vector<int> row_of(pattern_original, -1);
-    vector<vector<unsigned>> candidates;
-    vector<vector<int>> position; // per row, per original target vertex, index in candidates or -1
-    vector<vector<long long>> unary;
+    // Rows: every original pattern vertex, with its candidate images and the unary cost
+    // each carries so far.
+    vector<vector<unsigned>> candidates(pattern_original);
+    vector<vector<int>> position(pattern_original, vector<int>(target_original, -1));
+    vector<vector<long long>> theta(pattern_original);
     for (int p = 0; p < pattern_original; ++p) {
-        if (assigned[p] != -1 || ! domain_of[p])
-            continue;
-        row_of[p] = rows.size();
-        rows.push_back(p);
-        candidates.emplace_back();
-        position.emplace_back(target_original, -1);
-        unary.emplace_back();
-        domain_of[p]->values.for_each([&](unsigned t) {
+        values_of(p, [&](unsigned t) {
             // Labels keep an original vertex off edge-vertices, but say so rather than trust it.
             if (int(t) >= target_original)
                 return;
-            position.back()[t] = candidates.back().size();
-            candidates.back().push_back(t);
-            unary.back().push_back(_data.target_costs[t]);
+            position[p][t] = candidates[p].size();
+            candidates[p].push_back(t);
+            theta[p].push_back(_data.target_costs[t]);
         });
+        if (candidates[p].empty())
+            return false;
     }
-
-    // Edge-vertices: fold each into a constant, a unary cost, or a pairwise cost,
-    // according to how many of its endpoints are assigned.
-    map<pair<unsigned, unsigned>, unsigned> pair_index;
-    vector<PairTerm> pairs;
 
     auto target_endpoints = [&](unsigned t) -> const EdgeVertexEndpoints & {
         return _data.target_edge_vertices[t - target_original];
     };
 
+    // Edge-vertices: a loop is a unary cost on its vertex, and anything else a pairwise
+    // cost on its endpoints.
+    map<pair<unsigned, unsigned>, unsigned> pair_index;
+    vector<PairTerm> pairs;
     for (unsigned k = 0; k < _data.pattern_edge_vertices.size(); ++k) {
         unsigned e = pattern_original + k;
-        if (assigned[e] != -1 || ! domain_of[e])
-            continue;
-
         auto [from, to] = _data.pattern_edge_vertices[k];
-        int f_from = assigned[from], f_to = assigned[to];
 
-        // The cheapest image left for an edge-vertex whose endpoints are both decided.
-        if (f_from != -1 && f_to != -1) {
-            long long best = inf;
-            domain_of[e]->values.for_each([&](unsigned t) { best = min(best, _data.target_costs[t]); });
-            fixed_cost = add(fixed_cost, best);
-            continue;
-        }
-
-        // One endpoint decided (or a loop with its one endpoint not): a cost on the
-        // other endpoint's candidates.
-        if (f_from != -1 || f_to != -1 || from == to) {
-            unsigned free_vertex = (f_from == -1) ? from : to;
-            int decided = (f_from == -1) ? f_to : f_from;
-            bool free_is_from = (free_vertex == unsigned(from));
-            if (row_of[free_vertex] == -1)
-                continue;
-            unsigned r = row_of[free_vertex];
-
-            vector<long long> best(candidates[r].size(), inf);
-            domain_of[e]->values.for_each([&](unsigned t) {
+        if (from == to) {
+            vector<long long> best(candidates[from].size(), inf);
+            values_of(e, [&](unsigned t) {
                 auto & te = target_endpoints(t);
-                auto consider = [&](int free_image, int other_image) {
-                    if (from == to) {
-                        if (free_image != other_image)
-                            return;
-                    }
-                    else if (other_image != decided)
-                        return;
-                    if (free_image >= target_original)
-                        return;
-                    int i = position[r][free_image];
-                    if (i != -1)
-                        best[i] = min(best[i], _data.target_costs[t]);
-                };
-                if (_data.directed)
-                    free_is_from ? consider(te.from, te.to) : consider(te.to, te.from);
-                else {
-                    consider(te.from, te.to);
-                    consider(te.to, te.from);
-                }
+                if (te.from == te.to && te.from < target_original && position[from][te.from] != -1)
+                    best[position[from][te.from]] = min(best[position[from][te.from]], _data.target_costs[t]);
             });
-
-            for (unsigned i = 0; i < candidates[r].size(); ++i)
-                unary[r][i] = add(unary[r][i], best[i]);
+            for (unsigned i = 0; i < candidates[from].size(); ++i)
+                theta[from][i] = add(theta[from][i], best[i]);
             continue;
         }
 
-        // Neither endpoint decided: a cost on the pair of their images.
         unsigned a = min<unsigned>(from, to), b = max<unsigned>(from, to);
         bool a_is_from = (a == unsigned(from));
-        if (row_of[a] == -1 || row_of[b] == -1)
-            continue;
         auto [it, fresh] = pair_index.emplace(pair{a, b}, pairs.size());
         if (fresh) {
             PairTerm term;
-            term.row_a = row_of[a];
-            term.row_b = row_of[b];
-            term.cost.assign(candidates[term.row_a].size() * candidates[term.row_b].size(), 0);
-            term.message_a.assign(candidates[term.row_a].size(), 0);
-            term.message_b.assign(candidates[term.row_b].size(), 0);
+            term.a = a;
+            term.b = b;
+            term.cost.assign(candidates[a].size() * candidates[b].size(), 0);
+            term.message_a.assign(candidates[a].size(), 0);
+            term.message_b.assign(candidates[b].size(), 0);
             pairs.push_back(std::move(term));
         }
         auto & term = pairs[it->second];
-        unsigned width = candidates[term.row_b].size();
+        unsigned width = candidates[b].size();
 
         vector<long long> this_edge(term.cost.size(), inf);
-        domain_of[e]->values.for_each([&](unsigned t) {
+        values_of(e, [&](unsigned t) {
             auto & te = target_endpoints(t);
             auto consider = [&](int image_a, int image_b) {
                 if (image_a >= target_original || image_b >= target_original)
                     return;
-                int i = position[term.row_a][image_a], j = position[term.row_b][image_b];
+                int i = position[a][image_a], j = position[b][image_b];
                 if (i != -1 && j != -1)
                     this_edge[i * width + j] = min(this_edge[i * width + j], _data.target_costs[t]);
             };
@@ -353,18 +360,39 @@ auto CostBound::propagate_timed(const vector<int> & assigned, vector<Homomorphis
             term.cost[i] = add(term.cost[i], this_edge[i]);
     }
 
-    // Only an infinite part can conclude anything yet: costs may be negative, so the
-    // part decided so far reaching upper_bound says nothing about the whole.
-    if (is_inf(fixed_cost))
-        return false;
+    // A pair with one candidate on a side folds exactly: all of its cost goes to the other
+    // side (or to the residual, if both sides have one).
+    for (auto & term : pairs) {
+        unsigned na = candidates[term.a].size(), nb = candidates[term.b].size();
+        if (na == 1 && nb == 1) {
+            term.folded = true;
+            term.residual = term.cost[0];
+        }
+        else if (na == 1) {
+            term.folded = true;
+            for (unsigned j = 0; j < nb; ++j) {
+                term.message_b[j] = is_inf(term.cost[j]) ? 0 : term.cost[j];
+                theta[term.b][j] = is_inf(term.cost[j]) ? inf : add(theta[term.b][j], term.cost[j]);
+            }
+        }
+        else if (nb == 1) {
+            term.folded = true;
+            for (unsigned i = 0; i < na; ++i) {
+                term.message_a[i] = is_inf(term.cost[i]) ? 0 : term.cost[i];
+                theta[term.a][i] = is_inf(term.cost[i]) ? inf : add(theta[term.a][i], term.cost[i]);
+            }
+        }
+    }
 
-    // Dual ascent. theta is each row's unary cost plus the messages the pairs have sent
-    // it; each pair's residual cost is its cost minus the two messages it sent.
-    auto & theta = unary;
-    for (int sweep = 0; sweep < _dual_sweeps && ! pairs.empty(); ++sweep) {
+    // Dual ascent over the rest. theta is each row's unary cost plus the messages the
+    // pairs have sent it; each pair's residual cost is its cost minus the two messages
+    // it sent.
+    for (int sweep = 0; sweep < _dual_sweeps; ++sweep) {
         for (auto & term : pairs) {
-            auto & ta = theta[term.row_a];
-            auto & tb = theta[term.row_b];
+            if (term.folded)
+                continue;
+            auto & ta = theta[term.a];
+            auto & tb = theta[term.b];
             unsigned na = ta.size(), nb = tb.size();
 
             for (unsigned i = 0; i < na; ++i)
@@ -415,26 +443,32 @@ auto CostBound::propagate_timed(const vector<int> & assigned, vector<Homomorphis
         }
     }
 
-    // What is left in each pair after the messages, at its cheapest.
-    long long bound = fixed_cost;
+    // What is left in each pair after the messages, at its cheapest over the values still
+    // alive on both sides.
+    long long bound = 0;
     for (auto & term : pairs) {
-        auto & ta = theta[term.row_a];
-        auto & tb = theta[term.row_b];
-        unsigned nb = tb.size();
-        long long residual = inf;
-        for (unsigned i = 0; i < ta.size(); ++i) {
-            if (is_inf(ta[i]))
-                continue;
-            for (unsigned j = 0; j < nb; ++j) {
-                long long c = term.cost[i * nb + j];
-                if (is_inf(c) || is_inf(tb[j]))
+        if (! term.folded) {
+            auto & ta = theta[term.a];
+            auto & tb = theta[term.b];
+            unsigned nb = tb.size();
+            long long residual = inf;
+            for (unsigned i = 0; i < ta.size(); ++i) {
+                if (is_inf(ta[i]))
                     continue;
-                residual = min(residual, c - term.message_a[i] - term.message_b[j]);
+                for (unsigned j = 0; j < nb; ++j) {
+                    long long c = term.cost[i * nb + j];
+                    if (is_inf(c) || is_inf(tb[j]))
+                        continue;
+                    residual = min(residual, c - term.message_a[i] - term.message_b[j]);
+                }
             }
+            term.residual = residual;
         }
-        bound = add(bound, residual);
+        bound = add(bound, term.residual);
     }
 
+    // Nothing supports any pair of images for some pair: propagation over the linking
+    // equalities finds that for itself.
     if (is_inf(bound))
         return false;
 
@@ -449,65 +483,104 @@ auto CostBound::propagate_timed(const vector<int> & assigned, vector<Homomorphis
                 columns.push_back(t);
             }
 
-    vector<vector<long long>> matrix(rows.size(), vector<long long>(columns.size(), inf));
-    for (unsigned r = 0; r < rows.size(); ++r)
-        for (unsigned i = 0; i < candidates[r].size(); ++i)
-            matrix[r][column_of[candidates[r][i]]] = theta[r][i];
+    vector<vector<long long>> matrix(pattern_original, vector<long long>(columns.size(), inf));
+    for (int p = 0; p < pattern_original; ++p)
+        for (unsigned i = 0; i < candidates[p].size(); ++i)
+            matrix[p][column_of[candidates[p][i]]] = theta[p][i];
 
-    vector<long long> row_potential, column_potential;
-    long long assignment = rows.empty() ? 0 : assign(matrix, columns.size(), row_potential, column_potential);
-    long long before_assignment = bound;
-    bound = add(bound, assignment);
-    if (is_inf(bound) || bound >= upper_bound)
+    vector<long long> alpha, beta;
+    vector<unsigned> hall_rows, hall_columns;
+    if (! assign(matrix, columns.size(), alpha, beta, hall_rows, hall_columns)) {
+        if (_want_certificates) {
+            _certificate.kind = CostBoundCertificate::Kind::HallViolator;
+            _certificate.hall_rows = hall_rows;
+            for (auto j : hall_columns)
+                _certificate.hall_columns.push_back(columns[j]);
+        }
         return false;
-
-    // What forcing row r onto column j costs at least. Any assignment s using it costs
-    // sum_k (u_k + v_s(k) + reduced_k) >= sum_k u_k + reduced_rj + sum_k v_s(k), and the
-    // column potentials are at most 0, so the last sum is at least the most negative
-    // total of k potentials that includes v_j. Summing only the matched columns'
-    // potentials instead, as the assignment's own cost does, would over-prune.
-    long long row_total = 0;
-    for (auto u : row_potential)
-        row_total += u;
-    vector<long long> sorted_columns(column_potential);
-    std::sort(sorted_columns.begin(), sorted_columns.end());
-    unsigned k = rows.size();
-    long long most_negative_k = 0, most_negative_k_minus_one = 0;
-    for (unsigned i = 0; i < k && i < sorted_columns.size(); ++i) {
-        most_negative_k += sorted_columns[i];
-        if (i + 1 < k)
-            most_negative_k_minus_one += sorted_columns[i];
     }
-    long long kth_most_negative = (k >= 1 && k <= sorted_columns.size()) ? sorted_columns[k - 1] : 0;
-    auto forced_bound = [&](unsigned r, unsigned t, long long th) -> long long {
-        long long v = column_potential[column_of[t]];
-        long long columns_part = (v <= kth_most_negative) ? most_negative_k : most_negative_k_minus_one + v;
-        long long reduced = th - row_potential[r] - v;
-        return add(before_assignment, row_total + columns_part + reduced);
+
+    for (auto a : alpha)
+        bound += a;
+    for (auto b : beta)
+        bound -= b;
+
+    auto record_certificate = [&]() {
+        if (! _want_certificates)
+            return;
+        _certificate.kind = CostBoundCertificate::Kind::Bound;
+        _certificate.bound = bound;
+
+        // A pair's residual rides on the exactly-one of its first vertex, and on the
+        // linking equalities of that vertex's candidates: sum over x of
+        // (sum_y z(a, b, x, y) - x(a, x)) plus sum_x x(a, x) = 1 is sum z = 1.
+        vector<long long> exactly_one(alpha);
+        for (auto & term : pairs)
+            if (term.residual != 0)
+                exactly_one[term.a] += term.residual;
+        for (int p = 0; p < pattern_original; ++p)
+            if (exactly_one[p] != 0)
+                _certificate.exactly_one.emplace_back(p, exactly_one[p]);
+        for (unsigned j = 0; j < columns.size(); ++j)
+            if (beta[j] != 0)
+                _certificate.at_most_one.emplace_back(columns[j], beta[j]);
+
+        for (auto & term : pairs) {
+            for (unsigned i = 0; i < candidates[term.a].size(); ++i) {
+                long long m = (is_inf(theta[term.a][i]) ? 0 : term.message_a[i]) + term.residual;
+                if (m != 0)
+                    _certificate.links.push_back({term.a, term.b, true, candidates[term.a][i], m});
+            }
+            for (unsigned j = 0; j < candidates[term.b].size(); ++j) {
+                long long m = is_inf(theta[term.b][j]) ? 0 : term.message_b[j];
+                if (m != 0)
+                    _certificate.links.push_back({term.a, term.b, false, candidates[term.b][j], m});
+            }
+        }
     };
 
+    if (bound >= upper_bound) {
+        record_certificate();
+        return false;
+    }
+
     // Remove every value that cannot be in a mapping cheaper than upper_bound, and
-    // every value no edge-vertex supports.
-    for (unsigned r = 0; r < rows.size(); ++r) {
-        auto & d = *domain_of[rows[r]];
-        auto & scores = _scores[rows[r]];
+    // every value nothing supports.
+    bool any_by_bound = false;
+    for (int p = 0; p < pattern_original; ++p) {
+        auto & scores = _scores[p];
         scores.assign(target_original, inf);
-        for (unsigned i = 0; i < candidates[r].size(); ++i) {
-            unsigned t = candidates[r][i];
-            long long th = theta[r][i];
-            bool remove = is_inf(th) || forced_bound(r, t, th) >= upper_bound;
+        if (! domain_of[p] || assigned[p] != -1)
+            continue;
+        auto & d = *domain_of[p];
+        for (unsigned i = 0; i < candidates[p].size(); ++i) {
+            unsigned t = candidates[p][i];
+            long long th = theta[p][i];
+            bool remove = is_inf(th);
+            if (! remove && add(bound, th - alpha[p] + beta[column_of[t]]) >= upper_bound) {
+                remove = true;
+                any_by_bound = true;
+            }
             if (remove) {
                 d.values.reset(t);
                 --d.count;
                 ++_removals;
                 changed = true;
+                if (_want_certificates)
+                    _certificate.removed.emplace_back(p, t);
             }
             else
                 scores[t] = th;
         }
-        if (0 == d.count)
+        if (0 == d.count) {
+            if (any_by_bound)
+                record_certificate();
             return false;
+        }
     }
+
+    if (any_by_bound)
+        record_certificate();
 
     return true;
 }

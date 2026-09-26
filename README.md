@@ -82,8 +82,7 @@ joined by several edges with different labels, can only be given in the [JSON
 format](#the-gss-graph-json-format). A multigraph works without `--minimise-cost` too, as a
 decision problem. Both need an injective, non-induced mapping; minimising also needs sequential
 search without restarts (the default when minimising), and cannot be combined with counting. Both
-can be proof logged (`--prove`, with `--no-clique-detection`), although for now minimising under
-proof logging searches without the cost bound, so it is only practical on small instances; see
+can be proof logged (`--prove`, with `--no-clique-detection`), including the cost bound; see
 [the proof logging notes](dev_docs/proof-logging.md#minimising-cost-and-multigraphs). The supplemental graphs are not used on these instances, since every edge
 becomes a vertex in the graphs the solver searches.
 

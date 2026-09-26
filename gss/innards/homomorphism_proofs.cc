@@ -1073,6 +1073,59 @@ auto HomomorphismProofs::emit_reified_model(const InputGraph & pattern, const In
     _proof->finalise_model();
 }
 
+auto HomomorphismProofs::cost_bound(const std::vector<std::pair<int, int>> & decisions, const CostBoundCertificate & certificate, bool failed) -> void
+{
+    _proof->emit_proof_directive("% cost bound " + std::string(failed ? "failed" : "removed values") + " at depth " + std::to_string(decisions.size()));
+
+    switch (certificate.kind) {
+    case CostBoundCertificate::Kind::None:
+        // Anything done for lack of support follows by propagation over the linking
+        // equalities.
+        break;
+
+    case CostBoundCertificate::Kind::HallViolator: {
+        vector<int> rows(certificate.hall_rows.begin(), certificate.hall_rows.end());
+        vector<int> columns(certificate.hall_columns.begin(), certificate.hall_columns.end());
+        emit_hall_set_or_violator(rows, columns);
+        break;
+    }
+
+    case CostBoundCertificate::Kind::Bound: {
+        // The objective-improving constraint, plus each certificate constraint times its
+        // multiplier, using the other half of an equality for a negative one.
+        std::string pol = "pol " + std::to_string(_proof->objective_line());
+        auto term = [&](const std::string & label, long long multiplier) {
+            pol += " " + label;
+            if (multiplier != 1)
+                pol += " " + std::to_string(multiplier) + " *";
+            pol += " +";
+        };
+        for (auto & [p, m] : certificate.exactly_one)
+            if (m > 0)
+                term(_proof->at_least_one_value_label(p), m);
+            else
+                term(_proof->at_most_one_value_label(p), -m);
+        for (auto & [t, m] : certificate.at_most_one)
+            term(_proof->injectivity_label(t), m);
+        for (auto & l : certificate.links) {
+            auto label = "@lnkp" + std::to_string(l.a) + "_p" + std::to_string(l.b) + "_" + (l.on_a ? "a" : "b") + "t" + std::to_string(l.value);
+            if (l.multiplier > 0)
+                term(label + "ge", l.multiplier);
+            else
+                term(label + "le", -l.multiplier);
+        }
+        pol += " ;";
+        _proof->emit_proof_line(pol);
+        break;
+    }
+    }
+
+    // Nothing more is needed. At this node the derived constraint conflicts, or
+    // propagates exactly the values the bound removed, so the search's own nogoods follow
+    // from it by RUP, as do later steps relying on the removals. (Checking each removal
+    // with its own RUP here found no failures, and cost only size.)
+}
+
 auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
 {
     // Derive the loop-cancelled form of each loopy adjacency constraint, so the degree,

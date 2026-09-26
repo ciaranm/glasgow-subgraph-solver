@@ -3,6 +3,7 @@
 
 #include <gss/formats/input_graph.hh>
 #include <gss/homomorphism.hh>
+#include <gss/innards/cost_bound.hh>
 #include <gss/innards/processed_graphs_data.hh>
 #include <gss/innards/proof.hh>
 
@@ -148,6 +149,10 @@ namespace gss::innards
         // its two x, and a missing z is what forbids a pair of images. The objective, when
         // minimising, is the target costs of the x and z. See dev_docs/proof-logging.md.
         auto emit_reified_model(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void;
+
+        // Justify what a call of the cost bound did: that it failed, under these
+        // decisions, or which values it removed. See cost_bound.hh.
+        auto cost_bound(const std::vector<std::pair<int, int>> & decisions, const CostBoundCertificate & certificate, bool failed) -> void;
 
         // Derive the loop-cancelled forms of the adjacency constraints (a PBP derivation the
         // degree / supplemental-graph / distance-3 pols rely on). Deferred out of emit_model

@@ -170,13 +170,44 @@ originals. Search refutes those instead. (Reaching search with more pattern vert
 vertices exposed a sizing bug in `cheap_all_different`, whose bucket arrays were sized by the
 target; they are now sized by the number of domains.)
 
-**The cost bound does no pruning under proof yet.** Each new best mapping is logged with `soli` at
-the top level, and search then refutes the objective-improving constraint by exhaustion, so a proof
-is only practical on small instances. On the graph3 benchmark, a four-person pattern takes about two
-seconds, and a five-person one twenty seconds to solve, fifteen to verify, and a 690 MB proof;
-each extra person multiplies the search by about fifteen. Certifying the
-bound as a `pol` over the linking equalities, the exactly-one and at-most-one constraints, and the
-objective constraint is the next step: its messages are integers, so every multiplier is too.
+Each new best mapping is logged with `soli` at the top level, and the cost bound
+(`gss/innards/cost_bound.hh`) prunes against the objective-improving constraint it adds. **Each
+call of the bound that fails or removes values by the bound emits one `pol`**, which adds up:
+
+- the latest objective-improving constraint, `obj <= U - 1`;
+- each original vertex's `@al1` (or `@am1`, for a negative multiplier) times its row potential
+  from the assignment step, plus the residual of every pair where it is the smaller vertex;
+- each target vertex's `@inj` times its column potential, which is never negative;
+- each linking inequality, `ge` or `le` according to sign, times the dual-ascent message on that
+  value, plus the pair's residual on the smaller vertex's side.
+
+The result is `sum(-reduced cost * variable) >= bound - (U - 1)`. Every live candidate's
+coefficient is minus its reduced cost, never positive, and every other variable with a positive
+coefficient is false at the node by propagation. So at the node the constraint conflicts, when
+`bound >= U`, or propagates exactly the values with `bound + reduced cost >= U`, which are the
+ones the bound removed. Nothing else is written: the search's own backtrack nogoods then follow by
+RUP. Values the bound removes because no pair of images supports them need no derivation, since
+propagation over the linking equalities finds them. An assignment step with no finite solution at
+all writes the Hall violator the Hungarian algorithm's alternating tree gives.
+
+Two things about the bound are there to make that exact. Every original vertex is a row, with a
+single candidate once it has a value, and every pattern pair is one pairwise term, so each
+quantity in the bound is a multiplier on one model-B constraint. And the assignment step solves
+the square problem padded with zero-cost rows, whose dual, shifted, is an exact dual of the
+rectangular one; the unpadded Hungarian algorithm's potentials fall short of the assignment's cost
+when there are more columns than rows, and cost plus a reduced cost is then not even a valid bound.
+The bound is the dual's value, so it is exactly what the `pol` proves. The messages are rounded down
+to integers, so every multiplier is an integer.
+
+This was developed by first writing each conclusion as an `a` (assumption) rule, to check that the
+rest of the proof holds together, then replacing each with its derivation followed by a RUP of the
+same conclusion, and finally dropping those RUPs once they had all checked.
+
+With the bound certified, proofs have the same search as without them. On the graph3 benchmark, the
+largest supplied pattern (10 people, 76 edges) proves in 11 nodes with a 3.4 MB proof that
+verifies in under three seconds; a random 10-person query (781 nodes) writes 238 MB, almost all of
+it these `pol` lines, averaging about 700 terms, and takes three minutes to verify. Their size is
+the next thing to work on.
 
 `test-instances/weighted` has fixed instances for each case above, registered as `proof_weighted_*`
 and `proof_multigraph_*`. `test-instances/weighted_proof_sweep.py`, registered as

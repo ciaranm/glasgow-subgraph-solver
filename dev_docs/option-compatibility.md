@@ -69,7 +69,6 @@ place to look. `has_loops` means *either* graph has a self-loop.
 | nogood recording | `--staged`, or the restart schedule might restart | nothing consults a nogood without a restart |
 | every supplemental graph | the instance was not reified | slow to build on a reified target, and no help on the data that motivated it; see below |
 | degree, NDS and whole-instance degree | not proving a reified instance | their derivations cite adjacency constraints that the reified proof model does not have ([proof-logging.md](proof-logging.md#minimising-cost-and-multigraphs)) |
-| the cost bound's pruning | not proving | nothing certifies it yet |
 
 Two conditions recur, and it is worth seeing why they are the same argument twice. Both the
 clique-size filter and the clique reduction need k pattern vertices to reach k *distinct*

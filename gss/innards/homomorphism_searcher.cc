@@ -41,11 +41,11 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
 
-    // Under proof logging the bound does no pruning yet, since nothing certifies it: the
-    // search finds cheaper and cheaper mappings, and the proof's objective-improving
-    // constraints refute the rest.
-    if (cost_data)
-        _cost_bound = make_unique<CostBound>(*cost_data, model.pattern_size, model.target_size, 5, ! proof);
+    if (cost_data) {
+        _cost_bound = make_unique<CostBound>(*cost_data, model.pattern_size, model.target_size);
+        if (proof)
+            _cost_bound->want_certificates();
+    }
 }
 
 auto HomomorphismSearcher::incumbent() const -> const optional<HomomorphismAssignments> &
@@ -949,7 +949,10 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         // propagation has nothing left to do rather than running once per unit.
         if (_cost_bound && find_unit_domain() == new_domains.end()) {
             bool changed = false;
-            if (! _cost_bound->propagate(assigned_targets(assignments), new_domains, _incumbent_cost, changed))
+            bool ok = _cost_bound->propagate(assigned_targets(assignments), new_domains, _incumbent_cost, changed);
+            if (proof && (changed || ! ok))
+                model.proofs()->cost_bound(assignments_as_proof_decisions(assignments), _cost_bound->certificate(), ! ok);
+            if (! ok)
                 return false;
             if (changed)
                 done_globals_at_least_once = false;
