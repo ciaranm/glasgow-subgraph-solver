@@ -1,6 +1,7 @@
 #include <gss/innards/cheap_all_different.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 
+#include <algorithm>
 #include <tuple>
 #include <type_traits>
 
@@ -8,6 +9,7 @@ using namespace gss;
 using namespace gss::innards;
 
 using std::conditional_t;
+using std::optional;
 using std::shared_ptr;
 using std::tuple;
 using std::vector;
@@ -18,7 +20,8 @@ namespace
     auto cheap_all_different_with_optional_proofs(
         unsigned target_size,
         vector<HomomorphismDomain> & domains,
-        const HomomorphismModel * const model) -> bool
+        const HomomorphismModel * const model,
+        optional<unsigned> only_below) -> bool
     {
         // Pick domains smallest first; ties are broken by smallest .v first.
         // For each count p we have a linked list, whose first member is
@@ -26,14 +29,18 @@ namespace
         // Any domain with a count greater than domains.size() is put
         // int the "count==domains.size()" bucket.
         // The "first" array is sized to be able to hold domains.size()+1
-        // elements
-        vector<int> first(target_size + 1, -1), next(target_size, -1);
+        // elements, and "next" has one entry per domain. (Both used to be sized by
+        // target_size, which is only enough while there are no more domains than target
+        // vertices: more, and the bucket loop below read past the end of "first".)
+        vector<int> first(std::max<size_t>(target_size, domains.size()) + 1, -1), next(domains.size(), -1);
 
         [[maybe_unused]] conditional_t<proof_, vector<int>, tuple<>> lhs, hall_lhs, hall_rhs;
 
         // Iterate backwards, because we insert elements at the head of
         // lists and we want the sort to be stable
         for (int i = int(domains.size()) - 1; i >= 0; --i) {
+            if (only_below && domains.at(i).v >= *only_below)
+                continue;
             unsigned count = domains.at(i).count;
             if (count > domains.size())
                 count = domains.size();
@@ -114,10 +121,10 @@ namespace
 }
 
 auto gss::innards::cheap_all_different(unsigned target_size, vector<HomomorphismDomain> & domains, const shared_ptr<Proof> & proof,
-    const HomomorphismModel * const model) -> bool
+    const HomomorphismModel * const model, optional<unsigned> only_below) -> bool
 {
     if (! proof.get())
-        return cheap_all_different_with_optional_proofs<false>(target_size, domains, model);
+        return cheap_all_different_with_optional_proofs<false>(target_size, domains, model, only_below);
     else
-        return cheap_all_different_with_optional_proofs<true>(target_size, domains, model);
+        return cheap_all_different_with_optional_proofs<true>(target_size, domains, model, only_below);
 }

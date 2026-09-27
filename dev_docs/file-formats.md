@@ -51,6 +51,10 @@ backed by a throw.
 | `vfmcs` | no | some variants | no | per-variant | no |
 | `json` | optional, per vertex | yes | yes | **declared** | `convert_to_json` |
 
+Only JSON can express a multigraph (parallel edges with different labels) or integer costs on
+vertices and edges, and both are declared: `"multigraph"` at the top level, and costs all or nothing
+per element type, as labels are.
+
 Two things worth knowing about the older readers. LAD and DIMACS name *every* vertex, LAD with its
 own index as a string, so a partly named graph can only come from JSON or from building an
 `InputGraph` by hand. And `labelledlad` is directed because the format is, not because it has
@@ -80,10 +84,22 @@ validation rules; the design rationale is in #85. Points that matter when changi
   bytes, over graphs from the CSV and LAD readers as well as JSON's own. That round trip is the only
   real evidence that the format is unambiguous, so if you add a property to the format, add it to
   the writer in the same change or the test silently stops covering it.
-- **`multigraph` and `multiplicity` are known keys that this build refuses**, rather than unknown
-  ones, because `InputGraph` keys edges on the endpoint pair and cannot hold parallel edges. If it
-  ever can, the format does not need to change: `multigraph: true` switches the uniqueness key from
-  `(from, to)` to `(from, to, label)`.
+- **`"multigraph": true` switches the uniqueness key from `(from, to)` to `(from, to, label)`.**
+  `InputGraph` holds such a graph by keeping a short list of edges per endpoint pair, so
+  `adjacent()` and `degree()` are unchanged (degree counts neighbours), and `edge_label()` throws
+  on a multigraph rather than choosing one of several answers. Anything that reads edge labels
+  pairwise must therefore either refuse a multigraph or not see one: the homomorphism solver
+  rewrites a multigraph into a simple graph before anything else looks at it (see
+  `gss/innards/reification.hh`), and the clique and common-subgraph solvers refuse one.
+- **`multiplicity` is still a known key that this build refuses** for any value but 1. It is how
+  the format would say "several edges with the same label", which `InputGraph` cannot hold.
+- **Costs are integers and are all or nothing**, for the same reason labels are: reading an absent
+  cost as 0 would make that element free, which is a wrong answer rather than a loud failure.
+  `InputGraph` enforces this too: a costed graph's edges must be added with a cost, and reading a
+  vertex cost that was never set throws. The array form cannot carry a cost, so the writer uses
+  the object form for every edge of a graph with edge costs, and sorts edges by
+  `(from, to, label)` so that the output stays canonical whatever order parallel edges were added
+  in.
 - **Unknown keys are an error, except `x-`.** A misspelled key must fail loudly rather than being
   dropped.
 - `nlohmann/json` is included only by `json_graph.cc` and linked `PRIVATE`. Keep it out of headers:

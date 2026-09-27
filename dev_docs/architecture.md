@@ -92,6 +92,15 @@ homomorphism variants are all configurations of it.
   resumed unbounded, with the nogoods carried across. Sequential only; see
   [preprocessor-refactor.md](preprocessor-refactor.md).
 
+- **Multigraphs and costs.** `solve_homomorphism_problem` first **reifies** a multigraph, or a
+  target with edge costs when minimising (`innards/reification.{hh,cc}`): each edge becomes a
+  vertex of its own, so the pipeline above only ever sees simple graphs. `--minimise-cost` adds
+  **`CostBound`** (`innards/cost_bound.{hh,cc}`), which the searcher runs in `propagate()`: it
+  rebuilds pairwise costs from the edge-vertices' domains, tightens them by a local-polytope
+  dual ascent, and combines them with a minimum-cost assignment whose reduced costs remove
+  values. Every mapping search reaches is a new incumbent. See
+  [option-compatibility.md](option-compatibility.md) for what this can be combined with.
+
 `sip_decomposer` offers an alternative top level that solves subgraph isomorphism by decomposing the
 pattern into biconnected components.
 

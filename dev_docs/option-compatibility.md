@@ -39,6 +39,14 @@ apart matters:
 | proof logging, counting, with restarts | …when counting with restarts, use `--restarts none` |
 | more than 8 graph pairs (`--n-exact-path-graphs` too large, with `--distance3` and `--k4`) | Supplemental graphs won't fit in the chosen bitset size |
 | a cycle in the `--pattern-less-than` constraints | Pattern less than constraints form a loop |
+| costs on the pattern, with or without `--minimise-cost` | Costs on the pattern are not supported… |
+| `--minimise-cost` on a target with no costs | Minimising cost needs a target with vertex or edge costs |
+| `--minimise-cost` with threads, counting or enumeration, `--staged`, `--noninjective` or `--locally-injective`, `--induced`, restarts, or less-constraints | Minimising cost cannot yet be used with… |
+| a multigraph, or edge costs when minimising, with `--noninjective`, `--locally-injective`, `--induced`, or counting and enumeration | Multigraphs and edge costs need an injective mapping, and so on |
+| proof logging, a pattern without edge labels, and a multigraph target | Proof logging cannot yet be used for a pattern without edge labels on a multigraph target |
+| `--shape` with a multigraph, or with edge costs when minimising | Extra shape graphs cannot be used with multigraphs or edge costs |
+| `--decomposition` on a multigraph or with `--minimise-cost` | Decomposition cannot be used on multigraphs or when minimising cost |
+| the clique or common-subgraph solver on a multigraph | …cannot be used on a multigraph |
 
 ## What is silently disabled
 
@@ -59,6 +67,8 @@ place to look. `has_loops` means *either* graph has a self-loop.
 | …on supplementals | as above, and not non-injective | #91 |
 | clique detection (`--clique-detection`) | not counting, no proof, and fully injective **or** a loopless target | #94 |
 | nogood recording | `--staged`, or the restart schedule might restart | nothing consults a nogood without a restart |
+| every supplemental graph | the instance was not reified | slow to build on a reified target, and no help on the data that motivated it; see below |
+| degree, NDS and whole-instance degree | not proving a reified instance | their derivations cite adjacency constraints that the reified proof model does not have ([proof-logging.md](proof-logging.md#minimising-cost-and-multigraphs)) |
 
 Two conditions recur, and it is worth seeing why they are the same argument twice. Both the
 clique-size filter and the clique reduction need k pattern vertices to reach k *distinct*
@@ -72,6 +82,50 @@ both. Adjacency in the distance-2 graph means "within distance two", and two suc
 share an image in a perfectly loopless target — `build_exact_path_graphs` sets that graph's
 diagonal precisely so that propagation allows it.
 
+## Multigraphs and costs
+
+A multigraph, or edge costs when minimising, is **reified** before anything else sees it
+(`gss/innards/reification.hh`): every edge becomes a vertex of its own, joined to its
+endpoints, and edge costs become costs on those vertices. The reified graphs are simple, and
+everything downstream solves them as usual. That is what the refusals above are about. A
+mapping of the reified graphs means a mapping of the originals only when it is injective and
+not induced: an induced mapping would constrain the non-edges between original vertices and
+edge-vertices, and a non-injective one may need to collapse a pattern edge onto a target loop,
+which the loop edge-vertices' labels forbid. Counting and enumeration are refused because the
+search sees reified mappings, and without pattern edge labels one original mapping can extend
+to several of them.
+
+Three things change when minimising, all of them sound rather than disabled:
+
+- **The cost bound** (`gss/innards/cost_bound.hh`) runs in `propagate()` once unit propagation
+  has finished, and removes the values of original vertices that cannot be in a mapping cheaper
+  than the incumbent. It is exact integer arithmetic, and it assumes nothing about the sign of
+  a cost: an early exit on "the part decided so far already reaches the incumbent" was wrong
+  with negative costs, and the random oracle test caught it.
+- **All-different looks only at the original vertices.** Injectivity on edge-vertices follows
+  from it: two pattern edges landing on one target edge would need the same label and the same
+  pair of images, and edges are unique by endpoints and label. Hall reasoning over the
+  edge-vertices is therefore redundant, and it was a third of the search time.
+- **Branching is on original vertices only**, with values ordered by the bound's cost for
+  them. Once both endpoints of an edge-vertex are decided, adjacency leaves it at most one
+  value, except when an unlabelled pattern edge has several parallel target edges to choose
+  from, and then search falls back to branching on it.
+
+**The supplemental graphs are off for a reified instance**, in `make_shape_graph_plan()`. They
+would be sound, but a reified target has a vertex for every edge, and every pair of its original
+vertices is at distance two through an edge-vertex. On the graph3 scene-graph benchmark, the
+100 patterns took 480 s in total with them and 3.6 s without, and although they removed a few
+values on some patterns, every one of the 100 had the same node count and the same optimum
+either way. This is a decision made on one dataset, and worth revisiting when there is
+another. `--shape` is refused rather than dropped, since asking for one is explicit.
+
+`gss/weighted_homomorphism_test.cc` is the oracle test for all of this. It runs every
+combination of per-graph directedness, loops, vertex labels, edge labels, multigraph, and
+vertex, edge or both kinds of cost, with negative costs included, and checks the solver's
+cheapest mapping against the cheapest mapping the verifier accepts, costed by
+`cost_of_mapping()`. Neither the verifier nor that cost function knows about reification or
+the bound. The option sweep does not cover minimising.
+
 ## The pipeline steps' own guards
 
 The concluding steps in `homomorphism.cc` each have conditions that are not in the traits
@@ -82,7 +136,8 @@ layer, because they are about the shape of the instance rather than about an opt
   loopy target, and no counting or enumeration callback.
 - **`CliqueShortcutStep`** needs `can_use_clique()`, a pattern that `is_simple_clique()`
   accepts — no labels, no loops, not directed — and a target that is neither directed (#93)
-  nor loopy-with-induced.
+  nor loopy-with-induced. It is also skipped when minimising cost, since the clique solver
+  knows nothing of costs.
 
 `is_simple_clique()`'s list is exactly what the clique solver's view of a graph leaves out: it
 has no notion of a label, a loop, or an edge direction. Anything else handed to that solver
@@ -158,7 +213,10 @@ Not covered, and worth deciding on separately:
 - **`--decomposition`** (`sip_decomposer`), the clique solver and the common-subgraph solver:
   different top levels, each with its own option space.
 - **`--solution-limit`**, which deliberately returns an incomplete search.
-- **Mixed instances**, as above.
+- **Mixed instances**, as above, except under reification, where the weighted oracle test does
+  cover them.
+- **`--minimise-cost`, multigraphs and costs**, which `weighted_homomorphism_test.cc` covers
+  against an oracle instead.
 
 ## The golden table
 

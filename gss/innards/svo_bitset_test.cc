@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <vector>
+
 using namespace gss::innards;
 
 namespace
@@ -151,4 +153,27 @@ TEST_CASE("SVOBitset copy-assignment across the inline/heap boundary")
     // target is now a 128-bit bitset again, so bit 1500 is out of range and must
     // not be probed; count() == 1 confirms the large bit is gone.
     CHECK(target.count() == 1);
+}
+
+TEST_CASE("SVOBitset for_each visits exactly the set bits, in order")
+{
+    // Inline and heap sizes, with bits at word boundaries and at the very end.
+    for (unsigned size : {64u, 100u, 2000u}) {
+        SVOBitset b(size, 0);
+        std::vector<unsigned> expected;
+        for (unsigned v : {0u, 1u, 63u, 64u, 65u, 99u, 127u, 128u, 1000u, 1999u})
+            if (v < size) {
+                b.set(v);
+                expected.push_back(v);
+            }
+
+        std::vector<unsigned> seen;
+        b.for_each([&](unsigned v) { seen.push_back(v); });
+        CHECK(seen == expected);
+
+        SVOBitset empty(size, 0);
+        bool called = false;
+        empty.for_each([&](unsigned) { called = true; });
+        CHECK_FALSE(called);
+    }
 }

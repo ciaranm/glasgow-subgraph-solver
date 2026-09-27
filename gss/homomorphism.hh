@@ -128,6 +128,15 @@ namespace gss
 
         /// Optional proof options
         std::optional<ProofOptions> proof_options;
+
+        /// Find a mapping of least total cost, rather than any mapping. The cost of a
+        /// mapping is the sum of the costs of the target vertices and target edges it
+        /// uses, so the target must declare vertex costs, edge costs, or both, and the
+        /// pattern must declare neither. Needs an injective, non-induced mapping,
+        /// sequential search without restarts, and no proof logging, counting or
+        /// less-constraints; anything else is refused. The result is the cheapest mapping
+        /// found, and is optimal if the result is complete.
+        bool minimise_cost = false;
     };
 
     struct HomomorphismResult
@@ -149,6 +158,9 @@ namespace gss
 
         /// Did we perform a complete search?
         bool complete = false;
+
+        /// When minimising cost, the cost of the mapping, if one was found.
+        std::optional<long long> cost;
     };
 
     auto solve_homomorphism_problem(

@@ -42,7 +42,7 @@ auto main(int argc, char * argv[]) -> int
         string pattern_format_name = options_vars.count("format") ? options_vars["format"].as<string>() : "auto";
         auto graph = read_file_format(pattern_format_name, options_vars["graph-file"].as<string>());
 
-        if (graph.has_vertex_labels() || graph.has_edge_labels()) {
+        if (graph.has_vertex_labels() || graph.has_edge_labels() || graph.multigraph() || graph.has_vertex_costs() || graph.has_edge_costs()) {
             cerr << "Error: unsupported graph features" << endl;
             return EXIT_FAILURE;
         }

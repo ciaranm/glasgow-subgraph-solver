@@ -14,6 +14,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -69,9 +70,18 @@ namespace
         const std::tuple<std::unique_ptr<InputGraph>, bool, int> * extra_shape = nullptr;
     };
 
-    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops, bool directed) -> vector<ShapeGraphSpec>
+    auto make_shape_graph_plan(const HomomorphismParams & params, bool has_loops, bool directed, bool reified) -> vector<ShapeGraphSpec>
     {
         vector<ShapeGraphSpec> plan;
+
+        // On a reified instance every edge is a vertex, so the target is large and every
+        // pair of its original vertices is at distance two through an edge-vertex. On the
+        // scene-graph data that motivated reification, building the supplemental graphs
+        // took about five seconds per instance and left every node count unchanged, so
+        // they are off. See dev_docs/option-compatibility.md.
+        if (reified)
+            return plan;
+
         if (supports_exact_path_graphs(params, has_loops))
             plan.push_back({ShapeGraphSpec::Kind::ExactPath, unsigned(params.number_of_exact_path_graphs)});
         if (supports_distance2_graphs(params, has_loops))
@@ -88,10 +98,10 @@ namespace
 
     // The original graph plus every slot the plan allocates: this is the bitset stride
     // (max_graphs), computed once at construction so the graph rows can be sized.
-    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops, bool directed) -> unsigned
+    auto number_of_shape_graphs(const HomomorphismParams & params, bool has_loops, bool directed, bool reified) -> unsigned
     {
         unsigned n = 1;
-        for (const auto & spec : make_shape_graph_plan(params, has_loops, directed))
+        for (const auto & spec : make_shape_graph_plan(params, has_loops, directed, reified))
             n += spec.slot_count;
         return n;
     }
@@ -121,23 +131,45 @@ struct HomomorphismModel::Imp
     // same reason, and only written when params.record_filter_activations is set.
     mutable FilterActivations filter_activations;
 
-    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr, unsigned max_graphs) :
+    // If these graphs were reified from multigraphs or edge costs (see reification.hh),
+    // how many of their pattern and target vertices are original ones.
+    optional<pair<unsigned, unsigned>> reified_original_sizes;
+    bool reified;
+
+    Imp(const HomomorphismParams & p, const std::shared_ptr<Proof> & r, HomomorphismProofs * pr, unsigned max_graphs,
+        optional<pair<unsigned, unsigned>> sizes) :
         params(p),
         proof(r),
         proofs(pr),
-        filter_activations(max_graphs)
+        filter_activations(max_graphs),
+        reified_original_sizes(sizes),
+        reified(sizes.has_value())
     {
+    }
+
+    // The degree and NDS filters' proofs cite the adjacency constraints of the ordinary
+    // model, which the model written for a reified instance does not have (see
+    // HomomorphismProofs::emit_reified_model), so they are off when proving one.
+    auto degree_filtering() const -> bool
+    {
+        return degree_and_nds_are_preserved(params, graphs.has_loops) && ! (proof && reified);
     }
 };
 
 HomomorphismModel::HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-    const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs) :
+    const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs, optional<pair<unsigned, unsigned>> reified_original_sizes) :
     _imp(make_unique<Imp>(params, proof, proofs,
-        number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed()))),
-    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed())),
+        number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed(), reified_original_sizes.has_value()), reified_original_sizes)),
+    max_graphs(number_of_shape_graphs(params, pattern.loopy() || target.loopy(), pattern.directed() || target.directed(), reified_original_sizes.has_value())),
     pattern_size(pattern.size()),
     target_size(target.size())
 {
+    // Everything below reads edge labels pairwise, which a multigraph cannot answer.
+    // solve_homomorphism_problem reifies one before building a model, so reaching here
+    // with one is a bug in the caller, not a user error.
+    if (pattern.multigraph() || target.multigraph())
+        throw std::logic_error{"HomomorphismModel given a multigraph: reify it first (see reification.hh)"};
+
     _imp->graphs.has_loops = pattern.loopy() || target.loopy();
 
     _imp->graphs.patterns_degrees.resize(max_graphs);
@@ -374,7 +406,7 @@ auto HomomorphismModel::_check_degree_compatibility(
     vector<vector<optional<vector<int>>>> & targets_ndss,
     bool do_not_do_nds_yet) const -> bool
 {
-    if (! degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops))
+    if (! _imp->degree_filtering())
         return true;
 
     for (unsigned g = 0; g < graphs_to_consider; ++g) {
@@ -503,7 +535,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
     vector<vector<vector<int>>> patterns_ndss(max_graphs_for_degree_things);
     vector<vector<optional<vector<int>>>> targets_ndss(max_graphs_for_degree_things);
 
-    if (do_nds && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+    if (do_nds && _imp->degree_filtering() && ! _imp->params.no_nds) {
         for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
             patterns_ndss.at(g).resize(pattern_size);
             targets_ndss.at(g).resize(target_size);
@@ -550,7 +582,7 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
     }
 
     // for proof logging, we need degree information before we can output nds proofs
-    if (do_nds && _imp->proof && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+    if (do_nds && _imp->proof && _imp->degree_filtering() && ! _imp->params.no_nds) {
         for (unsigned i = 0; i < pattern_size; ++i) {
             for (unsigned j = 0; j < target_size; ++j) {
                 if (domains.at(i).values.test(j) &&
@@ -567,17 +599,27 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
     }
 
     // quick sanity check that we have enough values
+    // (Over the original vertices only, when reified: their injectivity keeps the
+    // edge-vertices distinct, and it is all the model written for proofs has.)
     if (is_nonshrinking(_imp->params)) {
+        auto counts = [&](const HomomorphismDomain & d) {
+            return (! _imp->reified_original_sizes) || d.v < _imp->reified_original_sizes->first;
+        };
         SVOBitset domains_union{target_size, 0};
+        unsigned counted = 0;
         for (auto & d : domains)
-            domains_union |= d.values;
+            if (counts(d)) {
+                domains_union |= d.values;
+                ++counted;
+            }
 
         unsigned domains_union_popcount = domains_union.count();
-        if (domains_union_popcount < unsigned(pattern_size)) {
+        if (domains_union_popcount < counted) {
             if (_imp->proof) {
                 vector<int> hall_lhs, hall_rhs;
                 for (auto & d : domains)
-                    hall_lhs.push_back(d.v);
+                    if (counts(d))
+                        hall_lhs.push_back(d.v);
                 auto dd = domains_union;
                 for (auto v = dd.find_first(); v != decltype(dd)::npos; v = dd.find_first()) {
                     dd.reset(v);
@@ -612,7 +654,7 @@ auto HomomorphismModel::tighten_domains_with_supplementals(vector<HomomorphismDo
     vector<vector<vector<int>>> patterns_ndss(max_graphs_for_degree_things);
     vector<vector<optional<vector<int>>>> targets_ndss(max_graphs_for_degree_things);
 
-    if (degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+    if (_imp->degree_filtering() && ! _imp->params.no_nds) {
         for (unsigned g = 0; g < max_graphs_for_degree_things; ++g) {
             patterns_ndss.at(g).resize(pattern_size);
             targets_ndss.at(g).resize(target_size);
@@ -648,7 +690,7 @@ auto HomomorphismModel::tighten_domains_with_supplementals(vector<HomomorphismDo
     }
 
     // pass 2 (proof only): NDS, now that the degree prunings are in the proof
-    if (_imp->proof && degree_and_nds_are_preserved(_imp->params, _imp->graphs.has_loops) && ! _imp->params.no_nds) {
+    if (_imp->proof && _imp->degree_filtering() && ! _imp->params.no_nds) {
         for (unsigned i = 0; i < pattern_size; ++i) {
             for (unsigned j = 0; j < target_size; ++j) {
                 if (domains.at(i).values.test(j) &&
@@ -685,6 +727,13 @@ auto HomomorphismModel::target_vertex_for_proof(int v) const -> NamedVertex
     return _imp->proofs->target_vertex(v);
 }
 
+auto HomomorphismModel::original_pattern_size() const -> optional<unsigned>
+{
+    if (_imp->reified_original_sizes)
+        return _imp->reified_original_sizes->first;
+    return nullopt;
+}
+
 auto HomomorphismModel::proofs() const -> HomomorphismProofs *
 {
     return _imp->proofs;
@@ -692,7 +741,11 @@ auto HomomorphismModel::proofs() const -> HomomorphismProofs *
 
 auto HomomorphismModel::prepare() -> bool
 {
-    if (is_nonshrinking(_imp->params) && (pattern_size > target_size))
+    // (The pipeline's PatternBiggerThanTargetStep has usually caught this already, and
+    // concluded the proof. When proving a reified instance it only acts on a count of
+    // original vertices, the only one the proof's model can justify, so neither does
+    // this: search will refute it instead.)
+    if (is_nonshrinking(_imp->params) && (pattern_size > target_size) && ! (_imp->proof && _imp->reified))
         return false;
 
     _imp->graphs.supplemental_graph_names.push_back("original");
@@ -721,7 +774,7 @@ auto HomomorphismModel::prepare() -> bool
     for (unsigned i = 0; i < target_size; ++i)
         _imp->graphs.targets_degrees.at(0).at(i) = _imp->graphs.target_graph_rows[i * max_graphs + 0].count();
 
-    if (global_degree_is_preserved(_imp->params)) {
+    if (global_degree_is_preserved(_imp->params) && ! (_imp->proof && _imp->reified)) {
         vector<pair<int, int>> p_gds, t_gds;
         for (unsigned i = 0; i < pattern_size; ++i)
             p_gds.emplace_back(i, _imp->graphs.patterns_degrees.at(0).at(i));
@@ -844,7 +897,7 @@ auto HomomorphismModel::build_supplemental_graphs() -> void
     // next free slot(s), then (when proving) derive it through the solver-proofs layer.
     // The plan also fixes max_graphs, so the bump counters land exactly on max_graphs at
     // the end (checked below).
-    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops, _imp->graphs.either_graph_directed)) {
+    for (const auto & spec : make_shape_graph_plan(_imp->params, _imp->graphs.has_loops, _imp->graphs.either_graph_directed, _imp->reified)) {
         switch (spec.kind) {
         case ShapeGraphSpec::Kind::ExactPath:
             build_exact_path_graphs(_imp->graphs, pattern_size, next_pattern_supplemental, max_graphs, _imp->params.number_of_exact_path_graphs, _imp->graphs.directed, false, true);

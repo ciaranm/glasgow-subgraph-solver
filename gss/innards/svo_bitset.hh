@@ -120,6 +120,20 @@ namespace gss::innards
             }
         }
 
+        /**
+         * Call f with each set bit, in increasing order. One pass over the words, where
+         * repeatedly calling find_first() and reset() on a copy rescans from the start
+         * for every bit.
+         */
+        template <typename F_>
+        auto for_each(const F_ & f) const -> void
+        {
+            const BitWord * b = (_is_long() ? _data.long_data : _data.short_data);
+            for (unsigned i = 0; i < n_words; ++i)
+                for (BitWord w = b[i]; 0 != w; w &= w - 1)
+                    f(i * bits_per_word + countr_zero(w));
+        }
+
         auto find_first() const -> unsigned
         {
             const BitWord * b = (_is_long() ? _data.long_data : _data.short_data);

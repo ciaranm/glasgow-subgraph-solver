@@ -1,0 +1,1 @@
+{"format": "gss-graph", "version": 1, "directed": false, "vertices": [{"name": "v0"}, {"name": "v1"}, {"name": "v2"}], "edges": [{"from": "v0", "to": "v1"}, {"from": "v0", "to": "v2"}, {"from": "v1", "to": "v2"}]}

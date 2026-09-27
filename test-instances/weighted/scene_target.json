@@ -1,0 +1,7 @@
+{"format":"gss-graph","version":1,"directed":true,"multigraph":true,
+ "vertices":[{"name":"P1","label":"person","cost":0},{"name":"P2","label":"person","cost":1},{"name":"P3","label":"person","cost":0},{"name":"C1","label":"chair","cost":0},{"name":"C2","label":"chair","cost":2}],
+ "edges":[
+  {"from":"P1","to":"P2","label":"left","cost":5},{"from":"P1","to":"P2","label":"near","cost":1},{"from":"P2","to":"P1","label":"right","cost":2},
+  {"from":"P2","to":"P3","label":"left","cost":1},{"from":"P2","to":"P3","label":"near","cost":4},{"from":"P3","to":"P2","label":"right","cost":1},
+  {"from":"P3","to":"P1","label":"left","cost":2},{"from":"P3","to":"P1","label":"near","cost":2},{"from":"P1","to":"P3","label":"right","cost":3},
+  {"from":"P1","to":"C1","label":"sits","cost":3},{"from":"P2","to":"C2","label":"sits","cost":0},{"from":"P3","to":"C1","label":"sits","cost":1},{"from":"P3","to":"C2","label":"sits","cost":1}]}

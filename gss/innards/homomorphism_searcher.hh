@@ -2,6 +2,7 @@
 #define GLASGOW_SUBGRAPH_SOLVER_GUARD_SRC_HOMOMORPHISM_SEARCHER_HH 1
 
 #include <gss/homomorphism.hh>
+#include <gss/innards/cost_bound.hh>
 #include <gss/innards/filter_activations.hh>
 #include <gss/innards/homomorphism_domain.hh>
 #include <gss/innards/homomorphism_model.hh>
@@ -9,6 +10,8 @@
 #include <gss/innards/watches.hh>
 
 #include <functional>
+#include <memory>
+#include <optional>
 #include <random>
 
 namespace gss::innards
@@ -95,6 +98,15 @@ namespace gss::innards
         const bool _record_filter_activations, _verbose_proof_comments, _track_removals;
         FilterActivations _filter_activations;
 
+        // When minimising cost: the bound, and the best mapping found so far. Every
+        // mapping search reaches is cheaper than the last, since the bound refuses
+        // anything that is not.
+        std::unique_ptr<CostBound> _cost_bound;
+        long long _incumbent_cost = CostBound::infinity();
+        std::optional<HomomorphismAssignments> _incumbent;
+
+        auto assigned_targets(const HomomorphismAssignments & assignments) const -> std::vector<int>;
+
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
         auto solution_in_proof_form(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<NamedVertex, NamedVertex>>;
@@ -130,9 +142,20 @@ namespace gss::innards
             bool reverse) -> void;
 
     public:
+        /**
+         * \param cost_data if not null, search for a cheapest mapping (see
+         *     HomomorphismParams::minimise_cost). Must outlive the searcher.
+         */
         HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
             const DuplicateSolutionFilterer &, const std::shared_ptr<Proof> &,
-            Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & watches);
+            Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & watches,
+            const CostData * cost_data = nullptr);
+
+        /**
+         * When minimising cost, the cheapest mapping found and its cost, if any.
+         */
+        auto incumbent() const -> const std::optional<HomomorphismAssignments> &;
+        auto incumbent_cost() const -> long long;
 
         auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 

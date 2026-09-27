@@ -1,11 +1,35 @@
 #include <gss/innards/verify.hh>
+
 #include <map>
+#include <optional>
+#include <set>
+#include <string>
+#include <string_view>
+#include <tuple>
 
 using namespace gss;
 using namespace gss::innards;
 
 using std::map;
+using std::optional;
+using std::set;
 using std::string;
+using std::string_view;
+using std::tuple;
+
+namespace
+{
+    // Every target edge, with its label and cost, keyed so that a pattern edge can look
+    // up the one it must land on. Works for multigraphs, where edge_label() does not.
+    auto target_edges(const InputGraph & target) -> map<tuple<int, int, string>, optional<long long>>
+    {
+        map<tuple<int, int, string>, optional<long long>> result;
+        target.for_each_edge_and_cost([&](int f, int t, string_view l, optional<long long> c) {
+            result.emplace(tuple{f, t, string{l}}, c);
+        });
+        return result;
+    }
+}
 
 BuggySolution::BuggySolution(const string & message) noexcept :
     _what(message)
@@ -97,8 +121,9 @@ auto gss::innards::verify_homomorphism(
             // Edge labels were not checked here at all, despite the heading. The pairs
             // with i == j are in this cross product, so this covers a loop's label too --
             // which is the one the solver itself can miss, loops being stripped out of its
-            // adjacency rows (issue #92).
-            else if (pattern.has_edge_labels() && pattern.adjacent(i, j) &&
+            // adjacency rows (issue #92). A multigraph's labels are checked below instead,
+            // since a pair may have several.
+            else if (pattern.has_edge_labels() && ! pattern.multigraph() && ! target.multigraph() && pattern.adjacent(i, j) &&
                 pattern.edge_label(i, j) != target.edge_label(t, u))
                 throw BuggySolution{"Edge " + pattern.vertex_name(i) + " -- " + pattern.vertex_name(j) +
                     " labelled '" + string{pattern.edge_label(i, j)} + "' mapped to edge " +
@@ -106,4 +131,51 @@ auto gss::innards::verify_homomorphism(
                     string{target.edge_label(t, u)} + "'"};
         }
     }
+
+    // In a multigraph, every labelled pattern edge needs a target edge with that label.
+    if (pattern.has_edge_labels() && (pattern.multigraph() || target.multigraph())) {
+        auto edges = target_edges(target);
+        pattern.for_each_edge([&](int i, int j, string_view l) {
+            auto t = mapping.find(i)->second, u = mapping.find(j)->second;
+            if (! edges.contains(tuple{t, u, string{l}}))
+                throw BuggySolution{"Edge " + pattern.vertex_name(i) + " -- " + pattern.vertex_name(j) +
+                    " labelled '" + string{l} + "' mapped to " + target.vertex_name(t) + " -- " +
+                    target.vertex_name(u) + ", which has no edge with that label"};
+        });
+    }
+}
+
+auto gss::innards::cost_of_mapping(
+    const InputGraph & pattern,
+    const InputGraph & target,
+    const map<int, int> & mapping) -> long long
+{
+    long long result = 0;
+    if (target.has_vertex_costs())
+        for (auto & [_, t] : mapping)
+            result += target.vertex_cost(t);
+
+    if (target.has_edge_costs()) {
+        bool directed = pattern.directed() || target.directed();
+        auto edges = target_edges(target);
+        bool use_labels = pattern.has_edge_labels();
+        pattern.for_each_edge([&](int i, int j, string_view l) {
+            if ((! directed) && j < i)
+                return;
+            auto t = mapping.find(i)->second, u = mapping.find(j)->second;
+            // Without pattern edge labels, target labels are ignored, so any target edge
+            // between the images will do, and the solver will have taken the cheapest.
+            optional<long long> best;
+            for (auto & [key, c] : edges)
+                if (get<0>(key) == t && get<1>(key) == u && ((! use_labels) || get<2>(key) == l))
+                    if ((! best) || *c < *best)
+                        best = *c;
+            if (! best)
+                throw BuggySolution{"Edge " + pattern.vertex_name(i) + " -- " + pattern.vertex_name(j) +
+                    " mapped to " + target.vertex_name(t) + " -- " + target.vertex_name(u) + ", which has no matching edge"};
+            result += *best;
+        });
+    }
+
+    return result;
 }

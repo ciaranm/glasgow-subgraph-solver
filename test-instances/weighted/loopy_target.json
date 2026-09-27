@@ -1,0 +1,7 @@
+{"format": "gss-graph", "version": 1, "directed": false, "multigraph": true,
+ "vertices": [{"name": "u", "label": "A", "cost": -2}, {"name": "v", "label": "A", "cost": 1}, {"name": "w", "label": "B", "cost": 0}, {"name": "z", "label": "B", "cost": -1}],
+ "edges": [{"from": "u", "to": "u", "label": "x", "cost": 4}, {"from": "v", "to": "v", "label": "x", "cost": -3},
+  {"from": "u", "to": "w", "label": "x", "cost": 1}, {"from": "u", "to": "w", "label": "y", "cost": 1},
+  {"from": "v", "to": "w", "label": "x", "cost": 2}, {"from": "v", "to": "w", "label": "y", "cost": -1},
+  {"from": "v", "to": "z", "label": "x", "cost": 0}, {"from": "v", "to": "z", "label": "y", "cost": 5},
+  {"from": "u", "to": "z", "label": "y", "cost": 0}]}

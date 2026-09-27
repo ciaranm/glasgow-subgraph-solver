@@ -3,6 +3,7 @@
 
 #include <gss/formats/input_graph.hh>
 #include <gss/homomorphism.hh>
+#include <gss/innards/cost_bound.hh>
 #include <gss/innards/processed_graphs_data.hh>
 #include <gss/innards/proof.hh>
 
@@ -135,6 +136,23 @@ namespace gss::innards
         // constraints), the preserved set, then finalise. Operates on the raw input graphs
         // (it runs before the model is built), so it is the solver's first proof step.
         auto emit_model(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void;
+
+        // Emit the OPB model for an instance that search will see reified (multigraphs, or
+        // minimising cost), written from the *original* graphs and independently of the
+        // reification, so that a reification bug shows up as a proof that does not check.
+        // Variables x for each original pattern vertex and label-compatible target vertex,
+        // and z for each pair of adjacent pattern vertices and ordered pair of target
+        // vertices carrying every edge that pair needs. The x variables are exactly the
+        // search's values for original vertices; the search's edge-vertices have no
+        // variables, and are determined by the z. Linking equalities in both directions,
+        // sum_y z(a, b, x, y) = x(a, x) and likewise for b, make each z the conjunction of
+        // its two x, and a missing z is what forbids a pair of images. The objective, when
+        // minimising, is the target costs of the x and z. See dev_docs/proof-logging.md.
+        auto emit_reified_model(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> void;
+
+        // Justify what a call of the cost bound did: that it failed, under these
+        // decisions, or which values it removed. See cost_bound.hh.
+        auto cost_bound(const std::vector<std::pair<int, int>> & decisions, const CostBoundCertificate & certificate, bool failed) -> void;
 
         // Derive the loop-cancelled forms of the adjacency constraints (a PBP derivation the
         // degree / supplemental-graph / distance-3 pols rely on). Deferred out of emit_model

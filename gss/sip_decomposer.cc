@@ -1,3 +1,4 @@
+#include <gss/configuration.hh>
 #include <gss/homomorphism.hh>
 #include <gss/innards/proof.hh>
 #include <gss/loooong.hh>
@@ -59,6 +60,11 @@ namespace
 auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & target,
     const HomomorphismParams & params) -> HomomorphismResult
 {
+    // The decomposition rebuilds reduced patterns edge by edge, which knows nothing of
+    // parallel edges or costs.
+    if (pattern.multigraph() || target.multigraph() || params.minimise_cost)
+        throw UnsupportedConfiguration{"Decomposition cannot be used on multigraphs or when minimising cost"};
+
     set<int> isolated_pattern_vertices;
     find_removable_isolated_pattern_vertices(pattern, params, isolated_pattern_vertices);
 

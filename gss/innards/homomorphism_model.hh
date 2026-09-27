@@ -8,6 +8,8 @@
 #include <gss/innards/svo_bitset.hh>
 
 #include <memory>
+#include <optional>
+#include <utility>
 
 namespace gss::innards
 {
@@ -43,8 +45,20 @@ namespace gss::innards
         auto has_occur_less_thans() const -> bool;
         std::vector<std::pair<unsigned, unsigned>> pattern_less_thans_in_convenient_order, target_occur_less_thans_in_convenient_order;
 
+        /**
+         * \param reified_original_sizes if the graphs were reified from multigraphs or
+         *     edge costs (see reification.hh), how many pattern and target vertices are
+         *     original ones. This turns the supplemental graphs off, and when proving, the
+         *     degree filters too.
+         */
         HomomorphismModel(const InputGraph & target, const InputGraph & pattern, const HomomorphismParams & params,
-            const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs);
+            const std::shared_ptr<Proof> & proof, HomomorphismProofs * proofs,
+            std::optional<std::pair<unsigned, unsigned>> reified_original_sizes = std::nullopt);
+
+        /**
+         * For a reified instance, how many of the pattern vertices are original ones.
+         */
+        auto original_pattern_size() const -> std::optional<unsigned>;
         ~HomomorphismModel();
 
         auto pattern_vertex_for_proof(int v) const -> NamedVertex;

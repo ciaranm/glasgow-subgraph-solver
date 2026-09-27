@@ -7,9 +7,14 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <tuple>
+#include <vector>
 
 using std::string;
 using std::stringstream;
@@ -56,6 +61,71 @@ TEST_CASE("InputGraph: add_directed_edge needs the graph declared directed")
     CHECK_NOTHROW(directed.add_directed_edge(0, 1, ""));
     CHECK(directed.adjacent(0, 1));
     CHECK_FALSE(directed.adjacent(1, 0));
+}
+
+TEST_CASE("InputGraph: a multigraph keeps parallel edges with different labels")
+{
+    InputGraph g{3, {.has_edge_labels = true, .directed = true, .multigraph = true}};
+    g.add_directed_edge(0, 1, "left");
+    g.add_directed_edge(0, 1, "near");
+    g.add_directed_edge(0, 1, "left"); // the same (from, to, label) again: still one edge
+    g.add_directed_edge(0, 2, "left");
+
+    CHECK(g.multigraph());
+    CHECK(g.number_of_directed_edges() == 3);
+    CHECK(g.adjacent(0, 1));
+    CHECK_FALSE(g.adjacent(1, 0));
+
+    // Degree counts neighbours, not edges.
+    CHECK(g.degree(0) == 2);
+
+    // There is no single label to report for a pair with two edges.
+    CHECK_THROWS_AS(g.edge_label(0, 1), std::logic_error);
+
+    std::multiset<std::tuple<int, int, string>> seen;
+    g.for_each_edge([&](int f, int t, std::string_view l) { seen.emplace(f, t, string{l}); });
+    CHECK(seen == std::multiset<std::tuple<int, int, string>>{{0, 1, "left"}, {0, 1, "near"}, {0, 2, "left"}});
+}
+
+TEST_CASE("InputGraph: a simple graph keeps one edge per pair")
+{
+    InputGraph g{2, false, true};
+    g.add_edge(0, 1, "red");
+    g.add_edge(0, 1, "blue");
+    CHECK(g.number_of_directed_edges() == 2);
+    CHECK(g.edge_label(0, 1) == "blue");
+
+    // The unlabelled overload has always left an existing edge alone.
+    g.add_edge(0, 1);
+    CHECK(g.edge_label(0, 1) == "blue");
+}
+
+TEST_CASE("InputGraph: costs are declared, and an absent cost is not 0")
+{
+    InputGraph g{2, {.has_edge_labels = true, .has_vertex_costs = true, .has_edge_costs = true}};
+    CHECK(g.has_vertex_costs());
+    CHECK(g.has_edge_costs());
+
+    g.set_vertex_cost(0, 7);
+    CHECK(g.vertex_cost(0) == 7);
+    CHECK_THROWS_AS(g.vertex_cost(1), std::logic_error);
+
+    CHECK_THROWS_AS(g.add_edge(0, 1, "x"), std::logic_error);
+    g.add_edge(0, 1, "x", 5);
+
+    std::vector<std::optional<long long>> costs;
+    g.for_each_edge_and_cost([&](int, int, std::string_view, std::optional<long long> c) { costs.push_back(c); });
+    CHECK(costs == std::vector<std::optional<long long>>{5, 5});
+
+    InputGraph uncosted{2, false, false};
+    CHECK_THROWS_AS(uncosted.set_vertex_cost(0, 1), std::logic_error);
+    CHECK_THROWS_AS(uncosted.vertex_cost(0), std::logic_error);
+    CHECK_THROWS_AS(uncosted.add_edge(0, 1, "", 3), std::logic_error);
+
+    std::vector<std::optional<long long>> none;
+    uncosted.add_edge(0, 1);
+    uncosted.for_each_edge_and_cost([&](int, int, std::string_view, std::optional<long long> c) { none.push_back(c); });
+    CHECK(none == std::vector<std::optional<long long>>{std::nullopt, std::nullopt});
 }
 
 TEST_CASE("InputGraph: vertex_has_name tells a set name from the index fallback")

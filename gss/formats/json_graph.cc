@@ -4,15 +4,18 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <optional>
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 using std::find;
+using std::get;
 using std::istream;
 using std::istreambuf_iterator;
 using std::map;
@@ -20,8 +23,10 @@ using std::nullopt;
 using std::optional;
 using std::ostream;
 using std::pair;
+using std::sort;
 using std::string;
 using std::to_string;
+using std::tuple;
 using std::vector;
 
 using json = nlohmann::json;
@@ -93,10 +98,22 @@ namespace
         return value.get<string>();
     }
 
+    // Costs are 64-bit signed integers. JSON has no integer width, so anything that
+    // would not fit is refused rather than wrapped.
+    auto as_cost(const json & value, const string & what, const string & filename) -> long long
+    {
+        if (value.is_number_unsigned() && value.get<unsigned long long>() > (unsigned long long)std::numeric_limits<long long>::max())
+            throw GraphFileError{filename, what + " does not fit in a 64-bit signed integer", true};
+        if (! value.is_number_integer())
+            throw GraphFileError{filename, what + " must be an integer", true};
+        return value.get<long long>();
+    }
+
     struct VertexData
     {
         optional<string> name;
         optional<string> label;
+        optional<long long> cost;
     };
 
     auto read_vertices(const json & doc, const string & filename) -> vector<VertexData>
@@ -128,13 +145,15 @@ namespace
             if (! entry.is_object())
                 throw GraphFileError{filename, where + " must be a name or an object", true};
 
-            check_keys(entry, where, {"name", "label"}, filename);
+            check_keys(entry, where, {"name", "label", "cost"}, filename);
 
             VertexData data;
             if (auto it = entry.find("name"); it != entry.end())
                 data.name = as_string(*it, where + "'s \"name\"", filename);
             if (auto it = entry.find("label"); it != entry.end())
                 data.label = as_string(*it, where + "'s \"label\"", filename);
+            if (auto it = entry.find("cost"); it != entry.end())
+                data.cost = as_cost(*it, where + "'s \"cost\"", filename);
             result.push_back(std::move(data));
         }
 
@@ -152,10 +171,21 @@ namespace
         return labelled != 0;
     }
 
+    // Costs likewise: an absent cost is not a cost of 0, and reading it as one would
+    // make an element free rather than making the file an error.
+    auto check_costs_all_or_nothing(size_t costed, size_t total, const string & what, const string & filename) -> bool
+    {
+        if (costed != 0 && costed != total)
+            throw GraphFileError{filename, to_string(costed) + " of " + to_string(total) + " " + what + " carry a \"cost\": costs are all or nothing (an absent cost is not the same as 0)",
+                true};
+        return costed != 0;
+    }
+
     struct EdgeData
     {
         int from, to;
         optional<string> label;
+        optional<long long> cost;
     };
 
     auto resolve_endpoint(const json & endpoint, const string & what, size_t vertex_count,
@@ -191,7 +221,7 @@ namespace
     }
 
     auto read_edges(const json & doc, size_t vertex_count, const map<string, int> & by_name,
-        bool directed, const string & filename) -> vector<EdgeData>
+        bool directed, bool multigraph, const string & filename) -> vector<EdgeData>
     {
         const auto & edges = require(doc, "edges", "the top-level object", filename);
         if (! edges.is_array())
@@ -200,8 +230,10 @@ namespace
         vector<EdgeData> result;
         optional<Addressing> addressing;
 
-        // Remembers where each edge was first given, so a duplicate can point at it.
-        map<pair<int, int>, size_t> already_seen;
+        // Remembers where each edge was first given, so a duplicate can point at it. A
+        // multigraph's edges are unique by (from, to, label), and a simple graph's by
+        // (from, to), which is the same thing with every label taken to be equal.
+        map<tuple<int, int, string>, size_t> already_seen;
 
         for (size_t e = 0; e < edges.size(); ++e) {
             const auto & entry = edges.at(e);
@@ -210,6 +242,7 @@ namespace
             const json * from = nullptr;
             const json * to = nullptr;
             optional<string> label;
+            optional<long long> cost;
 
             if (entry.is_array()) {
                 // The positional form is frozen at two or three elements for good:
@@ -224,20 +257,23 @@ namespace
                     label = as_string(entry.at(2), where + "'s label", filename);
             }
             else if (entry.is_object()) {
-                check_keys(entry, where, {"from", "to", "label", "multiplicity"}, filename);
+                check_keys(entry, where, {"from", "to", "label", "cost", "multiplicity"}, filename);
                 from = &require(entry, "from", where, filename);
                 to = &require(entry, "to", where, filename);
                 if (auto it = entry.find("label"); it != entry.end())
                     label = as_string(*it, where + "'s \"label\"", filename);
+                if (auto it = entry.find("cost"); it != entry.end())
+                    cost = as_cost(*it, where + "'s \"cost\"", filename);
 
-                // Multiplicity is how the format expresses parallel edges, so it is a
-                // key this version knows about and refuses rather than one it has
-                // never heard of.
+                // Multiplicity is how the format expresses several edges with the same
+                // label between one pair, so it is a key this version knows about and
+                // refuses rather than one it has never heard of. Parallel edges with
+                // different labels need only "multigraph": true.
                 if (auto it = entry.find("multiplicity"); it != entry.end()) {
                     if (! it->is_number_integer() || it->get<long long>() < 1)
                         throw GraphFileError{filename, where + "'s \"multiplicity\" must be an integer of at least 1", true};
                     if (it->get<long long>() != 1)
-                        throw GraphFileError{filename, where + " has \"multiplicity\" " + to_string(it->get<long long>()) + ", which needs \"multigraph\": true, and parallel edges are not supported by this build",
+                        throw GraphFileError{filename, where + " has \"multiplicity\" " + to_string(it->get<long long>()) + ", and several edges with the same label between one pair are not supported by this build",
                             true};
                 }
             }
@@ -248,16 +284,17 @@ namespace
             data.from = resolve_endpoint(*from, where + "'s \"from\"", vertex_count, by_name, addressing, filename);
             data.to = resolve_endpoint(*to, where + "'s \"to\"", vertex_count, by_name, addressing, filename);
             data.label = std::move(label);
+            data.cost = cost;
 
             // In an undirected graph [u, v] and [v, u] are the same edge, so writing
             // both is a duplicate rather than being quietly idempotent as it is in
             // CSV. A self-loop [v, v] is one edge either way, never doubled.
             auto key = directed || data.from <= data.to
-                ? pair{data.from, data.to}
-                : pair{data.to, data.from};
+                ? tuple{data.from, data.to, multigraph ? data.label.value_or("") : string{}}
+                : tuple{data.to, data.from, multigraph ? data.label.value_or("") : string{}};
             auto [it, inserted] = already_seen.emplace(key, e);
             if (! inserted)
-                throw GraphFileError{filename, where + " repeats the edge already given as edge " + to_string(it->second) + (directed ? "" : " (in an undirected graph [u, v] and [v, u] are the same edge)"),
+                throw GraphFileError{filename, where + " repeats the edge already given as edge " + to_string(it->second) + (multigraph ? " (in a multigraph an edge is its endpoints and its label)" : "") + (directed ? "" : " (in an undirected graph [u, v] and [v, u] are the same edge)"),
                     true};
 
             result.push_back(std::move(data));
@@ -303,12 +340,11 @@ auto read_json_graph(istream && infile, const string & filename) -> InputGraph
         throw GraphFileError{filename, "this file is version " + to_string(file_version) + ", and this reader understands up to version " + to_string(known_version),
             true};
 
-    // Parallel edges are expressible in the format by design, but InputGraph keys
-    // its edges on the endpoint pair and so cannot hold them. Refuse them outright
-    // rather than merging them into one and answering a different question.
+    // Optional, because its default is the restrictive reading: a file that leaves it
+    // out and then gives two edges between one pair is an error, not a different graph.
+    bool multigraph = false;
     if (auto it = doc.find("multigraph"); it != doc.end())
-        if (as_bool(*it, "\"multigraph\"", filename))
-            throw GraphFileError{filename, "\"multigraph\": true is not supported by this build, which cannot represent parallel edges", true};
+        multigraph = as_bool(*it, "\"multigraph\"", filename);
 
     // Never inferred: both readings of a file without this key parse cleanly and
     // give different answers, so there is no safe default to pick.
@@ -317,38 +353,51 @@ auto read_json_graph(istream && infile, const string & filename) -> InputGraph
     auto vertices = read_vertices(doc, filename);
 
     map<string, int> by_name;
-    size_t vertex_labelled = 0;
+    size_t vertex_labelled = 0, vertex_costed = 0;
     for (size_t v = 0; v < vertices.size(); ++v) {
         if (vertices[v].name)
             if (! by_name.emplace(*vertices[v].name, int(v)).second)
                 throw GraphFileError{filename, "two vertices are both named " + quoted_string(*vertices[v].name), true};
         if (vertices[v].label)
             ++vertex_labelled;
+        if (vertices[v].cost)
+            ++vertex_costed;
     }
 
     auto has_vertex_labels = check_all_or_nothing(vertex_labelled, vertices.size(), "vertices", filename);
+    auto has_vertex_costs = check_costs_all_or_nothing(vertex_costed, vertices.size(), "vertices", filename);
 
-    auto edges = read_edges(doc, vertices.size(), by_name, directed, filename);
+    auto edges = read_edges(doc, vertices.size(), by_name, directed, multigraph, filename);
 
-    size_t edge_labelled = 0;
-    for (const auto & e : edges)
+    size_t edge_labelled = 0, edge_costed = 0;
+    for (const auto & e : edges) {
         if (e.label)
             ++edge_labelled;
+        if (e.cost)
+            ++edge_costed;
+    }
     auto has_edge_labels = check_all_or_nothing(edge_labelled, edges.size(), "edges", filename);
+    auto has_edge_costs = check_costs_all_or_nothing(edge_costed, edges.size(), "edges", filename);
 
-    InputGraph result{int(vertices.size()), has_vertex_labels, has_edge_labels, directed};
+    InputGraph result{int(vertices.size()), InputGraphProperties{.has_vertex_labels = has_vertex_labels, .has_edge_labels = has_edge_labels, .directed = directed, .multigraph = multigraph, .has_vertex_costs = has_vertex_costs, .has_edge_costs = has_edge_costs}};
 
     for (size_t v = 0; v < vertices.size(); ++v) {
         if (vertices[v].name)
             result.set_vertex_name(int(v), *vertices[v].name);
         if (vertices[v].label)
             result.set_vertex_label(int(v), *vertices[v].label);
+        if (vertices[v].cost)
+            result.set_vertex_cost(int(v), *vertices[v].cost);
     }
 
     for (const auto & e : edges) {
         auto label = e.label.value_or("");
-        if (directed)
+        if (directed && e.cost)
+            result.add_directed_edge(e.from, e.to, label, *e.cost);
+        else if (directed)
             result.add_directed_edge(e.from, e.to, label);
+        else if (e.cost)
+            result.add_edge(e.from, e.to, label, *e.cost);
         else
             result.add_edge(e.from, e.to, label);
     }
@@ -379,11 +428,13 @@ auto write_json_graph(ostream & outfile, const InputGraph & graph) -> void
     outfile << "  \"format\": \"gss-graph\",\n";
     outfile << "  \"version\": " << known_version << ",\n";
     outfile << "  \"directed\": " << (graph.directed() ? "true" : "false") << ",\n";
+    if (graph.multigraph())
+        outfile << "  \"multigraph\": true,\n";
 
     // With nothing to say about any vertex, the count says it all.
-    if (! any_named && ! graph.has_vertex_labels())
+    if (! any_named && ! graph.has_vertex_labels() && ! graph.has_vertex_costs())
         outfile << "  \"vertices\": " << graph.size() << ",\n";
-    else if (! graph.has_vertex_labels() && all_named) {
+    else if (! graph.has_vertex_labels() && ! graph.has_vertex_costs() && all_named) {
         outfile << "  \"vertices\": [\n";
         for (int v = 0; v < graph.size(); ++v)
             outfile << "    " << json(graph.vertex_name(v)).dump() << (v + 1 < graph.size() ? "," : "") << "\n";
@@ -397,23 +448,43 @@ auto write_json_graph(ostream & outfile, const InputGraph & graph) -> void
                 entry["name"] = graph.vertex_name(v);
             if (graph.has_vertex_labels())
                 entry["label"] = string{graph.vertex_label(v)};
+            if (graph.has_vertex_costs())
+                entry["cost"] = graph.vertex_cost(v);
             outfile << "    " << entry.dump() << (v + 1 < graph.size() ? "," : "") << "\n";
         }
         outfile << "  ],\n";
     }
 
-    // for_each_edge walks the edge map in (from, to) order, so this is stable. An
-    // undirected graph holds both directions, and the edge is written once.
-    vector<string> lines;
-    graph.for_each_edge([&](int f, int t, std::string_view l) {
+    // Sorted by (from, to, label), so that the output does not depend on the order in
+    // which a multigraph's parallel edges were added. An undirected graph holds both
+    // directions, and the edge is written once. A cost can only be written in the
+    // object form, the array form being frozen.
+    vector<tuple<int, int, string, optional<long long>>> edges;
+    graph.for_each_edge_and_cost([&](int f, int t, std::string_view l, optional<long long> c) {
         if ((! graph.directed()) && t < f)
             return;
-
-        json edge = json::array({endpoint(f), endpoint(t)});
-        if (graph.has_edge_labels())
-            edge.push_back(string{l});
-        lines.push_back(edge.dump());
+        edges.emplace_back(f, t, string{l}, c);
     });
+    sort(edges.begin(), edges.end());
+
+    vector<string> lines;
+    for (auto & [f, t, l, c] : edges) {
+        json edge;
+        if (graph.has_edge_costs()) {
+            edge = json::object();
+            edge["from"] = endpoint(f);
+            edge["to"] = endpoint(t);
+            if (graph.has_edge_labels())
+                edge["label"] = l;
+            edge["cost"] = *c;
+        }
+        else {
+            edge = json::array({endpoint(f), endpoint(t)});
+            if (graph.has_edge_labels())
+                edge.push_back(l);
+        }
+        lines.push_back(edge.dump());
+    }
 
     if (lines.empty())
         outfile << "  \"edges\": []\n";
