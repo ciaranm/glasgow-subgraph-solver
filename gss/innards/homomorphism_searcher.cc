@@ -248,12 +248,25 @@ auto HomomorphismSearcher::restarting_search(
         // set up new domains
         Domains new_domains = copy_nonfixed_domains_and_make_assignment(domains, branch_domain->v, *f_v);
 
+        // When minimising under proof, the cost bound writes a long derivation for most
+        // propagations it prunes in, and those are only needed inside this child's subtree:
+        // its nogood, logged a level up, subsumes them. So open the child's level before
+        // propagating rather than after, and they are wiped on the way back out. (Elsewhere
+        // the propagation's few derivations stay at the parent's level, as they always have.)
+        bool scope_propagation = proof && _cost_bound;
+        if (scope_propagation)
+            proof->start_level(depth + 2);
+
         // propagate
         ++propagations;
         if (! propagate(false, new_domains, assignments)) {
             // failure? restore assignments and go on to the next thing
+            if (scope_propagation)
+                proof->back_up_to_level(depth + 1);
             if (proof)
                 model.proofs()->propagation_failure(assignments_as_proof_decisions(assignments), int(branch_domain->v), int(*f_v));
+            if (scope_propagation)
+                proof->forget_level(depth + 2);
 
             assignments.values.resize(assignments_size);
             actually_hit_a_failure = true;
@@ -261,7 +274,7 @@ auto HomomorphismSearcher::restarting_search(
             continue;
         }
 
-        if (proof)
+        if (proof && ! scope_propagation)
             proof->start_level(depth + 2);
 
         // recursive search

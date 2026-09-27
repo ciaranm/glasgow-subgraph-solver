@@ -209,6 +209,20 @@ verifies in under three seconds; a random 10-person query (781 nodes) writes 238
 it these `pol` lines, averaging about 700 terms, and takes three minutes to verify. Their size is
 the next thing to work on.
 
+Measurements on that query, for whoever does: checking the `pol` lines alone takes 172 of the 177
+seconds, about 15 ms each. Of their terms, about 685 are linking inequalities, split between the
+two sides of each pair, against about ten exactly-one and at-most-one terms. The size of the
+coefficients makes no difference (scaling costs by 10^3 rather than 10^6 verifies in the same
+time). So making proofs cheaper means fewer linking terms per derivation. Model constraints must
+be cited by label, never by number, so that a proof can still be checked against an independently
+generated encoding that agrees only on variable names and labels.
+
+When minimising under proof, the search opens a child's proof level before propagating it, not
+after, so the bound's derivations for that propagation are wiped with the child's level once its
+nogood is logged. Otherwise they would stay at the parent's level, and for the root's children
+forever. This keeps VeriPB's live database small, though on that query it did not change the time
+to verify.
+
 `test-instances/weighted` has fixed instances for each case above, registered as `proof_weighted_*`
 and `proof_multigraph_*`. `test-instances/weighted_proof_sweep.py`, registered as
 `proof_weighted_random_sweep` when Python is available, checks 150 random instances across
