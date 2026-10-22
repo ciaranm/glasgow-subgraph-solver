@@ -334,6 +334,16 @@ auto gss::innards::coset_reps(std::vector<SVOBitset> m, std::vector<int> & orbit
     return mappings;
 }
 
+/**
+ * Get the first variable in the var order moved by a given non-identity permutation.
+ */
+auto gss::innards::get_effective_var(const std::vector<int> &perm, const std::vector<int> &vertex_order) -> unsigned int {
+    for (int v : vertex_order) {
+        if (perm[v] != v) return v; // v is moved.
+    }
+    return 0;   // Oops... we checked the identity permutation.
+}
+
 auto gss::innards::dynamic_coset_reps(std::vector<int> & base, int sz, dejavu::groups::random_schreier &rschreier, std::vector<std::vector<unsigned int>> & reps, std::vector<std::vector<unsigned int>> & invs, std::vector<int> & orbit_sizes) -> void {
     rschreier.set_base(base);       // Empty base to begin with
 

@@ -10,6 +10,7 @@
 #include <gss/timeout.hh>
 #include <gss/value_ordering.hh>
 #include <gss/vertex_to_vertex_mapping.hh>
+#include <gss/innards/symmetry_schedule.hh>
 
 #include <functional>
 #include <list>
@@ -126,6 +127,8 @@ namespace gss
         bool semi_flexible_pattern = false, semi_flexible_target = false;
         bool composite_symmetries = false;
         bool symmetric_nogoods = false, symmetric_nogoods_only = false;
+        bool delayed_symmetry = false;
+        std::unique_ptr<innards::SymmetrySchedule> symmetry_schedule;
         long double pattern_aut_mantissa, target_aut_mantissa;
         int pattern_aut_exp, target_aut_exp;
 

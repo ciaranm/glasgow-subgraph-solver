@@ -129,7 +129,7 @@ namespace
                     auto assignments_copy = assignments;
 
                     switch (searcher.restarting_search(assignments_copy, domains, result.nodes, result.propagations,
-                        result.solution_count, 0, *params.restarts_schedule)) {
+                        result.solution_count, 0, *params.restarts_schedule, *params.symmetry_schedule)) {
                     case SearchResult::Satisfiable:
                         searcher.save_result(assignments_copy, result);
                         result.complete = true;
@@ -173,7 +173,9 @@ namespace
                 result.rep_solution_count = searcher.rep_solution_count;
             }
 
-            std::cout << "sym_time = " << microseconds_to_string(searcher.sym_time) << "\n";
+            std::cout << "aut_gp_time = " << microseconds_to_string(searcher.aut_gp_time) << "\n";
+            std::cout << "sym_calc_time = " << microseconds_to_string(searcher.sym_calc_time) << "\n";
+            std::cout << "sym_prop_time = " << microseconds_to_string(searcher.sym_prop_time) << "\n";
 
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
@@ -326,7 +328,7 @@ namespace
                         auto assignments_copy = thread_assignments;
 
                         switch (searchers[t]->restarting_search(assignments_copy, domains, thread_result.nodes, thread_result.propagations,
-                            thread_result.solution_count, 0, *thread_restarts_schedule)) {
+                            thread_result.solution_count, 0, *thread_restarts_schedule, *params.symmetry_schedule)) {
                         case SearchResult::Satisfiable:
                             searchers[t]->save_result(assignments_copy, thread_result);
                             thread_result.complete = true;

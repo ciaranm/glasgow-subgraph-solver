@@ -31,6 +31,7 @@ add_library(glasgow_subgraphs
         innards/proof.cc
         innards/svo_bitset.cc
         innards/symmetries.cc
+        innards/symmetry_schedule.cc
         innards/thread_utils.cc
         innards/verify.cc
         innards/watches.cc

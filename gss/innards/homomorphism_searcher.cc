@@ -45,7 +45,14 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         watches.table.target_size = model.target_size;
         watches.table.data.resize(model.pattern_size * model.target_size);
     }
+    initialise_symmetry();
+}
+
+auto HomomorphismSearcher::initialise_symmetry() -> void {
     if (params.partial_assignments_sym || params.orbit_sym) {
+        aut_gp_time = 0us;
+        sym_calc_time = 0us;
+        sym_prop_time = 0us;
         mapping.resize(model.pattern_size, -1);
         permuted.resize(model.pattern_size, -1);
         var_order.resize(model.pattern_size);
@@ -69,6 +76,20 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
     }
     if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
         pattern_orbit_sizes.resize(model.pattern_size, 1);
+    }
+    if (model.has_occur_less_thans() && !model.do_dynamic_occur_less_thans()) {
+        target_orbit_sizes.resize(model.target_size, 1);
+    }
+    if (model.do_dynamic_occur_less_thans()) {
+        target_orbit_sizes.resize(model.target_size, 1);
+    }
+    if (model.do_dynamic_less_thans()) {
+        pattern_orbit_sizes.resize(model.pattern_size, 1);
+    }
+}
+
+auto HomomorphismSearcher::calculate_groups() -> void {
+    if (model.has_less_thans() && !model.do_dynamic_less_thans()) {
         std::vector<innards::SVOBitset> adjacency_matrix;
         for (size_t i = 0; i < model.pattern_size; i++) {
             adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
@@ -77,18 +98,21 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             auto dejavu_start_time = steady_clock::now();
             std::cout << "pattern_";
             useful_pattern_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, pattern_base, pattern_orbit_sizes, var_order);
-            std::cout << "pattern_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << std::endl;
+            aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "pattern_less_constraints =";
+            for (auto & [a, b] : useful_pattern_constraints)
+                std::cout << " " << a << "<" << b;
+            std::cout << std::endl;
         }
         if (params.pattern_rep_syms) {
-            // pattern_coset_reps = params.pattern_aut_reps;
-            // pattern_coset_invs = params.pattern_aut_inverses;
+            auto dejavu_start_time = steady_clock::now();
             std::cout << "pattern_";
             pattern_coset_invs = innards::coset_reps(adjacency_matrix, pattern_orbit_sizes, pattern_base, var_order);
             pattern_coset_reps = innards::invert_list(pattern_coset_invs);
+            aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "pattern_constraints = [";
             for (auto p : pattern_coset_reps) {
-                for (int i = 0; i < p.size(); i++) {
+                for (unsigned int i = 0; i < p.size(); i++) {
                     if (i != p[i]) {
                         std::cout << i << "->" << p[i] << " ";
                     }
@@ -102,7 +126,6 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         }
     }
     if (model.has_occur_less_thans() && !model.do_dynamic_occur_less_thans()) {
-        target_orbit_sizes.resize(model.target_size, 1);
         std::vector<innards::SVOBitset> adjacency_matrix;
         for (size_t i = 0; i < model.target_size; i++) {
             adjacency_matrix.emplace_back(model.target_graph_row(0,i));
@@ -111,21 +134,21 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             auto dejavu_start_time = steady_clock::now();
             std::cout << "target_";
             useful_target_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, target_base, target_orbit_sizes, val_order);
-            std::cout << "target_symmetry_time = " << microseconds_to_string(duration_cast<microseconds>(steady_clock::now() - dejavu_start_time)) << std::endl;
+            aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "target_occur_less_constraints =";
             for (auto & [a, b] : useful_target_constraints)
                 std::cout << " " << a << "<" << b;
             std::cout << std::endl;
         }
         if (params.target_rep_syms) {
-            // target_coset_reps = params.target_aut_reps;
-            // target_coset_invs = params.target_aut_inverses;
+            auto dejavu_start_time = steady_clock::now();
             std::cout << "target_";
             target_coset_invs = innards::coset_reps(adjacency_matrix, target_orbit_sizes, target_base, val_order);
             target_coset_reps = innards::invert_list(target_coset_invs);
+            aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "target_constraints = [";
             for (auto t : target_coset_reps) {
-                for (int i = 0; i < t.size(); i++) {      // The first representative is the identity
+                for (unsigned int i = 0; i < t.size(); i++) {      // The first representative is the identity
                     if (i != t[i]) {
                         std::cout << i << "->" << t[i] << " ";
                     }
@@ -134,19 +157,18 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             }
             std::cout << "]\n";
         }
-        // target_base = params.target_base;
-        // target_orbit_sizes = params.target_orbit_sizes;
     }
     if (model.do_dynamic_occur_less_thans()) {
-        target_orbit_sizes.resize(model.target_size, 1);
         std::vector<innards::SVOBitset> adjacency_matrix;
         for (size_t i = 0; i < model.target_size; i++) {
             adjacency_matrix.emplace_back(model.target_graph_row(0,i));
         }
+        auto dejavu_start_time = steady_clock::now();
         std::cout << "target_";
         if (!initialise_dynamic_structure(t_rschreier, adjacency_matrix, model.directed())) {
             model.reset_has_occur_less_thans();
         }
+        aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
         if (params.target_rep_syms) {
             std::vector<unsigned int> id(model.target_size);
             std::iota(id.begin(), id.end(), 0);
@@ -155,15 +177,16 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
         }
     }
     if (model.do_dynamic_less_thans()) {
-        pattern_orbit_sizes.resize(model.pattern_size, 1);
         std::vector<innards::SVOBitset> adjacency_matrix;
         for (size_t i = 0; i < model.pattern_size; i++) {
             adjacency_matrix.emplace_back(model.pattern_graph_row(0,i));
         }
+        auto dejavu_start_time = steady_clock::now();
         std::cout << "pattern_";
         if (!initialise_dynamic_structure(p_rschreier, adjacency_matrix, model.directed())) {
             model.reset_has_less_thans();
         }
+        aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
         if (params.pattern_rep_syms) {
             std::vector<unsigned int> id(model.pattern_size);
             std::iota(id.begin(), id.end(), 0);
@@ -171,7 +194,6 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
             pattern_coset_invs.push_back(id);
         }
     }
-    sym_time = 0us;
 }
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
@@ -217,7 +239,8 @@ auto HomomorphismSearcher::restarting_search(
     unsigned long long & propagations,
     loooong & solution_count,
     int depth,
-    RestartsSchedule & restarts_schedule) -> SearchResult
+    RestartsSchedule & restarts_schedule,
+    SymmetrySchedule & symmetry_schedule) -> SearchResult
 {
     if (proof && proof->super_extra_verbose()) {
         vector<pair<NamedVertex, vector<NamedVertex>>> proof_domains;
@@ -316,6 +339,13 @@ auto HomomorphismSearcher::restarting_search(
     // override whether we use the lackey for propagation, in case we are inside a backjump
     bool use_lackey_for_propagation = false;
 
+    // enable symmetry breaking if triggering conditions are met
+    if (!symmetry_engaged && symmetry_schedule.should_engage_symmetry()) {
+        calculate_groups();
+        //TODO check that the current assignment doesn't fail the symmtery constraints
+        symmetry_engaged = true;
+    }
+
     // remember what the base was in case we're doing dynamic symmetries
     std::vector<int> pattern_base_cpy, ipb_cpy, target_base_cpy, itb_cpy, mapping_cpy;
     std::vector<unsigned int> val_order_cpy;
@@ -351,7 +381,7 @@ auto HomomorphismSearcher::restarting_search(
             irredundant_target_base = itb_cpy;
             auto sym_start_time = steady_clock::now();
             make_useful_target_constraints(*f_v, useful_target_constraints, target_base);
-            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            sym_calc_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
             val_order = val_order_cpy;
             searched.set(*f_v);
         }
@@ -365,7 +395,7 @@ auto HomomorphismSearcher::restarting_search(
         // make the assignment
         assignments.values.push_back({{branch_domain->v, unsigned(*f_v)}, true, discrepancy_count, int(branch_v_end)});
         
-        // Make sure we don't search symmetrical sibling branches (if dynamically breaking value symmetries)
+        // construct the current assignment as a vector, and the value order if it isn't total or fixed
         if (params.partial_assignments_sym || params.orbit_sym) {
             mapping = mapping_cpy;
             mapping[branch_domain->v] = *f_v;
@@ -378,13 +408,14 @@ auto HomomorphismSearcher::restarting_search(
                 val_order[*f_v] = var_order[branch_domain->v];
             }
         }
-        if (!params.symmetric_nogoods_only && (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0))) {
+        // Make sure we don't search symmetrical sibling branches (if dynamically breaking value symmetries)
+        if (symmetry_engaged && !params.symmetric_nogoods_only && (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0))) {
             auto sym_start_time = steady_clock::now();
             if (!filter_symmetrical_siblings(domains, branch_domain->v, *f_v, did_filter, searched)) {
                 assignments.values.resize(assignments_size);
                 continue;
             }
-            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         }
 
         // set up new domains
@@ -405,7 +436,7 @@ auto HomomorphismSearcher::restarting_search(
 
             // recursive search
             auto search_result = restarting_search(assignments, new_domains, nodes, propagations,
-                solution_count, depth + 1, restarts_schedule);
+                solution_count, depth + 1, restarts_schedule, symmetry_schedule);
 
             switch (search_result) {
             case SearchResult::Satisfiable:
@@ -476,8 +507,10 @@ auto HomomorphismSearcher::restarting_search(
         irredundant_target_base = itb_cpy;
     }
 
-    if (actually_hit_a_failure)
+    if (actually_hit_a_failure) {
         restarts_schedule.did_a_backtrack();
+        symmetry_schedule.did_a_backtrack();
+    }
 
     if (restarts_schedule.should_restart()) {
         if (proof)
@@ -1151,13 +1184,15 @@ auto HomomorphismSearcher::make_useful_target_constraints(
         base.push_back(target_vertex);       // Add this vertex as a new base point
         irredundant_target_base.push_back(target_vertex);
 
-        make_useful_target_constraints(useful_constraints);
+        if (symmetry_engaged) {
+            make_useful_target_constraints(useful_constraints);
 
-        if (target_orbit_sizes[target_vertex] == 1) {
-            irredundant_target_base.pop_back();
-        }
-        else {
-            return true;
+            if (target_orbit_sizes[target_vertex] == 1) {
+                irredundant_target_base.pop_back();
+            }
+            else {
+                return true;
+            }
         }
     }
 
@@ -1238,24 +1273,26 @@ auto HomomorphismSearcher::make_useful_pattern_constraints(
         base.push_back(p);      // Add this vertex as a new base point
         irredundant_pattern_base.push_back(p);
 
-        if (params.pattern_rep_syms) {
-            int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
+        if (symmetry_engaged) {
+            if (params.pattern_rep_syms) {
+                int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
-            innards::dynamic_coset_reps(irredundant_pattern_base, size, p_rschreier, pattern_coset_reps, pattern_coset_invs, pattern_orbit_sizes);
+                innards::dynamic_coset_reps(irredundant_pattern_base, size, p_rschreier, pattern_coset_reps, pattern_coset_invs, pattern_orbit_sizes);
 
-        }
-        else {
-            int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
+            }
+            else {
+                int size = model.pattern_size + (model.directed() ? 2 * model.pattern_edge_num : 0);
 
-            innards::dynamic_order_constraints(size, irredundant_pattern_base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
+                innards::dynamic_order_constraints(size, irredundant_pattern_base, pattern_orbit_sizes, p_rschreier, useful_constraints);      // Compute new constraints at new base point
 
-            // TODO are the domains of the symmetrical vertices equivalent? They should be.
+                // TODO are the domains of the symmetrical vertices equivalent? They should be.
 
-        }
-        added = pattern_orbit_sizes[p] != 1;       // Return true if new constraints were added
+            }
+            added = pattern_orbit_sizes[p] != 1;       // Return true if new constraints were added
 
-        if (!added) {
-            irredundant_pattern_base.pop_back();
+            if (!added) {
+                irredundant_pattern_base.pop_back();
+            }
         }
 
         adjust_variable_order();
@@ -1337,18 +1374,19 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                 unsigned int i;
                 for (unsigned int y = 0; y < model.pattern_size; y++) {
                     i = var_order[y];
+                    if (p_aut[i] == i) {     // This variable is fixed under this permutation
+                        continue;
+                    }
                     if (mapping[i] != -1 && mapping[p_aut[i]] != -1) {
                         // if (occurs_before(mapping[p_aut[i]],mapping[i])) {       // The permuted mapping is lex-less-than the original
                         if (val_order[mapping[p_aut[i]]] < val_order[mapping[i]]) {       // The permuted mapping is lex-less-than the original
                             return false;
                         }
-                        else if (p_aut[i] == i) {     // The mapping is the same so far
-                            continue;
-                        }
                         // else if (occurs_before(mapping[i], mapping[p_aut[i]])) {      // The original mapping is lex-less-than the permutation
-                        else if (val_order[mapping[i]] < val_order[mapping[p_aut[i]]]) {      // The original mapping is lex-less-than the permutation
-                            break;                          // TODO we don't need to check this particular p_aut again until we backtrack
-                        }
+                        // else if (val_order[mapping[i]] < val_order[mapping[p_aut[i]]]) {      // The original mapping is lex-less-than the permutation
+                        //     break;                          // TODO we don't need to check this particular p_aut again until we backtrack
+                        // }
+                        break;
                     }
                     else if (mapping[i] != -1) {
                         for (auto &d : new_domains) {
@@ -1612,10 +1650,15 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                 }
             }
             if (model.do_dynamic_occur_less_thans()) {
+                //TODO this might be redundant with dynamic order because of unit domains...
                 if (make_useful_target_constraints(current_assignment->target_vertex, useful_target_constraints, target_base)) {
                     // added new constraints -- may want to log something
                 }
             }
+            sym_calc_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+
+            if (symmetry_engaged) {
+            sym_start_time = steady_clock::now();
 
             if (params.partial_assignments_sym || params.orbit_sym) {       
                 // record this assignment and adjust var/val orders as necessary
@@ -1631,44 +1674,45 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             }
 
             if (!params.symmetric_nogoods_only) {
-                // propagate orbit less thans
-                if (model.has_less_thans() && !params.pattern_rep_syms) {
-                    // if (model.do_dynamic_less_thans()) {
-                    //     if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
-                    //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                    //         return false;
-                    //     }
-                    // }
-                    // else {
-                    //     if (!propagate_less_thans(new_domains)) {
-                    //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                    //         return false;
-                    //     }
-                    // }
-                    if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
-                        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                        return false;
-                    }
-                }
-
-                // propagate orbit occurs less thans
-                if (model.has_occur_less_thans() && !params.target_rep_syms) {
-                    if (params.natural_target || params.degree_sym_target || params.flexible_target || (params.semi_flexible_target && rep_solution_count != 0)) {
-                        if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, current_assignment)) {
-                            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                    // propagate orbit less thans
+                    if (model.has_less_thans() && !params.pattern_rep_syms) {
+                        // if (model.do_dynamic_less_thans()) {
+                        //     if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                        //         return false;
+                        //     }
+                        // }
+                        // else {
+                        //     if (!propagate_less_thans(new_domains)) {
+                        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                        //         return false;
+                        //     }
+                        // }
+                        if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
+                            sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
                             return false;
                         }
                     }
-                    else if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
-                        // Can we actually do anything here?
+
+                    // propagate orbit occurs less thans
+                    if (model.has_occur_less_thans() && !params.target_rep_syms) {
+                        if (params.natural_target || params.degree_sym_target || params.flexible_target || (params.semi_flexible_target && rep_solution_count != 0)) {
+                            if (!propagate_occur_less_thans(assignments, new_domains, useful_target_constraints, current_assignment)) {
+                                sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                                return false;
+                            }
+                        }
+                        else if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
+                            // Can we actually do anything here?
+                        }
+                        // else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, current_assignment)) {
+                        //     sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+                        //     return false;
+                        // }
                     }
-                    // else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, current_assignment)) {
-                    //     sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                    //     return false;
-                    // }
                 }
+                sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
             }
-            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         }
 
         // propagate all different
@@ -1679,14 +1723,14 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
         done_globals_at_least_once = true;
     }
 
-    if (!params.symmetric_nogoods_only) {
+    if (symmetry_engaged && !params.symmetric_nogoods_only) {
         auto sym_start_time = steady_clock::now();
         // propagate permutation symmetries - extra assignments make this more effective
         if (params.partial_assignments_sym && !break_coset_rep_symmetries(assignments, new_domains)) {
-            sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+            sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
             return false;
         }
-        sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
+        sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
         if (params.injectivity == Injectivity::Injective && ! cheap_all_different(model.target_size, new_domains, proof, &model)) {
             return false;
         }

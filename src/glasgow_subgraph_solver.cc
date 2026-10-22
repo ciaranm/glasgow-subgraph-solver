@@ -3,6 +3,7 @@
 #include <gss/innards/automorphisms.hh>
 #include <gss/innards/lackey.hh>
 #include <gss/innards/symmetries.hh>
+#include <gss/innards/symmetry_schedule.hh>
 #include <gss/innards/verify.hh>
 #include <gss/restarts.hh>
 #include <gss/sip_decomposer.hh>
@@ -539,6 +540,27 @@ namespace
             params.symmetric_nogoods = true;
             params.symmetric_nogoods_only = true;
         }
+        if (options_vars.count("delay-symmetry")) {
+            params.delayed_symmetry = true;
+            string symmetry_delay_policy = options_vars["delay-symmetry"].as<string>();
+            if (symmetry_delay_policy == "timed") {
+                microseconds delay_duration = innards::TimedSymmetrySchedule::default_duration;
+                if (options_vars.count("sym-delay-duration")) {
+                    delay_duration = microseconds{options_vars["sym-delay-duration"].as<int>()};
+                }
+                params.symmetry_schedule = make_unique<innards::TimedSymmetrySchedule>(delay_duration);
+            }
+            else if (symmetry_delay_policy == "backtracks") {
+                long long minimum_backtracks = innards::BacktrackSymmetrySchedule::default_minimum_backtracks;
+                if (options_vars.count("sym-delay-backtracks")) {
+                    minimum_backtracks = options_vars["sym-delay-backtracks"].as<int>();
+                }
+                params.symmetry_schedule = make_unique<innards::BacktrackSymmetrySchedule>(minimum_backtracks);
+            }
+        }
+        else {
+            params.symmetry_schedule = make_unique<innards::NoSymmetrySchedule>();
+        }
 
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
@@ -641,9 +663,12 @@ auto main(int argc, char * argv[]) -> int
             ("target-coset-symmetries",
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
                 cxxopts::value<string>())
-            ("composite-symmetries", "Compute combinations of automorphisms to break extra symmetries (requires Dejavu)");
-            ("symmetric-nogoods", "Log symmetric branches as nogoods on restarts (requires Dejavu)");
-            ("symmetric-nogoods-only", "Log symmetric branches as nogoods on restarts, and don't propagate symmetries elsewhere (requires Dejavu)");
+            ("composite-symmetries", "Compute combinations of automorphisms to break extra symmetries (requires Dejavu)")
+            ("symmetric-nogoods", "Log symmetric branches as nogoods on restarts (requires Dejavu)")
+            ("symmetric-nogoods-only", "Log symmetric branches as nogoods on restarts, and don't propagate symmetries elsewhere (requires Dejavu)")
+            ("delay-symmetry", "Specify symmetry delay policy (timed / backtracks)", cxxopts::value<string>())
+            ("sym-delay-duration", "Specify the duration in microseconds bfeore symmetries engage", cxxopts::value<int>())
+            ("sym-delay-backtracks", "Specify the number of backtracks before symmetries engage", cxxopts::value<int>());
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")

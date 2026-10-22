@@ -7,6 +7,7 @@
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/watches.hh>
 #include <gss/innards/automorphisms.hh>
+#include <gss/innards/symmetry_schedule.hh>
 // #include <gss/innards/symmetry_model.hh>
 
 #include <functional>
@@ -96,7 +97,7 @@ namespace gss::innards
         std::vector<std::vector<unsigned int>> pattern_coset_invs, target_coset_invs;
         std::vector<std::vector<innards::SVOBitset>> seen_before;
         std::vector<int> target_base, pattern_base;
-        std::vector<int> irredundant_target_base, irredundant_pattern_base;         // Seems like dejavu (very rarely) is incomplete otherwise
+        std::vector<int> irredundant_target_base, irredundant_pattern_base;
         std::vector<unsigned int> var_order, val_order;
         int latest_value_index;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
@@ -106,7 +107,10 @@ namespace gss::innards
         std::vector<int> mapping, permuted;             // Tuples in *natural* variable order
         std::vector<SVOBitset> occurs;
         std::vector<bool> occurs_check;
+        bool symmetry_engaged = false;
 
+        auto initialise_symmetry() -> void; 
+        auto calculate_groups() -> void; 
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
@@ -178,7 +182,8 @@ namespace gss::innards
             unsigned long long & propagations,
             loooong & solution_count,
             int depth,
-            RestartsSchedule & restarts_schedule) -> SearchResult;
+            RestartsSchedule & restarts_schedule,
+            SymmetrySchedule & symmetry_schedule) -> SearchResult;
 
         auto save_result(const HomomorphismAssignments & assignments, HomomorphismResult & result) -> void;
 
@@ -189,7 +194,7 @@ namespace gss::innards
 
         auto count_solution() -> loooong;
 
-        std::chrono::microseconds sym_time;
+        std::chrono::microseconds aut_gp_time, sym_calc_time, sym_prop_time;
         loooong rep_solution_count = 0;
 
         Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> watches;
