@@ -92,8 +92,14 @@ homomorphism variants are all configurations of it.
   resumed unbounded, with the nogoods carried across. Sequential only; see
   [preprocessor-refactor.md](preprocessor-refactor.md).
 
-`sip_decomposer` offers an alternative top level that solves subgraph isomorphism by decomposing the
-pattern into biconnected components.
+`sip_decomposer` offers an alternative top level (`--decomposition`). When counting injective,
+non-induced, undirected embeddings, it counts each connected component of the pattern separately
+and corrects for components that overlap by inclusion–exclusion over the ways of gluing them
+together (the c = 0 case of Section 3.6 of Jessica Ryan's 2023 Glasgow PhD thesis), solving each
+glued component once per isomorphism class. Isolated pattern vertices are handled by a closed form.
+Otherwise it only strips isolated pattern vertices before solving. It refuses proof logging, and
+it does not produce a mapping when counting. Where it is going, including certified counts, is in
+[decomposition-counting.md](decomposition-counting.md).
 
 ## The clique and common-subgraph solvers
 
