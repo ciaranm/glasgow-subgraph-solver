@@ -6,6 +6,7 @@
 
 #include <cxxopts.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -388,7 +389,7 @@ auto main(int argc, char * argv[]) -> int
         // an incomplete statement, or none at all, is not left lying around to be mistaken
         // for a real one
         if (statement) {
-            bool written = statement->tellp() > 0 && result.complete;
+            bool written = result.complete && std::any_of(result.extra_stats.begin(), result.extra_stats.end(), [](const string & s) { return s.starts_with("decomposition_statement_nodes = "); });
             statement->close();
             if (! written)
                 std::remove(statement_file->c_str());

@@ -1,6 +1,7 @@
 #include <gss/configuration.hh>
 #include <gss/counting_statement.hh>
 #include <gss/homomorphism.hh>
+#include <gss/innards/decomposition_proof.hh>
 #include <gss/innards/proof.hh>
 #include <gss/loooong.hh>
 #include <gss/sip_decomposer.hh>
@@ -86,6 +87,8 @@ namespace
         int size = 0;
         vector<string> labels;
         map<pair<int, int>, string> edges;
+        // only for searching under proof, where they must be the pattern's names
+        vector<string> names;
     };
 
     auto encode(const SmallGraph & g, const vector<int> & order) -> string
@@ -370,6 +373,8 @@ namespace
         auto as_input_graph(const SmallGraph & component) const -> InputGraph
         {
             InputGraph graph(component.size, pattern.has_vertex_labels(), pattern.has_edge_labels());
+            for (int i = 0; i < component.size && ! component.names.empty(); ++i)
+                graph.set_vertex_name(i, component.names[i]);
             for (int i = 0; i < component.size && pattern.has_vertex_labels(); ++i)
                 graph.set_vertex_label(i, component.labels[i]);
             for (auto & [e, label] : component.edges)
@@ -473,6 +478,19 @@ namespace
         map<vector<vector<int>>, int> leaf_nodes;
         map<vector<int>, optional<pair<int, loooong>>> exact_nodes;
 
+        // What a proof needs to know about the statement's structure, by node.
+        struct ExactNode
+        {
+            int product;
+            vector<int> leaves;
+            optional<int> overlaps;
+            vector<int> children;
+        };
+        map<int, ExactNode> exact_structure;
+        map<int, vector<int>> leaf_cubes;
+        set<int> glued_leaves;
+        innards::DecompositionProof * decomposition_proof = nullptr;
+
         auto enumeration_params() const -> HomomorphismParams
         {
             HomomorphismParams result;
@@ -539,7 +557,11 @@ namespace
                 sort(assignment.begin(), assignment.end());
                 cubes.push_back(statement->add_cube(assignment));
             }
-            return leaf_nodes.emplace(members, statement->add_or(cubes)).first->second;
+            auto node = statement->add_or(cubes);
+            leaf_cubes.emplace(node, cubes);
+            if (std::any_of(members.begin(), members.end(), [](const auto & m) { return m.size() > 1; }))
+                glued_leaves.insert(node);
+            return leaf_nodes.emplace(members, node).first->second;
         }
 
         // The node for the embeddings of H / sigma, and its count, or nothing if
@@ -596,7 +618,11 @@ namespace
             if (aborted)
                 return std::nullopt;
 
-            int node = overlaps.empty() ? product_node : statement->add_minus(product_node, statement->add_or(overlaps));
+            optional<int> overlaps_node;
+            if (! overlaps.empty())
+                overlaps_node = statement->add_or(overlaps);
+            int node = overlaps_node ? statement->add_minus(product_node, *overlaps_node) : product_node;
+            exact_structure.emplace(node, ExactNode{product_node, leaves, overlaps_node, overlaps});
             return exact_nodes.emplace(sigma, pair{node, product - overlap}).first->second;
         }
 
@@ -633,8 +659,11 @@ namespace
         // embeddings at all. Then nothing is written, because a statement cannot say
         // zero that way, and no_statement_because says why. The vertices must be every
         // pattern vertex.
-        auto write_statement(std::ostream & out) -> optional<loooong>
+        auto write_statement(std::ostream & out, const optional<ProofOptions> & proof_options) -> optional<loooong>
         {
+            if (proof_options)
+                return write_statement_with_proof(out, *proof_options);
+
             if (vertices.empty()) {
                 CountingStatementWriter writer{out, {}};
                 writer.finish(writer.add_cube({}));
@@ -668,6 +697,111 @@ namespace
             statement = nullptr;
             if (aborted || ! root)
                 return std::nullopt;
+            writer.finish(root->first);
+            statement_nodes = writer.number_of_nodes();
+            return root->second;
+        }
+
+        // As write_statement, but also writing a proof that the solver's encoding of the
+        // instance implies the statement's root (phase 4 of decomposition-counting.md),
+        // or that it has no solutions when there is no statement.
+        auto write_statement_with_proof(std::ostream & out, const ProofOptions & proof_options) -> optional<loooong>
+        {
+            innards::DecompositionProof proof(proof_options, pattern, target);
+            decomposition_proof = &proof;
+
+            vector<int> discrete(vertices.size());
+            for (unsigned v = 0; v < vertices.size(); ++v)
+                discrete[v] = v;
+            auto q = build_quotient(discrete);
+            number_of_components = q->components.size();
+            if (more_blocks_than_targets(*q)) {
+                no_statement_because = "the pattern has more vertices of some label than the target";
+                proof.finish_pattern_bigger_than_target();
+                return std::nullopt;
+            }
+
+            CountingStatementWriter writer{out, vector<int>(pattern.size(), target.size())};
+            writer.set_observer([&](int i, const CountingNode & node) { proof.define_gate(i, node); });
+            statement = &writer;
+
+            // Each component of the pattern is searched under proof, which concludes that
+            // its leaf holds. Isomorphic components cannot share these searches, because
+            // each proof is about its own variables, but they still fill the enumeration
+            // cache for the glued components later on.
+            // for now, without the preprocessing whose derivations might not survive a
+            // nested solve
+            auto search_params = [&] {
+                auto result = enumeration_params();
+                result.clique_detection = false;
+                result.no_supplementals = true;
+                result.no_nds = true;
+                return result;
+            };
+            for (auto & c : q->components) {
+                auto component = component_graph(*q, c);
+                vector<int> component_vertices;
+                for (auto b : c) {
+                    component_vertices.push_back(vertices[b]);
+                    component.names.push_back(pattern.vertex_name(vertices[b]));
+                }
+
+                ++solver_calls;
+                auto searched = proof.search_component(as_input_graph(component), component_vertices, search_params(), writer);
+                if (! searched.complete) {
+                    aborted = true;
+                    return std::nullopt;
+                }
+                if (! searched.leaf) {
+                    no_statement_because = "some component has no embeddings";
+                    proof.finish_no_solutions();
+                    return std::nullopt;
+                }
+
+                vector<vector<int>> members;
+                for (auto v : component_vertices)
+                    members.push_back({v});
+                leaf_nodes.emplace(members, *searched.leaf);
+                leaf_cubes.emplace(*searched.leaf, searched.cubes);
+
+                auto form = canonical_form(component);
+                if (! embeddings_by_key.contains(form.key)) {
+                    vector<vector<int>> by_position;
+                    for (auto & e : searched.embeddings) {
+                        vector<int> p(form.order.size());
+                        for (unsigned i = 0; i < form.order.size(); ++i)
+                            p[i] = e[form.order[i]];
+                        by_position.push_back(std::move(p));
+                    }
+                    embeddings_by_key.emplace(form.key, std::move(by_position));
+                }
+            }
+
+            auto root = exact(discrete);
+            statement = nullptr;
+            if (aborted || ! root)
+                return std::nullopt;
+
+            // The root: every component's leaf holds, so the product does, and every
+            // overlap has a glued leaf, every cube of which sends two pattern vertices to
+            // one target vertex, so no overlap holds.
+            auto & r = exact_structure.at(root->first);
+            if (r.leaves.size() > 1)
+                proof.derive(counting_gate_name(r.product));
+            if (r.overlaps) {
+                for (auto & c : r.children) {
+                    auto & e = exact_structure.at(c);
+                    auto glued = std::find_if(e.leaves.begin(), e.leaves.end(), [&](int l) { return glued_leaves.contains(l); });
+                    if (glued == e.leaves.end())
+                        throw UnsupportedConfiguration{"an overlap has no glued leaf, which cannot happen"};
+                    proof.refute_glued_leaf(*glued, leaf_cubes.at(*glued));
+                    proof.derive("~" + counting_gate_name(c));
+                }
+                proof.derive("~" + counting_gate_name(*r.overlaps));
+                proof.derive(counting_gate_name(root->first));
+            }
+            proof.finish();
+
             writer.finish(root->first);
             statement_nodes = writer.number_of_nodes();
             return root->second;
@@ -739,7 +873,7 @@ namespace
 
         HomomorphismResult result;
         ComponentCounter counter(pattern, target, params, vertices);
-        auto count = counter.write_statement(statement);
+        auto count = counter.write_statement(statement, params.proof_options);
         result.nodes = counter.nodes;
         result.propagations = counter.propagations;
         result.complete = ! counter.aborted;
@@ -754,10 +888,13 @@ namespace
 auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & target,
     const HomomorphismParams & params, std::ostream * statement) -> HomomorphismResult
 {
-    // each piece would write its own proof over the top of the last one, and none of
-    // them would be a proof about the whole instance
-    if (params.proof_options)
-        throw UnsupportedConfiguration{"Proof logging cannot be used with decomposition"};
+    // Without a statement, each piece would write its own proof over the top of the last
+    // one, and none of them would be a proof about the whole instance. With one, the
+    // proof is about the statement (see dev_docs/decomposition-counting.md).
+    if (params.proof_options && ! statement)
+        throw UnsupportedConfiguration{"Proof logging can only be used with decomposition when writing a statement"};
+    if (params.proof_options && (pattern.has_vertex_labels() || pattern.has_edge_labels()))
+        throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
 
     if (statement) {
         if (! can_count_by_components(pattern, params))

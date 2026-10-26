@@ -196,6 +196,14 @@ if(VERIPB_EXECUTABLE)
     gss_add_proof_test(proof_mcs_clique glasgow_common_subgraph_solver --clique
         ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
+    # Counting by decomposition with a statement and its proof (phase 4 of
+    # dev_docs/decomposition-counting.md): counts, statements and proofs on random
+    # disconnected patterns, with and without loops.
+    add_test(NAME decomposition_proof_sweep
+        COMMAND ${CMAKE_SOURCE_DIR}/test-instances/decomposition_proof_sweep.bash
+            $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
+            $<TARGET_FILE:count_statement> ${CMAKE_CURRENT_BINARY_DIR}/decomposition_proof_sweep)
+
     # Randomised proof sweep: generate random instances and check the proof verifies
     # on each, across decision/induced/counting combinations. Catches proof-logging
     # bugs that fixed instances miss; complements the in-process correctness oracle in

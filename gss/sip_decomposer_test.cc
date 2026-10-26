@@ -10,12 +10,15 @@
 #include <catch2/generators/catch_generators_range.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <random>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include <unistd.h>
 
 using namespace gss;
 
@@ -551,6 +554,38 @@ TEST_CASE("decomposition statements can say zero when the components only overla
     REQUIRE(statement);
     CHECK(count_counting_statement(*statement) == 0);
     CHECK(result.solution_count == 0);
+}
+
+TEST_CASE("decomposition writes a proof alongside a statement")
+{
+    // two disjoint edges into a path on four vertices, with a proof; whether the proof
+    // verifies is checked by the decomposition_proof_sweep test, when VeriPB is around
+    auto pattern = read_csv(stringstream{"a,b\nc,d\n"}, "pattern");
+    auto target = read_csv(stringstream{"1,2\n2,3\n3,4\n"}, "target");
+
+    auto base = std::filesystem::temp_directory_path() / ("gss_decomposition_proof_" + std::to_string(::getpid()));
+    auto params = counting_params();
+    params.proof_options = ProofOptions{.opb_file = base.string() + ".opb", .log_file = base.string() + ".pbp", .super_extra_verbose = false};
+    HomomorphismResult result;
+    auto statement = statement_for(pattern, target, params, result);
+    REQUIRE(statement);
+    CHECK(result.solution_count == 8);
+    CHECK(count_counting_statement(*statement) == 8);
+    CHECK(std::filesystem::file_size(base.string() + ".opb") > 0);
+    CHECK(std::filesystem::file_size(base.string() + ".pbp") > 0);
+    std::filesystem::remove(base.string() + ".opb");
+    std::filesystem::remove(base.string() + ".pbp");
+}
+
+TEST_CASE("decomposition refuses proof logging on labelled graphs")
+{
+    auto pattern = read_csv(stringstream{"a,b,x\nc,d,y\n"}, "pattern");
+    auto target = read_csv(stringstream{"1,2,x\n2,3,y\n"}, "target");
+
+    auto params = counting_params();
+    params.proof_options = ProofOptions{};
+    stringstream out;
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params, &out), UnsupportedConfiguration);
 }
 
 TEST_CASE("decomposition refuses proof logging")

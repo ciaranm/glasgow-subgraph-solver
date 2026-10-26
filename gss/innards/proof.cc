@@ -88,6 +88,21 @@ struct Proof::Imp
     map<pair<pair<NamedVertex, NamedVertex>, pair<NamedVertex, NamedVertex>>, long> clique_for_hom_non_edge_constraints;
 
     vector<pair<int, int>> zero_in_proof_objectives;
+
+    // A nested solve (see begin_nested_solve): the outer solve's numbering, put aside
+    // until the nested one ends, and the nested solve's own state.
+    struct OuterNumbering
+    {
+        map<pair<long, long>, string> variable_mappings;
+        map<long, string> at_least_one_value_constraints, at_most_one_value_constraints, injectivity_constraints;
+        unordered_map<string, string> cached_proof_lines;
+    };
+    optional<OuterNumbering> outer;
+    optional<NestedSolve> nested;
+    optional<string> guard;
+    vector<long> nested_scratch_lines;
+    optional<long> nested_conclusion;
+    int number_of_nested_solves = 0;
 };
 
 Proof::Proof(const ProofOptions & options) :
@@ -110,6 +125,13 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
 {
     for (int i = 0; i < target_size; ++i)
         _imp->variable_mappings.emplace(pair{pattern_vertex, i}, pattern_name(pattern_vertex) + "_" + target_name(i));
+
+    // the outer model already has these rows, under these labels
+    if (_imp->nested) {
+        _imp->at_least_one_value_constraints.emplace(pattern_vertex, "@al1" + pattern_name(pattern_vertex));
+        _imp->at_most_one_value_constraints.emplace(pattern_vertex, "@am1" + pattern_name(pattern_vertex));
+        return;
+    }
 
     _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
     auto al1_label = "@al1" + pattern_name(pattern_vertex);
@@ -136,6 +158,25 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
 auto Proof::create_injectivity_constraints(int pattern_size, int target_size,
     const function<auto(int)->string> & target_name) -> void
 {
+    if (_imp->nested) {
+        // At most one of our pattern vertices maps to v: the outer row, with every other
+        // pattern vertex's literal added in to cancel it.
+        for (int v = 0; v < target_size; ++v) {
+            set<string> ours;
+            for (int p = 0; p < pattern_size; ++p)
+                ours.insert(_imp->variable_mappings.at(pair{p, v}));
+            auto label = "@inj" + target_name(v) + "_n" + to_string(_imp->number_of_nested_solves);
+            string line = label + " pol " + _imp->outer->injectivity_constraints.at(v);
+            for (auto & [pv, name] : _imp->outer->variable_mappings)
+                if (pv.second == v && ! ours.contains(name))
+                    line += " x" + name + " +";
+            line += " ;";
+            _imp->nested_scratch_lines.push_back(emit_proof_line(line));
+            _imp->injectivity_constraints.emplace(v, label);
+        }
+        return;
+    }
+
     for (int v = 0; v < target_size; ++v) {
         _imp->model_stream << "* injectivity on value " << v << '\n';
         auto inj_label = "@inj" + target_name(v);
@@ -154,6 +195,8 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size,
 
 auto Proof::create_forbidden_assignment_constraint(int p, int t) -> void
 {
+    if (_imp->nested)
+        return;
     _imp->model_stream << "* forbidden assignment\n";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p, t}] << " >= 1 ;\n";
     ++_imp->nb_constraints;
@@ -183,6 +226,8 @@ auto Proof::emit_preserved_assignment_variables() -> void
     // so VeriPB counts solutions in terms of the high-level mapping. The line
     // goes into the prelude, which finalise_model writes immediately after the
     // header and before any constraint.
+    if (_imp->nested)
+        return;
     _imp->model_prelude_stream << "preserved:";
     for (auto & [_, name] : _imp->variable_mappings)
         _imp->model_prelude_stream << " x" << name;
@@ -191,6 +236,9 @@ auto Proof::emit_preserved_assignment_variables() -> void
 
 auto Proof::finalise_model() -> void
 {
+    if (_imp->nested)
+        return;
+
     unique_ptr<ostream> f = make_unique<ofstream>(_imp->opb_filename);
 
     *f << "* #variable= " << (_imp->variable_mappings.size() + _imp->binary_variable_mappings.size() + _imp->connected_variable_mappings.size() + _imp->connected_variable_mappings_aux.size())
@@ -216,6 +264,11 @@ auto Proof::finalise_model() -> void
 
 auto Proof::finish_unsat_proof() -> void
 {
+    if (_imp->nested) {
+        finish_enumeration_proof(0, true);
+        return;
+    }
+
     *_imp->proof_stream << "% asserting that we've proved unsat\n";
     *_imp->proof_stream << "rup >= 1 ;\n";
     ++_imp->proof_line;
@@ -233,6 +286,19 @@ auto Proof::finish_sat_proof() -> void
 
 auto Proof::finish_enumeration_proof(const loooong & number_of_solutions, bool complete) -> void
 {
+    if (_imp->nested) {
+        // Conclude at level 0, so that the conclusion outlives the search lines it rests
+        // on, which are then wiped.
+        if (complete) {
+            *_imp->proof_stream << "setlvl 0;\n";
+            *_imp->proof_stream << "% nested solve concludes\n";
+            _imp->nested_conclusion = emit_proof_line("rup" + guard_suffix() + " >= 1 ;");
+            _imp->active_level = 0;
+            wipe_level(1);
+        }
+        return;
+    }
+
     if (complete) {
         // Every solution has been logged with solx and excluded, so the
         // remaining problem is unsatisfiable: assert the contradiction and
@@ -284,6 +350,17 @@ auto Proof::incorrect_guess(const vector<pair<int, int>> & decisions, bool failu
         *_imp->proof_stream << "% [" << decisions.size() << "] incorrect guess\n";
     else
         *_imp->proof_stream << "% [" << decisions.size() << "] backtracking\n";
+
+    // Under a guard, a nogood is only "this, or one of the solutions so far", which is
+    // not something the core can have: it stays derived, and the wiplvl that cleans up
+    // its level deletes it for nothing.
+    if (_imp->nested) {
+        string line = "rup";
+        for (auto & [var, val] : decisions)
+            line += " 1 ~x" + _imp->variable_mappings[pair{var, val}];
+        emit_proof_line(line + guard_suffix() + " >= 1 ;");
+        return;
+    }
 
     *_imp->proof_stream << "rup";
     for (auto & [var, val] : decisions)
@@ -389,6 +466,20 @@ auto Proof::post_solution(const vector<pair<NamedVertex, NamedVertex>> & decisio
         *_imp->proof_stream << " " << var.second << "=" << val.second;
     *_imp->proof_stream << ";\n";
 
+    // In a nested solve, a solution is not logged with solx but folded into the guard:
+    // the solution implies the new guard, so "not this solution, or the guard" follows.
+    if (_imp->nested) {
+        vector<pair<int, int>> solution;
+        for (auto & [var, val] : decisions)
+            solution.emplace_back(var.first, val.first);
+        _imp->guard = _imp->nested->on_solution(solution);
+        string line = "rup";
+        for (auto & [var, val] : decisions)
+            line += " 1 ~x" + _imp->variable_mappings[pair{var.first, val.first}];
+        emit_proof_line(line + guard_suffix() + " >= 1 ;");
+        return;
+    }
+
     // Emit the solution-excluding (solx) rule at the top proof level. The
     // blocking constraint it introduces must persist for the rest of the proof
     // (so the solution count stays sound); if we logged it at the current deep
@@ -479,12 +570,16 @@ auto Proof::injectivity_labels() const -> const map<long, string> &
 
 auto Proof::emit_model_constraint(const string & line) -> void
 {
+    if (_imp->nested)
+        return;
     _imp->model_stream << line << "\n";
     ++_imp->nb_constraints;
 }
 
 auto Proof::emit_model_comment(const string & line) -> void
 {
+    if (_imp->nested)
+        return;
     _imp->model_stream << line << "\n";
 }
 
@@ -1022,4 +1117,76 @@ auto Proof::create_clique_nonedge(int v, int w) -> void
 auto Proof::super_extra_verbose() const -> bool
 {
     return _imp->super_extra_verbose;
+}
+
+auto Proof::begin_nested_solve(NestedSolve nested) -> void
+{
+    if (_imp->nested)
+        throw ProofError{"nested solves cannot be nested"};
+    if (! _imp->proof_stream)
+        throw ProofError{"a nested solve needs the outer model to have been finalised"};
+
+    _imp->outer = Imp::OuterNumbering{move(_imp->variable_mappings), move(_imp->at_least_one_value_constraints),
+        move(_imp->at_most_one_value_constraints), move(_imp->injectivity_constraints), move(_imp->cached_proof_lines)};
+    _imp->variable_mappings.clear();
+    _imp->at_least_one_value_constraints.clear();
+    _imp->at_most_one_value_constraints.clear();
+    _imp->injectivity_constraints.clear();
+    _imp->cached_proof_lines.clear();
+
+    _imp->nested = move(nested);
+    _imp->guard.reset();
+    _imp->nested_scratch_lines.clear();
+    _imp->nested_conclusion.reset();
+    ++_imp->number_of_nested_solves;
+}
+
+auto Proof::end_nested_solve() -> optional<long>
+{
+    if (! _imp->nested)
+        throw ProofError{"not in a nested solve"};
+
+    if (0 != _imp->active_level) {
+        *_imp->proof_stream << "setlvl 0;\n";
+        _imp->active_level = 0;
+    }
+    if (_imp->largest_level_set >= 1)
+        wipe_level(1);
+
+    // the weakened injectivity rows were only for this solve, and are derived
+    if (! _imp->nested_scratch_lines.empty()) {
+        *_imp->proof_stream << "del id";
+        for (auto & id : _imp->nested_scratch_lines)
+            *_imp->proof_stream << " " << id;
+        *_imp->proof_stream << " ;\n";
+    }
+
+    _imp->variable_mappings = move(_imp->outer->variable_mappings);
+    _imp->at_least_one_value_constraints = move(_imp->outer->at_least_one_value_constraints);
+    _imp->at_most_one_value_constraints = move(_imp->outer->at_most_one_value_constraints);
+    _imp->injectivity_constraints = move(_imp->outer->injectivity_constraints);
+    _imp->cached_proof_lines = move(_imp->outer->cached_proof_lines);
+    _imp->outer.reset();
+    _imp->nested.reset();
+    _imp->guard.reset();
+    _imp->deletable_core_lines_by_level.clear();
+
+    return _imp->nested_conclusion;
+}
+
+auto Proof::at_level_zero(const function<void()> & f) -> void
+{
+    auto level = _imp->active_level;
+    if (0 != level)
+        *_imp->proof_stream << "setlvl 0;\n";
+    _imp->active_level = 0;
+    f();
+    if (0 != level)
+        *_imp->proof_stream << "setlvl " << level << ";\n";
+    _imp->active_level = level;
+}
+
+auto Proof::guard_suffix() const -> string
+{
+    return _imp->guard ? " 1 " + *_imp->guard : "";
 }

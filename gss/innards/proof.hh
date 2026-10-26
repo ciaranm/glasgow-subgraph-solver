@@ -49,6 +49,18 @@ namespace gss::innards
         std::vector<int> non_neighbours;
     };
 
+    /**
+     * How a nested solve logs into an outer proof (see Proof::begin_nested_solve).
+     */
+    struct NestedSolve
+    {
+        /// Called with each solution the nested search finds, as (pattern vertex, target
+        /// vertex) pairs in the nested solve's own numbering. It may emit definitions,
+        /// at level 0 through Proof::at_level_zero, and returns the literal that guards
+        /// every search line from then on, which must be implied by the solution.
+        std::function<auto(const std::vector<std::pair<int, int>> &)->std::string> on_solution;
+    };
+
     class Proof
     {
     private:
@@ -128,6 +140,24 @@ namespace gss::innards
         auto emit_preserved_assignment_variables() -> void;
 
         auto finalise_model() -> void;
+
+        // Nested solves. A solve over part of the pattern can log into this proof, as long
+        // as its pattern's vertex names are the outer pattern's names for the same vertices:
+        // its variables and its at-least-one, at-most-one and adjacency rows are then the
+        // outer model's, and are not written again, while its injectivity rows are derived
+        // from the outer ones by weakening. Its search runs under a guard: no guard until it
+        // finds a solution, and then whatever literal NestedSolve::on_solution returns, so
+        // every search line it writes is "this, or one of the solutions so far". Its
+        // conclusion is the guard as a unit, or a contradiction if it found nothing.
+        auto begin_nested_solve(NestedSolve) -> void;
+        // Ends the nested solve, restoring the outer numbering, and returns the line number
+        // of its conclusion, or nothing if it did not conclude (it was aborted).
+        auto end_nested_solve() -> std::optional<long>;
+        // Run f with the proof at level 0, so that what it emits survives the search's
+        // backtracking, and then go back to the active level.
+        auto at_level_zero(const std::function<void()> & f) -> void;
+        // " 1 <guard>" to append to a search line's terms, or "" when there is no guard.
+        [[nodiscard]] auto guard_suffix() const -> std::string;
 
         // when we're done
         auto finish_unsat_proof() -> void;

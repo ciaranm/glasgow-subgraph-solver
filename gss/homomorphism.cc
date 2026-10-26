@@ -722,7 +722,7 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
-        proof = make_shared<Proof>(*params.proof_options);
+        proof = params.nested_proof ? params.nested_proof : make_shared<Proof>(*params.proof_options);
     }
 
     // The solver-proofs middle layer (owns vertex naming + the homomorphism-specific

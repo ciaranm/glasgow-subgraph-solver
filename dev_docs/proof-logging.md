@@ -46,6 +46,12 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
 | not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
 
+`--decomposition` refuses `--prove` unless it is also writing a counting statement
+(`--decomposition-statement`). It then writes one proof about the whole instance, into which each
+component of the pattern's search logs as a *nested solve* under a guard (`Proof::begin_nested_solve`),
+and which so far ends once it has derived the statement's root, with `conclusion NONE`. See
+[decomposition-counting.md](decomposition-counting.md), phase 4.
+
 `--staged` on its own *is* supported: the supplemental graphs are derived mid-proof at the level-0
 restart boundary, and an instance that concludes in the cheap first round emits no supplemental
 derivations at all.

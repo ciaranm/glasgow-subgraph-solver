@@ -128,6 +128,11 @@ namespace gss
 
         /// Optional proof options
         std::optional<ProofOptions> proof_options;
+
+        /// With proof_options set, log into this existing proof instead of writing a
+        /// model and a proof of our own; the files in proof_options are then ignored. The
+        /// proof must be in a nested solve (see innards::Proof::begin_nested_solve).
+        std::shared_ptr<innards::Proof> nested_proof;
     };
 
     struct HomomorphismResult

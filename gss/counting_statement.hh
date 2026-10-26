@@ -4,6 +4,7 @@
 #include <gss/loooong.hh>
 
 #include <exception>
+#include <functional>
 #include <iosfwd>
 #include <string>
 #include <utility>
@@ -62,6 +63,7 @@ namespace gss
     private:
         std::ostream & _out;
         int _next_id = 0;
+        std::function<void(int, const CountingNode &)> _observer;
 
         auto start_node(const char * kind) -> int;
 
@@ -72,6 +74,9 @@ namespace gss
         auto add_and(const std::vector<int> & children) -> int;
         auto add_or(const std::vector<int> & children) -> int;
         auto add_minus(int a, int b) -> int;
+
+        /// Called with each node's id and contents as soon as it is written.
+        auto set_observer(std::function<void(int, const CountingNode &)>) -> void;
 
         /// Closes the document. Must be called exactly once, last.
         auto finish(int root) -> void;
@@ -97,6 +102,16 @@ namespace gss
 
     /// The count of the root. Only right if the side conditions hold.
     auto count_counting_statement(const CountingStatement &) -> loooong;
+
+    /// The name of the counting formula's variable for "variable u takes value t", and
+    /// of node i's gate.
+    auto counting_variable_name(int u, int t) -> std::string;
+    auto counting_gate_name(int i) -> std::string;
+
+    /// The rows defining node i's gate, in the counting formula's own order and form,
+    /// each ending " ;": all but the last say that the gate implies its definition, and
+    /// the last that the definition implies the gate.
+    auto counting_node_definition(int i, const CountingNode & node) -> std::vector<std::string>;
 
     /// The counting formula, as an OPB file. It mentions only the statement's own
     /// variables, so a proof that it is equienumerable with some input has to move the

@@ -283,10 +283,16 @@ and no witness may touch a preserved variable.
   [counting-statements.md](counting-statements.md), "From an input to the counting formula".
 - **Gates** are introduced by `red`, in both directions, and are not in the preserved set,
   so introducing them preserves the count.
-- **Input ⇒ root.** Each component's embedding lies in its leaf, by that leaf's search
-  proof, logged into the one proof file under the guess literals as assumptions. The
-  overlaps contradict the input by RUP: every cube under σ ≠ 0̂ sets x_{u,t} and x_{v,t}
-  for some glued pair, against the at-most-one constraint for t.
+- **Input ⇒ root.** Each component's embedding lies in its leaf, by a search of that
+  component logged into the one proof. The search runs under a guard that it does not
+  know in advance. Until it finds a solution there is no guard. Each solution's cube is
+  then written to the statement and its gate defined, and a fold literal is defined:
+  f_k ↔ f_{k−1} ∨ cube_k. From then on every backtracking nogood carries "∨ f_k". So the
+  search concludes f_N, which implies the leaf, defined only afterwards over all the cubes.
+  Every definition is fresh when it is made, so nothing has to be known before the search
+  starts. Propagation failures need no guard: no solution extends them. The overlaps
+  contradict the input by RUP: every cube under σ ≠ 0̂ sets x_{u,t} and x_{v,t} for some
+  glued pair, against the at-most-one constraint for t.
 - **Root ⇒ input**, needed to delete the input's constraints as in Section 4.4 of the
   CP 2026 paper. A colliding element of Prod_0̂ has some exact pattern ρ, and to show it is
   in the overlap needs *glued-leaf completeness*. This was expected to need searches logged
@@ -511,6 +517,44 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
 - Emit the gate definitions through the translator's code, and derive the root.
 - Done when: VeriPB accepts the proof up to the point of deriving r_root, on small
   instances.
+- Status: done.
+  - `--prove NAME` now works with `--decomposition` when `--decomposition-statement` is
+    given (and only then), for unlabelled instances.
+  - The proof:
+    1. writes the solver's usual encoding of the whole instance;
+    2. moves the preserved set to the statement's variables;
+    3. defines every node's gate, into the core, as the statement writer writes it,
+       through `counting_node_definition`;
+    4. searches each component of the pattern as a nested solve under the fold guard
+       above;
+    5. derives the root as a unit, and stops with `conclusion NONE`.
+
+    When a component has no embeddings, its search derives a contradiction, and the proof
+    concludes that there are no solutions instead.
+  - `gss/innards/decomposition_proof.{hh,cc}` has the proof's side of this. The nested
+    solve is `Proof::begin_nested_solve`, which `HomomorphismParams::nested_proof` points a
+    solve at. A nested solve's pattern must name its vertices as the outer pattern does.
+    Then its variables and its at-most-one, at-least-one and adjacency rows are the outer
+    model's and are not written again. Its injectivity rows are derived per target, by
+    adding the other pattern vertices' literals to the outer row.
+  - Component searches do not share enumerations by isomorphism, because each proof is
+    about its own variables. This costs at most a factor of the number of components.
+  - For now, component searches run with `--no-supplementals --no-nds`. Glued components,
+    which need no search proof, run as before.
+  - `test-instances/decomposition_proof_sweep.bash` (ctest `decomposition_proof_sweep`)
+    checks 30 random instances, with and without loops. For each it checks the count,
+    `count_statement`, VeriPB, and that the root is derived. Before it was cut down for
+    ctest, the same checks passed on 100 small instances and 40 loopy ones of up to 7
+    pattern vertices.
+  - Planting bugs shows which steps matter:
+    - dropping the guard from backtracking nogoods breaks every instance;
+    - so does dropping it from solution clauses, or leaving the previous guard out of a
+      fold;
+    - dropping it from propagation failures changes nothing, which is why they do not
+      carry one;
+    - skipping the refutation of every glued cube breaks almost every instance, but
+      skipping the last of a leaf's cubes does not: unit propagation finds that one by
+      itself.
 
 ### Phase 5: root ⇒ input, and deletion
 
