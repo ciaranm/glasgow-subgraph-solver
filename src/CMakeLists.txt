@@ -34,6 +34,17 @@ add_test(NAME json_round_trip
         ${CMAKE_SOURCE_DIR}/test-instances
         ${CMAKE_CURRENT_BINARY_DIR}/json_round_trip)
 
+# The hand-written counting certificate from phase 2 of dev_docs/decomposition-counting.md:
+# the translator must still produce exactly the files its proofs were written against,
+# and the proofs are checked too when VeriPB is available.
+add_test(NAME counting_certificate_two_edges_into_path4
+    COMMAND ${CMAKE_SOURCE_DIR}/test-instances/counting/check_certificate.bash
+        $<TARGET_FILE:count_statement>
+        "$<$<BOOL:${VERIPB_EXECUTABLE}>:${VERIPB_EXECUTABLE}>"
+        ${CMAKE_SOURCE_DIR}/test-instances/counting/two_edges_into_path4
+        ${CMAKE_CURRENT_BINARY_DIR}/counting_certificate_two_edges_into_path4
+        8)
+
 # Proof-size metrics over a fixed, representative matrix (see
 # dev_docs/preprocessor-refactor.md). Pure measurement: it emits a TSV of the
 # supplemental-graph count and OPB/PBP line counts per configuration, the baseline that

@@ -1,0 +1,54 @@
+* #variable= 16 #constraint= 28;
+preserved: x0_0 x0_1 x0_2 x0_3 x1_0 x1_1 x1_2 x1_3 x2_0 x2_1 x2_2 x2_3 x3_0 x3_1 x3_2 x3_3 ;
+* vertex 0 domain
+@al10 1 x0_0 1 x0_1 1 x0_2 1 x0_3 >= 1 ;
+@am10 -1 x0_0 -1 x0_1 -1 x0_2 -1 x0_3 >= -1 ;
+* vertex 1 domain
+@al11 1 x1_0 1 x1_1 1 x1_2 1 x1_3 >= 1 ;
+@am11 -1 x1_0 -1 x1_1 -1 x1_2 -1 x1_3 >= -1 ;
+* vertex 2 domain
+@al12 1 x2_0 1 x2_1 1 x2_2 1 x2_3 >= 1 ;
+@am12 -1 x2_0 -1 x2_1 -1 x2_2 -1 x2_3 >= -1 ;
+* vertex 3 domain
+@al13 1 x3_0 1 x3_1 1 x3_2 1 x3_3 >= 1 ;
+@am13 -1 x3_0 -1 x3_1 -1 x3_2 -1 x3_3 >= -1 ;
+* injectivity on value 0
+@inj0 -1 x0_0 -1 x1_0 -1 x2_0 -1 x3_0 >= -1 ;
+* injectivity on value 1
+@inj1 -1 x0_1 -1 x1_1 -1 x2_1 -1 x3_1 >= -1 ;
+* injectivity on value 2
+@inj2 -1 x0_2 -1 x1_2 -1 x2_2 -1 x3_2 >= -1 ;
+* injectivity on value 3
+@inj3 -1 x0_3 -1 x1_3 -1 x2_3 -1 x3_3 >= -1 ;
+* adjacency 0 maps to 0
+@adj0_0_1 1 ~x0_0 1 x1_1 >= 1 ;
+* adjacency 0 maps to 1
+@adj0_1_1 1 ~x0_1 1 x1_0 1 x1_2 >= 1 ;
+* adjacency 0 maps to 2
+@adj0_2_1 1 ~x0_2 1 x1_1 1 x1_3 >= 1 ;
+* adjacency 0 maps to 3
+@adj0_3_1 1 ~x0_3 1 x1_2 >= 1 ;
+* adjacency 1 maps to 0
+@adj1_0_0 1 ~x1_0 1 x0_1 >= 1 ;
+* adjacency 1 maps to 1
+@adj1_1_0 1 ~x1_1 1 x0_0 1 x0_2 >= 1 ;
+* adjacency 1 maps to 2
+@adj1_2_0 1 ~x1_2 1 x0_1 1 x0_3 >= 1 ;
+* adjacency 1 maps to 3
+@adj1_3_0 1 ~x1_3 1 x0_2 >= 1 ;
+* adjacency 2 maps to 0
+@adj2_0_3 1 ~x2_0 1 x3_1 >= 1 ;
+* adjacency 2 maps to 1
+@adj2_1_3 1 ~x2_1 1 x3_0 1 x3_2 >= 1 ;
+* adjacency 2 maps to 2
+@adj2_2_3 1 ~x2_2 1 x3_1 1 x3_3 >= 1 ;
+* adjacency 2 maps to 3
+@adj2_3_3 1 ~x2_3 1 x3_2 >= 1 ;
+* adjacency 3 maps to 0
+@adj3_0_2 1 ~x3_0 1 x2_1 >= 1 ;
+* adjacency 3 maps to 1
+@adj3_1_2 1 ~x3_1 1 x2_0 1 x2_2 >= 1 ;
+* adjacency 3 maps to 2
+@adj3_2_2 1 ~x3_2 1 x2_1 1 x2_3 >= 1 ;
+* adjacency 3 maps to 3
+@adj3_3_2 1 ~x3_3 1 x2_2 >= 1 ;

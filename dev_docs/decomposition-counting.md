@@ -3,8 +3,9 @@
 A design plan for counting subgraph embeddings by decomposition, following Section 3.6 of
 Jessica Ryan's PhD thesis, and for certifying those counts with VeriPB without enumerating
 the solutions. This is forward-looking: it describes where the code is going, not where it
-is. The first piece, the c = 0 case without proofs, exists as a prototype in
-`gss/sip_decomposer.cc`; everything else here is a plan. For the current architecture see
+is. The c = 0 case without proofs exists as a prototype in `gss/sip_decomposer.cc`, it can
+state its argument as a counting statement (phase 1), and one certificate has been written
+by hand (phase 2); everything else here is a plan. For the current architecture see
 [architecture.md](architecture.md); for proof logging see
 [proof-logging.md](proof-logging.md).
 
@@ -101,9 +102,14 @@ supported. In brief:
   to the exact graph above 5040 orderings.
 - none() is memoised on the quotient's isomorphism class, which is the sorted multiset of
   its components' keys.
+- A quotient with more blocks of some label than the target has vertices with that label
+  has no injective embedding, and is skipped. Without this, a pattern bigger than its
+  target explores every way of gluing itself together.
 - It reports `decomposition_components`, `decomposition_solver_calls`,
   `decomposition_quotients` and `decomposition_coarsenings_considered`.
 - It refuses proof logging, and produces no mapping when counting.
+- With `--decomposition-statement FILE` it also writes its argument as a counting
+  statement; see phase 1 below.
 
 `gss/sip_decomposer_test.cc` compares it with the plain solver on 200 random disconnected
 patterns across loops and labels.
@@ -126,7 +132,9 @@ by enumeration; and there is no c > 0 case yet.
 The aim is to move as much of the argument as possible into VeriPB rather than into an
 external combiner. The solver states its argument in a small language whose statements
 are efficiently countable, and VeriPB checks that the problem is equienumerable with a PB
-translation of that statement.
+translation of that statement. The file format and the exact translation are specified in
+[counting-statements.md](counting-statements.md); this section is about why the language
+is the way it is.
 
 ### Nodes
 
@@ -187,10 +195,17 @@ checked before any count is reported.
   nodes.
 - The rest are about f(m) · m^c · c^c instances: disjointness between hub guesses,
   containment for each Exact_σ, and disjointness of the exact-pattern classes.
-- Each of those is emitted by the translator as a small PB instance over the statement's
-  own definitions, such as defs ∧ r_b ∧ ¬r_a, which needs an ordinary UNSAT proof. Because
-  the instance contains only definitions, it cannot accidentally depend on the problem's
-  constraints, and no VeriPB extension is needed.
+- The translator emits all of those as one PB instance over the statement's own
+  definitions, with a selector variable for each condition saying that it is violated
+  (for a ⊖ node, r_b ∧ ¬r_a), and a clause saying that one of them is. That needs an
+  ordinary UNSAT proof. Because the instance contains only definitions, it cannot
+  accidentally depend on the problem's constraints, and no VeriPB extension is needed.
+- Phase 2 confirmed that this is load-bearing. A statement that lists one of its glued
+  leaves twice under the same ⊕ translates to a formula whose main proof still verifies
+  as `EQUIENUMERABLE`, because the duplicate does not change which assignments the root
+  accepts. But the counter adds the duplicate's count twice, and prints 4 for an instance
+  with 8 solutions. Only the side-condition instance, which then has a solution, catches
+  it.
 - Later, these could move inside the main proof with a narrowly scoped VeriPB feature: a
   lemma that may use only the output formula's definitions.
 
@@ -233,21 +248,24 @@ inclusion–exclusion.
 
 ### Lining up the files
 
-`EQUIENUMERABLE FILE` needs the output file to match the final database exactly, so:
+What `EQUIENUMERABLE FILE` compares, from `veripb-checker/src/rules/output.rs` and checked
+in phase 2: every constraint in the output file must be in the database and in core, and
+every core constraint must be in the output file, looked up after normalisation. So it is a
+set comparison. Order does not matter, a duplicated row is harmless, and `-1 x … >= -1`
+matches `1 x … <= 1`. Derived constraints are ignored. The preserved sets must be equal as
+sets. Checked deletion must never have been downgraded, no solution may have been logged,
+and no witness may touch a preserved variable.
 
 - **Use one implementation.** The solver emits its gate definitions in the proof by
   calling the translator's code, so the two copies cannot diverge. The independent copy is
   the one checked.
-- **Order.** If both walk the DAG in the same order, constraint order matches. If VeriPB
-  turns out to compare order and that proves fragile, the options are a VeriPB feature
-  request or the planned PERMUTATION output.
 - **Names.** x variables follow the certified encoder's naming exactly, as for the CakePB
   encoding. Gate variables are derived from node ids under a prefix the encoder never
   uses.
 - **The encoding's own constraints.** Everything from the SIP encoding is deleted except
   what the translator also emits. The overlap is the exactly-one group for each pattern
-  vertex: either the translator copies the encoding's exact syntax, or the proof re-derives
-  the translator's form and deletes the encoding's.
+  vertex, and because the comparison normalises, the translator's `>= 1` and `<= 1` rows
+  match the encoding's `@al1` and `@am1` rows as they stand.
 
 ### The main proof
 
@@ -260,11 +278,11 @@ inclusion–exclusion.
   for some glued pair, against the at-most-one constraint for t.
 - **Root ⇒ input**, needed to delete the input's constraints as in Section 4.4 of the
   CP 2026 paper. A colliding element of Prod_0̂ has some exact pattern ρ, and to show it is
-  in the overlap needs *glued-leaf completeness*. Glued cubes deliberately violate
-  injectivity, so those searches must be logged against adjacency plus per-component
-  at-most-one constraints, derived from the full ones before they are deleted. The
-  deletion order matters, and the proof contains searches over assignments that the input
-  rules out. This is the hardest part of the proof engineering.
+  in the overlap needs *glued-leaf completeness*. This was expected to need searches logged
+  against adjacency plus per-component at-most-one constraints. Phase 2 found otherwise:
+  the adjacency rows go by unit propagation, and the injectivity rows by the collision
+  lemma, which needs only the statement's own definitions (see phase 2's findings). This
+  is still the hardest part of the proof engineering.
 
 ## Plan
 
@@ -288,6 +306,63 @@ parallel.
 - Done when: the counter reproduces `solution_count` on the random tests and the grid
   instances, and the translator's PB formula has the same count as the input under brute
   force on tiny instances.
+- Status: done, except for the larger grid instances, which need the renaming node.
+  - The format and the translation are specified in
+    [counting-statements.md](counting-statements.md). It is an s-expression in the same
+    small dialect as the constraint solver's `.scp` files, chosen so that a verified
+    parser stays simple: numbers and a few keywords only, no names, strings or comments,
+    fixed sections, and node ids that must count up from zero with children defined first.
+  - `gss/counting_statement.{hh,cc}` reads, checks, counts and translates statements, and
+    writes them as they are built. `src/count_statement.cc` is the standalone counter and
+    translator. `--decomposition-statement FILE` makes the solver write one.
+  - Statements build the c = 0 recursion over every pattern vertex: isolated vertices are
+    components like any other, and there is one node per quotient, not per isomorphism
+    class. Isomorphic components still share one enumeration, renamed into place.
+  - There is no node for "nothing". If some component has no embeddings, or the pattern
+    cannot fit by pigeonhole, no statement is written, and an ordinary unsatisfiability
+    proof is the right certificate. A count of zero for any other reason is expressible,
+    as a ⊖ whose two sides are equal.
+  - A pigeonholed quotient gets no node, so it is left out of its parents' ⊕ nodes. That
+    is sound for the count, but the certificate will have to refute those quotients, by a
+    counting argument from the at-most-one constraints.
+  - `gss/counting_statement_test.cc` tests the language on its own: counts, every way of
+    being malformed, and the exact translation.
+  - `gss/sip_decomposer_test.cc` checks statement counts against the plain solver on
+    random disconnected patterns. On tiny instances it evaluates every assignment against
+    the meaning of every node and the side conditions. On the solutions, and a sample of the
+    other assignments, it also checks the translator's rows: every definition holds, the
+    root row holds exactly when the root does, flipping any one gate breaks one of its own
+    rows, and no violation selector in the side-condition instance can be switched on.
+    Planting any of six bugs, three in the translator and three in the decomposer, makes it
+    fail.
+  - Phase 2's certificate is a regression test (see below), and the translator reproduces
+    an independently written Python translator's output byte for byte on it.
+
+  Measured sizes:
+
+  | Instance | Nodes | File | Build | Count |
+  |---|---|---|---|---|
+  | 3 edges, 6×6 grid | 34k | 1.9 MB | 0.1 s | 0.1 s |
+  | 3 × P3, 6×6 grid | 2.1M | 175 MB | 3.8 s | 4.0 s, 640 MB |
+  | 3 edges, 40×40 grid | 2.3M | 161 MB | 3.1 s | 3.5 s, 470 MB |
+  | 6 edges, 6×6 grid | stopped at 300 s, after 15.7 GB of statement | | | |
+  | 4 × P4, 6×6 grid | stopped after 3 GB of statement | | | |
+
+  The solver writes statements as it goes, so it builds them in under 25 MB, but they get
+  big quickly. Two things blow up: there is one node per partition rather than per
+  isomorphism class (6 edges have 113 classes, and vastly more partitions), and every glued
+  component's embeddings are written out as cubes. The renaming node (see "Later") fixes
+  the first, and is a prerequisite for anything that is not small. The second is inherent
+  to leaves being plain enumerations. The counter holds the whole statement in memory, as
+  a verified one probably would.
+- Instances are in `test-instances/decomposition/`, as CSV:
+  - `grid6` and `grid40` are 6×6 and 40×40 grid graphs;
+  - `edges2`, `edges3` and `edges6` are disjoint unions of edges;
+  - `p3x3` is three disjoint P3s, and `p4x4` is four disjoint P4s;
+  - `path4` is the path on four vertices.
+
+  Run experiments under `ulimit -v` and `ulimit -f`, and use the solver's own `--timeout`
+  rather than `timeout`, so that it can remove an incomplete statement.
 
 ### Phase 2: VeriPB feasibility, by hand
 
@@ -300,6 +375,64 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
   most likely to be expensive, and the mathematics needs it whatever the encoding.
 - Done when: the hand-written certificate verifies, or there is a precise list of what
   VeriPB would need.
+- Status: done for two disjoint edges into P4, which is in
+  `test-instances/counting/two_edges_into_path4/` and checked by the
+  `counting_certificate_two_edges_into_path4` test. It has the statement, the solver's
+  encoding of the instance, the translator's two files, and two proofs:
+  - `main.pbp`, 614 lines: `veripb --force-checked-deletion input.opb main.pbp output.opb`
+    says `s VERIFIED OUTPUT EQUIENUMERABLE`;
+  - `side.pbp`, 126 lines: `veripb side.opb side.pbp` says `s VERIFIED UNSATISFIABLE`.
+
+  How the main proof goes:
+  1. Every gate is introduced by `red` in both directions, autoproved, and moved to core.
+  2. Input ⇒ root. Each component's leaf holds, by a search over that component that
+     closes off each solution with the clause "not this assignment, or the leaf gate"
+     instead of `solx`. Every cube of a glued leaf is refuted by RUP against one
+     injectivity row. Then the ⊕ and the ⊖ follow by RUP.
+  3. Root ⇒ input, by deleting the encoding's rows.
+     - Each adjacency row is deleted with no subproof at all. Unit propagation from the
+       root reaches the component's leaf, and every cube in it is falsified, either by
+       the at-most-one or by the missing neighbour.
+     - Each injectivity row is deleted with a subproof. It derives the pairwise clauses
+       ¬x_{u,t} ∨ ¬x_{v,t}, recovers the at-most-one from them with `pol`, and
+       contradicts the negated row. For u and v in the same component, the pairwise
+       clause is one RUP step, because every cube is injective. Across components, it
+       is a case split on the other vertices' values: each case completes a cube of some
+       glued leaf, and the root says that no glued leaf holds.
+  4. `output EQUIENUMERABLE FILE`.
+
+  Findings:
+  - The exactly-one rows did not need touching: VeriPB normalises before comparing (see
+    "Lining up the files").
+  - Root ⇒ input does not need the adjacency rows. The proof still verifies with every
+    adjacency row deleted *before* the injectivity rows. The completeness it needs comes
+    from the glued leaves' own cubes, not from searches against adjacency. So the plan's
+    "glued-leaf completeness searches logged against adjacency plus per-component
+    at-most-one" are unnecessary, at least here.
+  - The side conditions are load-bearing, as the plan said: see "Side conditions affect
+    the count".
+  - Here every Exact under the root's ⊕ is a leaf, because every quotient of two edges is
+    connected. Disjointness was one RUP per cube per pair of leaves, then `pol`.
+
+  With three or more components, an Exact node under a ⊕ is a ⊖ in its own right, and
+  disjointness and root ⇒ input turn out to need the same lemma. Call it the *collision
+  lemma* at τ: Prod_τ ∧ x_{u,t} ∧ x_{v,t} → B_τ, for u and v in different components of
+  H/τ, where B_τ is the ⊕ under Exact_τ.
+  - Two different Exacts under one ⊕ have partitions that differ on some pair u, v,
+    glued in one (so every cube there has u and v equal) but not in the other.
+  - If u and v are in the same component of the other quotient, its cubes all separate
+    them. That gives one RUP step per value t, with no case split.
+  - Otherwise the other Exact implies, by its collision lemma, that u and v differ.
+  - Deleting injectivity row t is the collision lemma at the root.
+
+  The lemma should follow by cases on pairs of cubes, one from each of the two components
+  that collide. A colliding pair completes a cube of the glued leaf of some ρ above τ, and
+  so Prod_ρ by unit propagation, and Prod_ρ implies Exact_ρ ∨ B_ρ. Every node under B_ρ
+  is also under B_τ, so B_ρ → B_τ is one RUP step. The number of cases is the number of
+  colliding cube pairs, which is about the size of the glued leaves. So this is
+  polynomial in what the solver already enumerated, and in the FPT budget. This has not
+  been checked on an instance yet; a proof generator for small statements with three
+  components is the next step.
 
 ### Phase 3: c > 0, without proofs
 
@@ -322,8 +455,9 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
 
 ### Phase 5: root ⇒ input, and deletion
 
-- Derive the per-component at-most-one constraints, run and log the glued-leaf
-  completeness searches, then delete the input constraints in a valid order.
+- Delete the adjacency rows, which unit propagation from the root justifies, and the
+  injectivity rows, by the collision lemma at the root (see phase 2). Pigeonholed
+  quotients, which have no nodes, need a counting argument instead.
 - Done when: `EQUIENUMERABLE` verifies end to end against the counter's file, for c = 0
   and then c > 0.
 
@@ -345,8 +479,9 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
 
 ## Open questions
 
-- How expensive are the exact-pattern disjointness proofs in practice?
-- Does `EQUIENUMERABLE FILE` care about constraint order?
+- How expensive are the exact-pattern disjointness proofs in practice? Phase 2 suggests
+  they are the same problem as deleting the injectivity constraints, and polynomial in the
+  leaves, but that is untested beyond two components.
 - How big do certificates get on instances where decomposition actually wins, compared
   with enumeration proofs of the same counts?
 - When should the solver choose to decompose at all?

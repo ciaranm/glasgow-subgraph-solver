@@ -10,6 +10,9 @@ perf.data.old
 *.opb
 *.veripb
 *.pbp
+# ...except hand-written certificates, which are test fixtures
+!test-instances/counting/**/*.opb
+!test-instances/counting/**/*.pbp
 
 # ide
 .idea/
