@@ -142,9 +142,18 @@ Every node is a **reified gate**: an extension variable r_n defined in both dire
 over its children. Gate variables are therefore functionally determined by the original
 variables, which is what makes negation, and hence subtraction, cheap.
 
-Variables are **multi-valued**: each pattern vertex u is the exactly-one group x_{u,·}. A
-literal fixes one value and implicitly sets the rest of the group false. Without this,
-smoothing over Boolean variables would cost a factor of n.
+Variables are **multi-valued**: each is an exactly-one group, such as y_{u,·} for pattern
+vertex u. A literal fixes one value and implicitly sets the rest of the group false. Without
+this, smoothing over Boolean variables would cost a factor of n.
+
+The statement's variables are its own, not the input's. The counting formula mentions
+nothing from the input encoding, and the proof moves the preserved set across to it, as in
+Section 4 of the CP 2026 paper. That keeps the verified counter and translator independent
+of the problem: they would serve a constraint solver whose preserved set is the bits of its
+integer variables, or an AND/OR search, as well as this. It also leaves the solver free to
+choose its variables. One per pattern vertex is a renaming; one per component, with one
+value per embedding, would make each component's leaf just its exactly-one group. Phase 2
+measured the renaming as a small, constant cost per input variable.
 
 Each node has a *scope*, a set of multi-valued variables, and a count: the number of
 assignments to its scope, respecting the exactly-one groups, under which r_n is true.
@@ -163,8 +172,8 @@ are an exactly-one over that many fresh variables.
 ### Translation
 
 A statement translates to a linear-size PB formula: the gate definitions, the exactly-one
-groups, and the unit constraint r_root. Because every gate is determined by x, the
-formula's count projected onto x is the root's count. For example, ⊖ is
+groups, and the unit constraint r_root. Because every gate is determined by the variables,
+the formula's count projected onto them is the root's count. For example, ⊖ is
 
 ```
 1 ~r 1 a >= 1 ;        % r → a
@@ -259,19 +268,21 @@ and no witness may touch a preserved variable.
 - **Use one implementation.** The solver emits its gate definitions in the proof by
   calling the translator's code, so the two copies cannot diverge. The independent copy is
   the one checked.
-- **Names.** x variables follow the certified encoder's naming exactly, as for the CakePB
-  encoding. Gate variables are derived from node ids under a prefix the encoder never
-  uses.
-- **The encoding's own constraints.** Everything from the SIP encoding is deleted except
-  what the translator also emits. The overlap is the exactly-one group for each pattern
-  vertex, and because the comparison normalises, the translator's `>= 1` and `<= 1` rows
-  match the encoding's `@al1` and `@am1` rows as they stand.
+- **Names.** The counting formula uses only its own names (`y`, `g`), which the encoder
+  never uses, so nothing has to match the encoder's naming. That would not have been
+  true of the formula sharing the input's x variables, which would have tied the
+  translator to one encoder's names and broken for inputs with named vertices.
+- **The encoding's own constraints.** Everything from the SIP encoding is deleted,
+  including its exactly-one rows, once the y versions have been derived from them.
 
 ### The main proof
 
+- **Variables.** Each y variable is defined from the input's variables and added to the
+  preserved set, and at the end each x variable is removed from it, and the links are
+  deleted with an x ↦ y witness. The steps are listed in
+  [counting-statements.md](counting-statements.md), "From an input to the counting formula".
 - **Gates** are introduced by `red`, in both directions, and are not in the preserved set,
-  so introducing them preserves the count. No `preserved_add` or `preserved_rm` is needed,
-  because everything stays over x.
+  so introducing them preserves the count.
 - **Input ⇒ root.** Each component's embedding lies in its leaf, by that leaf's search
   proof, logged into the one proof file under the guess literals as assumptions. The
   overlaps contradict the input by RUP: every cube under σ ≠ 0̂ sets x_{u,t} and x_{v,t}
@@ -379,12 +390,14 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
   `test-instances/counting/two_edges_into_path4/` and checked by the
   `counting_certificate_two_edges_into_path4` test. It has the statement, the solver's
   encoding of the instance, the translator's two files, and two proofs:
-  - `main.pbp`, 614 lines: `veripb --force-checked-deletion input.opb main.pbp output.opb`
+  - `main.pbp`, 758 lines: `veripb --force-checked-deletion input.opb main.pbp output.opb`
     says `s VERIFIED OUTPUT EQUIENUMERABLE`;
   - `side.pbp`, 126 lines: `veripb side.opb side.pbp` says `s VERIFIED UNSATISFIABLE`.
 
   How the main proof goes:
-  1. Every gate is introduced by `red` in both directions, autoproved, and moved to core.
+  1. Each y variable is defined as a copy of its x variable and added to the preserved set,
+     and the exactly-one rows over y are derived. Then every gate is introduced by `red`
+     in both directions, autoproved, and moved to core.
   2. Input ⇒ root. Each component's leaf holds, by a search over that component that
      closes off each solution with the clause "not this assignment, or the leaf gate"
      instead of `solx`. Every cube of a glued leaf is refuted by RUP against one
@@ -399,11 +412,17 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
        clause is one RUP step, because every cube is injective. Across components, it
        is a case split on the other vertices' values: each case completes a cube of some
        glued leaf, and the root says that no glued leaf holds.
-  4. `output EQUIENUMERABLE FILE`.
+  4. The x exactly-one rows are deleted, each x variable leaves the preserved set, and the
+     links are deleted with x ↦ y witnesses.
+  5. `output EQUIENUMERABLE FILE`, against a file that mentions no x at all.
 
   Findings:
-  - The exactly-one rows did not need touching: VeriPB normalises before comparing (see
-    "Lining up the files").
+  - Moving the preserved set to the statement's own variables costs 144 of the 758 lines,
+    a constant number per input variable, and VeriPB proves every one of those steps by
+    itself apart from four one-line `pol` subproofs. An earlier version kept the x
+    variables and their exactly-one rows in the output, which needed none of this (VeriPB
+    normalises before comparing, so the rows matched), but tied the translator to the
+    encoder.
   - Root ⇒ input does not need the adjacency rows. The proof still verifies with every
     adjacency row deleted *before* the injectivity rows. The completeness it needs comes
     from the glued leaves' own cubes, not from searches against adjacency. So the plan's

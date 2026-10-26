@@ -1,6 +1,6 @@
 (
   (version 1)
-  (domain 4 4)
+  (domain 4 4 4 4)
   (nodes
     (0 cube (0 0) (1 1))
     (1 cube (0 1) (1 0))

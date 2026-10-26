@@ -48,8 +48,8 @@ namespace gss
 
     struct CountingStatement
     {
-        int number_of_variables = 0;
-        int number_of_values = 0;
+        /// Variable u takes one of the values 0 to domain_sizes[u] - 1.
+        std::vector<int> domain_sizes;
         std::vector<CountingNode> nodes;
         int root = 0;
     };
@@ -66,7 +66,7 @@ namespace gss
         auto start_node(const char * kind) -> int;
 
     public:
-        CountingStatementWriter(std::ostream & out, int number_of_variables, int number_of_values);
+        CountingStatementWriter(std::ostream & out, const std::vector<int> & domain_sizes);
 
         auto add_cube(const std::vector<std::pair<int, int>> & assignment) -> int;
         auto add_and(const std::vector<int> & children) -> int;
@@ -98,7 +98,9 @@ namespace gss
     /// The count of the root. Only right if the side conditions hold.
     auto count_counting_statement(const CountingStatement &) -> loooong;
 
-    /// The counting formula, as an OPB file.
+    /// The counting formula, as an OPB file. It mentions only the statement's own
+    /// variables, so a proof that it is equienumerable with some input has to move the
+    /// input's preserved set over to them.
     auto write_counting_opb(std::ostream &, const CountingStatement &) -> void;
 
     /// The side-condition instance, as an OPB file, which must be unsatisfiable. Writes

@@ -27,14 +27,13 @@ namespace
     }
 
     // one variable, three values, either of the first two
-    const string one_of_two = statement("1 3", "(0 cube (0 0)) (1 cube (0 1)) (2 or 0 1)", "2");
+    const string one_of_two = statement("3", "(0 cube (0 0)) (1 cube (0 1)) (2 or 0 1)", "2");
 }
 
 TEST_CASE("counting statements read and count")
 {
     auto s = read(one_of_two);
-    CHECK(s.number_of_variables == 1);
-    CHECK(s.number_of_values == 3);
+    CHECK(s.domain_sizes == vector<int>{3});
     CHECK(s.nodes.size() == 3);
     CHECK(count_counting_statement(s) == 2);
     CHECK(counting_side_conditions(s).empty());
@@ -43,7 +42,7 @@ TEST_CASE("counting statements read and count")
 TEST_CASE("counting statements multiply, add and subtract")
 {
     // x0 in {0, 1}, x1 in {0, 1, 2}, minus the one where both are 0
-    auto s = read(statement("2 3",
+    auto s = read(statement("3 3",
         "(0 cube (0 0)) (1 cube (0 1)) (2 or 0 1) "
         "(3 cube (1 0)) (4 cube (1 1)) (5 cube (1 2)) (6 or 3 4 5) "
         "(7 and 2 6) (8 cube (0 0) (1 0)) (9 minus 7 8)",
@@ -58,15 +57,15 @@ TEST_CASE("counting statements multiply, add and subtract")
 
 TEST_CASE("counting statements allow empty cubes and ands")
 {
-    CHECK(count_counting_statement(read(statement("0 5", "(0 cube)", "0"))) == 1);
-    CHECK(count_counting_statement(read(statement("0 5", "(0 and)", "0"))) == 1);
+    CHECK(count_counting_statement(read(statement("", "(0 cube)", "0"))) == 1);
+    CHECK(count_counting_statement(read(statement("", "(0 and)", "0"))) == 1);
 }
 
 TEST_CASE("counting statements leave only non-syntactic side conditions")
 {
     // an or of distinct cubes is discharged; an or with a repeated cube, or over
     // anything that is not a cube, is not
-    auto s = read(statement("1 3",
+    auto s = read(statement("3",
         "(0 cube (0 0)) (1 cube (0 1)) (2 cube (0 1)) "
         "(3 or 0 1) (4 or 1 2) (5 or 0 0) (6 or 3)",
         "6"));
@@ -75,7 +74,7 @@ TEST_CASE("counting statements leave only non-syntactic side conditions")
 
 TEST_CASE("counting statements reject a negative minus")
 {
-    auto s = read(statement("1 3", "(0 cube (0 0)) (1 cube (0 1)) (2 or 0 1) (3 minus 0 2)", "3"));
+    auto s = read(statement("3", "(0 cube (0 0)) (1 cube (0 1)) (2 or 0 1) (3 minus 0 2)", "3"));
     CHECK_THROWS_AS(count_counting_statement(s), CountingStatementError);
 }
 
@@ -85,41 +84,44 @@ TEST_CASE("counting statements reject anything malformed")
         // lexical and grammatical
         string{""},
         string{"("},
-        statement("1 3", "(0 cube (0 0)) (1 cube (0 1)) (2 or 0 1)", "2") + " extra",
+        statement("3", "(0 cube (0 0)) (1 cube (0 1)) (2 or 0 1)", "2") + " extra",
         string{"((version 2) (domain 1 1) (nodes (0 cube (0 0))) (root 0))"},
         string{"((domain 1 1) (version 1) (nodes (0 cube (0 0))) (root 0))"},
         string{"((version 1) (domain 1 1) (nodes (0 cube (0 0))))"},
-        statement("1 03", "(0 cube (0 0))", "0"),
-        statement("1 -3", "(0 cube (0 0))", "0"),
-        statement("1 +3", "(0 cube (0 0))", "0"),
-        statement("1 3", "(0 cube (0 0)) (1 xor 0)", "1"),
-        statement("1 3", "(0 cube (0 0) (0))", "0"),
-        statement("1 3", "(0 cube (0 0 1))", "0"),
-        statement("1 3", "(0 cube 0 0)", "0"),
-        statement("1 3", "(0 or (0 0))", "0"),
-        statement("1 99999999999", "(0 cube (0 0))", "0"),
+        statement("03", "(0 cube (0 0))", "0"),
+        statement("-3", "(0 cube (0 0))", "0"),
+        statement("+3", "(0 cube (0 0))", "0"),
+        statement("3", "(0 cube (0 0)) (1 xor 0)", "1"),
+        statement("3", "(0 cube (0 0) (0))", "0"),
+        statement("3", "(0 cube (0 0 1))", "0"),
+        statement("3", "(0 cube 0 0)", "0"),
+        statement("3", "(0 or (0 0))", "0"),
+        statement("99999999999", "(0 cube (0 0))", "0"),
         // ids and references
-        statement("1 3", "(1 cube (0 0))", "1"),
-        statement("1 3", "(0 cube (0 0)) (0 cube (0 1))", "0"),
-        statement("1 3", "(0 or 0)", "0"),
-        statement("1 3", "(0 or 1) (1 cube (0 0))", "0"),
-        statement("1 3", "(0 cube (0 0))", "1"),
+        statement("3", "(1 cube (0 0))", "1"),
+        statement("3", "(0 cube (0 0)) (0 cube (0 1))", "0"),
+        statement("3", "(0 or 0)", "0"),
+        statement("3", "(0 or 1) (1 cube (0 0))", "0"),
+        statement("3", "(0 cube (0 0))", "1"),
         // ranges
-        statement("1 3", "(0 cube (1 0))", "0"),
-        statement("1 3", "(0 cube (0 3))", "0"),
+        statement("3", "(0 cube (1 0))", "0"),
+        statement("3", "(0 cube (0 3))", "0"),
         // cubes
-        statement("2 3", "(0 cube (1 0) (0 0))", "0"),
-        statement("2 3", "(0 cube (0 0) (0 1))", "0"),
+        statement("3 3", "(0 cube (1 0) (0 0))", "0"),
+        statement("3 3", "(0 cube (0 0) (0 1))", "0"),
         // scopes
-        statement("2 3", "(0 cube (0 0)) (1 cube (0 1) (1 1)) (2 and 0 1)", "2"),
-        statement("2 3", "(0 cube (0 0) (1 0)) (1 cube (0 1)) (2 or 0 1)", "2"),
-        statement("2 3", "(0 cube (0 0) (1 0)) (1 or)", "0"),
-        statement("2 3", "(0 cube (0 0) (1 0)) (1 cube (0 1)) (2 minus 0 1)", "2"),
-        statement("2 3", "(0 cube (0 0) (1 0)) (1 minus 0)", "1"),
-        statement("2 3", "(0 cube (0 0) (1 0)) (1 minus 0 0 0)", "1"),
+        statement("3 3", "(0 cube (0 0)) (1 cube (0 1) (1 1)) (2 and 0 1)", "2"),
+        statement("3 3", "(0 cube (0 0) (1 0)) (1 cube (0 1)) (2 or 0 1)", "2"),
+        statement("3 3", "(0 cube (0 0) (1 0)) (1 or)", "0"),
+        statement("3 3", "(0 cube (0 0) (1 0)) (1 cube (0 1)) (2 minus 0 1)", "2"),
+        statement("3 3", "(0 cube (0 0) (1 0)) (1 minus 0)", "1"),
+        statement("3 3", "(0 cube (0 0) (1 0)) (1 minus 0 0 0)", "1"),
         // the root must cover every variable
-        statement("2 3", "(0 cube (0 0))", "0"),
-        statement("2 3", "(0 cube (0 0) (1 0)) (1 cube (0 0))", "1"));
+        statement("3 3", "(0 cube (0 0))", "0"),
+        statement("3 3", "(0 cube (0 0) (1 0)) (1 cube (0 0))", "1"),
+        // each variable has its own domain
+        statement("2 3", "(0 cube (0 2) (1 0))", "0"),
+        statement("3 0", "(0 cube (0 0))", "0"));
 
     INFO(bad);
     CHECK_THROWS_AS(read(bad), CountingStatementError);
@@ -134,19 +136,19 @@ TEST_CASE("counting statements translate exactly as specified")
     stringstream opb;
     write_counting_opb(opb, s);
     CHECK(opb.str() ==
-        "preserved: x0_0 x0_1 x1_0 x1_1 ;\n"
-        "1 x0_0 1 x0_1 >= 1 ;\n"
-        "1 x0_0 1 x0_1 <= 1 ;\n"
-        "1 x1_0 1 x1_1 >= 1 ;\n"
-        "1 x1_0 1 x1_1 <= 1 ;\n"
-        "2 ~g0 1 x0_0 1 x1_1 >= 2 ;\n"
-        "1 g0 1 ~x0_0 1 ~x1_1 >= 1 ;\n"
-        "2 ~g1 1 x0_1 1 x1_0 >= 2 ;\n"
-        "1 g1 1 ~x0_1 1 ~x1_0 >= 1 ;\n"
+        "preserved: y0_0 y0_1 y1_0 y1_1 ;\n"
+        "1 y0_0 1 y0_1 >= 1 ;\n"
+        "1 y0_0 1 y0_1 <= 1 ;\n"
+        "1 y1_0 1 y1_1 >= 1 ;\n"
+        "1 y1_0 1 y1_1 <= 1 ;\n"
+        "2 ~g0 1 y0_0 1 y1_1 >= 2 ;\n"
+        "1 g0 1 ~y0_0 1 ~y1_1 >= 1 ;\n"
+        "2 ~g1 1 y0_1 1 y1_0 >= 2 ;\n"
+        "1 g1 1 ~y0_1 1 ~y1_0 >= 1 ;\n"
         "1 ~g2 1 g0 1 g1 >= 1 ;\n"
         "2 g2 1 ~g0 1 ~g1 >= 2 ;\n"
-        "2 ~g3 1 x0_0 1 x1_1 >= 2 ;\n"
-        "1 g3 1 ~x0_0 1 ~x1_1 >= 1 ;\n"
+        "2 ~g3 1 y0_0 1 y1_1 >= 2 ;\n"
+        "1 g3 1 ~y0_0 1 ~y1_1 >= 1 ;\n"
         "1 ~g4 1 g2 >= 1 ;\n"
         "1 ~g4 1 ~g3 >= 1 ;\n"
         "1 g4 1 ~g2 1 g3 >= 1 ;\n"
@@ -165,6 +167,30 @@ TEST_CASE("counting statements translate exactly as specified")
             "1 v4 >= 1 ;\n");
 }
 
+TEST_CASE("counting statements give each variable its own domain")
+{
+    // a variable with one value, and one with two, either of which is allowed
+    auto s = read(statement("1 2", "(0 cube (0 0) (1 0)) (1 cube (0 0) (1 1)) (2 or 0 1)", "2"));
+    CHECK(s.domain_sizes == vector<int>{1, 2});
+    CHECK(count_counting_statement(s) == 2);
+
+    stringstream opb;
+    write_counting_opb(opb, s);
+    CHECK(opb.str() ==
+        "preserved: y0_0 y1_0 y1_1 ;\n"
+        "1 y0_0 >= 1 ;\n"
+        "1 y0_0 <= 1 ;\n"
+        "1 y1_0 1 y1_1 >= 1 ;\n"
+        "1 y1_0 1 y1_1 <= 1 ;\n"
+        "2 ~g0 1 y0_0 1 y1_0 >= 2 ;\n"
+        "1 g0 1 ~y0_0 1 ~y1_0 >= 1 ;\n"
+        "2 ~g1 1 y0_0 1 y1_1 >= 2 ;\n"
+        "1 g1 1 ~y0_0 1 ~y1_1 >= 1 ;\n"
+        "1 ~g2 1 g0 1 g1 >= 1 ;\n"
+        "2 g2 1 ~g0 1 ~g1 >= 2 ;\n"
+        "1 g2 >= 1 ;\n");
+}
+
 TEST_CASE("counting statements write no side-condition instance when there is nothing to prove")
 {
     stringstream side;
@@ -175,7 +201,7 @@ TEST_CASE("counting statements write no side-condition instance when there is no
 TEST_CASE("counting statement writer writes what the reader reads")
 {
     stringstream out;
-    CountingStatementWriter writer{out, 2, 3};
+    CountingStatementWriter writer{out, {3, 3}};
     auto a = writer.add_cube({{0, 0}});
     auto b = writer.add_cube({{0, 2}});
     auto c = writer.add_or({a, b});

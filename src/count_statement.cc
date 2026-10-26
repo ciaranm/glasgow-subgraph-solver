@@ -74,8 +74,7 @@ auto main(int argc, char * argv[]) -> int
                 std::remove(name.c_str());
         }
 
-        cout << "variables = " << statement.number_of_variables << endl;
-        cout << "values = " << statement.number_of_values << endl;
+        cout << "variables = " << statement.domain_sizes.size() << endl;
         cout << "nodes = " << statement.nodes.size() << endl;
         cout << "side_conditions = " << side_conditions.size() << endl;
         cout << "count = " << count << endl;

@@ -636,7 +636,7 @@ namespace
         auto write_statement(std::ostream & out) -> optional<loooong>
         {
             if (vertices.empty()) {
-                CountingStatementWriter writer{out, pattern.size(), target.size()};
+                CountingStatementWriter writer{out, {}};
                 writer.finish(writer.add_cube({}));
                 statement_nodes = writer.number_of_nodes();
                 return loooong{1};
@@ -662,7 +662,7 @@ namespace
                 }
             }
 
-            CountingStatementWriter writer{out, pattern.size(), target.size()};
+            CountingStatementWriter writer{out, vector<int>(pattern.size(), target.size())};
             statement = &writer;
             auto root = exact(discrete);
             statement = nullptr;

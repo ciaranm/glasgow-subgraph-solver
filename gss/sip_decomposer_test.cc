@@ -316,8 +316,7 @@ TEST_CASE("decomposition statements count what the solver counts on random disco
     CHECK(result.complete);
     CHECK(result.solution_count == expected.solution_count);
     if (statement) {
-        CHECK(statement->number_of_variables == pattern.size());
-        CHECK(statement->number_of_values == target.size());
+        CHECK(statement->domain_sizes == vector<int>(pattern.size(), target.size()));
         CHECK(count_counting_statement(*statement) == expected.solution_count);
     }
     else
@@ -359,7 +358,8 @@ TEST_CASE("decomposition statements mean what they say by brute force")
         return;
     }
 
-    int m = statement->number_of_variables, n = statement->number_of_values, size = statement->nodes.size();
+    REQUIRE(statement->domain_sizes == vector<int>(pattern.size(), target.size()));
+    int m = pattern.size(), n = target.size(), size = statement->nodes.size();
     auto side_conditions = counting_side_conditions(*statement);
 
     stringstream opb, side;
@@ -370,7 +370,7 @@ TEST_CASE("decomposition statements mean what they say by brute force")
     vector<int> x(m * n), g(size), v(size, -1);
     for (int u = 0; u < m; ++u)
         for (int t = 0; t < n; ++t)
-            x[u * n + t] = names.emplace("x" + std::to_string(u) + "_" + std::to_string(t), names.size()).first->second;
+            x[u * n + t] = names.emplace("y" + std::to_string(u) + "_" + std::to_string(t), names.size()).first->second;
     for (int i = 0; i < size; ++i)
         g[i] = names.emplace("g" + std::to_string(i), names.size()).first->second;
     for (auto & i : side_conditions)

@@ -29,10 +29,13 @@ auto CountingStatementError::what() const noexcept -> const char *
     return _what.c_str();
 }
 
-CountingStatementWriter::CountingStatementWriter(ostream & out, int number_of_variables, int number_of_values) :
+CountingStatementWriter::CountingStatementWriter(ostream & out, const vector<int> & domain_sizes) :
     _out(out)
 {
-    _out << "(\n(version 1)\n(domain " << number_of_variables << " " << number_of_values << ")\n(nodes\n";
+    _out << "(\n(version 1)\n(domain";
+    for (auto & n : domain_sizes)
+        _out << " " << n;
+    _out << ")\n(nodes\n";
 }
 
 auto CountingStatementWriter::start_node(const char * kind) -> int
@@ -241,8 +244,10 @@ namespace
     // along the way.
     auto check_and_compute_scopes(const CountingStatement & statement) -> vector<vector<int>>
     {
-        if (statement.number_of_variables < 0 || statement.number_of_values < 0)
-            throw CountingStatementError{"negative domain"};
+        for (auto & n : statement.domain_sizes)
+            if (n < 0)
+                throw CountingStatementError{"negative domain size"};
+        int number_of_variables = statement.domain_sizes.size();
 
         vector<vector<int>> scopes;
         scopes.reserve(statement.nodes.size());
@@ -258,10 +263,10 @@ namespace
                 if (! node.children.empty())
                     fail_node(id, "a cube has no children");
                 for (auto & [u, t] : node.assignment) {
-                    if (u < 0 || u >= statement.number_of_variables)
+                    if (u < 0 || u >= number_of_variables)
                         fail_node(id, "variable " + to_string(u) + " out of range");
-                    if (t < 0 || t >= statement.number_of_values)
-                        fail_node(id, "value " + to_string(t) + " out of range");
+                    if (t < 0 || t >= statement.domain_sizes[u])
+                        fail_node(id, "value " + to_string(t) + " out of range for variable " + to_string(u));
                     if ((! scope.empty()) && scope.back() >= u)
                         fail_node(id, "cube variables are not strictly increasing");
                     scope.push_back(u);
@@ -305,8 +310,8 @@ namespace
         if (statement.root < 0 || statement.root >= int(statement.nodes.size()))
             throw CountingStatementError{"root " + to_string(statement.root) + " is not a node"};
         auto & root_scope = scopes[statement.root];
-        bool covers_everything = int(root_scope.size()) == statement.number_of_variables;
-        for (int u = 0; covers_everything && u < statement.number_of_variables; ++u)
+        bool covers_everything = int(root_scope.size()) == number_of_variables;
+        for (int u = 0; covers_everything && u < number_of_variables; ++u)
             covers_everything = root_scope[u] == u;
         if (! covers_everything)
             throw CountingStatementError{"the root's scope is not every variable"};
@@ -328,9 +333,9 @@ namespace
         return cubes.end() == std::adjacent_find(cubes.begin(), cubes.end(), [](auto a, auto b) { return *a == *b; });
     }
 
-    auto x(int u, int t) -> string
+    auto y(int u, int t) -> string
     {
-        return "x" + to_string(u) + "_" + to_string(t);
+        return "y" + to_string(u) + "_" + to_string(t);
     }
 
     auto g(int i) -> string
@@ -340,12 +345,12 @@ namespace
 
     auto write_definitions(ostream & out, const CountingStatement & statement) -> void
     {
-        for (int u = 0; u < statement.number_of_variables; ++u) {
-            for (int t = 0; t < statement.number_of_values; ++t)
-                out << "1 " << x(u, t) << " ";
+        for (int u = 0; u < int(statement.domain_sizes.size()); ++u) {
+            for (int t = 0; t < statement.domain_sizes[u]; ++t)
+                out << "1 " << y(u, t) << " ";
             out << ">= 1 ;\n";
-            for (int t = 0; t < statement.number_of_values; ++t)
-                out << "1 " << x(u, t) << " ";
+            for (int t = 0; t < statement.domain_sizes[u]; ++t)
+                out << "1 " << y(u, t) << " ";
             out << "<= 1 ;\n";
         }
 
@@ -357,7 +362,7 @@ namespace
                 vector<string> literals;
                 if (node.kind == CountingNodeKind::Cube)
                     for (auto & [u, t] : node.assignment)
-                        literals.push_back(x(u, t));
+                        literals.push_back(y(u, t));
                 else
                     for (auto & c : node.children)
                         literals.push_back(g(c));
@@ -414,8 +419,8 @@ auto gss::read_counting_statement(istream & in) -> CountingStatement
 
     reader.expect_open();
     reader.expect_keyword("domain");
-    result.number_of_variables = reader.read_number();
-    result.number_of_values = reader.read_number();
+    while (reader.at_atom())
+        result.domain_sizes.push_back(reader.read_number());
     reader.expect_close();
 
     reader.expect_open();
@@ -522,9 +527,9 @@ auto gss::count_counting_statement(const CountingStatement & statement) -> loooo
 auto gss::write_counting_opb(ostream & out, const CountingStatement & statement) -> void
 {
     out << "preserved:";
-    for (int u = 0; u < statement.number_of_variables; ++u)
-        for (int t = 0; t < statement.number_of_values; ++t)
-            out << " " << x(u, t);
+    for (int u = 0; u < int(statement.domain_sizes.size()); ++u)
+        for (int t = 0; t < statement.domain_sizes[u]; ++t)
+            out << " " << y(u, t);
     out << " ;\n";
 
     write_definitions(out, statement);
