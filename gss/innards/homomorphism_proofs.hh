@@ -56,6 +56,10 @@ namespace gss::innards
         bool _locally_injective = false;
         std::map<std::pair<int, int>, std::string> _locally_injective_constraints;
 
+        // Whether the model carries the global injectivity constraints, which the
+        // loop-cancelled adjacency derivations rely on.
+        bool _injective = false;
+
         // For each pattern edge (p,q) whose supplemental adjacency constraint was emitted
         // under subsumption elision, the slot whose (strongest) constraint we kept. Used to
         // re-derive an elided weaker constraint on demand (see ensure_supplemental_adjacency).

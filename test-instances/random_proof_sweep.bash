@@ -59,8 +59,13 @@ for loops in "" "--loops 0.3"; do
         # instances all of these fire (the exact-path arms exercise create_exact_path_graphs
         # with @linj); on loopy instances the degree/NDS/supplemental filters are disabled
         # (issue #58), so those arms mainly exercise the encoding and counting.
+        #
+        # Non-injective decision on a loopy target concludes in TargetLoopShortcutStep without
+        # searching, and once wrote an empty proof for it; counting skips that shortcut, so the
+        # second arm exercises non-injective search proper.
         for opts in "" "--induced" "--count-solutions" "--induced --count-solutions" "--distance3" \
-                "--locally-injective" "--locally-injective --count-solutions" "--locally-injective --induced --count-solutions"; do
+                "--locally-injective" "--locally-injective --count-solutions" "--locally-injective --induced --count-solutions" \
+                "--noninjective" "--noninjective --count-solutions"; do
             checked=$((checked + 1))
             proof="${workdir}/rps_proof_${seed}_${checked}"
 
