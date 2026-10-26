@@ -124,9 +124,18 @@ by enumeration; and there is no c > 0 case yet.
 ## The counting language
 
 The aim is to move as much of the argument as possible into VeriPB rather than into an
-external combiner. The solver states its argument in a small language whose statements
-are efficiently countable, and VeriPB checks that the problem is equienumerable with a PB
+external combiner, even at the cost of more complicated proof machinery. This is a
+deliberate preference: in the past, pushing hard on "how would this be done cleanly
+inside VeriPB" has ended in either a cleaner design or a carefully scoped, generic VeriPB
+extension. The solver states its argument in a small language whose statements are
+efficiently countable, and VeriPB checks that the problem is equienumerable with a PB
 translation of that statement.
+
+This is implemented in `gss/counting_statement.{hh,cc}` (the format, the reader and
+writer, the counter and the PB translation), with `src/count_statement.cc` as the
+standalone counter and translator, and `--counting-statement` on the solver to emit a
+statement. The file format is documented by the writer and by the examples in
+`gss/counting_statement_test.cc`.
 
 ### Nodes
 
@@ -233,7 +242,9 @@ inclusion–exclusion.
 
 ### Lining up the files
 
-`EQUIENUMERABLE FILE` needs the output file to match the final database exactly, so:
+`EQUIENUMERABLE FILE` is believed to need the output file to match the final database
+exactly, possibly modulo constraint order. That belief has not been checked against
+VeriPB yet; Phase 2 is where it gets checked. Assuming it holds:
 
 - **Use one implementation.** The solver emits its gate definitions in the proof by
   calling the translator's code, so the two copies cannot diverge. The independent copy is
@@ -271,13 +282,45 @@ inclusion–exclusion.
 Each phase ends with something that can be checked on its own. Phases 1 and 2 can run in
 parallel.
 
+### Picking this up
+
+- Branches: `decomposition/component-counting` is Phase 0 (PR #107), and
+  `decomposition/statements` is Phase 1, stacked on it. Rebase the second after the
+  first merges.
+- Tests: `gss/sip_decomposer_test.cc` checks the decomposer and its statements against
+  the plain solver on random disconnected patterns, and brute-forces the tiny ones:
+  - side conditions;
+  - counts;
+  - the OPB text, by unit propagation from every assignment;
+  - the exactly-one constraints.
+
+  `gss/counting_statement_test.cc` checks the language on its own.
+- Instances are in `test-instances/decomposition/`, as CSV:
+  - `grid6` and `grid40` are 6×6 and 40×40 grid graphs;
+  - `edges2`, `edges3` and `edges6` are disjoint unions of edges;
+  - `p3x3` is three disjoint P3s, and `p4x4` is four disjoint P4s;
+  - `edges2` into `path4` is the worked P4 example above.
+
+  For example:
+
+  ```shell
+  glasgow_subgraph_solver --count-solutions --decomposition \
+      --counting-statement out.stmt edges2.csv path4.csv
+  count_statement --opb out.opb out.stmt
+  ```
+
+- Statements get big quickly. Run experiments under `ulimit -v`: an unbounded run on a
+  40×40 grid used 52 GB and was killed by the OOM killer.
+- Unrelated, found along the way: Example 10 of the CP 2026 paper gives 392 for
+  s1 → t1, but by hand it is 368. 392 is what s1 → ¬t1 gives.
+
 ### Phase 0: land the c = 0 prototype
 
 - PR #107 for `decomposition/component-counting`. The complete-flag and proof-sweep
   failures it ran into (#104, #106) are fixed on `main`.
 - Done when: CI is green and the PR is merged.
 
-### Phase 1: emit statements, count them independently
+### Phase 1: emit statements, count them independently (done, apart from the grids)
 
 - Define a file format for counting-language statements: nodes, scopes, the variable and
   value names, and the gate-name convention.
@@ -288,6 +331,30 @@ parallel.
 - Done when: the counter reproduces `solution_count` on the random tests and the grid
   instances, and the translator's PB formula has the same count as the input under brute
   force on tiny instances.
+- Status: the format, `count_statement`, `--counting-statement` and the brute-force tests
+  exist. Measured statement sizes, with no isomorphism sharing and every leaf enumerated:
+
+  | Instance | Nodes | File | Build |
+  |---|---|---|---|
+  | 3 edges, 6×6 grid | 34k | 1.6 MB | 25 ms |
+  | 3 edges, 40×40 grid | 2.3M | 135 MB | 2.4 s |
+  | 3 × P3, 6×6 grid | 2.1M | 137 MB | 2.1 s |
+  | 3 × P3, 40×40 grid | out of memory at 52 GB | | |
+  | 6 edges, 6×6 grid | out of memory at 8 GB | | |
+
+  So statements are only practical where few glued components exist and each has few
+  embeddings. Two things blow up: there is one Exact node per partition rather than per
+  isomorphism class (6 edges: 113 classes, vastly more partitions), and every glued
+  component's embeddings are written out as cubes. The renaming node (see "Later") fixes
+  the first, and is now a prerequisite for any instance that is not tiny. The second is
+  inherent to leaves being plain enumerations.
+- Statements build the c = 0 recursion over every pattern vertex: isolated vertices are
+  ordinary components (no closed form), and nothing is shared up to isomorphism. Both the
+  statement builder and the plain counter prune by pigeonhole: a quotient with more
+  blocks of some label than the target has vertices of that label is empty. The root
+  is then a `false` node, so a pattern bigger than its target costs nothing. The
+  certificate will have to refute these quotients, and cutting planes does pigeonhole
+  cheaply from the at-most-one constraints.
 
 ### Phase 2: VeriPB feasibility, by hand
 

@@ -1,4 +1,5 @@
 #include <gss/configuration.hh>
+#include <gss/counting_statement.hh>
 #include <gss/homomorphism.hh>
 #include <gss/innards/proof.hh>
 #include <gss/loooong.hh>
@@ -190,6 +191,172 @@ namespace
         return "canonical;" + *best;
     }
 
+    // H / sigma, for a partition sigma of the pattern vertices vertices[0 .. n - 1],
+    // written as the block number of each, numbered in order of first occurrence. Gluing
+    // vertices with different labels, or two edges with different labels into one, is
+    // impossible for an embedding, and gives nothing.
+    struct Quotient
+    {
+        int size = 0;
+        map<pair<int, int>, string> edges;
+        vector<string> labels;
+        vector<vector<int>> components;
+    };
+
+    auto build_quotient(const InputGraph & pattern, const vector<int> & vertices, const vector<int> & sigma) -> optional<Quotient>
+    {
+        Quotient q;
+        q.size = *std::max_element(sigma.begin(), sigma.end()) + 1;
+
+        if (pattern.has_vertex_labels()) {
+            vector<optional<string>> labels(q.size);
+            for (unsigned v = 0; v < vertices.size(); ++v) {
+                auto label = string{pattern.vertex_label(vertices[v])};
+                if (! labels[sigma[v]])
+                    labels[sigma[v]] = label;
+                else if (*labels[sigma[v]] != label)
+                    return std::nullopt;
+            }
+            for (auto & l : labels)
+                q.labels.push_back(*l);
+        }
+
+        // two pattern edges can be glued into one quotient edge, in which case the
+        // target edge must carry both labels, which it cannot unless they agree
+        for (unsigned v = 0; v < vertices.size(); ++v)
+            for (unsigned w = v; w < vertices.size(); ++w)
+                if (pattern.adjacent(vertices[v], vertices[w])) {
+                    auto label = pattern.has_edge_labels() ? string{pattern.edge_label(vertices[v], vertices[w])} : string{};
+                    auto key = std::minmax(sigma[v], sigma[w]);
+                    auto [where, inserted] = q.edges.emplace(key, label);
+                    if ((! inserted) && where->second != label)
+                        return std::nullopt;
+                }
+
+        vector<int> parent(q.size);
+        for (int b = 0; b < q.size; ++b)
+            parent[b] = b;
+        auto find = [&](int b) {
+            while (parent[b] != b)
+                b = parent[b] = parent[parent[b]];
+            return b;
+        };
+        for (auto & [e, _] : q.edges)
+            parent[find(e.first)] = find(e.second);
+
+        map<int, int> component_number;
+        for (int b = 0; b < q.size; ++b) {
+            auto [where, inserted] = component_number.emplace(find(b), q.components.size());
+            if (inserted)
+                q.components.emplace_back();
+            q.components[where->second].push_back(b);
+        }
+
+        return q;
+    }
+
+    // How many target vertices carry each label, with every vertex of an unlabelled
+    // target under the empty label.
+    auto count_target_labels(const InputGraph & pattern, const InputGraph & target) -> map<string, long>
+    {
+        map<string, long> result;
+        for (int t = 0; t < target.size(); ++t)
+            ++result[pattern.has_vertex_labels() ? string{target.vertex_label(t)} : string{}];
+        return result;
+    }
+
+    // An injective embedding of H / sigma needs a different target vertex for each block,
+    // carrying that block's label, so there is none if some label has more blocks than
+    // target vertices. This is what stops a pattern bigger than its target from
+    // exploring every way of gluing it, all of which are empty.
+    auto more_blocks_than_targets(const Quotient & q, const map<string, long> & target_with_label) -> bool
+    {
+        map<string, long> blocks_with_label;
+        for (int b = 0; b < q.size; ++b) {
+            auto label = q.labels.empty() ? string{} : q.labels[b];
+            auto t = target_with_label.find(label);
+            if (++blocks_with_label[label] > (t == target_with_label.end() ? 0 : t->second))
+                return true;
+        }
+        return false;
+    }
+
+    // The connected component of a quotient made up of the given blocks, renumbered
+    // from zero in the order given.
+    auto component_graph(const InputGraph & pattern, const Quotient & q, const vector<int> & blocks) -> SmallGraph
+    {
+        map<int, int> index_of_block;
+        for (unsigned i = 0; i < blocks.size(); ++i)
+            index_of_block.emplace(blocks[i], i);
+
+        SmallGraph component;
+        component.size = blocks.size();
+        if (pattern.has_vertex_labels())
+            for (auto b : blocks)
+                component.labels.push_back(q.labels[b]);
+        for (auto & [e, label] : q.edges)
+            if (auto a = index_of_block.find(e.first); a != index_of_block.end())
+                component.edges.emplace(std::minmax(a->second, index_of_block.at(e.second)), label);
+        return component;
+    }
+
+    auto to_input_graph(const InputGraph & pattern, const SmallGraph & component) -> InputGraph
+    {
+        InputGraph graph(component.size, pattern.has_vertex_labels(), pattern.has_edge_labels());
+        for (int i = 0; i < component.size && pattern.has_vertex_labels(); ++i)
+            graph.set_vertex_label(i, component.labels[i]);
+        for (auto & [e, label] : component.edges)
+            graph.add_edge(e.first, e.second, label);
+        return graph;
+    }
+
+    // Calls f(tau) for each coarsening tau != sigma of sigma that glues each block of
+    // H / sigma only to blocks from other components: block b goes into an existing group
+    // that has nothing from its component yet, or starts a new one. Groups are opened in
+    // block order, so tau is already numbered in order of first occurrence. Stops early if
+    // f returns false.
+    template <typename F_>
+    auto for_each_coarsening(const Quotient & q, const vector<int> & sigma, const F_ & f) -> void
+    {
+        vector<int> component_of_block(q.size);
+        for (unsigned c = 0; c < q.components.size(); ++c)
+            for (auto b : q.components[c])
+                component_of_block[b] = c;
+
+        vector<int> group_of_block(q.size);
+        vector<vector<bool>> group_has_component;
+        bool stopped = false;
+        auto enumerate = [&](auto & self, int b) -> void {
+            if (stopped)
+                return;
+            if (b == q.size) {
+                if (int(group_has_component.size()) == q.size)
+                    return;
+                vector<int> tau(sigma.size());
+                for (unsigned v = 0; v < sigma.size(); ++v)
+                    tau[v] = group_of_block[sigma[v]];
+                if (! f(tau))
+                    stopped = true;
+                return;
+            }
+
+            for (unsigned g = 0; g < group_has_component.size(); ++g)
+                if (! group_has_component[g][component_of_block[b]]) {
+                    group_of_block[b] = g;
+                    group_has_component[g][component_of_block[b]] = true;
+                    self(self, b + 1);
+                    group_has_component[g][component_of_block[b]] = false;
+                }
+
+            group_of_block[b] = group_has_component.size();
+            group_has_component.emplace_back(q.components.size(), false);
+            group_has_component.back()[component_of_block[b]] = true;
+            self(self, b + 1);
+            group_has_component.pop_back();
+        };
+        enumerate(enumerate, 0);
+    }
+
     // Counting by components: what we need to be able to say that the number of
     // embeddings of H is a function of the numbers of embeddings of its connected
     // components, and of the graphs obtained by gluing them together.
@@ -236,99 +403,18 @@ namespace
         vector<int> vertices;
         int number_of_components = 0;
 
+        map<string, long> target_with_label;
         map<string, loooong> component_counts;
         map<string, loooong> none_counts;
 
         unsigned long long solver_calls = 0, coarsenings_considered = 0;
-
-        struct Quotient
-        {
-            int size = 0;
-            map<pair<int, int>, string> edges;
-            vector<string> labels;
-            vector<vector<int>> components;
-        };
-
-        auto build_quotient(const vector<int> & sigma) const -> optional<Quotient>
-        {
-            Quotient q;
-            q.size = *std::max_element(sigma.begin(), sigma.end()) + 1;
-
-            if (pattern.has_vertex_labels()) {
-                vector<optional<string>> labels(q.size);
-                for (unsigned v = 0; v < vertices.size(); ++v) {
-                    auto label = string{pattern.vertex_label(vertices[v])};
-                    if (! labels[sigma[v]])
-                        labels[sigma[v]] = label;
-                    else if (*labels[sigma[v]] != label)
-                        return std::nullopt;
-                }
-                for (auto & l : labels)
-                    q.labels.push_back(*l);
-            }
-
-            // two pattern edges can be glued into one quotient edge, in which case the
-            // target edge must carry both labels, which it cannot unless they agree
-            for (unsigned v = 0; v < vertices.size(); ++v)
-                for (unsigned w = v; w < vertices.size(); ++w)
-                    if (pattern.adjacent(vertices[v], vertices[w])) {
-                        auto label = pattern.has_edge_labels() ? string{pattern.edge_label(vertices[v], vertices[w])} : string{};
-                        auto key = std::minmax(sigma[v], sigma[w]);
-                        auto [where, inserted] = q.edges.emplace(key, label);
-                        if ((! inserted) && where->second != label)
-                            return std::nullopt;
-                    }
-
-            vector<int> parent(q.size);
-            for (int b = 0; b < q.size; ++b)
-                parent[b] = b;
-            auto find = [&](int b) {
-                while (parent[b] != b)
-                    b = parent[b] = parent[parent[b]];
-                return b;
-            };
-            for (auto & [e, _] : q.edges)
-                parent[find(e.first)] = find(e.second);
-
-            map<int, int> component_number;
-            for (int b = 0; b < q.size; ++b) {
-                auto [where, inserted] = component_number.emplace(find(b), q.components.size());
-                if (inserted)
-                    q.components.emplace_back();
-                q.components[where->second].push_back(b);
-            }
-
-            return q;
-        }
-
-        auto component_graph(const Quotient & q, const vector<int> & blocks) const -> SmallGraph
-        {
-            map<int, int> index_of_block;
-            for (unsigned i = 0; i < blocks.size(); ++i)
-                index_of_block.emplace(blocks[i], i);
-
-            SmallGraph component;
-            component.size = blocks.size();
-            if (pattern.has_vertex_labels())
-                for (auto b : blocks)
-                    component.labels.push_back(q.labels[b]);
-            for (auto & [e, label] : q.edges)
-                if (auto a = index_of_block.find(e.first); a != index_of_block.end())
-                    component.edges.emplace(std::minmax(a->second, index_of_block.at(e.second)), label);
-            return component;
-        }
 
         auto count_component(const string & key, const SmallGraph & component) -> loooong
         {
             if (auto c = component_counts.find(key); c != component_counts.end())
                 return c->second;
 
-            InputGraph graph(component.size, pattern.has_vertex_labels(), pattern.has_edge_labels());
-            for (int i = 0; i < component.size && pattern.has_vertex_labels(); ++i)
-                graph.set_vertex_label(i, component.labels[i]);
-            for (auto & [e, label] : component.edges)
-                graph.add_edge(e.first, e.second, label);
-
+            auto graph = to_input_graph(pattern, component);
             ++solver_calls;
             auto result = solve_homomorphism_problem(graph, target, params);
             nodes += result.nodes;
@@ -341,8 +427,8 @@ namespace
 
         auto none(const vector<int> & sigma) -> loooong
         {
-            auto q = build_quotient(sigma);
-            if (! q)
+            auto q = build_quotient(pattern, vertices, sigma);
+            if ((! q) || more_blocks_than_targets(*q, target_with_label))
                 return 0;
 
             // none(sigma) depends only on H / sigma up to isomorphism, and a disjoint
@@ -352,7 +438,7 @@ namespace
             vector<SmallGraph> components;
             vector<string> keys;
             for (auto & c : q->components) {
-                components.push_back(component_graph(*q, c));
+                components.push_back(component_graph(pattern, *q, c));
                 keys.push_back(canonical_key(components.back()));
             }
             auto sorted_keys = keys;
@@ -373,46 +459,11 @@ namespace
                     return none_counts.emplace(quotient_key, 0).first->second;
             }
 
-            // enumerate the coarsenings of sigma that glue each block to blocks from
-            // other components only: block b goes into an existing group that has nothing
-            // from its component yet, or starts a new one. Groups are opened in block
-            // order, so the result is already numbered in order of first occurrence.
-            vector<int> component_of_block(q->size);
-            for (unsigned c = 0; c < q->components.size(); ++c)
-                for (auto b : q->components[c])
-                    component_of_block[b] = c;
-
-            vector<int> group_of_block(q->size);
-            vector<vector<bool>> group_has_component;
-            auto enumerate = [&](auto & self, int b) -> void {
-                if (aborted)
-                    return;
-                if (b == q->size) {
-                    if (int(group_has_component.size()) == q->size)
-                        return;
-                    ++coarsenings_considered;
-                    vector<int> tau(sigma.size());
-                    for (unsigned v = 0; v < sigma.size(); ++v)
-                        tau[v] = group_of_block[sigma[v]];
-                    total -= none(tau);
-                    return;
-                }
-
-                for (unsigned g = 0; g < group_has_component.size(); ++g)
-                    if (! group_has_component[g][component_of_block[b]]) {
-                        group_of_block[b] = g;
-                        group_has_component[g][component_of_block[b]] = true;
-                        self(self, b + 1);
-                        group_has_component[g][component_of_block[b]] = false;
-                    }
-
-                group_of_block[b] = group_has_component.size();
-                group_has_component.emplace_back(q->components.size(), false);
-                group_has_component.back()[component_of_block[b]] = true;
-                self(self, b + 1);
-                group_has_component.pop_back();
-            };
-            enumerate(enumerate, 0);
+            for_each_coarsening(*q, sigma, [&](const vector<int> & tau) {
+                ++coarsenings_considered;
+                total -= none(tau);
+                return ! aborted;
+            });
 
             if (aborted)
                 return 0;
@@ -427,7 +478,8 @@ namespace
             pattern(p),
             target(t),
             params(r),
-            vertices(v)
+            vertices(v),
+            target_with_label(count_target_labels(p, t))
         {
         }
 
@@ -440,7 +492,7 @@ namespace
             for (unsigned v = 0; v < vertices.size(); ++v)
                 discrete[v] = v;
 
-            auto q = build_quotient(discrete);
+            auto q = build_quotient(pattern, vertices, discrete);
             number_of_components = q ? q->components.size() : 0;
             return none(discrete);
         }
@@ -461,7 +513,8 @@ namespace
         // exactly one target vertex labelled L, so the isolated ones labelled L can go on
         // any of the rest. (A looped vertex has a nonzero degree, so is not isolated.)
         vector<int> vertices;
-        map<string, long> isolated_with_label, others_with_label, target_with_label;
+        map<string, long> isolated_with_label, others_with_label;
+        auto target_with_label = count_target_labels(pattern, target);
         for (int v = 0; v < pattern.size(); ++v) {
             auto label = pattern.has_vertex_labels() ? string{pattern.vertex_label(v)} : string{};
             if (0 == pattern.degree(v))
@@ -471,8 +524,6 @@ namespace
                 vertices.push_back(v);
             }
         }
-        for (int t = 0; t < target.size(); ++t)
-            ++target_with_label[pattern.has_vertex_labels() ? string{target.vertex_label(t)} : string{}];
 
         HomomorphismResult result;
         ComponentCounter counter(pattern, target, params, vertices);
@@ -493,15 +544,235 @@ namespace
         counter.stats(result.extra_stats);
         return result;
     }
+
+    // The parameters for a subcall that enumerates, as far as they can be copied: the
+    // extra shapes cannot be, and are only filtering, so leaving them out changes nothing
+    // but speed.
+    auto enumerating_params(const HomomorphismParams & params) -> HomomorphismParams
+    {
+        HomomorphismParams result;
+        result.timeout = params.timeout;
+        result.start_time = params.start_time;
+        result.induced = params.induced;
+        result.injectivity = params.injectivity;
+        result.count_solutions = true;
+        result.value_ordering_heuristic = params.value_ordering_heuristic;
+        result.restarts_schedule.reset(params.restarts_schedule->clone());
+        result.nogood_size_limit = params.nogood_size_limit;
+        result.n_threads = params.n_threads;
+        result.delay_thread_creation = params.delay_thread_creation;
+        result.triggered_restarts = params.triggered_restarts;
+        result.clique_detection = params.clique_detection;
+        result.distance3 = params.distance3;
+        result.k4 = params.k4;
+        result.no_supplementals = params.no_supplementals;
+        result.number_of_exact_path_graphs = params.number_of_exact_path_graphs;
+        result.clique_size_constraints = params.clique_size_constraints;
+        result.clique_size_constraints_on_supplementals = params.clique_size_constraints_on_supplementals;
+        result.no_nds = params.no_nds;
+        result.staged = params.staged;
+        result.staged_first_round_backtracks = params.staged_first_round_backtracks;
+        return result;
+    }
+
+    // Builds the counting-language statement for the same recursion as ComponentCounter
+    // (see dev_docs/decomposition-counting.md, "Compiling Ryan's algorithm"):
+    //
+    //     Exact_sigma = Prod_sigma minus (the sum of Exact_tau over coarsenings tau),
+    //     Prod_sigma  = the product of Leaf_K over the components K of H / sigma,
+    //     Leaf_K      = the sum of one cube per embedding of K,
+    //
+    // where a cube gives every pattern vertex in a block the block's image. Nothing is
+    // shared up to isomorphism, because a node is about particular pattern vertices, and
+    // isolated vertices are components like any other, so this does far more work than
+    // ComponentCounter: it is for certifying a count, not for finding one quickly.
+    //
+    // Exact_tau is empty whenever some component of H / tau has no embedding, or H / tau
+    // has more vertices with some label than the target, and is left out of the sums that
+    // would mention it; Exact of the discrete partition is the root, so is always built.
+    class StatementBuilder
+    {
+    private:
+        const InputGraph & pattern;
+        const InputGraph & target;
+        const HomomorphismParams & params;
+        CountingStatement & statement;
+
+        vector<int> vertices;
+        map<string, long> target_with_label;
+        map<vector<vector<int>>, pair<int, bool>> leaves;
+        map<vector<int>, optional<int>> exacts;
+
+        auto leaf(const vector<vector<int>> & members, const SmallGraph & component) -> pair<int, bool>
+        {
+            if (auto l = leaves.find(members); l != leaves.end())
+                return l->second;
+
+            auto graph = to_input_graph(pattern, component);
+            auto sub_params = enumerating_params(params);
+            vector<int> cubes;
+            sub_params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
+                vector<pair<int, int>> literals;
+                for (auto & [i, t] : mapping)
+                    for (auto & v : members[i])
+                        literals.emplace_back(v, t);
+                sort(literals.begin(), literals.end());
+                cubes.push_back(statement.add_cube(std::move(literals)));
+                return true;
+            };
+
+            ++solver_calls;
+            auto result = solve_homomorphism_problem(graph, target, sub_params);
+            nodes += result.nodes;
+            propagations += result.propagations;
+            if (! result.complete)
+                aborted = true;
+
+            pair<int, bool> node;
+            if (cubes.empty()) {
+                vector<int> scope;
+                for (auto & m : members)
+                    scope.insert(scope.end(), m.begin(), m.end());
+                sort(scope.begin(), scope.end());
+                node = pair{statement.add_false(std::move(scope)), true};
+            }
+            else
+                node = pair{statement.add_sum(std::move(cubes)), false};
+
+            return leaves.emplace(members, node).first->second;
+        }
+
+        auto exact(const vector<int> & sigma, bool is_root) -> optional<int>
+        {
+            if (auto e = exacts.find(sigma); e != exacts.end())
+                return e->second;
+
+            auto q = build_quotient(pattern, vertices, sigma);
+            if (! q)
+                return exacts.emplace(sigma, std::nullopt).first->second;
+
+            if (more_blocks_than_targets(*q, target_with_label)) {
+                optional<int> result;
+                if (is_root)
+                    result = statement.add_false(vertices);
+                return exacts.emplace(sigma, result).first->second;
+            }
+
+            vector<int> children;
+            bool any_empty = false;
+            for (auto & blocks : q->components) {
+                vector<vector<int>> members(blocks.size());
+                for (unsigned v = 0; v < sigma.size(); ++v)
+                    if (auto b = std::find(blocks.begin(), blocks.end(), sigma[v]); b != blocks.end())
+                        members[b - blocks.begin()].push_back(vertices[v]);
+
+                auto [node, empty] = leaf(members, component_graph(pattern, *q, blocks));
+                if (aborted)
+                    return std::nullopt;
+                children.push_back(node);
+                any_empty = any_empty || empty;
+            }
+
+            if (any_empty && ! is_root)
+                return exacts.emplace(sigma, std::nullopt).first->second;
+
+            auto product = children.size() == 1 ? children.front() : statement.add_product(std::move(children));
+            if (any_empty)
+                return exacts.emplace(sigma, product).first->second;
+
+            vector<int> overlaps;
+            for_each_coarsening(*q, sigma, [&](const vector<int> & tau) {
+                if (auto e = exact(tau, false))
+                    overlaps.push_back(*e);
+                return ! aborted;
+            });
+            if (aborted)
+                return std::nullopt;
+
+            optional<int> result = product;
+            if (! overlaps.empty())
+                result = statement.add_difference(product, overlaps.size() == 1 ? overlaps.front() : statement.add_sum(std::move(overlaps)));
+            return exacts.emplace(sigma, result).first->second;
+        }
+
+    public:
+        unsigned long long nodes = 0, propagations = 0, solver_calls = 0;
+        bool aborted = false;
+
+        StatementBuilder(const InputGraph & p, const InputGraph & t, const HomomorphismParams & r, CountingStatement & s) :
+            pattern(p),
+            target(t),
+            params(r),
+            statement(s),
+            target_with_label(count_target_labels(p, t))
+        {
+        }
+
+        auto build() -> void
+        {
+            vector<string> target_names;
+            for (int t = 0; t < target.size(); ++t)
+                target_names.push_back(target.vertex_name(t));
+            auto domain = statement.add_domain(std::move(target_names));
+            for (int v = 0; v < pattern.size(); ++v) {
+                statement.add_variable(pattern.vertex_name(v), domain);
+                vertices.push_back(v);
+            }
+
+            if (vertices.empty()) {
+                statement.root = statement.add_cube({});
+                return;
+            }
+
+            vector<int> discrete(vertices.size());
+            for (unsigned v = 0; v < vertices.size(); ++v)
+                discrete[v] = v;
+            if (auto root = exact(discrete, true))
+                statement.root = *root;
+        }
+
+        auto stats(std::list<string> & extra_stats) const -> void
+        {
+            extra_stats.emplace_back("decomposition_solver_calls = " + to_string(solver_calls));
+            extra_stats.emplace_back("decomposition_leaves = " + to_string(leaves.size()));
+            extra_stats.emplace_back("decomposition_quotients = " + to_string(exacts.size()));
+            extra_stats.emplace_back("statement_nodes = " + to_string(statement.nodes.size()));
+        }
+    };
+
+    auto build_statement(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params,
+        CountingStatement & statement) -> HomomorphismResult
+    {
+        HomomorphismResult result;
+        StatementBuilder builder(pattern, target, params, statement);
+        builder.build();
+
+        result.nodes = builder.nodes;
+        result.propagations = builder.propagations;
+        result.complete = ! builder.aborted;
+        if (result.complete) {
+            auto count = count_counting_statement(statement);
+            result.solution_count = count.count;
+            result.extra_stats.emplace_back("statement_obligations = " + to_string(count.obligations.size()));
+        }
+        builder.stats(result.extra_stats);
+        return result;
+    }
 }
 
 auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & target,
-    const HomomorphismParams & params) -> HomomorphismResult
+    const HomomorphismParams & params, CountingStatement * statement) -> HomomorphismResult
 {
     // each piece would write its own proof over the top of the last one, and none of
     // them would be a proof about the whole instance
     if (params.proof_options)
         throw UnsupportedConfiguration{"Proof logging cannot be used with decomposition"};
+
+    if (statement) {
+        if (! can_count_by_components(pattern, params))
+            throw UnsupportedConfiguration{"A counting statement needs injective, non-induced, undirected counting, without enumeration or symmetry constraints"};
+        return build_statement(pattern, target, params, *statement);
+    }
 
     if (can_count_by_components(pattern, params))
         return count_by_components(pattern, target, params);

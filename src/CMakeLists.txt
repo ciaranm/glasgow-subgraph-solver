@@ -21,6 +21,9 @@ target_link_libraries(convert_to_lad PRIVATE cxxopts)
 add_executable(convert_to_json convert_to_json.cc)
 target_link_libraries(convert_to_json PRIVATE cxxopts)
 
+add_executable(count_statement count_statement.cc)
+target_link_libraries(count_statement PRIVATE cxxopts)
+
 # The JSON format over the real corpus: convert each instance, check the solver gets
 # the same answer through JSON as through the original format, and check the writer's
 # output is a fixed point. Needs no external tools, so it runs in every lane.

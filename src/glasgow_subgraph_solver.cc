@@ -1,3 +1,5 @@
+#include <gss/configuration.hh>
+#include <gss/counting_statement.hh>
 #include <gss/formats/read_file_format.hh>
 #include <gss/homomorphism.hh>
 #include <gss/innards/verify.hh>
@@ -9,10 +11,12 @@
 #include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 #include <unistd.h>
@@ -30,6 +34,7 @@ using std::localtime;
 using std::make_pair;
 using std::make_shared;
 using std::make_unique;
+using std::ofstream;
 using std::optional;
 using std::pair;
 using std::put_time;
@@ -105,6 +110,7 @@ auto main(int argc, char * argv[]) -> int
             ("k4", "Use 4-clique filtering (experimental)") //
             ("n-exact-path-graphs", "Specify number of exact path graphs", cxxopts::value<int>()) //
             ("decomposition", "Use decomposition") //
+            ("counting-statement", "With --decomposition and --count-solutions, write a counting-language statement of the argument to this file (slow, experimental)", cxxopts::value<string>()) //
             ("cliques", "Use clique size constraints") //
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
             ("shape", "Specify an extra shape graph, as a CSV file with one vertex labelled from and one labelled to, and any other labels on the rest (slow, experimental, injective only)", cxxopts::value<std::vector<std::string>>(shapes)) //
@@ -364,7 +370,22 @@ auto main(int argc, char * argv[]) -> int
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
 
-        auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params) : solve_homomorphism_problem(pattern, target, params);
+        if (options_vars.count("counting-statement") && ! options_vars.count("decomposition"))
+            throw UnsupportedConfiguration{"--counting-statement needs --decomposition"};
+
+        optional<CountingStatement> statement;
+        if (options_vars.count("counting-statement"))
+            statement.emplace();
+
+        auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params, statement ? &*statement : nullptr) : solve_homomorphism_problem(pattern, target, params);
+
+        // an incomplete statement would say something false, so only write a whole one
+        if (statement && result.complete) {
+            ofstream statement_file{options_vars["counting-statement"].as<string>()};
+            write_counting_statement(statement_file, *statement);
+            if (! statement_file)
+                throw std::runtime_error{"error writing counting statement to " + options_vars["counting-statement"].as<string>()};
+        }
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);

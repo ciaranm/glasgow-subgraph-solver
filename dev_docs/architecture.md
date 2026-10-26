@@ -22,11 +22,11 @@ call the matching `solve_*` function, and print the `*Result`.
 
 ```
             src/glasgow_subgraph_solver.cc   glasgow_clique_solver.cc   glasgow_common_subgraph_solver.cc
-                          │                          │                          │   (also create_random_graph, convert_to_lad, convert_to_json)
+                          │                          │                          │   (also create_random_graph, convert_to_lad, convert_to_json, count_statement)
                           ▼                          ▼                          ▼
   ┌───────────────────────────────────────────────────────────────────────────────────────┐
   │ Public API  (gss/*.hh)                                                                   │
-  │   homomorphism · clique · common_subgraph · sip_decomposer                               │
+  │   homomorphism · clique · common_subgraph · sip_decomposer · counting_statement          │
   │   HomomorphismParams / CliqueParams / CommonSubgraphParams   +   *Result structs         │
   │   restarts · timeout · value_ordering · loooong · vertex_to_vertex_mapping               │
   └───────────────────────────────────────────────────────────────────────────────────────┘
@@ -98,8 +98,10 @@ and corrects for components that overlap by inclusion–exclusion over the ways 
 together (the c = 0 case of Section 3.6 of Jessica Ryan's 2023 Glasgow PhD thesis), solving each
 glued component once per isomorphism class. Isolated pattern vertices are handled by a closed form.
 Otherwise it only strips isolated pattern vertices before solving. It refuses proof logging, and
-it does not produce a mapping when counting. Where it is going, including certified counts, is in
-[decomposition-counting.md](decomposition-counting.md).
+it does not produce a mapping when counting. With `--counting-statement` it also writes its
+argument as a statement in a small counting language (`counting_statement.{hh,cc}`), which the
+standalone `count_statement` driver re-counts and translates to PB. Where it is going, including
+certified counts, is in [decomposition-counting.md](decomposition-counting.md).
 
 ## The clique and common-subgraph solvers
 
