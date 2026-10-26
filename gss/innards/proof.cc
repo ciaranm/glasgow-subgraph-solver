@@ -350,17 +350,26 @@ auto Proof::back_up_to_top() -> void
 {
     // A restart abandons the whole search tree rather than backtracking out of it level
     // by level, so the per-level deletion bookkeeping never gets its matching
-    // forget_level calls. Drop it: everything recorded at a search level is removed by
-    // the next wiplvl, and trying to "del id" it afterwards is a double deletion, which
-    // VeriPB rejects ("constraint ... has already been deleted"). Dropping can only
-    // leave a constraint alive longer than necessary, never delete one twice, so it is
-    // safe whether or not a wiplvl follows. (A solution's blocking constraint lives at
-    // level 0 and so survives -- but counting with restarts is rejected under proof, so
-    // at a restart this map holds only backtrack nogoods.)
-    _imp->deletable_core_lines_by_level.clear();
-
+    // forget_level calls. What it still holds are the backtrack nogoods on the current
+    // branch (counting with restarts is rejected under proof, so no blocking
+    // constraints): each is in the core but tagged at a search level, so the next
+    // wiplvl at or above that level would delete it, and wiping a core constraint is
+    // an unchecked deletion, after which VeriPB refuses any solx (#106). So move each
+    // one to level 0 instead: copy it there, put the copy in the core, and then
+    // checked-delete the original, which the copy trivially implies. The copies are
+    // valid nogoods, so keeping them for the rest of the proof costs only their size.
     *_imp->proof_stream << "setlvl " << 0 << ";\n";
     _imp->active_level = 0;
+
+    for (auto & [_, ids] : _imp->deletable_core_lines_by_level)
+        for (auto & id : ids) {
+            *_imp->proof_stream << "pol " << id << " ;\n";
+            ++_imp->proof_line;
+            *_imp->proof_stream << "core id " << _imp->proof_line << " ;\n";
+            *_imp->proof_stream << "del id " << id << " ;\n";
+        }
+
+    _imp->deletable_core_lines_by_level.clear();
 }
 
 auto Proof::post_restart_nogood(const vector<pair<int, int>> & decisions) -> void

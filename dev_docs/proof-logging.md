@@ -123,6 +123,12 @@ backtrack past its own level. This matters most for counting, where the per-solu
 constraints would otherwise accumulate and make the proof linear in the number of solutions; deleting
 them keeps it linear in the search *depth* instead.
 
+A restart (including the staged-solving transition) abandons the tree without backtracking out of
+it, so the core nogoods on the current branch are still tagged at search levels. Left there, the
+next `wiplvl` would wipe them, and wiping a core constraint is an *unchecked* deletion, after which
+VeriPB refuses any later `solx` ([issue #106]). So at a restart each one is copied to level 0
+(`pol <id>`), the copy is put in the core, and the original is checked-deleted.
+
 ## Current status and known limitations
 
 - **Refutation (UNSAT) proofs verify.** Proving that *no* mapping exists works end to end with
@@ -151,6 +157,7 @@ them keeps it linear in the search *depth* instead.
 
 [issue #49]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/49
 [issue #59]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/59
+[issue #106]: https://github.com/ciaranm/glasgow-subgraph-solver/issues/106
 
 ## Verifying with the CakePB checker
 
