@@ -545,6 +545,16 @@ namespace
 
             ++result.solution_count;
 
+            // No search happened, but a decision proof still has to log the solution it
+            // claims; without this the proof concluded nothing at all.
+            if (ctx.proof) {
+                vector<pair<NamedVertex, NamedVertex>> solution;
+                for (int n = 0; n < pattern.size(); ++n)
+                    solution.emplace_back(ctx.hom_proofs->pattern_vertex(n), ctx.hom_proofs->target_vertex(loop));
+                ctx.proof->post_solution(solution);
+                ctx.proof->finish_sat_proof();
+            }
+
             ctx.result = move(result);
             return StepOutcome::Concluded;
         }

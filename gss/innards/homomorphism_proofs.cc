@@ -850,9 +850,11 @@ auto HomomorphismProofs::emit_model(const InputGraph & pattern, const InputGraph
     }
 
     // generate constraints for injectivity
-    if (params.injectivity == Injectivity::Injective)
+    if (params.injectivity == Injectivity::Injective) {
+        _injective = true;
         _proof->create_injectivity_constraints(pattern.size(), target.size(),
             [&](int v) { return target.vertex_name(v); });
+    }
     else if (params.injectivity == Injectivity::LocallyInjective)
         // local injectivity: for each pattern vertex and each target, at most one of
         // that vertex's neighbours may map there (so phi restricted to a neighbourhood
@@ -949,10 +951,12 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
     // forbids q from also mapping to t). VeriPB lets a proof line reassign an existing label,
     // so every later @adj reference in a pol picks up the loop-cancelled form; the original
     // loop-bearing constraint stays in the database (by number) so solutions still satisfy the
-    // model. The loop-cancelled form relies on global injectivity on t, which local injectivity
-    // does not give -- but under local injectivity the pol-summing filters that would need it
-    // are disabled anyway (issue #58), so skip the relabelling entirely.
-    if (is_locally_injective())
+    // model. The loop-cancelled form relies on global injectivity on t, so it is only derived
+    // when the model has it. Local injectivity does not give it, but under local injectivity
+    // the pol-summing filters that would need it are disabled anyway (issue #58). Without any
+    // injectivity it is not even true -- p and q can both map to a looped t -- and RUP rightly
+    // rejects it; nothing that would cite it runs there either.
+    if (! _injective)
         return;
 
     auto & adjacency = _adjacency;
