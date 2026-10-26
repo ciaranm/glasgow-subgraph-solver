@@ -273,11 +273,9 @@ parallel.
 
 ### Phase 0: land the c = 0 prototype
 
-- Open a PR for `decomposition/component-counting`. It also fixes #104 (the
-  pattern-bigger-than-target result now reports a complete search); the issue's other
-  requests, an `extra_stats` line naming that step and tightening the allowance in
-  `random_homomorphism_test.cc`, should go in the same PR.
-- Done when: CI is green, with #106 (an unrelated proof-sweep failure) noted.
+- PR #107 for `decomposition/component-counting`. The complete-flag and proof-sweep
+  failures it ran into (#104, #106) are fixed on `main`.
+- Done when: CI is green and the PR is merged.
 
 ### Phase 1: emit statements, count them independently
 
