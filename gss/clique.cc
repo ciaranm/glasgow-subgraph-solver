@@ -857,8 +857,11 @@ namespace
                 done = watches.apply_new_nogoods(
                     [&](int literal) { p.reset(literal); });
 
-                if (done)
+                if (done) {
+                    // the nogoods alone refute what is left, so the search is over
+                    result.complete = true;
                     break;
+                }
 
                 watches.clear_new_nogoods();
 
@@ -871,10 +874,14 @@ namespace
                 switch (expand<connected_>(params.proof_is_for_hom ? 1 : 0, result.nodes, result.find_nodes, result.prove_nodes, c, new_p, a, 0)) {
                 case SearchResult::Complete:
                     done = true;
+                    result.complete = true;
                     break;
 
                 case SearchResult::DecidedTrue:
+                    // a clique of the size asked to decide answers the question, but one
+                    // that only meets stop_after_finding says nothing about optimality
                     done = true;
+                    result.complete = params.decide && incumbent.value >= *params.decide;
                     break;
 
                 case SearchResult::Aborted:

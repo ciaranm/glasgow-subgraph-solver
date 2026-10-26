@@ -66,6 +66,7 @@ TEST_CASE("maximum clique of a complete graph is the whole graph")
     auto result = solve_clique_problem(g, make_params());
     CHECK(result.clique == set<int>{0, 1, 2, 3});
     CHECK(is_clique(g, result.clique));
+    CHECK(result.complete);
 }
 
 TEST_CASE("maximum clique of a triangle")
@@ -123,6 +124,7 @@ TEST_CASE("decision: a clique of the requested size exists")
     auto result = solve_clique_problem(g, params);
     CHECK(result.clique.size() == 3);
     CHECK(is_clique(g, result.clique));
+    CHECK(result.complete);
 }
 
 TEST_CASE("decision: a clique of the requested size does not exist")
@@ -132,6 +134,7 @@ TEST_CASE("decision: a clique of the requested size does not exist")
     params.decide = 4;
     auto result = solve_clique_problem(g, params);
     CHECK(result.clique.empty());
+    CHECK(result.complete);
 }
 
 TEST_CASE("stop_after_finding returns a clique at least that big")

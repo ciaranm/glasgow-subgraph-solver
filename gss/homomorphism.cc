@@ -509,7 +509,10 @@ namespace
                     ctx.proof->finish_unsat_proof();
             }
 
+            // A complete refutation: no search was needed, but none was cut short either.
             ctx.result = HomomorphismResult{};
+            ctx.result.complete = true;
+            ctx.result.extra_stats.emplace_back("pattern_bigger_than_target = true");
             return StepOutcome::Concluded;
         }
     };

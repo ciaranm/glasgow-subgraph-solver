@@ -149,9 +149,7 @@ namespace
     auto make_params(const Row & row) -> HomomorphismParams
     {
         // No timeout, so every solve here runs to completion and the two answers being
-        // compared are both exact. That is why nothing below compares `complete`: the one
-        // configuration that reports an incomplete search is the trivial
-        // pattern-bigger-than-target refutation, which is exact anyway.
+        // compared are both exact; `solve` checks that each one says so.
         HomomorphismParams params;
         params.timeout = make_shared<Timeout>(0s);
         params.restarts_schedule = make_unique<NoRestartsSchedule>();
@@ -494,6 +492,7 @@ namespace
     auto solve(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> Answer
     {
         auto result = solve_homomorphism_problem(pattern, target, params);
+        CHECK(result.complete);
         return Answer{
             params.count_solutions ? (result.solution_count > loooong{0}) : (! result.mapping.empty()),
             result.solution_count,

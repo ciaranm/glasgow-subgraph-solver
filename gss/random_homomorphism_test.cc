@@ -228,10 +228,9 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                     auto result = solve_homomorphism_problem(pattern, target, params);
                     CHECK(got == expected);
                     CHECK(result.solution_count == int(expected.size()));
-                    // a non-empty enumeration must have run to completion; the only
-                    // incomplete case is the trivial injective pattern-bigger-than-target
-                    // shortcut (0 solutions)
-                    CHECK((result.complete || expected.empty()));
+                    // there is no timeout, so every path must report a complete search,
+                    // including the trivial pattern-bigger-than-target refutation (#104)
+                    CHECK(result.complete);
 
                     // Staged counting must match the oracle exactly, including under the
                     // no-restarts schedule counting uses: a tiny first-round budget forces
@@ -252,7 +251,7 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                     auto staged_count = solve_homomorphism_problem(pattern, target, params);
                     CHECK(staged_got == expected);
                     CHECK(staged_count.solution_count == int(expected.size()));
-                    CHECK((staged_count.complete || expected.empty()));
+                    CHECK(staged_count.complete);
 
                     // Decision mode takes a different route through the pipeline: the
                     // pattern-bigger-than-target refutation, the target-loop shortcut and the
