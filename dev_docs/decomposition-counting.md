@@ -444,14 +444,54 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
   - Otherwise the other Exact implies, by its collision lemma, that u and v differ.
   - Deleting injectivity row t is the collision lemma at the root.
 
-  The lemma should follow by cases on pairs of cubes, one from each of the two components
-  that collide. A colliding pair completes a cube of the glued leaf of some ρ above τ, and
-  so Prod_ρ by unit propagation, and Prod_ρ implies Exact_ρ ∨ B_ρ. Every node under B_ρ
-  is also under B_τ, so B_ρ → B_τ is one RUP step. The number of cases is the number of
-  colliding cube pairs, which is about the size of the glued leaves. So this is
-  polynomial in what the solver already enumerated, and in the FPT budget. This has not
-  been checked on an instance yet; a proof generator for small statements with three
-  components is the next step.
+  The lemma follows by cases on pairs of cubes, one from each of the two components that
+  collide. A colliding pair completes a cube of the glued leaf of some ρ above τ, and so
+  Prod_ρ by unit propagation, and Prod_ρ implies Exact_ρ ∨ B_ρ. Every node under B_ρ is
+  also under B_τ, so B_ρ → B_τ is one RUP step. The number of cases is the number of
+  colliding cube pairs, which is about the size of the glued leaves, so this is polynomial
+  in what the solver already enumerated.
+
+  Checked by generating both proofs for statements the solver writes, with a Python
+  generator that reads the partition structure back off the statement's leaves. It handles
+  unlabelled, loopless LAD instances with at least as many target vertices as pattern
+  vertices, so nothing is pigeonholed. VeriPB accepts the main proof as
+  `OUTPUT EQUIENUMERABLE` and the side-condition proof as `UNSATISFIABLE` on:
+  - all 98 random instances with a statement among 100 small ones (3 or 4 components, at
+    most 6 pattern vertices, the other two having count 0);
+  - 15 larger ones (3 or 4 components, up to 7 pattern vertices, up to 39k statement
+    nodes), which are all of those that VeriPB finished; of the rest, 10 had their proofs
+    generated but not checked within 30 minutes, 3 hit a 2 GB cap on the statement, and
+    1 had count 0;
+  - three disjoint edges into P6.
+
+  Disjointness has two possible shapes, and the first one tried does not scale:
+  - Pairwise, as in the P4 certificate, is quadratic in the number of Exacts under a ⊕, and
+    under the root's ⊕ that is one per way of gluing. It was two thirds of the side proof.
+  - A decision tree over vertex pairs is linear in that number. Split the Exacts on a pair
+    u, v that some glue and some do not. Introduce a gate a ↔ ∨ (each half), and exclude
+    the two halves from each other with one RUP step per value. Then combine with the same
+    `pol`-and-divide trick that recovers an at-most-one from pairwise clauses. The
+    generator uses this, and it halved the side proof on three edges into P6.
+
+  Sizes, per statement node, over the 98 small instances: the main proof is about 5 lines;
+  the side-condition proof is 9 with three components and 18 with four. The side proof
+  is now spread over restriction lemmas for containment, equality and separation lemmas
+  for single leaves, the collision lemmas' cases, and the decision trees, with none of
+  them dominating. On larger instances the side proof grows to about 16 to 21 lines per
+  node. Checking it is the slow part. On one 7-vertex instance with 39k nodes and 1008
+  solutions:
+  - VeriPB took 17 s for the 160k-line main proof;
+  - it took 34 minutes for the 640k-line side proof;
+  - the solver's own enumeration proof took 0.05 s.
+
+  The side proof never deletes anything, which is the first thing to look at; this hasn't
+  been investigated yet. These are not instances where decomposition should win, since
+  their counts are small. The statements themselves remain the hard limit: random
+  patterns with 10 or 11 vertices hit the 2 GB cap on the statement alone.
+
+  The generator is in `tmp/gss-decomp/phase2b/` on the shared cluster, not in this
+  repository. The structure it recovers from leaves is what the solver will know directly
+  when it writes these proofs itself (phases 4 to 6).
 
 ### Phase 3: c > 0, without proofs
 
@@ -498,9 +538,10 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
 
 ## Open questions
 
-- How expensive are the exact-pattern disjointness proofs in practice? Phase 2 suggests
-  they are the same problem as deleting the injectivity constraints, and polynomial in the
-  leaves, but that is untested beyond two components.
+- How expensive are the exact-pattern disjointness proofs in practice? Phase 2 found them
+  to be the same problem as deleting the injectivity constraints (the collision lemma).
+  With a decision tree instead of pairwise exclusion, the side proof is about 10 to 20
+  lines per statement node on small random instances.
 - How big do certificates get on instances where decomposition actually wins, compared
   with enumeration proofs of the same counts?
 - When should the solver choose to decompose at all?
