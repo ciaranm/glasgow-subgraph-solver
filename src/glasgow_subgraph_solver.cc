@@ -7,8 +7,10 @@
 #include <cxxopts.hpp>
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -30,6 +32,7 @@ using std::localtime;
 using std::make_pair;
 using std::make_shared;
 using std::make_unique;
+using std::ofstream;
 using std::optional;
 using std::pair;
 using std::put_time;
@@ -105,6 +108,7 @@ auto main(int argc, char * argv[]) -> int
             ("k4", "Use 4-clique filtering (experimental)") //
             ("n-exact-path-graphs", "Specify number of exact path graphs", cxxopts::value<int>()) //
             ("decomposition", "Use decomposition") //
+            ("decomposition-statement", "With --decomposition, also write a counting statement to this file (see dev_docs/counting-statements.md)", cxxopts::value<string>()) //
             ("cliques", "Use clique size constraints") //
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
             ("shape", "Specify an extra shape graph, as a CSV file with one vertex labelled from and one labelled to, and any other labels on the rest (slow, experimental, injective only)", cxxopts::value<std::vector<std::string>>(shapes)) //
@@ -364,7 +368,33 @@ auto main(int argc, char * argv[]) -> int
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
 
-        auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params) : solve_homomorphism_problem(pattern, target, params);
+        optional<string> statement_file;
+        optional<ofstream> statement;
+        if (options_vars.count("decomposition-statement")) {
+            if (! options_vars.count("decomposition")) {
+                cerr << "--decomposition-statement needs --decomposition" << endl;
+                return EXIT_FAILURE;
+            }
+            statement_file = options_vars["decomposition-statement"].as<string>();
+            statement.emplace(*statement_file);
+            if (! *statement) {
+                cerr << "Cannot write to " << *statement_file << endl;
+                return EXIT_FAILURE;
+            }
+        }
+
+        auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params, statement ? &*statement : nullptr) : solve_homomorphism_problem(pattern, target, params);
+
+        // an incomplete statement, or none at all, is not left lying around to be mistaken
+        // for a real one
+        if (statement) {
+            bool written = statement->tellp() > 0 && result.complete;
+            statement->close();
+            if (! written)
+                std::remove(statement_file->c_str());
+            else
+                result.extra_stats.emplace_back("decomposition_statement_file = " + *statement_file);
+        }
 
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
