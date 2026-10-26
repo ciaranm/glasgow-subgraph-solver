@@ -108,3 +108,7 @@ add_test(NAME option_sweep_test COMMAND $<TARGET_FILE:option_sweep_test>)
 add_executable(extra_shapes_test extra_shapes_test.cc)
 target_link_libraries(extra_shapes_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME extra_shapes_test COMMAND $<TARGET_FILE:extra_shapes_test>)
+
+add_executable(sip_decomposer_test sip_decomposer_test.cc)
+target_link_libraries(sip_decomposer_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME sip_decomposer_test COMMAND $<TARGET_FILE:sip_decomposer_test>)
