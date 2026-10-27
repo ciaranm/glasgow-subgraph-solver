@@ -348,7 +348,8 @@ auto HomomorphismProofs::emit_adjacency_constraint(int p, int q, int t, const st
     for (auto & u : permitted)
         line += " 1 x" + _proof->variable_name(q, u);
     line += " >= 1 ;";
-    _proof->emit_model_constraint(line);
+    if (_proof->emit_model_constraint(line))
+        _model_adjacency_labels.push_back(adj_label);
 
     auto & adjacency = _adjacency;
     adjacency.labels.emplace(std::tuple<long, long, long, long>{0, p, q, t}, adj_label);
@@ -945,12 +946,14 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
     // Mechanism: before issue #49 the adjacency constraint left the target's self-loop term
     // out, so it could be summed into a pol cleanly. We now keep that term (so a loop->loop
     // mapping satisfies the model), but it then appears as a stray "q maps to the loopy
-    // target" term in every pol. For each adjacency constraint over a loopy target t, rewrite
-    // its @adj label to the loop-cancelled version -- ~x_p_t together with the neighbours of t
-    // other than t -- which follows from the constraint plus injectivity on t (mapping p to t
-    // forbids q from also mapping to t). VeriPB lets a proof line reassign an existing label,
-    // so every later @adj reference in a pol picks up the loop-cancelled form; the original
-    // loop-bearing constraint stays in the database (by number) so solutions still satisfy the
+    // target" term in every pol. For each adjacency constraint over a loopy target t, derive
+    // the loop-cancelled version -- ~x_p_t together with the neighbours of t other than t --
+    // which follows from the constraint plus injectivity on t (mapping p to t forbids q from
+    // also mapping to t), under a label of its own, and point the adjacency cache at it, so
+    // every later citation picks up the loop-cancelled form. (It used to take over the
+    // original's label, which VeriPB allows, but then the label no longer named the model's
+    // constraint for anything outside this solve, such as a nested solve's outer proof.) The
+    // original loop-bearing constraint stays in the database so solutions still satisfy the
     // model. The loop-cancelled form relies on global injectivity on t, so it is only derived
     // when the model has it. Local injectivity does not give it, but under local injectivity
     // the pol-summing filters that would need it are disabled anyway (issue #58). Without any
@@ -971,12 +974,14 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
             continue;
         if (std::find(pit->second.begin(), pit->second.end(), t) == pit->second.end())
             continue; // t is not a neighbour of itself: no loop term to cancel
-        std::string line = label + " rup 1 ~x" + _proof->variable_name(p, t);
+        auto loop_free = label + "_loopfree";
+        std::string line = loop_free + " rup 1 ~x" + _proof->variable_name(p, t);
         for (auto & u : pit->second)
             if (u != t)
                 line += " 1 x" + _proof->variable_name(q, u);
         line += " >= 1 ;";
         _proof->emit_proof_line(line);
+        label = loop_free;
         // (The original loop-bearing constraint is now redundant, but it is left in place:
         // deleting it needs `del id <number>`, and that number does not correspond to the
         // same constraint in CakePB's independently-numbered OPB, so the deletion breaks the
@@ -1113,4 +1118,9 @@ auto HomomorphismProofs::forget_transient_supplemental_adjacencies() -> void
         adjacency.ids.erase(key);
     }
     _pending_transient_adjacencies.clear();
+}
+
+auto HomomorphismProofs::model_adjacency_labels() const -> const std::vector<std::string> &
+{
+    return _model_adjacency_labels;
 }

@@ -119,7 +119,9 @@ namespace gss::innards
 
         // The OPB-model analogues: emit_model_constraint writes a constraint into the model
         // (bumping the constraint count); emit_model_comment writes a `*` comment line.
-        auto emit_model_constraint(const std::string & line) -> void;
+        // Returns the constraint's number in the model (or 0 in a nested solve, which writes
+        // no model).
+        auto emit_model_constraint(const std::string & line) -> long;
         auto emit_model_comment(const std::string & line) -> void;
 
         // Read accessors for the model constraint labels the homomorphism derivations cite:

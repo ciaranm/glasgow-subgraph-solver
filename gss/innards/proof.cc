@@ -103,6 +103,20 @@ struct Proof::Imp
     vector<long> nested_scratch_lines;
     optional<long> nested_conclusion;
     int number_of_nested_solves = 0;
+
+    // Every label defined so far, in the model or the proof. VeriPB would let a later line
+    // take over a label, silently changing what every later citation of it means, so we
+    // never do that: a second definition is a bug, and throws.
+    set<string> labels;
+
+    auto define_label(const string & line) -> void
+    {
+        if (line.empty() || line[0] != '@')
+            return;
+        auto label = line.substr(0, line.find(' '));
+        if (! labels.insert(label).second)
+            throw ProofError{"the label " + label + " is defined twice"};
+    }
 };
 
 Proof::Proof(const ProofOptions & options) :
@@ -135,6 +149,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
 
     _imp->model_stream << "* vertex " << pattern_vertex << " domain\n";
     auto al1_label = "@al1" + pattern_name(pattern_vertex);
+    _imp->define_label(al1_label);
     stringstream al1_constraint;
     al1_constraint << al1_label << " ";
     for (int i = 0; i < target_size; ++i)
@@ -145,6 +160,7 @@ auto Proof::create_cp_variable(int pattern_vertex, int target_size,
     _imp->at_least_one_value_constraints.emplace(pattern_vertex, al1_label);
 
     auto am1_label = "@am1" + pattern_name(pattern_vertex);
+    _imp->define_label(am1_label);
     stringstream am1_constraint;
     am1_constraint << am1_label << " ";
     for (int i = 0; i < target_size; ++i)
@@ -180,6 +196,7 @@ auto Proof::create_injectivity_constraints(int pattern_size, int target_size,
     for (int v = 0; v < target_size; ++v) {
         _imp->model_stream << "* injectivity on value " << v << '\n';
         auto inj_label = "@inj" + target_name(v);
+        _imp->define_label(inj_label);
         _imp->model_stream << inj_label << " ";
 
         for (int p = 0; p < pattern_size; ++p) {
@@ -211,6 +228,7 @@ auto Proof::create_adjacency_constraint(const NamedVertex & p, const NamedVertex
     const vector<int> & uu, bool) -> void
 {
     auto adj_label = "@adj" + p.second + "_" + t.second + "_" + q.second;
+    _imp->define_label(adj_label);
 
     _imp->model_stream << adj_label << " ";
     _imp->model_stream << "1 ~x" << _imp->variable_mappings[pair{p.first, t.first}];
@@ -534,6 +552,7 @@ auto Proof::new_incumbent(const vector<tuple<NamedVertex, NamedVertex, bool>> & 
 
 auto Proof::emit_proof_line(const string & line) -> long
 {
+    _imp->define_label(line);
     *_imp->proof_stream << line << "\n";
     return ++_imp->proof_line;
 }
@@ -568,12 +587,13 @@ auto Proof::injectivity_labels() const -> const map<long, string> &
     return _imp->injectivity_constraints;
 }
 
-auto Proof::emit_model_constraint(const string & line) -> void
+auto Proof::emit_model_constraint(const string & line) -> long
 {
     if (_imp->nested)
-        return;
+        return 0;
+    _imp->define_label(line);
     _imp->model_stream << line << "\n";
-    ++_imp->nb_constraints;
+    return ++_imp->nb_constraints;
 }
 
 auto Proof::emit_model_comment(const string & line) -> void
@@ -640,6 +660,7 @@ auto Proof::create_objective(int n, optional<int> d) -> void
 auto Proof::create_non_edge_constraint(const NamedVertex & p, const NamedVertex & q) -> void
 {
     auto name = string{"@noedge"} + (p.first < q.first ? p.second : q.second) + "_" + (p.first < q.first ? q.second : p.second);
+    _imp->define_label(name);
 
     _imp->model_stream << name << " -1 x" << _imp->binary_variable_mappings[p.first] << " -1 x" << _imp->binary_variable_mappings[q.first] << " >= -1 ;\n";
 
