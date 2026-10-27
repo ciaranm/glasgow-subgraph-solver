@@ -99,8 +99,9 @@ thesis. It guesses which pattern vertices go onto a few of the target's highest-
 what is left separately, with lists of where its vertices may go, and corrects for components
 that overlap by inclusion–exclusion over the ways of gluing them together. Each glued component
 is solved once per isomorphism class, with its lists passed to the solver as
-`HomomorphismParams::restrict_initial_domains`. Isolated pattern vertices are handled by a
-closed form. Otherwise it only strips isolated pattern vertices before solving. It does not
+`HomomorphismParams::restrict_initial_domains`. Before any of that, it runs the plain solver's
+checks before search on the whole instance, which see things that no single component does.
+Isolated pattern vertices are handled by a closed form. Otherwise it only strips isolated pattern vertices before solving. It does not
 produce a mapping when counting, and it only allows proof logging alongside a statement, without
 hubs. With `--decomposition-statement FILE` it also writes
 its argument as a counting statement (`counting_statement`), which the `count_statement` driver

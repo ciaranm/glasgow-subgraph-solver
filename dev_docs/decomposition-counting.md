@@ -96,6 +96,14 @@ choice.
 non-induced, undirected embeddings. Vertex labels, edge labels and loops are supported. In
 brief:
 
+- First, the plain solver's checks before search run on the whole instance
+  (`HomomorphismModel::prepare`). They can rule it out where every component would fit on
+  its own, by comparing degree sequences for instance, and decomposing never sees the whole
+  instance. On the LV benchmark instances with disconnected patterns, the plain solver
+  rejects 749 of 1159 this way, where decomposition used to grind through the inclusion–
+  exclusion until it timed out. `DecompositionOptions::check_whole_instance` turns this off,
+  which the tests do, so that they still exercise the decomposition on those instances. It
+  does not yet happen under proof logging, which would need the plain solver's proof of it.
 - Isolated pattern vertices use a closed form: a falling factorial for each vertex label.
 - Everything else is guessed onto the hubs in every possible way, and what is left of each
   guess goes through the recursion above, with lists. Gluing vertices with different labels,
@@ -104,21 +112,37 @@ brief:
 - The hubs are the c highest-degree target vertices, ties going to the lower-numbered
   vertex. `DecompositionOptions::hubs` (the hidden `--decomposition-hubs N`) sets c.
   Otherwise c is chosen to minimise a rough estimate of the work, (number of guesses) × P
-  + Σ d(t)^(k−1) over the non-hubs t. Here:
+  + E, worked out in logarithms. Here:
   - P is the number of valid partitions of the pattern's vertices, which bounds each
     guess's inclusion–exclusion;
-  - k = m − ℓ + 1 is the size of the biggest glued component, for ℓ components;
-  - d is the degree once the hubs are gone, so the sum is a star-shaped overestimate of
-    enumerating that component.
+  - E estimates the embeddings that enumeration visits: of each component, and of the
+    biggest glued component, which glues one vertex of greatest degree from each component
+    together;
+  - a graph with e edges and degrees g(v) gets Π_v F(g(v)) / F(1)^e, where F(j) =
+    Σ_t d(t)_j over the non-hubs t, d(t) is the degree once the hubs are gone, and d_j is a
+    falling factorial. This is the expected number of embeddings into a random graph with
+    those degrees (the configuration model).
 
-  The sum is what makes a heavy-tailed degree distribution worth guessing on: the top few
-  vertices dominate it. A grid gets c = 0 on all of the patterns in the table below. The
-  number of guesses only grows with c, so the search for c stops once the guesses alone
-  cost more than the best so far. Hubs need an undirected target.
+  The estimate is exact for a star, which is what makes a heavy-tailed degree distribution
+  worth guessing on: the top few vertices dominate F(j) for large j. It charges little for
+  a dense pattern in a sparse target. An earlier version used Σ d(t)^(k−1) for the biggest
+  glued component of k vertices, which is the same for a star but about 10⁶⁰ for a
+  45-vertex component. That made any number of guesses look cheap, so it picked c in the
+  tens and then never finished guessing. A grid gets c = 0 on all of the patterns in the
+  table below. The number of guesses only grows with c, so the search for c stops once the
+  guesses alone cost more than the best so far. Hubs need an undirected target.
 - A guess puts some of the pattern vertices onto distinct hubs, respecting labels, loops
-  and the edges between them. Every other vertex gets a list: the non-hubs adjacent, with
-  the right edge label, to every hub that its neighbours were guessed onto. A guess that
-  leaves any vertex an empty list is skipped. The lists reach the solver through
+  and the edges between them, and only onto hubs with at least their degree. Every other
+  vertex gets a list. It contains the non-hubs that have:
+  - an edge, with the right label, to every hub that its neighbours were guessed onto;
+  - at least as many non-hub neighbours as it has neighbours not on hubs.
+
+  Both hold of any embedding, because it is injective and every vertex not on a hub goes to
+  a non-hub. A guess that leaves any vertex an empty list is skipped. The degree condition
+  is what prunes guesses that leave a high-degree pattern vertex off the hubs when only the
+  hubs could take it.
+- The guesses and the coarsenings check the timeout themselves, because there can be
+  enough of them to outlast it without any solver call noticing. The lists reach the solver through
   `HomomorphismParams::restrict_initial_domains`, which any caller can use.
 - Each glued component is counted by one call to `solve_homomorphism_problem`, cached up
   to isomorphism: colour refinement, then brute force within colour classes, falling back
@@ -132,7 +156,8 @@ brief:
   target explores every way of gluing itself together.
 - It reports `decomposition_components`, `decomposition_hubs`, `decomposition_guesses`,
   `decomposition_solver_calls`, `decomposition_quotients` and
-  `decomposition_coarsenings_considered`.
+  `decomposition_coarsenings_considered`, and `decomposition_rejected_before_search = true`
+  when the checks on the whole instance ruled it out.
 - It produces no mapping when counting. It allows proof logging only when writing a
   statement, and then without hubs, unless they are asked for, which it refuses.
 - With `--decomposition-statement FILE` it also writes its argument as a counting
@@ -151,9 +176,17 @@ Counting on a 40×40 grid, where the plain solver runs out of time on all of the
 | 6 disjoint edges | 5.7×10²² in 12.7 s, 52 calls, 1.8M coarsenings |
 | 4 × P4 | times out at 120 s: 812 distinct glued trees, each counted by enumeration |
 
-Known limits: the coarsening enumeration does not use the symmetry between identical
-components, which dominates the six-edge case; large glued components are still counted
-by enumeration; and the choice of c is a rough heuristic.
+Known limits:
+- The coarsening enumeration does not use the symmetry between identical components, which
+  dominates the six-edge case.
+- Large glued components are still counted by enumeration.
+- The choice of c is a rough heuristic.
+- Inclusion–exclusion is at its worst when the count is zero or small but the pieces have
+  many embeddings. Then it works through every quotient to reach a total that a plain search
+  of the whole pattern would refute quickly. For instance, one hub splits a 24-vertex
+  pattern into four small dense graphs that each fit in LV g13 many times. That case takes
+  38,635 solver calls and times out at 100 s, where the plain solver refutes the whole
+  pattern in 1.5 s.
 
 ## The counting language
 

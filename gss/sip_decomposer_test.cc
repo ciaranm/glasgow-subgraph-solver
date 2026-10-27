@@ -122,10 +122,10 @@ namespace
 
     // Writes a statement, and reads it back, which checks that it is well-formed.
     auto statement_for(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params,
-        HomomorphismResult & result, optional<int> hubs = std::nullopt) -> optional<CountingStatement>
+        HomomorphismResult & result, optional<int> hubs = std::nullopt, bool check_whole_instance = true) -> optional<CountingStatement>
     {
         stringstream out;
-        result = solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{&out, hubs});
+        result = solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{&out, hubs, check_whole_instance});
         if (out.str().empty())
             return std::nullopt;
         return read_counting_statement(out);
@@ -277,15 +277,20 @@ TEST_CASE("decomposition agrees with the solver on random disconnected patterns"
     auto expected = solve_homomorphism_problem(pattern, target, params);
     REQUIRE(expected.complete);
 
-    // every number of hubs gives the same count; -1 is the decomposer's own choice
-    for (int hubs : {-1, 0, 1, 2, 3}) {
-        auto decomposed = solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{nullptr, hubs_option(hubs)});
-        INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs);
-        CHECK(decomposed.complete);
-        CHECK(decomposed.solution_count == expected.solution_count);
-        if (hubs != -1)
-            CHECK(has_stat(decomposed, "decomposition_hubs = " + std::to_string(hubs)));
-    }
+    // every number of hubs gives the same count; -1 is the decomposer's own choice. The
+    // checks on the whole instance rule out many of these, so the decomposition itself
+    // also runs without them.
+    for (bool check : {true, false})
+        for (int hubs : {-1, 0, 1, 2, 3}) {
+            auto decomposed = solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{nullptr, hubs_option(hubs), check});
+            INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs << " check " << check);
+            CHECK(decomposed.complete);
+            CHECK(decomposed.solution_count == expected.solution_count);
+            if (hubs != -1)
+                CHECK(has_stat(decomposed, "decomposition_hubs = " + std::to_string(hubs)));
+            if (has_stat(decomposed, "decomposition_rejected_before_search = true"))
+                CHECK((check && expected.solution_count == 0));
+        }
 }
 
 TEST_CASE("decomposition leaves non-injective counts alone")
@@ -329,19 +334,20 @@ TEST_CASE("decomposition statements count what the solver counts on random disco
     auto expected = solve_homomorphism_problem(pattern, target, params);
     REQUIRE(expected.complete);
 
-    for (int hubs : {-1, 0, 1, 2, 3}) {
-        HomomorphismResult result;
-        auto statement = statement_for(pattern, target, params, result, hubs_option(hubs));
-        INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs);
-        CHECK(result.complete);
-        CHECK(result.solution_count == expected.solution_count);
-        if (statement) {
-            CHECK(statement->domain_sizes == vector<int>(pattern.size(), target.size()));
-            CHECK(count_counting_statement(*statement) == expected.solution_count);
+    for (bool check : {true, false})
+        for (int hubs : {-1, 0, 1, 2, 3}) {
+            HomomorphismResult result;
+            auto statement = statement_for(pattern, target, params, result, hubs_option(hubs), check);
+            INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs << " check " << check);
+            CHECK(result.complete);
+            CHECK(result.solution_count == expected.solution_count);
+            if (statement) {
+                CHECK(statement->domain_sizes == vector<int>(pattern.size(), target.size()));
+                CHECK(count_counting_statement(*statement) == expected.solution_count);
+            }
+            else
+                CHECK(expected.solution_count == 0);
         }
-        else
-            CHECK(expected.solution_count == 0);
-    }
 }
 
 TEST_CASE("decomposition statements mean what they say by brute force")
@@ -353,6 +359,7 @@ TEST_CASE("decomposition statements mean what they say by brute force")
         Shape{false, false, true}, Shape{true, true, true});
     auto seed = GENERATE(range(0, 30));
     auto hubs = GENERATE(-1, 0, 1, 2);
+    // without the checks on the whole instance, which would leave many with no statement
 
     // no more pattern vertices than target vertices, or the pigeonhole would mean that
     // most of these write no statement at all
@@ -373,7 +380,7 @@ TEST_CASE("decomposition statements mean what they say by brute force")
     REQUIRE(expected.complete);
 
     HomomorphismResult result;
-    auto statement = statement_for(pattern, target, params, result, hubs_option(hubs));
+    auto statement = statement_for(pattern, target, params, result, hubs_option(hubs), false);
     INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs);
     if (! statement) {
         CHECK(expected.solution_count == 0);
@@ -558,6 +565,30 @@ TEST_CASE("decomposition does not glue a pattern that is bigger than its target"
     CHECK(result.complete);
     CHECK(result.solution_count == 0);
     CHECK(std::find(result.extra_stats.begin(), result.extra_stats.end(), "decomposition_coarsenings_considered = 0") != result.extra_stats.end());
+}
+
+TEST_CASE("decomposition starts with the checks on the whole instance")
+{
+    // each edge fits on its own, but the degree sequences rule out both together
+    auto pattern = read_csv(stringstream{"a,b\nc,d\n"}, "pattern");
+    auto target = read_csv(stringstream{"1,2\n2,3\n4,\n"}, "target");
+    auto params = counting_params();
+
+    auto checked = solve_sip_by_decomposition(pattern, target, params);
+    CHECK(checked.complete);
+    CHECK(checked.solution_count == 0);
+    CHECK(has_stat(checked, "decomposition_rejected_before_search = true"));
+    CHECK(has_stat(checked, "decomposition_coarsenings_considered = 0"));
+
+    HomomorphismResult with_statement;
+    CHECK(! statement_for(pattern, target, params, with_statement));
+    CHECK(has_stat(with_statement, "decomposition_statement = none, because the checks before search rule out every embedding"));
+
+    auto unchecked = solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{nullptr, std::nullopt, false});
+    CHECK(unchecked.complete);
+    CHECK(unchecked.solution_count == 0);
+    CHECK(! has_stat(unchecked, "decomposition_rejected_before_search = true"));
+    CHECK(! has_stat(unchecked, "decomposition_coarsenings_considered = 0"));
 }
 
 TEST_CASE("decomposition statements can say zero when the components only overlap")

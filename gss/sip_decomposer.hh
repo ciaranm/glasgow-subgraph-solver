@@ -22,6 +22,12 @@ namespace gss
         /// Any choice gives the same count. Only used when counting; with proof logging,
         /// there are no hubs unless this says otherwise, which is not yet supported.
         std::optional<int> hubs;
+
+        /// Whether to start with the plain solver's checks before search, on the whole
+        /// instance, which can rule out every embedding where each component would fit on
+        /// its own. Not yet with proof logging. Only worth turning off to exercise the
+        /// decomposition itself, as the tests do.
+        bool check_whole_instance = true;
     };
 
     auto solve_sip_by_decomposition(
