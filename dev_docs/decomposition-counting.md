@@ -3,9 +3,11 @@
 A design plan for counting subgraph embeddings by decomposition, following Section 3.6 of
 Jessica Ryan's PhD thesis, and for certifying those counts with VeriPB without enumerating
 the solutions. This is forward-looking: it describes where the code is going, not where it
-is. The c = 0 case without proofs exists as a prototype in `gss/sip_decomposer.cc`, it can
-state its argument as a counting statement (phase 1), and one certificate has been written
-by hand (phase 2); everything else here is a plan. For the current architecture see
+is. The algorithm exists in `gss/sip_decomposer.cc`, including the hub guesses (phase 3).
+It can state its argument as a counting statement (phase 1). Without hubs, it can also prove
+that the solver's encoding of the instance is equienumerable with that statement (phases 4
+and 5). The side-condition proofs and the pipeline (phase 6), and proofs with hubs, are
+still a plan. For the current architecture see
 [architecture.md](architecture.md); for proof logging see
 [proof-logging.md](proof-logging.md).
 
@@ -90,29 +92,55 @@ choice.
 
 ## Where the prototype is
 
-`solve_sip_by_decomposition` (`--decomposition`) does the c = 0 case when counting
-injective, non-induced, undirected embeddings. Vertex labels, edge labels and loops are
-supported. In brief:
+`solve_sip_by_decomposition` (`--decomposition`) does this when counting injective,
+non-induced, undirected embeddings. Vertex labels, edge labels and loops are supported. In
+brief:
 
 - Isolated pattern vertices use a closed form: a falling factorial for each vertex label.
-- Everything else goes through the recursion above. Gluing vertices with different labels,
-  or gluing two edges with different labels onto each other, gives zero.
+- Everything else is guessed onto the hubs in every possible way, and what is left of each
+  guess goes through the recursion above, with lists. Gluing vertices with different labels,
+  or gluing two edges with different labels onto each other, gives zero, and so does gluing
+  vertices whose lists have nothing in common.
+- The hubs are the c highest-degree target vertices, ties going to the lower-numbered
+  vertex. `DecompositionOptions::hubs` (the hidden `--decomposition-hubs N`) sets c.
+  Otherwise c is chosen to minimise a rough estimate of the work, (number of guesses) × P
+  + Σ d(t)^(k−1) over the non-hubs t. Here:
+  - P is the number of valid partitions of the pattern's vertices, which bounds each
+    guess's inclusion–exclusion;
+  - k = m − ℓ + 1 is the size of the biggest glued component, for ℓ components;
+  - d is the degree once the hubs are gone, so the sum is a star-shaped overestimate of
+    enumerating that component.
+
+  The sum is what makes a heavy-tailed degree distribution worth guessing on: the top few
+  vertices dominate it. A grid gets c = 0 on all of the patterns in the table below. The
+  number of guesses only grows with c, so the search for c stops once the guesses alone
+  cost more than the best so far. Hubs need an undirected target.
+- A guess puts some of the pattern vertices onto distinct hubs, respecting labels, loops
+  and the edges between them. Every other vertex gets a list: the non-hubs adjacent, with
+  the right edge label, to every hub that its neighbours were guessed onto. A guess that
+  leaves any vertex an empty list is skipped. The lists reach the solver through
+  `HomomorphismParams::restrict_initial_domains`, which any caller can use.
 - Each glued component is counted by one call to `solve_homomorphism_problem`, cached up
   to isomorphism: colour refinement, then brute force within colour classes, falling back
-  to the exact graph above 5040 orderings.
+  to the exact graph above 5040 orderings. A vertex's list is part of its colour, so the
+  cache is shared between guesses wherever their lists agree. Lists are numbered as they
+  are first seen, so that a key stays short.
 - none() is memoised on the quotient's isomorphism class, which is the sorted multiset of
-  its components' keys.
+  its components' keys. This is shared between guesses too.
 - A quotient with more blocks of some label than the target has vertices with that label
   has no injective embedding, and is skipped. Without this, a pattern bigger than its
   target explores every way of gluing itself together.
-- It reports `decomposition_components`, `decomposition_solver_calls`,
-  `decomposition_quotients` and `decomposition_coarsenings_considered`.
-- It refuses proof logging, and produces no mapping when counting.
+- It reports `decomposition_components`, `decomposition_hubs`, `decomposition_guesses`,
+  `decomposition_solver_calls`, `decomposition_quotients` and
+  `decomposition_coarsenings_considered`.
+- It produces no mapping when counting. It allows proof logging only when writing a
+  statement, and then without hubs, unless they are asked for, which it refuses.
 - With `--decomposition-statement FILE` it also writes its argument as a counting
   statement; see phase 1 below.
 
 `gss/sip_decomposer_test.cc` compares it with the plain solver on 200 random disconnected
-patterns across loops and labels.
+patterns across loops and labels, with the decomposer's own choice of c and with c from 0 to
+3.
 
 Counting on a 40×40 grid, where the plain solver runs out of time on all of these:
 
@@ -125,7 +153,7 @@ Counting on a 40×40 grid, where the plain solver runs out of time on all of the
 
 Known limits: the coarsening enumeration does not use the symmetry between identical
 components, which dominates the six-edge case; large glued components are still counted
-by enumeration; and there is no c > 0 case yet.
+by enumeration; and the choice of c is a rough heuristic.
 
 ## The counting language
 
@@ -222,8 +250,12 @@ checked before any count is reported.
 
 - **Root** = ⊕ over hub guesses (S, f), with |S| ≤ c and f an injective, edge-preserving
   map from S into V_c(G). Guesses that fail those conditions are left out, and the main
-  proof shows they are impossible.
-- **Guess** = cube(S ↦ f) ⊗ Rest_{S,f}, where Rest is over V(H) \ S.
+  proof shows they are impossible. So are guesses whose Rest has no node, because some
+  component has no embeddings, or by pigeonhole. With only one guess left, the root is
+  that guess.
+- **Guess** = cube(S ↦ f) ⊗ Rest_{S,f}, where Rest is over V(H) \ S. When S is empty,
+  this is just Rest, and when S is everything, just the cube. With c = 0, the only guess
+  has S empty, so the statement is the same as before there were hubs.
 - **Rest_{S,f}** = Exact_0̂ for the components of H \ S.
 - **Exact_σ** = Prod_σ ⊖ (⊕ of Exact_τ over τ ∈ Up(σ) \ {σ}), shared across parents.
   This is the memo table.
@@ -234,9 +266,9 @@ checked before any count is reported.
 Lists need no special treatment: they determine which cubes exist, and a glued vertex's
 list is the intersection automatically. Scopes line up (a cube over S ⊗ a node over
 V(H) \ S covers V(H)). The size is about m^c · c^c guesses × f(m) partitions × Σ #Emb(K)
-cubes, the same FPT budget as the algorithm. Exact nodes cannot be shared between guesses,
-because their leaves differ, and isomorphic glued components in different places are
-separate nodes. A renaming node, count(ρ(n)) = count(n) for a variable bijection ρ, would
+cubes, the same FPT budget as the algorithm. Exact nodes are shared between guesses only
+where their blocks have the same lists, which is what the memo is keyed on. Isomorphic glued
+components in different places are separate nodes. A renaming node, count(ρ(n)) = count(n) for a variable bijection ρ, would
 recover the isomorphism sharing; it is deferred.
 
 ## The verification model
@@ -509,6 +541,40 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
   defeats a single search.
 - Done when: counts match the plain solver on random instances, and the counter reproduces
   them.
+- Status: done, as described in "Where the prototype is" above.
+  - `HomomorphismParams::restrict_initial_domains` is the API: a predicate on (pattern
+    vertex, target vertex), applied when the domains are first built. The target-loop and
+    clique shortcuts step aside for it, and proof logging refuses it for now.
+    `random_homomorphism_test` checks it against the brute-force oracle in every family
+    and mode.
+  - The statement for a guess is cube(S ↦ f) ⊗ Rest, and the root is the or of the
+    guesses that have embeddings. With c = 0, statements are as they were.
+  - `sip_decomposer_test` checks the counts and the statements with the decomposer's own
+    choice of c and with c from 0 to 3, including the brute-force semantics and side
+    conditions with c up to 2. A star with four leaves into a star with 199 leaves (1.5 ×
+    10⁹ solutions) takes c = 1 and counts at once. A wider sweep of 400 random instances
+    into small heavy-tailed targets, with c up to 6, also agreed with the plain solver
+    and `count_statement` every time.
+  - Under proof logging there are no hubs, unless they are asked for, which is refused.
+    Proofs with hubs need each guess's search to run under its cube and its lists as
+    assumptions, and the side conditions to cover the guesses' disjointness. That belongs
+    with phases 5 and 6.
+  - Counting, on a 300-vertex preferential-attachment graph (maximum degree 43), and on a
+    120-vertex G(n, 0.06):
+
+    | Target | Pattern | Plain | c = 0 | Chosen c | Time |
+    |---|---|---|---|---|---|
+    | preferential | K₁,₅ | 44.6 s | 42.8 s | 10 | 0.3 s |
+    | preferential | K₁,₄ + P₃ | > 120 s | > 300 s | 5 | 13.6 s |
+    | preferential | 3 × P₃ | > 120 s | > 300 s | 4 | 26.9 s |
+    | preferential | 6 disjoint edges | | > 300 s | 1 | 124 s |
+    | G(n, p) | 3 × P₃ | | 37.8 s | 3 | 23.0 s |
+    | G(n, p) | K₁,₄ + P₃ | | 12.8 s | 5 | 5.4 s |
+
+    Guesses are cheap: 3 × P₃ took 21.5 s with 163k guesses at c = 8, its best. On the
+    40 × 40 grid a needless hub costs 1.2 to 1.5 times as long, which the heuristic
+    avoids for the patterns in the table above. 4 × P₄ on the preferential graph times
+    out at every c tried.
 
 ### Phase 4: proof plumbing, input ⇒ root
 

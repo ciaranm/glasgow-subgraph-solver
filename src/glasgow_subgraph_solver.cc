@@ -110,6 +110,7 @@ auto main(int argc, char * argv[]) -> int
             ("n-exact-path-graphs", "Specify number of exact path graphs", cxxopts::value<int>()) //
             ("decomposition", "Use decomposition") //
             ("decomposition-statement", "With --decomposition, also write a counting statement to this file (see dev_docs/counting-statements.md)", cxxopts::value<string>()) //
+            ("decomposition-hubs", "With --decomposition, guess pattern vertices onto this many of the target's highest-degree vertices (chosen automatically if not given)", cxxopts::value<int>()) //
             ("cliques", "Use clique size constraints") //
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
             ("shape", "Specify an extra shape graph, as a CSV file with one vertex labelled from and one labelled to, and any other labels on the rest (slow, experimental, injective only)", cxxopts::value<std::vector<std::string>>(shapes)) //
@@ -384,7 +385,17 @@ auto main(int argc, char * argv[]) -> int
             }
         }
 
-        auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params, statement ? &*statement : nullptr) : solve_homomorphism_problem(pattern, target, params);
+        if (options_vars.count("decomposition-hubs") && ! options_vars.count("decomposition")) {
+            cerr << "--decomposition-hubs needs --decomposition" << endl;
+            return EXIT_FAILURE;
+        }
+
+        DecompositionOptions decomposition_options;
+        decomposition_options.statement = statement ? &*statement : nullptr;
+        if (options_vars.count("decomposition-hubs"))
+            decomposition_options.hubs = options_vars["decomposition-hubs"].as<int>();
+
+        auto result = options_vars.count("decomposition") ? solve_sip_by_decomposition(pattern, target, params, decomposition_options) : solve_homomorphism_problem(pattern, target, params);
 
         // an incomplete statement, or none at all, is not left lying around to be mistaken
         // for a real one

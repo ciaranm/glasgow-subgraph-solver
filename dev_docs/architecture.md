@@ -93,12 +93,16 @@ homomorphism variants are all configurations of it.
   [preprocessor-refactor.md](preprocessor-refactor.md).
 
 `sip_decomposer` offers an alternative top level (`--decomposition`). When counting injective,
-non-induced, undirected embeddings, it counts each connected component of the pattern separately
-and corrects for components that overlap by inclusion–exclusion over the ways of gluing them
-together (the c = 0 case of Section 3.6 of Jessica Ryan's 2023 Glasgow PhD thesis), solving each
-glued component once per isomorphism class. Isolated pattern vertices are handled by a closed form.
-Otherwise it only strips isolated pattern vertices before solving. It refuses proof logging, and
-it does not produce a mapping when counting. With `--decomposition-statement FILE` it also writes
+non-induced, undirected embeddings, it follows Section 3.6 of Jessica Ryan's 2023 Glasgow PhD
+thesis. It guesses which pattern vertices go onto a few of the target's highest-degree vertices
+(the hubs), in every possible way, and then for each guess counts each connected component of
+what is left separately, with lists of where its vertices may go, and corrects for components
+that overlap by inclusion–exclusion over the ways of gluing them together. Each glued component
+is solved once per isomorphism class, with its lists passed to the solver as
+`HomomorphismParams::restrict_initial_domains`. Isolated pattern vertices are handled by a
+closed form. Otherwise it only strips isolated pattern vertices before solving. It does not
+produce a mapping when counting, and it only allows proof logging alongside a statement, without
+hubs. With `--decomposition-statement FILE` it also writes
 its argument as a counting statement (`counting_statement`), which the `count_statement` driver
 reads, counts, and translates to the pseudo-Boolean formula a certified count would be checked
 against; the format is specified in [counting-statements.md](counting-statements.md). Where it is

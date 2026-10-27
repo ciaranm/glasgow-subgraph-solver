@@ -7,6 +7,9 @@
 #include <gss/sip_decomposer.hh>
 
 #include <algorithm>
+#include <cmath>
+#include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
@@ -87,6 +90,9 @@ namespace
         int size = 0;
         vector<string> labels;
         map<pair<int, int>, string> edges;
+        // the list of target vertices each vertex may go to, as a list number (see
+        // ComponentCounter), or empty if there are no lists
+        vector<int> lists;
         // only for searching under proof, where they must be the pattern's names
         vector<string> names;
     };
@@ -101,6 +107,11 @@ namespace
         if (! g.labels.empty())
             for (auto v : order)
                 result += to_string(g.labels[v].size()) + ":" + g.labels[v];
+        if (! g.lists.empty()) {
+            result += "|";
+            for (auto v : order)
+                result += to_string(g.lists[v]) + ",";
+        }
         vector<std::tuple<int, int, const string *>> edges;
         for (auto & [e, label] : g.edges) {
             auto [a, b] = std::minmax(position[e.first], position[e.second]);
@@ -147,9 +158,14 @@ namespace
             return pair{colours, int(sorted.size())};
         };
 
+        // a vertex's list is part of its colour, like its label: an isomorphism must
+        // preserve both
         vector<string> descriptions(g.size);
-        for (int v = 0; v < g.size; ++v)
+        for (int v = 0; v < g.size; ++v) {
             descriptions[v] = g.labels.empty() ? string{} : g.labels[v];
+            if (! g.lists.empty())
+                descriptions[v] += "|" + to_string(g.lists[v]);
+        }
         auto [colours, number_of_colours] = renumber(descriptions);
 
         while (true) {
@@ -207,6 +223,141 @@ namespace
         return CanonicalForm{"canonical;" + *best, best_order};
     }
 
+    // The vertices of each connected component of the pattern restricted to vertices,
+    // which must contain every neighbour of each of its members.
+    auto pattern_components(const InputGraph & pattern, const vector<int> & vertices) -> vector<vector<int>>
+    {
+        vector<int> parent(pattern.size());
+        for (int v = 0; v < pattern.size(); ++v)
+            parent[v] = v;
+        auto find = [&](int v) {
+            while (parent[v] != v)
+                v = parent[v] = parent[parent[v]];
+            return v;
+        };
+        for (auto v : vertices)
+            for (auto w : vertices)
+                if (pattern.adjacent(v, w))
+                    parent[find(v)] = find(w);
+
+        map<int, vector<int>> components;
+        for (auto v : vertices)
+            components[find(v)].push_back(v);
+        vector<vector<int>> result;
+        for (auto & [_, c] : components)
+            result.push_back(c);
+        return result;
+    }
+
+    // How many partitions of the vertices of these components put no two vertices of
+    // one component in the same block: the coarsenings that the inclusion-exclusion can
+    // visit. Adding a component of size s to a partition with b blocks puts j of its
+    // vertices into distinct existing blocks and opens s - j new ones.
+    auto number_of_valid_partitions(const vector<vector<int>> & components) -> double
+    {
+        vector<double> with_blocks{1};
+        for (auto & component : components) {
+            int s = component.size();
+            vector<double> next(with_blocks.size() + s, 0);
+            for (int b = 0; b < int(with_blocks.size()); ++b) {
+                double ways = 1;
+                for (int j = 0; j <= s && j <= b; ++j) {
+                    next[b + s - j] += with_blocks[b] * ways;
+                    // from C(s, j) b! / (b - j)! to C(s, j + 1) b! / (b - j - 1)!
+                    ways *= double(s - j) / (j + 1) * (b - j);
+                }
+            }
+            with_blocks = std::move(next);
+        }
+        double result = 0;
+        for (auto w : with_blocks)
+            result += w;
+        return result;
+    }
+
+    // The hubs are the target vertices that pattern vertices are guessed onto, rather than
+    // found by search: the c target vertices of highest degree, ties going to the lower
+    // numbered vertex. In Ryan's terms, what is left has maximum degree Delta. Any choice
+    // of hubs gives the right count; it only affects how long that takes. If hubs is
+    // given, it is c. Otherwise c is chosen to minimise a rough estimate of the work,
+    //
+    //     (number of guesses) x P + sum over non-hubs t of d(t)^(k - 1).
+    //
+    // Each guess runs its own inclusion-exclusion, over at most P coarsenings, the
+    // number of valid partitions of the m vertices. Then the biggest glued component has
+    // k = m - l + 1 vertices, for l components, and counting it by enumeration visits up
+    // to about d(t)^(k - 1) embeddings around each target vertex t, where d is the degree
+    // once the hubs are gone. That is a gross overestimate for anything but a star, but it
+    // is what makes a heavy-tailed degree distribution worth guessing on, and a regular
+    // one not. The guesses put any j <= c of the m vertices onto distinct hubs, which is
+    // at most the sum over j of C(m, j) c! / (c - j)! ways. That only grows with c, so
+    // once it alone costs more than the best so far, no larger c can do better.
+    auto choose_hubs(const InputGraph & pattern, const InputGraph & target, const vector<int> & vertices, optional<int> hubs) -> vector<int>
+    {
+        int n = target.size();
+        vector<int> by_degree(n);
+        for (int t = 0; t < n; ++t)
+            by_degree[t] = t;
+        std::stable_sort(by_degree.begin(), by_degree.end(), [&](int a, int b) { return target.degree(a) > target.degree(b); });
+
+        // the lists are made from undirected adjacency
+        if (hubs && *hubs > 0 && target.directed())
+            throw UnsupportedConfiguration{"Decomposition cannot yet use hubs with a directed target"};
+        if (hubs && (*hubs < 0 || *hubs > n))
+            throw UnsupportedConfiguration{"The number of hubs must be between 0 and the number of target vertices"};
+
+        int c = 0;
+        if (hubs)
+            c = *hubs;
+        else if (! (target.directed() || vertices.empty())) {
+            auto components = pattern_components(pattern, vertices);
+            double m = vertices.size(), k = m - components.size() + 1;
+            double partitions = number_of_valid_partitions(components);
+
+            vector<vector<int>> neighbours(n);
+            target.for_each_edge([&](int f, int t, std::string_view) {
+                if (f != t)
+                    neighbours[f].push_back(t);
+            });
+            vector<int> degree(n);
+            vector<bool> removed(n, false);
+            auto weight = [&](int d) { return std::pow(double(d), k - 1); };
+            double enumeration = 0;
+            for (int t = 0; t < n; ++t) {
+                degree[t] = neighbours[t].size();
+                enumeration += weight(degree[t]);
+            }
+
+            double best = partitions + enumeration;
+            for (int h = 1; h < n; ++h) {
+                auto hub = by_degree[h - 1];
+                removed[hub] = true;
+                enumeration -= weight(degree[hub]);
+                for (auto u : neighbours[hub])
+                    if (! removed[u]) {
+                        enumeration += weight(degree[u] - 1) - weight(degree[u]);
+                        --degree[u];
+                    }
+
+                double guesses = 0, term = 1;
+                for (int j = 0; j <= h && j <= m; ++j) {
+                    guesses += term;
+                    term *= (m - j) / (j + 1) * (h - j);
+                }
+                if (guesses * partitions >= best)
+                    break;
+                if (guesses * partitions + enumeration < best) {
+                    best = guesses * partitions + enumeration;
+                    c = h;
+                }
+            }
+        }
+
+        vector<int> result(by_degree.begin(), by_degree.begin() + c);
+        sort(result.begin(), result.end());
+        return result;
+    }
+
     // Counting by components: what we need to be able to say that the number of
     // embeddings of H is a function of the numbers of embeddings of its connected
     // components, and of the graphs obtained by gluing them together.
@@ -218,18 +369,27 @@ namespace
     // Counts injective embeddings of a disconnected pattern into the target, by
     // counting each connected component separately and correcting for the
     // embeddings in which components overlap by inclusion-exclusion. This is the
-    // c = 0 case of the algorithm in Section 3.6 of Jessica Ryan's PhD thesis
-    // (Glasgow, 2023), with the solver doing the per-component counts.
+    // algorithm in Section 3.6 of Jessica Ryan's PhD thesis (Glasgow, 2023), with the
+    // solver doing the per-component counts.
     //
-    // The vertices being decomposed are numbered 0 .. n - 1 here, and are
-    // pattern vertices vertices[0 .. n - 1]. A partition of them is written as the
-    // block number of each vertex, with blocks numbered in order of first
-    // occurrence, so that equal partitions are equal vectors. A partition is
-    // valid if no block holds two vertices of the same connected component of
-    // the pattern: an embedding is injective on each component, so these are the
-    // only ways in which embeddings of the components can overlap. For a valid
-    // partition sigma, the quotient H / sigma glues together the vertices in each
-    // block; it has no new loops, because adjacent vertices share a component.
+    // First, some pattern vertices are guessed onto hubs (see choose_hubs), in every
+    // possible way: injectively, preserving labels, loops and the edges between them.
+    // Every embedding puts exactly one set of pattern vertices onto the hubs, so the
+    // count is the sum over the guesses. In each guess, the other pattern vertices go
+    // to target vertices that are not hubs, and each gets a list of the ones it may go
+    // to: those adjacent to the hubs that its neighbours were guessed onto. With no
+    // hubs, there is one guess, which puts nothing on a hub, and there are no lists.
+    //
+    // Then, for each guess, the vertices being decomposed are the ones left over,
+    // numbered 0 .. n - 1 here, and are pattern vertices vertices[0 .. n - 1]. A
+    // partition of them is written as the block number of each vertex, with blocks
+    // numbered in order of first occurrence, so that equal partitions are equal
+    // vectors. A partition is valid if no block holds two vertices of the same
+    // connected component of what is left of the pattern: an embedding is injective on
+    // each component, so these are the only ways in which embeddings of the components
+    // can overlap. For a valid partition sigma, the quotient H / sigma glues together
+    // the vertices in each block; it has no new loops, because adjacent vertices share
+    // a component. A block's list is the intersection of its members' lists.
     //
     // Write none(sigma) for the number of injective embeddings of H / sigma, and
     // product(sigma) for the product, over the connected components of H / sigma,
@@ -242,7 +402,8 @@ namespace
     //
     // which is Lemma 3.8 of the thesis, and what we want is none of the discrete
     // partition. Every term is non-negative, so if product(sigma) is zero then so
-    // is none(tau) for every such tau, and we need not look at them.
+    // is none(tau) for every such tau, and we need not look at them. All of this
+    // holds with lists, which only say which embeddings exist.
     class ComponentCounter
     {
     private:
@@ -250,27 +411,183 @@ namespace
         const InputGraph & target;
         const HomomorphismParams & params;
 
+        // With any hubs, lists are numbered: list_values[l] is the target vertices of
+        // list l, in order. Isomorphic graphs whose vertices have the same lists can
+        // share a count, so equal lists must get equal numbers.
+        vector<int> hubs;
+        vector<bool> is_hub;
+        vector<vector<int>> list_values;
+        map<vector<int>, int> list_numbers;
+        map<pair<int, int>, int> intersections;
+        map<pair<int, string>, int> hub_neighbourhoods;
+        int every_non_hub = -1;
+
+        // the vertices being decomposed, for the guess at hand, and their lists, which
+        // are empty if there are no hubs
         vector<int> vertices;
+        vector<int> vertex_lists;
         int number_of_components = 0;
 
         // how many target vertices carry each label, with every vertex of an unlabelled
-        // target under the empty label
-        map<string, long> target_with_label;
+        // target under the empty label, and how many of those are not hubs
+        map<string, long> target_with_label, non_hubs_with_label;
 
         map<string, loooong> component_counts;
         map<string, loooong> none_counts;
 
-        unsigned long long solver_calls = 0, coarsenings_considered = 0;
+        unsigned long long solver_calls = 0, coarsenings_considered = 0, guesses = 0;
+
+        auto list_number(vector<int> values) -> int
+        {
+            auto [where, inserted] = list_numbers.emplace(std::move(values), list_values.size());
+            if (inserted)
+                list_values.push_back(where->first);
+            return where->second;
+        }
+
+        auto intersection(int a, int b) -> int
+        {
+            if (a == b)
+                return a;
+            pair<int, int> key = std::minmax(a, b);
+            if (auto i = intersections.find(key); i != intersections.end())
+                return i->second;
+            vector<int> both;
+            std::set_intersection(list_values[a].begin(), list_values[a].end(), list_values[b].begin(), list_values[b].end(), std::back_inserter(both));
+            auto result = list_number(std::move(both));
+            intersections.emplace(key, result);
+            return result;
+        }
+
+        auto pattern_edge_label(int v, int w) const -> string
+        {
+            return pattern.has_edge_labels() ? string{pattern.edge_label(v, w)} : string{};
+        }
+
+        auto target_edge_label(int t, int u) const -> string
+        {
+            return pattern.has_edge_labels() ? string{target.edge_label(t, u)} : string{};
+        }
+
+        // The non-hubs that a pattern vertex can go to if it has a neighbour on hub h,
+        // joined by an edge with this label.
+        auto hub_neighbourhood(int h, const string & label) -> int
+        {
+            if (auto n = hub_neighbourhoods.find({h, label}); n != hub_neighbourhoods.end())
+                return n->second;
+            vector<int> values;
+            for (int t = 0; t < target.size(); ++t)
+                if ((! is_hub[t]) && target.adjacent(t, h) && target_edge_label(t, h) == label)
+                    values.push_back(t);
+            auto result = list_number(std::move(values));
+            hub_neighbourhoods.emplace(pair{h, label}, result);
+            return result;
+        }
+
+        // Can pattern vertex v go on hub h, given the guess so far?
+        auto fits_on_hub(int v, int h, const vector<pair<int, int>> & cube) const -> bool
+        {
+            if (pattern.has_vertex_labels() && pattern.vertex_label(v) != target.vertex_label(h))
+                return false;
+            if (pattern.adjacent(v, v) && ! (target.adjacent(h, h) && pattern_edge_label(v, v) == target_edge_label(h, h)))
+                return false;
+            for (auto & [w, g] : cube)
+                if (pattern.adjacent(v, w) && ! (target.adjacent(h, g) && pattern_edge_label(v, w) == target_edge_label(h, g)))
+                    return false;
+            return true;
+        }
+
+        // Calls f(cube, rest, lists) for each guess of which candidates go on which hubs,
+        // where cube is the guess, as (pattern vertex, hub) in order, rest is the other
+        // candidates, and lists is their lists. A guess that leaves some vertex an empty
+        // list has no embeddings, and is skipped. The candidates must be in order, and
+        // must contain every neighbour of each of their members.
+        template <typename F_>
+        auto for_each_guess(const vector<int> & candidates, const F_ & f) -> void
+        {
+            if (hubs.empty()) {
+                ++guesses;
+                f(vector<pair<int, int>>{}, candidates, vector<int>{});
+                return;
+            }
+
+            vector<bool> on_hub(pattern.size(), false), used(target.size(), false);
+            vector<pair<int, int>> cube;
+            auto guess = [&](auto & self, unsigned i) -> void {
+                if (aborted)
+                    return;
+                if (i == candidates.size()) {
+                    vector<int> rest, lists;
+                    for (auto v : candidates)
+                        if (! on_hub[v]) {
+                            int list = every_non_hub;
+                            for (auto & [s, h] : cube)
+                                if (pattern.adjacent(v, s))
+                                    list = intersection(list, hub_neighbourhood(h, pattern_edge_label(v, s)));
+                            if (list_values[list].empty())
+                                return;
+                            rest.push_back(v);
+                            lists.push_back(list);
+                        }
+                    ++guesses;
+                    f(cube, rest, lists);
+                    return;
+                }
+
+                auto v = candidates[i];
+                self(self, i + 1);
+                for (auto h : hubs)
+                    if ((! used[h]) && fits_on_hub(v, h, cube)) {
+                        on_hub[v] = used[h] = true;
+                        cube.emplace_back(v, h);
+                        self(self, i + 1);
+                        cube.pop_back();
+                        on_hub[v] = used[h] = false;
+                    }
+            };
+            guess(guess, 0);
+        }
+
+        auto set_vertices(const vector<int> & v, const vector<int> & lists) -> void
+        {
+            vertices = v;
+            vertex_lists = lists;
+        }
+
+        auto discrete() const -> vector<int>
+        {
+            vector<int> result(vertices.size());
+            for (unsigned v = 0; v < vertices.size(); ++v)
+                result[v] = v;
+            return result;
+        }
+
+        // The pattern vertices in each block of sigma, in order, with the block's list, or
+        // -1 if there are no lists.
+        using Blocks = vector<pair<vector<int>, int>>;
+
+        auto blocks_of(const vector<int> & sigma) -> Blocks
+        {
+            Blocks blocks(*std::max_element(sigma.begin(), sigma.end()) + 1, pair{vector<int>{}, -1});
+            for (unsigned v = 0; v < vertices.size(); ++v) {
+                auto & [members, list] = blocks[sigma[v]];
+                members.push_back(vertices[v]);
+                if (! vertex_lists.empty())
+                    list = (list == -1) ? vertex_lists[v] : intersection(list, vertex_lists[v]);
+            }
+            return blocks;
+        }
 
         struct Quotient
         {
             int size = 0;
             map<pair<int, int>, string> edges;
             vector<string> labels;
+            vector<int> lists;
             vector<vector<int>> components;
         };
 
-        auto build_quotient(const vector<int> & sigma) const -> optional<Quotient>
+        auto build_quotient(const vector<int> & sigma) -> optional<Quotient>
         {
             Quotient q;
             q.size = *std::max_element(sigma.begin(), sigma.end()) + 1;
@@ -288,12 +605,20 @@ namespace
                     q.labels.push_back(*l);
             }
 
+            // a block whose members' lists have nothing in common cannot go anywhere
+            if (! vertex_lists.empty())
+                for (auto & [_, list] : blocks_of(sigma)) {
+                    if (list_values[list].empty())
+                        return std::nullopt;
+                    q.lists.push_back(list);
+                }
+
             // two pattern edges can be glued into one quotient edge, in which case the
             // target edge must carry both labels, which it cannot unless they agree
             for (unsigned v = 0; v < vertices.size(); ++v)
                 for (unsigned w = v; w < vertices.size(); ++w)
                     if (pattern.adjacent(vertices[v], vertices[w])) {
-                        auto label = pattern.has_edge_labels() ? string{pattern.edge_label(vertices[v], vertices[w])} : string{};
+                        auto label = pattern_edge_label(vertices[v], vertices[w]);
                         auto key = std::minmax(sigma[v], sigma[w]);
                         auto [where, inserted] = q.edges.emplace(key, label);
                         if ((! inserted) && where->second != label)
@@ -325,14 +650,15 @@ namespace
         // An injective embedding of H / sigma needs a different target vertex for each
         // block, carrying that block's label, so there is none if some label has more
         // blocks than target vertices. Without this, a pattern bigger than its target
-        // explores every way of gluing itself together, all of them empty.
-        auto more_blocks_than_targets(const Quotient & q) const -> bool
+        // explores every way of gluing itself together, all of them empty. Blocks never
+        // go on hubs, so only the other target vertices are available.
+        auto more_blocks_than_targets(const Quotient & q, const map<string, long> & available) const -> bool
         {
             map<string, long> blocks_with_label;
             for (int b = 0; b < q.size; ++b) {
                 auto label = q.labels.empty() ? string{} : q.labels[b];
-                auto t = target_with_label.find(label);
-                if (++blocks_with_label[label] > (t == target_with_label.end() ? 0 : t->second))
+                auto t = available.find(label);
+                if (++blocks_with_label[label] > (t == available.end() ? 0 : t->second))
                     return true;
             }
             return false;
@@ -349,10 +675,23 @@ namespace
             if (pattern.has_vertex_labels())
                 for (auto b : blocks)
                     component.labels.push_back(q.labels[b]);
+            if (! q.lists.empty())
+                for (auto b : blocks)
+                    component.lists.push_back(q.lists[b]);
             for (auto & [e, label] : q.edges)
                 if (auto a = index_of_block.find(e.first); a != index_of_block.end())
                     component.edges.emplace(std::minmax(a->second, index_of_block.at(e.second)), label);
             return component;
+        }
+
+        // Each vertex of the component may only go to the vertices on its list.
+        auto restriction(const SmallGraph & component) const -> std::function<auto(int, int)->bool>
+        {
+            auto allowed = std::make_shared<vector<vector<bool>>>(component.size, vector<bool>(target.size(), false));
+            for (int v = 0; v < component.size; ++v)
+                for (auto t : list_values[component.lists[v]])
+                    (*allowed)[v][t] = true;
+            return [allowed](int p, int t) { return (*allowed)[p][t]; };
         }
 
         auto count_component(const string & key, const SmallGraph & component) -> loooong
@@ -361,7 +700,14 @@ namespace
                 return c->second;
 
             ++solver_calls;
-            auto result = solve_homomorphism_problem(as_input_graph(component), target, params);
+            HomomorphismResult result;
+            if (component.lists.empty())
+                result = solve_homomorphism_problem(as_input_graph(component), target, params);
+            else {
+                auto restricted = enumeration_params();
+                restricted.restrict_initial_domains = restriction(component);
+                result = solve_homomorphism_problem(as_input_graph(component), target, restricted);
+            }
             nodes += result.nodes;
             propagations += result.propagations;
             if (! result.complete)
@@ -430,13 +776,14 @@ namespace
         auto none(const vector<int> & sigma) -> loooong
         {
             auto q = build_quotient(sigma);
-            if ((! q) || more_blocks_than_targets(*q))
+            if ((! q) || more_blocks_than_targets(*q, non_hubs_with_label))
                 return 0;
 
             // none(sigma) depends only on H / sigma up to isomorphism, and a disjoint
             // union is determined up to isomorphism by its components' isomorphism
             // classes, so this is the memo key, and also how we find components that
-            // have already been counted
+            // have already been counted. Lists are part of the keys, so this holds across
+            // guesses too.
             vector<SmallGraph> components;
             vector<string> keys;
             for (auto & c : q->components) {
@@ -471,12 +818,13 @@ namespace
         // Writing a statement (see dev_docs/counting-statements.md) instead of just
         // counting. The recursion is the same, but every quotient gets its own node,
         // over the actual pattern vertices, so isomorphic quotients cannot share a memo
-        // entry: the memo is keyed on sigma itself. Isomorphic components still share
-        // one enumeration, which is renamed into place.
+        // entry: the memo is keyed on the blocks themselves, with their lists, which
+        // also lets guesses share nodes where their lists agree. Isomorphic components
+        // still share one enumeration, which is renamed into place.
         CountingStatementWriter * statement = nullptr;
         map<string, vector<vector<int>>> embeddings_by_key;
-        map<vector<vector<int>>, int> leaf_nodes;
-        map<vector<int>, optional<pair<int, loooong>>> exact_nodes;
+        map<Blocks, int> leaf_nodes;
+        map<Blocks, optional<pair<int, loooong>>> exact_nodes;
 
         // What a proof needs to know about the statement's structure, by node.
         struct ExactNode
@@ -519,6 +867,8 @@ namespace
 
             vector<vector<int>> found;
             auto child_params = enumeration_params();
+            if (! component.lists.empty())
+                child_params.restrict_initial_domains = restriction(component);
             child_params.enumerate_callback = [&](const VertexToVertexMapping & mapping) -> bool {
                 vector<int> embedding(form.order.size());
                 for (unsigned p = 0; p < form.order.size(); ++p)
@@ -539,7 +889,7 @@ namespace
 
         // The leaf for one component of a quotient: an or of one cube per embedding,
         // with every pattern vertex in a block taking that block's image.
-        auto leaf(const vector<vector<int>> & members, const vector<vector<int>> & found, const CanonicalForm & form) -> int
+        auto leaf(const Blocks & members, const vector<vector<int>> & found, const CanonicalForm & form) -> int
         {
             if (auto l = leaf_nodes.find(members); l != leaf_nodes.end())
                 return l->second;
@@ -552,30 +902,47 @@ namespace
             for (auto & embedding : found) {
                 vector<pair<int, int>> assignment;
                 for (unsigned i = 0; i < members.size(); ++i)
-                    for (auto v : members[i])
+                    for (auto v : members[i].first)
                         assignment.emplace_back(v, embedding[position[i]]);
                 sort(assignment.begin(), assignment.end());
                 cubes.push_back(statement->add_cube(assignment));
             }
             auto node = statement->add_or(cubes);
             leaf_cubes.emplace(node, cubes);
-            if (std::any_of(members.begin(), members.end(), [](const auto & m) { return m.size() > 1; }))
+            if (std::any_of(members.begin(), members.end(), [](const auto & m) { return m.first.size() > 1; }))
                 glued_leaves.insert(node);
             return leaf_nodes.emplace(members, node).first->second;
+        }
+
+        // Does H / sigma have any embeddings, as far as exact can tell without writing
+        // anything? Exactly when this holds, exact(sigma) gives a node.
+        auto might_embed(const vector<int> & sigma) -> bool
+        {
+            auto q = build_quotient(sigma);
+            if ((! q) || more_blocks_than_targets(*q, non_hubs_with_label))
+                return false;
+            for (auto & c : q->components) {
+                auto component = component_graph(*q, c);
+                if (embeddings(component, canonical_form(component)).empty() || aborted)
+                    return false;
+            }
+            return true;
         }
 
         // The node for the embeddings of H / sigma, and its count, or nothing if
         // product(sigma) is zero, in which case no node is written at all.
         auto exact(const vector<int> & sigma) -> optional<pair<int, loooong>>
         {
-            if (auto e = exact_nodes.find(sigma); e != exact_nodes.end())
+            auto blocks = blocks_of(sigma);
+            sort(blocks.begin(), blocks.end());
+            if (auto e = exact_nodes.find(blocks); e != exact_nodes.end())
                 return e->second;
 
             // a pigeonholed quotient has no node, which leaves it out of its parents' sums:
             // nothing is lost, because it has no embeddings to count
             auto q = build_quotient(sigma);
-            if ((! q) || more_blocks_than_targets(*q))
-                return exact_nodes.emplace(sigma, std::nullopt).first->second;
+            if ((! q) || more_blocks_than_targets(*q, non_hubs_with_label))
+                return exact_nodes.emplace(blocks, std::nullopt).first->second;
 
             // enumerate every component before writing any of them, so that nothing is
             // written for a quotient with an unembeddable component
@@ -589,17 +956,14 @@ namespace
                 if (aborted)
                     return std::nullopt;
                 if (found.back()->empty())
-                    return exact_nodes.emplace(sigma, std::nullopt).first->second;
+                    return exact_nodes.emplace(blocks, std::nullopt).first->second;
             }
 
-            vector<vector<int>> members_of_block(q->size);
-            for (unsigned v = 0; v < vertices.size(); ++v)
-                members_of_block[sigma[v]].push_back(vertices[v]);
-
+            auto members_of_block = blocks_of(sigma);
             vector<int> leaves;
             loooong product = 1;
             for (unsigned c = 0; c < q->components.size(); ++c) {
-                vector<vector<int>> members;
+                Blocks members;
                 for (auto b : q->components[c])
                     members.push_back(members_of_block[b]);
                 leaves.push_back(leaf(members, *found[c], forms[c]));
@@ -623,100 +987,160 @@ namespace
                 overlaps_node = statement->add_or(overlaps);
             int node = overlaps_node ? statement->add_minus(product_node, *overlaps_node) : product_node;
             exact_structure.emplace(node, ExactNode{product_node, leaves, overlaps_node, overlaps});
-            return exact_nodes.emplace(sigma, pair{node, product - overlap}).first->second;
+            return exact_nodes.emplace(blocks, pair{node, product - overlap}).first->second;
         }
 
     public:
         unsigned long long nodes = 0, propagations = 0;
         bool aborted = false;
 
-        ComponentCounter(const InputGraph & p, const InputGraph & t, const HomomorphismParams & r, const vector<int> & v) :
+        ComponentCounter(const InputGraph & p, const InputGraph & t, const HomomorphismParams & r, const vector<int> & h) :
             pattern(p),
             target(t),
             params(r),
-            vertices(v)
+            hubs(h),
+            is_hub(t.size(), false)
         {
-            for (int w = 0; w < target.size(); ++w)
-                ++target_with_label[pattern.has_vertex_labels() ? string{target.vertex_label(w)} : string{}];
+            for (auto v : hubs)
+                is_hub[v] = true;
+            for (int w = 0; w < target.size(); ++w) {
+                auto label = pattern.has_vertex_labels() ? string{target.vertex_label(w)} : string{};
+                ++target_with_label[label];
+                if (! is_hub[w])
+                    ++non_hubs_with_label[label];
+            }
+
+            if (! hubs.empty()) {
+                vector<int> non_hubs;
+                for (int w = 0; w < target.size(); ++w)
+                    if (! is_hub[w])
+                        non_hubs.push_back(w);
+                every_non_hub = list_number(std::move(non_hubs));
+            }
         }
 
-        auto count() -> loooong
+        // The number of embeddings of the pattern restricted to these vertices, which
+        // must be in order, and must contain every neighbour of each of their members.
+        auto count(const vector<int> & candidates) -> loooong
         {
-            if (vertices.empty())
+            if (candidates.empty())
                 return 1;
 
-            vector<int> discrete(vertices.size());
-            for (unsigned v = 0; v < vertices.size(); ++v)
-                discrete[v] = v;
-
-            auto q = build_quotient(discrete);
-            number_of_components = q ? q->components.size() : 0;
-            return none(discrete);
+            number_of_components = pattern_components(pattern, candidates).size();
+            loooong total = 0;
+            for_each_guess(candidates, [&](const vector<pair<int, int>> &, const vector<int> & rest, const vector<int> & lists) {
+                if (rest.empty()) {
+                    total += 1;
+                    return;
+                }
+                set_vertices(rest, lists);
+                total += none(discrete());
+            });
+            return total;
         }
 
         // Writes a statement whose count is the number of embeddings, and returns that
-        // count, unless the pattern cannot fit by pigeonhole or some component has no
+        // count, unless the pattern cannot fit by pigeonhole or no guess has any
         // embeddings at all. Then nothing is written, because a statement cannot say
-        // zero that way, and no_statement_because says why. The vertices must be every
-        // pattern vertex.
+        // zero that way, and no_statement_because says why.
+        //
+        // The root is the or of a node for each guess that has embeddings, or just that
+        // node if there is only one. A guess's node is the and of a cube for the vertices
+        // on hubs and an exact node for the rest, or just whichever of them is not empty.
+        // Every embedding puts one set of vertices on hubs, so the guesses are disjoint.
         auto write_statement(std::ostream & out, const optional<ProofOptions> & proof_options) -> optional<loooong>
         {
-            if (proof_options)
-                return write_statement_with_proof(out, *proof_options);
+            vector<int> all(pattern.size());
+            for (int v = 0; v < pattern.size(); ++v)
+                all[v] = v;
 
-            if (vertices.empty()) {
+            if (proof_options) {
+                if (! hubs.empty())
+                    throw UnsupportedConfiguration{"Proof logging cannot yet be used with decomposition hubs"};
+                return write_statement_with_proof(out, *proof_options, all);
+            }
+
+            if (all.empty()) {
                 CountingStatementWriter writer{out, {}};
                 writer.finish(writer.add_cube({}));
                 statement_nodes = writer.number_of_nodes();
                 return loooong{1};
             }
 
-            vector<int> discrete(vertices.size());
-            for (unsigned v = 0; v < vertices.size(); ++v)
-                discrete[v] = v;
-
-            auto q = build_quotient(discrete);
+            set_vertices(all, {});
+            auto q = build_quotient(discrete());
             number_of_components = q->components.size();
-            if (more_blocks_than_targets(*q)) {
+            if (more_blocks_than_targets(*q, target_with_label)) {
                 no_statement_because = "the pattern has more vertices of some label than the target";
                 return std::nullopt;
             }
-            for (auto & c : q->components) {
-                auto component = component_graph(*q, c);
-                if (aborted)
-                    return std::nullopt;
-                if (embeddings(component, canonical_form(component)).empty()) {
-                    no_statement_because = "some component has no embeddings";
-                    return std::nullopt;
-                }
+
+            // find the guesses with embeddings before writing anything
+            struct Guess
+            {
+                vector<pair<int, int>> cube;
+                vector<int> rest, lists;
+            };
+            vector<Guess> viable;
+            for_each_guess(all, [&](const vector<pair<int, int>> & cube, const vector<int> & rest, const vector<int> & lists) {
+                set_vertices(rest, lists);
+                if (rest.empty() || might_embed(discrete()))
+                    viable.push_back(Guess{cube, rest, lists});
+            });
+            if (aborted)
+                return std::nullopt;
+            if (viable.empty()) {
+                no_statement_because = hubs.empty() ? "some component has no embeddings" : "no way of putting pattern vertices on hubs leaves the rest any embeddings";
+                return std::nullopt;
             }
 
             CountingStatementWriter writer{out, vector<int>(pattern.size(), target.size())};
             statement = &writer;
-            auto root = exact(discrete);
+            vector<int> guess_nodes;
+            loooong total = 0;
+            for (auto & g : viable) {
+                optional<int> rest_node;
+                if (! g.rest.empty()) {
+                    set_vertices(g.rest, g.lists);
+                    auto e = exact(discrete());
+                    if (aborted)
+                        return std::nullopt;
+                    if (! e)
+                        throw UnsupportedConfiguration{"a guess that might embed has no node, which cannot happen"};
+                    rest_node = e->first;
+                    total += e->second;
+                }
+                else
+                    total += 1;
+
+                if (g.cube.empty())
+                    guess_nodes.push_back(*rest_node);
+                else {
+                    auto cube = writer.add_cube(g.cube);
+                    guess_nodes.push_back(rest_node ? writer.add_and({cube, *rest_node}) : cube);
+                }
+            }
             statement = nullptr;
-            if (aborted || ! root)
-                return std::nullopt;
-            writer.finish(root->first);
+            writer.finish(guess_nodes.size() == 1 ? guess_nodes.front() : writer.add_or(guess_nodes));
             statement_nodes = writer.number_of_nodes();
-            return root->second;
+            return total;
         }
 
         // As write_statement, but also writing a proof that the solver's encoding of the
         // instance is equienumerable with the statement's counting formula (phases 4 and 5
         // of decomposition-counting.md), or that it has no solutions when there is no
-        // statement.
-        auto write_statement_with_proof(std::ostream & out, const ProofOptions & proof_options) -> optional<loooong>
+        // statement. Only without hubs, for now.
+        auto write_statement_with_proof(std::ostream & out, const ProofOptions & proof_options, const vector<int> & all) -> optional<loooong>
         {
             innards::DecompositionProof proof(proof_options, pattern, target);
             decomposition_proof = &proof;
 
-            vector<int> discrete(vertices.size());
-            for (unsigned v = 0; v < vertices.size(); ++v)
-                discrete[v] = v;
-            auto q = build_quotient(discrete);
+            set_vertices(all, {});
+            auto discrete_partition = discrete();
+            auto q = build_quotient(discrete_partition);
             number_of_components = q->components.size();
-            if (more_blocks_than_targets(*q)) {
+            ++guesses;
+            if (more_blocks_than_targets(*q, target_with_label)) {
                 no_statement_because = "the pattern has more vertices of some label than the target";
                 proof.finish_pattern_bigger_than_target();
                 return std::nullopt;
@@ -760,9 +1184,9 @@ namespace
                     return std::nullopt;
                 }
 
-                vector<vector<int>> members;
+                Blocks members;
                 for (auto v : component_vertices)
-                    members.push_back({v});
+                    members.emplace_back(vector{v}, -1);
                 leaf_nodes.emplace(members, *searched.leaf);
                 leaf_cubes.emplace(*searched.leaf, searched.cubes);
                 structure.components.push_back({component_vertices, *searched.leaf, searched.cubes, searched.embeddings});
@@ -780,7 +1204,7 @@ namespace
                 }
             }
 
-            auto root = exact(discrete);
+            auto root = exact(discrete_partition);
             statement = nullptr;
             if (aborted || ! root)
                 return std::nullopt;
@@ -810,15 +1234,11 @@ namespace
             structure.product = r.product;
             structure.overlaps = r.overlaps;
             set<int> children(r.children.begin(), r.children.end());
-            for (auto & [sigma, e] : exact_nodes)
+            for (auto & [blocks, e] : exact_nodes)
                 if (e && children.contains(e->first)) {
-                    map<int, vector<int>> blocks;
-                    for (unsigned v = 0; v < vertices.size(); ++v)
-                        blocks[sigma[v]].push_back(vertices[v]);
                     vector<vector<int>> partition;
-                    for (auto & [_, b] : blocks)
-                        partition.push_back(b);
-                    sort(partition.begin(), partition.end());
+                    for (auto & [members, _] : blocks)
+                        partition.push_back(members);
                     structure.overlaps_by_partition.emplace(partition, e->first);
                 }
             proof.finish(structure);
@@ -834,6 +1254,8 @@ namespace
         auto stats(std::list<string> & extra_stats) const -> void
         {
             extra_stats.emplace_back("decomposition_components = " + to_string(number_of_components));
+            extra_stats.emplace_back("decomposition_hubs = " + to_string(hubs.size()));
+            extra_stats.emplace_back("decomposition_guesses = " + to_string(guesses));
             extra_stats.emplace_back("decomposition_solver_calls = " + to_string(solver_calls));
             extra_stats.emplace_back("decomposition_quotients = " + to_string(statement_nodes ? exact_nodes.size() : none_counts.size()));
             extra_stats.emplace_back("decomposition_coarsenings_considered = " + to_string(coarsenings_considered));
@@ -842,7 +1264,8 @@ namespace
         }
     };
 
-    auto count_by_components(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params) -> HomomorphismResult
+    auto count_by_components(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params,
+        optional<int> hubs) -> HomomorphismResult
     {
         // Isolated vertices are not worth a solver call each, nor the inclusion-exclusion
         // that gluing them on would cost: every other pattern vertex with label L uses
@@ -863,8 +1286,8 @@ namespace
             ++target_with_label[pattern.has_vertex_labels() ? string{target.vertex_label(t)} : string{}];
 
         HomomorphismResult result;
-        ComponentCounter counter(pattern, target, params, vertices);
-        result.solution_count = counter.count();
+        ComponentCounter counter(pattern, target, params, choose_hubs(pattern, target, vertices, hubs));
+        result.solution_count = counter.count(vertices);
         for (auto & [label, k] : isolated_with_label)
             result.solution_count *= falling_factorial(target_with_label[label] - others_with_label[label], k);
 
@@ -884,16 +1307,19 @@ namespace
 
     // The same count, but stating the argument as it goes. Isolated vertices are
     // components like any other here, because the statement language has no way of
-    // saying "a falling factorial".
+    // saying "a falling factorial". Under proof there are no hubs, for now.
     auto write_statement_by_components(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params,
-        std::ostream & statement) -> HomomorphismResult
+        std::ostream & statement, optional<int> hubs) -> HomomorphismResult
     {
         vector<int> vertices(pattern.size());
         for (int v = 0; v < pattern.size(); ++v)
             vertices[v] = v;
 
+        if (params.proof_options && ! hubs)
+            hubs = 0;
+
         HomomorphismResult result;
-        ComponentCounter counter(pattern, target, params, vertices);
+        ComponentCounter counter(pattern, target, params, choose_hubs(pattern, target, vertices, hubs));
         auto count = counter.write_statement(statement, params.proof_options);
         result.nodes = counter.nodes;
         result.propagations = counter.propagations;
@@ -907,8 +1333,10 @@ namespace
 }
 
 auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGraph & target,
-    const HomomorphismParams & params, std::ostream * statement) -> HomomorphismResult
+    const HomomorphismParams & params, const DecompositionOptions & options) -> HomomorphismResult
 {
+    auto statement = options.statement;
+
     // Without a statement, each piece would write its own proof over the top of the last
     // one, and none of them would be a proof about the whole instance. With one, the
     // proof is about the statement (see dev_docs/decomposition-counting.md).
@@ -920,11 +1348,14 @@ auto gss::solve_sip_by_decomposition(const InputGraph & pattern, const InputGrap
     if (statement) {
         if (! can_count_by_components(pattern, params))
             throw UnsupportedConfiguration{"A decomposition statement can only be written when counting injective, non-induced embeddings of an undirected pattern, with no symmetry constraints"};
-        return write_statement_by_components(pattern, target, params, *statement);
+        return write_statement_by_components(pattern, target, params, *statement, options.hubs);
     }
 
     if (can_count_by_components(pattern, params))
-        return count_by_components(pattern, target, params);
+        return count_by_components(pattern, target, params, options.hubs);
+
+    if (options.hubs)
+        throw UnsupportedConfiguration{"Decomposition can only use hubs when counting injective, non-induced embeddings of an undirected pattern, with no symmetry constraints"};
 
     set<int> isolated_pattern_vertices;
     find_removable_isolated_pattern_vertices(pattern, params, isolated_pattern_vertices);

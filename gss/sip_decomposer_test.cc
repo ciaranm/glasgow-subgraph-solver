@@ -109,12 +109,23 @@ namespace
         return target;
     }
 
+    // A number of hubs to force, or -1 to let the decomposer choose.
+    auto hubs_option(int hubs) -> optional<int>
+    {
+        return hubs == -1 ? std::nullopt : optional<int>{hubs};
+    }
+
+    auto has_stat(const HomomorphismResult & result, const string & stat) -> bool
+    {
+        return std::find(result.extra_stats.begin(), result.extra_stats.end(), stat) != result.extra_stats.end();
+    }
+
     // Writes a statement, and reads it back, which checks that it is well-formed.
     auto statement_for(const InputGraph & pattern, const InputGraph & target, const HomomorphismParams & params,
-        HomomorphismResult & result) -> optional<CountingStatement>
+        HomomorphismResult & result, optional<int> hubs = std::nullopt) -> optional<CountingStatement>
     {
         stringstream out;
-        result = solve_sip_by_decomposition(pattern, target, params, &out);
+        result = solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{&out, hubs});
         if (out.str().empty())
             return std::nullopt;
         return read_counting_statement(out);
@@ -266,10 +277,15 @@ TEST_CASE("decomposition agrees with the solver on random disconnected patterns"
     auto expected = solve_homomorphism_problem(pattern, target, params);
     REQUIRE(expected.complete);
 
-    auto decomposed = solve_sip_by_decomposition(pattern, target, params);
-    INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels);
-    CHECK(decomposed.complete);
-    CHECK(decomposed.solution_count == expected.solution_count);
+    // every number of hubs gives the same count; -1 is the decomposer's own choice
+    for (int hubs : {-1, 0, 1, 2, 3}) {
+        auto decomposed = solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{nullptr, hubs_option(hubs)});
+        INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs);
+        CHECK(decomposed.complete);
+        CHECK(decomposed.solution_count == expected.solution_count);
+        if (hubs != -1)
+            CHECK(has_stat(decomposed, "decomposition_hubs = " + std::to_string(hubs)));
+    }
 }
 
 TEST_CASE("decomposition leaves non-injective counts alone")
@@ -313,17 +329,19 @@ TEST_CASE("decomposition statements count what the solver counts on random disco
     auto expected = solve_homomorphism_problem(pattern, target, params);
     REQUIRE(expected.complete);
 
-    HomomorphismResult result;
-    auto statement = statement_for(pattern, target, params, result);
-    INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels);
-    CHECK(result.complete);
-    CHECK(result.solution_count == expected.solution_count);
-    if (statement) {
-        CHECK(statement->domain_sizes == vector<int>(pattern.size(), target.size()));
-        CHECK(count_counting_statement(*statement) == expected.solution_count);
+    for (int hubs : {-1, 0, 1, 2, 3}) {
+        HomomorphismResult result;
+        auto statement = statement_for(pattern, target, params, result, hubs_option(hubs));
+        INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs);
+        CHECK(result.complete);
+        CHECK(result.solution_count == expected.solution_count);
+        if (statement) {
+            CHECK(statement->domain_sizes == vector<int>(pattern.size(), target.size()));
+            CHECK(count_counting_statement(*statement) == expected.solution_count);
+        }
+        else
+            CHECK(expected.solution_count == 0);
     }
-    else
-        CHECK(expected.solution_count == 0);
 }
 
 TEST_CASE("decomposition statements mean what they say by brute force")
@@ -334,6 +352,7 @@ TEST_CASE("decomposition statements mean what they say by brute force")
     auto shape = GENERATE(Shape{false, false, false}, Shape{true, false, false}, Shape{false, true, false},
         Shape{false, false, true}, Shape{true, true, true});
     auto seed = GENERATE(range(0, 30));
+    auto hubs = GENERATE(-1, 0, 1, 2);
 
     // no more pattern vertices than target vertices, or the pigeonhole would mean that
     // most of these write no statement at all
@@ -354,8 +373,8 @@ TEST_CASE("decomposition statements mean what they say by brute force")
     REQUIRE(expected.complete);
 
     HomomorphismResult result;
-    auto statement = statement_for(pattern, target, params, result);
-    INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels);
+    auto statement = statement_for(pattern, target, params, result, hubs_option(hubs));
+    INFO("seed " << seed << " loops " << shape.loops << " vertex labels " << shape.vertex_labels << " edge labels " << shape.edge_labels << " hubs " << hubs);
     if (! statement) {
         CHECK(expected.solution_count == 0);
         return;
@@ -494,7 +513,7 @@ TEST_CASE("decomposition statements are refused where they cannot be written")
     auto params = counting_params();
     params.injectivity = Injectivity::NonInjective;
     stringstream out;
-    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params, &out), UnsupportedConfiguration);
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{&out, std::nullopt}), UnsupportedConfiguration);
 }
 
 TEST_CASE("decomposition statements are not written when a component cannot be placed")
@@ -585,7 +604,7 @@ TEST_CASE("decomposition refuses proof logging on labelled graphs")
     auto params = counting_params();
     params.proof_options = ProofOptions{};
     stringstream out;
-    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params, &out), UnsupportedConfiguration);
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{&out, std::nullopt}), UnsupportedConfiguration);
 }
 
 TEST_CASE("decomposition refuses proof logging")
@@ -596,4 +615,58 @@ TEST_CASE("decomposition refuses proof logging")
     auto params = counting_params();
     params.proof_options = ProofOptions{};
     CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params), UnsupportedConfiguration);
+}
+
+TEST_CASE("decomposition guesses a star's centre onto a hub")
+{
+    // A star with four leaves into a star with 199 leaves, which a single search cannot
+    // count without visiting every one of its 199 * 198 * 197 * 196 solutions. With the
+    // hub guessed, the leaves are four isolated vertices with lists.
+    string star;
+    for (int i = 1; i <= 199; ++i)
+        star += "0," + std::to_string(i) + "\n";
+    auto target = read_csv(stringstream{star}, "target");
+    auto pattern = read_csv(stringstream{"c,a\nc,b\nc,d\nc,e\n"}, "pattern");
+
+    auto params = counting_params();
+    loooong expected = loooong{199} * 198 * 197 * 196;
+    auto result = solve_sip_by_decomposition(pattern, target, params);
+    CHECK(result.complete);
+    CHECK(result.solution_count == expected);
+    CHECK(has_stat(result, "decomposition_hubs = 1"));
+
+    HomomorphismResult with_statement;
+    auto statement = statement_for(pattern, target, params, with_statement);
+    REQUIRE(statement);
+    CHECK(with_statement.solution_count == expected);
+    CHECK(count_counting_statement(*statement) == expected);
+    CHECK(has_stat(with_statement, "decomposition_hubs = 1"));
+}
+
+TEST_CASE("decomposition hubs are refused where they cannot be used")
+{
+    auto pattern = read_csv(stringstream{"a,b\nc,d\n"}, "pattern");
+    auto target = read_csv(stringstream{"1,2\n2,3\n3,4\n"}, "target");
+    auto params = counting_params();
+
+    // more hubs than target vertices, or fewer than none
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{nullptr, 5}), UnsupportedConfiguration);
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, params, DecompositionOptions{nullptr, -1}), UnsupportedConfiguration);
+
+    // not when there is nothing to count by components
+    auto non_injective = counting_params();
+    non_injective.injectivity = Injectivity::NonInjective;
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, non_injective, DecompositionOptions{nullptr, 1}), UnsupportedConfiguration);
+
+    // not into a directed target
+    InputGraph directed(3, false, false, true);
+    directed.add_directed_edge(0, 1, "");
+    directed.add_directed_edge(1, 2, "");
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, directed, params, DecompositionOptions{nullptr, 1}), UnsupportedConfiguration);
+
+    // not with proof logging, yet, which has no hubs unless asked
+    auto proving = counting_params();
+    proving.proof_options = ProofOptions{};
+    stringstream out;
+    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, proving, DecompositionOptions{&out, 1}), UnsupportedConfiguration);
 }

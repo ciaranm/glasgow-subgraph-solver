@@ -48,7 +48,9 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | no `HomomorphismParams::restrict_initial_domains` (API only) | a restriction would be an assumption, which the proof does not yet state |
 
 `--decomposition` refuses `--prove` unless it is also writing a counting statement
-(`--decomposition-statement`). It then writes one proof about the whole instance, into which each
+(`--decomposition-statement`), and then guesses nothing onto hubs: it refuses
+`--decomposition-hubs` with a nonzero count.
+It then writes one proof about the whole instance, into which each
 component of the pattern's search logs as a *nested solve* under a guard (`Proof::begin_nested_solve`),
 and which ends with `output EQUIENUMERABLE FILE` against the counting formula that
 `count_statement --opb` writes for the statement:
