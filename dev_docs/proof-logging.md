@@ -45,6 +45,7 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
 | not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
+| no `HomomorphismParams::restrict_initial_domains` (API only) | a restriction would be an assumption, which the proof does not yet state |
 
 `--decomposition` refuses `--prove` unless it is also writing a counting statement
 (`--decomposition-statement`). It then writes one proof about the whole instance, into which each

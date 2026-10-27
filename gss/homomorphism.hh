@@ -120,6 +120,12 @@ namespace gss
         /// diagnosing by hand.
         bool record_filter_activations = false;
 
+        /// If set, pattern vertex p can only be mapped to target vertex t when this returns
+        /// true. Only the initial domains are restricted, before any other filtering, so this
+        /// behaves as if every other target vertex had a label that p does not. Not yet
+        /// supported with proof logging.
+        std::function<auto(int, int)->bool> restrict_initial_domains;
+
         /// Less pattern constraints
         std::list<std::pair<std::string, std::string>> pattern_less_constraints;
 

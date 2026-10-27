@@ -528,7 +528,9 @@ auto HomomorphismModel::initialise_domains(vector<HomomorphismDomain> & domains,
         for (unsigned j = 0; j < target_size; ++j) {
             bool ok = true;
 
-            if (! _check_label_compatibility(i, j))
+            if (_imp->params.restrict_initial_domains && ! _imp->params.restrict_initial_domains(i, j))
+                ok = false;
+            else if (! _check_label_compatibility(i, j))
                 ok = false;
             else if (! _check_loop_compatibility(i, j))
                 ok = false;

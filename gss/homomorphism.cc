@@ -530,7 +530,7 @@ namespace
             // Not for induced: mapping every pattern vertex onto one self-looped target vertex
             // sends each pattern non-edge to that loop -- an edge -- which an induced mapping
             // forbids.
-            if (! ((params.injectivity == Injectivity::NonInjective) && ! params.induced && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback))
+            if (! ((params.injectivity == Injectivity::NonInjective) && ! params.induced && ! pattern.has_vertex_labels() && ! pattern.has_edge_labels() && target.loopy() && ! params.count_solutions && ! params.enumerate_callback && ! params.restrict_initial_domains))
                 return StepOutcome::Continue;
 
             HomomorphismResult result;
@@ -584,7 +584,9 @@ namespace
             // can_use_clique() carries the injectivity premise the reduction needs (#94),
             // rather than leaving it to the fact that TargetLoopShortcutStep usually gets
             // there first.
-            if (! (can_use_clique(params, target.loopy()) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy())))
+            //
+            // Not with restricted domains, which the clique solver knows nothing about.
+            if (! (can_use_clique(params, target.loopy()) && is_simple_clique(pattern) && ! target.directed() && ! (params.induced && target.loopy()) && ! params.restrict_initial_domains))
                 return StepOutcome::Continue;
 
             CliqueParams clique_params;
@@ -722,6 +724,8 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
+        if (params.restrict_initial_domains)
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used with restricted initial domains"};
         proof = params.nested_proof ? params.nested_proof : make_shared<Proof>(*params.proof_options);
     }
 

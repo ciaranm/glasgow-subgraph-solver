@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <map>
 #include <memory>
@@ -265,6 +266,80 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                         params.staged = staged;
                         auto decision = solve_homomorphism_problem(pattern, target, params);
                         INFO("decision, staged=" << staged << ", satisfiable=" << (! decision.mapping.empty()));
+                        CHECK((! decision.mapping.empty()) == (! expected.empty()));
+                        CHECK((decision.mapping.empty() || expected.contains(decision.mapping)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Restricting the initial domains must give exactly the oracle's solutions that respect the
+// restriction, on every path through the pipeline: counting, staged counting, and deciding,
+// where the target-loop shortcut and the clique reduction would otherwise ignore it.
+TEST_CASE("random instances: restricted initial domains match the brute-force oracle")
+{
+    mt19937 rng{0xd0a1};
+    uniform_real_distribution<double> dist{0.0, 1.0};
+
+    for (auto & family : all_families()) {
+        for (int iter = 0; iter < 30; ++iter) {
+            int np = 1 + int(rng() % 4); // 1..4
+            int nt = 1 + int(rng() % 5); // 1..5
+            double pattern_density = (rng() % 100) / 100.0;
+            double target_density = (rng() % 100) / 100.0;
+
+            auto pattern = random_graph(np, pattern_density, 0.5, family, rng);
+            auto target = random_graph(nt, target_density, 0.5, family, rng);
+
+            vector<vector<bool>> allowed(np, vector<bool>(nt));
+            string restriction;
+            for (int p = 0; p < np; ++p)
+                for (int t = 0; t < nt; ++t)
+                    if ((allowed[p][t] = dist(rng) < 0.7))
+                        restriction += " " + to_string(p) + "->" + to_string(t);
+
+            for (auto injectivity : {Injectivity::Injective, Injectivity::LocallyInjective, Injectivity::NonInjective}) {
+                for (bool induced : {false, true}) {
+                    bool injective = (injectivity == Injectivity::Injective);
+                    bool locally_injective = (injectivity == Injectivity::LocallyInjective);
+
+                    set<map<int, int>> expected;
+                    for (auto & s : brute_force_solutions(pattern, target, injective, locally_injective, induced))
+                        if (std::all_of(s.begin(), s.end(), [&](const auto & pt) { return allowed[pt.first][pt.second]; }))
+                            expected.insert(s);
+
+                    INFO("family " << family.name() << ", iteration " << iter
+                                   << ", |pattern|=" << np << ", |target|=" << nt
+                                   << ", induced=" << induced << ", injectivity=" << int(injectivity)
+                                   << "\n  pattern:" << describe(pattern)
+                                   << "\n  target:" << describe(target)
+                                   << "\n  allowed:" << restriction
+                                   << "\n  oracle=" << expected.size());
+
+                    auto params = make_params(injectivity, induced);
+                    params.restrict_initial_domains = [&](int p, int t) { return bool(allowed[p][t]); };
+
+                    for (bool staged : {false, true}) {
+                        params.staged = staged;
+                        params.staged_first_round_backtracks = 1;
+
+                        set<map<int, int>> got;
+                        params.count_solutions = true;
+                        params.enumerate_callback = [&](const VertexToVertexMapping & mapping) {
+                            got.insert(mapping);
+                            return true;
+                        };
+                        auto counted = solve_homomorphism_problem(pattern, target, params);
+                        INFO("staged=" << staged);
+                        CHECK(got == expected);
+                        CHECK(counted.solution_count == int(expected.size()));
+                        CHECK(counted.complete);
+
+                        params.count_solutions = false;
+                        params.enumerate_callback = {};
+                        auto decision = solve_homomorphism_problem(pattern, target, params);
                         CHECK((! decision.mapping.empty()) == (! expected.empty()));
                         CHECK((decision.mapping.empty() || expected.contains(decision.mapping)));
                     }
