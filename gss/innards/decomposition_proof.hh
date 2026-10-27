@@ -5,6 +5,7 @@
 #include <gss/formats/input_graph.hh>
 #include <gss/homomorphism.hh>
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -59,8 +60,8 @@ namespace gss::innards
         auto search_component(const InputGraph & component, const std::vector<int> & vertices,
             HomomorphismParams params, CountingStatementWriter & writer) -> SearchedComponent;
 
-        // Derive a literal, by unit propagation, at level 0.
-        auto derive(const std::string & literal) -> void;
+        // Derive a literal, by unit propagation, at level 0, returning its line.
+        auto derive(const std::string & literal) -> long;
 
         // Every cube of a glued leaf sends two pattern vertices to one target vertex, so
         // none of them, and hence not the leaf, can hold.
@@ -73,8 +74,35 @@ namespace gss::innards
         // contradiction.
         auto finish_no_solutions() -> void;
 
-        // Stop here, concluding nothing: phase 4 goes as far as the root.
-        auto finish() -> void;
+        // What finish needs to know about the statement, once its root has been derived.
+        struct Structure
+        {
+            int root;
+            long root_line;
+            // the root's product node, and the or of its overlaps, if it has any
+            int product;
+            std::optional<int> overlaps;
+
+            // each component of the pattern: its vertices, its leaf, and its cubes, each
+            // with its embedding as the image of each vertex in turn
+            struct Component
+            {
+                std::vector<int> vertices;
+                int leaf;
+                std::vector<int> cubes;
+                std::vector<std::vector<int>> embeddings;
+            };
+            std::vector<Component> components;
+
+            // each overlap under the root, by its partition of the pattern vertices (sorted
+            // blocks, sorted, singletons included)
+            std::map<std::vector<std::vector<int>>, int> overlaps_by_partition;
+        };
+
+        // Delete everything but the counting formula from the core, which shows that the
+        // root implies the encoding, and conclude that the core is equienumerable with
+        // the translator's counting formula (phase 5 of decomposition-counting.md).
+        auto finish(const Structure &) -> void;
     };
 }
 

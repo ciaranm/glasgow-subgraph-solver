@@ -49,8 +49,23 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 `--decomposition` refuses `--prove` unless it is also writing a counting statement
 (`--decomposition-statement`). It then writes one proof about the whole instance, into which each
 component of the pattern's search logs as a *nested solve* under a guard (`Proof::begin_nested_solve`),
-and which so far ends once it has derived the statement's root, with `conclusion NONE`. See
-[decomposition-counting.md](decomposition-counting.md), phase 4.
+and which ends with `output EQUIENUMERABLE FILE` against the counting formula that
+`count_statement --opb` writes for the statement:
+
+```shell session
+$ ./build/glasgow_subgraph_solver --count-solutions --no-clique-detection --decomposition \
+    --decomposition-statement s.stmt --prove p --format lad pattern target
+$ ./build/count_statement s.stmt --opb counting.opb
+$ veripb --force-checked-deletion p.opb p.pbp counting.opb
+```
+
+The count is then `count_statement`'s, provided its side-condition instance is unsatisfiable,
+which is not yet proved. See [decomposition-counting.md](decomposition-counting.md), phases 4
+to 6.
+
+Every label is defined once: `Proof` throws if a model row or proof line reuses one. VeriPB
+itself would let a later line take a label over, silently changing what every later citation of it
+means.
 
 `--staged` on its own *is* supported: the supplemental graphs are derived mid-proof at the level-0
 restart boundary, and an instance that concludes in the cheap first round emits no supplemental

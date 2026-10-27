@@ -563,6 +563,49 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
   quotients, which have no nodes, need a counting argument instead.
 - Done when: `EQUIENUMERABLE` verifies end to end against the counter's file, for c = 0
   and then c > 0.
+- Status: done for c = 0.
+  - The proof now ends with `output EQUIENUMERABLE FILE` against `count_statement --opb`'s
+    file. VeriPB accepts it with `--force-checked-deletion`.
+  - After the root (phase 4):
+    1. The root goes into the core.
+    2. The adjacency rows are deleted with no subproof.
+    3. Each injectivity row is deleted with a subproof:
+       - for each pair of pattern vertices, "not both at t";
+       - within a component, one RUP step;
+       - across components, the collision lemma at the root, by cases on pairs of cubes;
+       - then the at-most-one is recovered with `pol`.
+    4. The x exactly-one rows are deleted, x leaves the preserved set, and the copies are
+       deleted with x ↦ y witnesses.
+  - The collision lemma needs no `B_ρ → B_τ` lemmas, unlike the Python generator's side
+    proofs. At the root, ¬B_0 falsifies every overlap of the root by unit propagation, and
+    ρ's own overlaps are all among them, so B_ρ fails too. Planting their removal changed
+    nothing, which is how this came to light. Without the per-pair-of-cubes cases, 4 of the
+    30 sweep instances fail: the rest have at most one candidate cube, which unit
+    propagation finds by itself.
+  - The overlap that a pair of colliding cubes completes is found by its partition, which
+    the decomposer hands over with the root's structure.
+  - Pigeonholed quotients never come up here. Every overlap of the root has fewer blocks
+    than the root, and the root has passed the pigeonhole test, or there would be no
+    statement. They will come up in the side-condition proofs, at inner quotients.
+  - `decomposition_proof_sweep` checks `OUTPUT EQUIENUMERABLE` (or zero solutions) on its 30
+    instances. The same checks pass on:
+    - 100 small instances;
+    - 40 loopy ones;
+    - 22 larger ones, of up to 8 pattern vertices and 371k statement nodes.
+
+    Checking time is mostly VeriPB's:
+    - a 39k-node statement (1008 solutions) checks in 19 s, where the Python generator's
+      side proof alone took 34 minutes;
+    - the 371k-node one takes 18.5 minutes for 1.5M proof lines;
+    - three more, of 3M to 14M proof lines, did not finish checking within 30 minutes.
+
+    The side conditions are not part of this proof; they are phase 6.
+  - Labels are now defined once each: `Proof` throws if a line reuses one. Before this, the
+    loop-cancelled adjacency rows took over the model rows' `@adj` labels, which VeriPB
+    allows. A nested solve's derivations then leaked into the outer proof: deleting
+    `@adj…` deleted the derived row, not the model's, and the output check failed on
+    loopy instances. The loop-cancelled rows now have labels of their own (`…_loopfree`),
+    which the adjacency cache points at.
 
 ### Phase 6: side conditions, and the pipeline
 

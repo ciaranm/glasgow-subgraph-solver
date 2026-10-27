@@ -4,10 +4,10 @@
 #
 #   - the count agrees with the plain solver's;
 #   - count_statement agrees with both;
-#   - VeriPB accepts the proof;
-#   - the proof derives the statement's root as a unit (phase 4 of
-#     dev_docs/decomposition-counting.md stops there), or, when there is no statement,
-#     concludes that there are no solutions.
+#   - VeriPB accepts the proof as showing that the solver's encoding is equienumerable
+#     with count_statement's counting formula (phases 4 and 5 of
+#     dev_docs/decomposition-counting.md), or, when there is no statement, as concluding
+#     that there are no solutions.
 #
 # Patterns have three or four components of one to three vertices, at most six in all,
 # and targets at least as many vertices. The second half of the instances have loops.
@@ -74,7 +74,7 @@ for loops in 0 1; do
         awk -v seed="${seed}" -v loops="${loops}" -v which=target "${generate}" > "${tgt}"
         stmt="${workdir}/${tag}.stmt"
         proof="${workdir}/${tag}"
-        rm -f "${stmt}" "${proof}.opb" "${proof}.pbp"
+        rm -f "${stmt}" "${proof}.opb" "${proof}.pbp" "${proof}.counting.opb"
         checked=$((checked + 1))
 
         want=$("${solver}" --format lad --count-solutions "${pat}" "${tgt}" | grep '^solution_count')
@@ -86,26 +86,24 @@ for loops in 0 1; do
             continue
         fi
 
-        verified=$("${veripb}" "${proof}.opb" "${proof}.pbp" 2>&1 | grep '^s ')
-        if ! echo "${verified}" | grep -q '^s VERIFIED'; then
-            echo "${tag}: the proof does not verify"
-            fails=$((fails + 1))
-            continue
-        fi
-
         if [ -s "${stmt}" ]; then
-            counted=$("${count_statement}" "${stmt}" | grep '^count' | sed 's/count/solution_count/')
-            root=$(grep -o '(root [0-9]*)' "${stmt}" | grep -o '[0-9][0-9]*')
+            counted=$("${count_statement}" "${stmt}" --opb "${proof}.counting.opb" | grep '^count' | sed 's/count/solution_count/')
             if [ "${counted}" != "${want}" ]; then
                 echo "${tag}: count_statement says '${counted}', not '${want}'"
                 fails=$((fails + 1))
-            elif ! grep -q "^rup 1 g${root} >= 1 ;" "${proof}.pbp"; then
-                echo "${tag}: the proof does not derive the root, g${root}"
+                continue
+            fi
+            verified=$("${veripb}" --force-checked-deletion "${proof}.opb" "${proof}.pbp" "${proof}.counting.opb" 2>&1 | grep '^s ')
+            if ! echo "${verified}" | grep -q '^s VERIFIED OUTPUT EQUIENUMERABLE'; then
+                echo "${tag}: the proof does not verify as equienumerable with the counting formula"
                 fails=$((fails + 1))
             fi
-        elif ! echo "${verified}" | grep -q 'COMPLETE ENUMERATION OF 0 SOLUTIONS'; then
-            echo "${tag}: no statement, but the proof does not conclude that there are no solutions"
-            fails=$((fails + 1))
+        else
+            verified=$("${veripb}" --force-checked-deletion "${proof}.opb" "${proof}.pbp" 2>&1 | grep '^s ')
+            if ! echo "${verified}" | grep -q '^s VERIFIED COMPLETE ENUMERATION OF 0 SOLUTIONS'; then
+                echo "${tag}: no statement, but the proof does not conclude that there are no solutions"
+                fails=$((fails + 1))
+            fi
         fi
     done
 done

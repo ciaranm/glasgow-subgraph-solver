@@ -703,8 +703,9 @@ namespace
         }
 
         // As write_statement, but also writing a proof that the solver's encoding of the
-        // instance implies the statement's root (phase 4 of decomposition-counting.md),
-        // or that it has no solutions when there is no statement.
+        // instance is equienumerable with the statement's counting formula (phases 4 and 5
+        // of decomposition-counting.md), or that it has no solutions when there is no
+        // statement.
         auto write_statement_with_proof(std::ostream & out, const ProofOptions & proof_options) -> optional<loooong>
         {
             innards::DecompositionProof proof(proof_options, pattern, target);
@@ -738,6 +739,7 @@ namespace
                 result.no_nds = true;
                 return result;
             };
+            innards::DecompositionProof::Structure structure;
             for (auto & c : q->components) {
                 auto component = component_graph(*q, c);
                 vector<int> component_vertices;
@@ -763,6 +765,7 @@ namespace
                     members.push_back({v});
                 leaf_nodes.emplace(members, *searched.leaf);
                 leaf_cubes.emplace(*searched.leaf, searched.cubes);
+                structure.components.push_back({component_vertices, *searched.leaf, searched.cubes, searched.embeddings});
 
                 auto form = canonical_form(component);
                 if (! embeddings_by_key.contains(form.key)) {
@@ -798,9 +801,27 @@ namespace
                     proof.derive("~" + counting_gate_name(c));
                 }
                 proof.derive("~" + counting_gate_name(*r.overlaps));
-                proof.derive(counting_gate_name(root->first));
             }
-            proof.finish();
+
+            // Then the root implies the encoding, which is what lets the encoding's
+            // constraints be deleted, and that needs each overlap's partition.
+            structure.root = root->first;
+            structure.root_line = proof.derive(counting_gate_name(root->first));
+            structure.product = r.product;
+            structure.overlaps = r.overlaps;
+            set<int> children(r.children.begin(), r.children.end());
+            for (auto & [sigma, e] : exact_nodes)
+                if (e && children.contains(e->first)) {
+                    map<int, vector<int>> blocks;
+                    for (unsigned v = 0; v < vertices.size(); ++v)
+                        blocks[sigma[v]].push_back(vertices[v]);
+                    vector<vector<int>> partition;
+                    for (auto & [_, b] : blocks)
+                        partition.push_back(b);
+                    sort(partition.begin(), partition.end());
+                    structure.overlaps_by_partition.emplace(partition, e->first);
+                }
+            proof.finish(structure);
 
             writer.finish(root->first);
             statement_nodes = writer.number_of_nodes();
