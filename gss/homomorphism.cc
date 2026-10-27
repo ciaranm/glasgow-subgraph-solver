@@ -724,7 +724,9 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
         if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
-        if (params.restrict_initial_domains)
+        // a nested solve under an assumption can restrict its domains, as long as the
+        // assumption justifies it (see NestedSolve::assumption)
+        if (params.restrict_initial_domains && ! (params.nested_proof && params.nested_proof->under_assumption()))
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with restricted initial domains"};
         proof = params.nested_proof ? params.nested_proof : make_shared<Proof>(*params.proof_options);
     }

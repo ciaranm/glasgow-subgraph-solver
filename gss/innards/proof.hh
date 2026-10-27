@@ -59,6 +59,14 @@ namespace gss::innards
         /// at level 0 through Proof::at_level_zero, and returns the literal that guards
         /// every search line from then on, which must be implied by the solution.
         std::function<auto(const std::vector<std::pair<int, int>> &)->std::string> on_solution;
+
+        /// A literal the nested search may take to be true, if any. Every search line it
+        /// writes, and its conclusion, then carries this literal's negation, and so does
+        /// every value it rules out by unit propagation before searching. Any value that
+        /// HomomorphismParams::restrict_initial_domains removes must follow from the
+        /// assumption, either by unit propagation or by a line the caller has derived
+        /// before the solve begins.
+        std::optional<std::string> assumption;
     };
 
     class Proof
@@ -133,6 +141,8 @@ namespace gss::innards
         [[nodiscard]] auto at_most_one_value_label(int p) const -> const std::string &;
         [[nodiscard]] auto at_least_one_value_label(int p) const -> const std::string &;
         [[nodiscard]] auto cached_proof_line(const std::string & key) const -> std::optional<std::string>;
+        // Has a line with this label been written?
+        [[nodiscard]] auto label_defined(const std::string & label) const -> bool;
         auto cache_proof_line(const std::string & key, const std::string & label) -> void;
 
         // Declare a projected (preserved) set, listing exactly the assignment
@@ -150,7 +160,9 @@ namespace gss::innards
         // from the outer ones by weakening. Its search runs under a guard: no guard until it
         // finds a solution, and then whatever literal NestedSolve::on_solution returns, so
         // every search line it writes is "this, or one of the solutions so far". Its
-        // conclusion is the guard as a unit, or a contradiction if it found nothing.
+        // conclusion is the guard as a unit, or a contradiction if it found nothing. With
+        // NestedSolve::assumption, all of that holds only under the assumption, and says
+        // so.
         auto begin_nested_solve(NestedSolve) -> void;
         // Ends the nested solve, restoring the outer numbering, and returns the line number
         // of its conclusion, or nothing if it did not conclude (it was aborted).
@@ -158,8 +170,13 @@ namespace gss::innards
         // Run f with the proof at level 0, so that what it emits survives the search's
         // backtracking, and then go back to the active level.
         auto at_level_zero(const std::function<void()> & f) -> void;
-        // " 1 <guard>" to append to a search line's terms, or "" when there is no guard.
+        // " 1 <guard>" to append to a search line's terms, or "" when there is no guard,
+        // together with the assumption's negation, if there is an assumption.
         [[nodiscard]] auto guard_suffix() const -> std::string;
+        // " 1 ~<assumption>" to append to a line that holds only under the nested solve's
+        // assumption, or "" when there is none.
+        [[nodiscard]] auto assumption_suffix() const -> std::string;
+        [[nodiscard]] auto under_assumption() const -> bool;
 
         // when we're done
         auto finish_unsat_proof() -> void;

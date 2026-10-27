@@ -152,6 +152,10 @@ namespace gss::innards
         // The labels of the adjacency constraints emit_model wrote into the model.
         [[nodiscard]] auto model_adjacency_labels() const -> const std::vector<std::string> &;
 
+        // The model's adjacency row for p going to t, about its neighbour q: its label,
+        // and the target vertices it lets q go to.
+        [[nodiscard]] auto model_adjacency(int p, int q, int t) const -> std::pair<std::string, std::vector<long>>;
+
         // Prove the supplemental graphs that have just been built into the
         // ProcessedGraphsData. max_graphs is the bitset stride; number_of_exact_path_graphs
         // / slot identify which graph(s) within the data the derivation is about.

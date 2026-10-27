@@ -11,6 +11,8 @@
 #
 # Patterns have three or four components of one to three vertices, at most six in all,
 # and targets at least as many vertices. The second half of the instances have loops.
+# Each instance runs twice: with the decomposer's own choice of hubs, which is often none
+# on targets this small, and with two hubs, which exercises the proof of the guesses.
 # The instances come from awk's random numbers, so they may differ between awk
 # implementations; every one of them is checked the same way.
 #
@@ -65,9 +67,12 @@ BEGIN {
 
 fails=0
 checked=0
+for hubs in auto 2; do
 for loops in 0 1; do
     for seed in $(seq 1 15); do
-        tag="dps_${loops}_${seed}"
+        tag="dps_${hubs}_${loops}_${seed}"
+        hub_option=""
+        [ "${hubs}" != auto ] && hub_option="--decomposition-hubs ${hubs}"
         pat="${workdir}/${tag}_pattern.lad"
         tgt="${workdir}/${tag}_target.lad"
         awk -v seed="${seed}" -v loops="${loops}" -v which=pattern "${generate}" > "${pat}"
@@ -78,7 +83,7 @@ for loops in 0 1; do
         checked=$((checked + 1))
 
         want=$("${solver}" --format lad --count-solutions "${pat}" "${tgt}" | grep '^solution_count')
-        got=$("${solver}" --format lad --count-solutions --decomposition --decomposition-statement "${stmt}" \
+        got=$("${solver}" --format lad --count-solutions --decomposition ${hub_option} --decomposition-statement "${stmt}" \
             --prove "${proof}" "${pat}" "${tgt}" 2>&1 | grep '^solution_count')
         if [ -z "${want}" ] || [ "${want}" != "${got}" ]; then
             echo "${tag}: counts differ: '${want}' and '${got}'"
@@ -106,6 +111,7 @@ for loops in 0 1; do
             fi
         fi
     done
+done
 done
 
 echo "${checked} instances checked, ${fails} failed"

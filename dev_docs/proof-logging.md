@@ -45,15 +45,17 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
 | not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
-| no `HomomorphismParams::restrict_initial_domains` (API only) | a restriction would be an assumption, which the proof does not yet state |
+| no `HomomorphismParams::restrict_initial_domains` (API only), except in a nested solve under an assumption | a restriction is an assumption, which only a nested solve can state (`NestedSolve::assumption`), and then the caller has to derive whatever the assumption does not give by unit propagation |
 
 `--decomposition` refuses `--prove` unless it is also writing a counting statement
-(`--decomposition-statement`), and then guesses nothing onto hubs: it refuses
-`--decomposition-hubs` with a nonzero count.
+(`--decomposition-statement`).
 It then writes one proof about the whole instance, into which each
 component of the pattern's search logs as a *nested solve* under a guard (`Proof::begin_nested_solve`),
 and which ends with `output EQUIENUMERABLE FILE` against the counting formula that
-`count_statement --opb` writes for the statement:
+`count_statement --opb` writes for the statement. With hubs, each of those searches also
+runs under an assumption, a literal saying where the guess puts things, which every line
+it writes then carries (see [decomposition-counting.md](decomposition-counting.md), phase
+5):
 
 ```shell session
 $ ./build/glasgow_subgraph_solver --count-solutions --no-clique-detection --decomposition \

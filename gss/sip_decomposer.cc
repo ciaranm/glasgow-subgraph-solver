@@ -33,6 +33,7 @@ using std::set;
 using std::sort;
 using std::string;
 using std::to_string;
+using std::tuple;
 using std::vector;
 
 namespace
@@ -965,6 +966,7 @@ namespace
             vector<int> children;
         };
         map<int, ExactNode> exact_structure;
+        map<int, Blocks> exact_blocks;
         map<int, vector<int>> leaf_cubes;
         set<int> glued_leaves;
         innards::DecompositionProof * decomposition_proof = nullptr;
@@ -1117,6 +1119,7 @@ namespace
                 overlaps_node = statement->add_or(overlaps);
             int node = overlaps_node ? statement->add_minus(product_node, *overlaps_node) : product_node;
             exact_structure.emplace(node, ExactNode{product_node, leaves, overlaps_node, overlaps});
+            exact_blocks.emplace(node, blocks);
             return exact_nodes.emplace(blocks, pair{node, product - overlap}).first->second;
         }
 
@@ -1201,11 +1204,8 @@ namespace
             for (int v = 0; v < pattern.size(); ++v)
                 all[v] = v;
 
-            if (proof_options) {
-                if (! hubs.empty())
-                    throw UnsupportedConfiguration{"Proof logging cannot yet be used with decomposition hubs"};
+            if (proof_options)
                 return write_statement_with_proof(out, *proof_options, all);
-            }
 
             if (all.empty()) {
                 CountingStatementWriter writer{out, {}};
@@ -1281,17 +1281,25 @@ namespace
         // As write_statement, but also writing a proof that the solver's encoding of the
         // instance is equienumerable with the statement's counting formula (phases 4 and 5
         // of decomposition-counting.md), or that it has no solutions when there is no
-        // statement. Only without hubs, for now.
+        // statement.
+        //
+        // The proof walks the same tree of guesses as for_each_guess. At each node, the
+        // decisions so far are a set of literals, each a vertex on a hub or a vertex off
+        // all of them, and the node derives "not all of these, or one of the guesses so
+        // far holds", which the fold over the guesses' gates says. At a leaf, that comes
+        // from the guess's searches, or from why it has no embeddings, and at any other
+        // node by unit propagation from its children, because the vertex it decides goes
+        // somewhere: off the hubs, or onto a hub, which the node either tried or can rule
+        // out. The root of the tree says that some guess holds. With no hubs, the tree is
+        // a single leaf, which decides nothing.
         auto write_statement_with_proof(std::ostream & out, const ProofOptions & proof_options, const vector<int> & all) -> optional<loooong>
         {
-            innards::DecompositionProof proof(proof_options, pattern, target);
+            innards::DecompositionProof proof(proof_options, pattern, target, hubs);
             decomposition_proof = &proof;
 
             set_vertices(all, {});
-            auto discrete_partition = discrete();
-            auto q = build_quotient(discrete_partition);
+            auto q = build_quotient(discrete());
             number_of_components = q->components.size();
-            ++guesses;
             if (more_blocks_than_targets(*q, target_with_label)) {
                 no_statement_because = "the pattern has more vertices of some label than the target";
                 proof.finish_pattern_bigger_than_target();
@@ -1302,10 +1310,6 @@ namespace
             writer.set_observer([&](int i, const CountingNode & node) { proof.define_gate(i, node); });
             statement = &writer;
 
-            // Each component of the pattern is searched under proof, which concludes that
-            // its leaf holds. Isomorphic components cannot share these searches, because
-            // each proof is about its own variables, but they still fill the enumeration
-            // cache for the glued components later on.
             // for now, without the preprocessing whose derivations might not survive a
             // nested solve
             auto search_params = [&] {
@@ -1315,38 +1319,61 @@ namespace
                 result.no_nds = true;
                 return result;
             };
-            innards::DecompositionProof::Structure structure;
-            for (auto & c : q->components) {
-                auto component = component_graph(*q, c);
-                vector<int> component_vertices;
-                for (auto b : c) {
-                    component_vertices.push_back(vertices[b]);
-                    component.names.push_back(pattern.vertex_name(vertices[b]));
-                }
 
-                ++solver_calls;
-                auto searched = proof.search_component(as_input_graph(component), component_vertices, search_params(), writer);
-                if (! searched.complete) {
-                    aborted = true;
-                    return std::nullopt;
-                }
-                if (! searched.leaf) {
-                    no_statement_because = "some component has no embeddings";
-                    proof.finish_no_solutions();
-                    return std::nullopt;
-                }
+            // Each component of what a guess leaves off the hubs is searched under proof,
+            // under the assumption that its vertices are off the hubs and that its
+            // neighbours on hubs are where the guess puts them. That is all it depends on,
+            // so guesses that agree on it share the search. (It also determines the lists,
+            // which are in the key anyway, so that nothing relies on that.) Isomorphic components cannot
+            // share these searches, because each proof is about its own variables, but they
+            // still fill the enumeration cache for the glued components later on.
+            using Component = innards::DecompositionProof::Structure::Component;
+            map<tuple<vector<int>, vector<int>, optional<string>>, optional<Component>> searched;
+            auto search = [&](const vector<int> & component_vertices, SmallGraph component,
+                              const optional<string> & assumption) -> const optional<Component> & {
+                auto key = tuple{component_vertices, component.lists, assumption};
+                if (auto s = searched.find(key); s != searched.end())
+                    return s->second;
 
-                Blocks members;
                 for (auto v : component_vertices)
-                    members.emplace_back(vector{v}, -1);
-                leaf_nodes.emplace(members, *searched.leaf);
-                leaf_cubes.emplace(*searched.leaf, searched.cubes);
-                structure.components.push_back({component_vertices, *searched.leaf, searched.cubes, searched.embeddings});
+                    component.names.push_back(pattern.vertex_name(v));
+                auto child_params = search_params();
+                if (! component.lists.empty())
+                    child_params.restrict_initial_domains = restriction(component);
+                ++solver_calls;
+                auto result = proof.search_component(as_input_graph(component), component_vertices, std::move(child_params), writer, assumption);
+                if (! result.complete) {
+                    aborted = true;
+                    return searched.emplace(key, std::nullopt).first->second;
+                }
+                if (result.cubes.empty())
+                    return searched.emplace(key, std::nullopt).first->second;
+
+                // the leaf for these vertices with these lists, which an earlier guess with
+                // the same lists might have written, and which this search must agree with
+                Blocks members;
+                for (auto v : component_vertices) {
+                    auto i = std::find(vertices.begin(), vertices.end(), v) - vertices.begin();
+                    members.emplace_back(vector{v}, vertex_lists.empty() ? -1 : vertex_lists[i]);
+                }
+                int leaf;
+                if (auto l = leaf_nodes.find(members); l != leaf_nodes.end()) {
+                    leaf = l->second;
+                    set<int> cubes(leaf_cubes.at(leaf).begin(), leaf_cubes.at(leaf).end());
+                    if (cubes != set<int>(result.cubes.begin(), result.cubes.end()))
+                        throw UnsupportedConfiguration{"two searches of a component with the same lists disagree, which cannot happen"};
+                }
+                else {
+                    leaf = writer.add_or(result.cubes);
+                    leaf_nodes.emplace(members, leaf);
+                    leaf_cubes.emplace(leaf, result.cubes);
+                }
+                proof.conclude_component(result, leaf, assumption);
 
                 auto form = canonical_form(component);
                 if (! embeddings_by_key.contains(form.key)) {
                     vector<vector<int>> by_position;
-                    for (auto & e : searched.embeddings) {
+                    for (auto & e : result.embeddings) {
                         vector<int> p(form.order.size());
                         for (unsigned i = 0; i < form.order.size(); ++i)
                             p[i] = e[form.order[i]];
@@ -1354,50 +1381,191 @@ namespace
                     }
                     embeddings_by_key.emplace(form.key, std::move(by_position));
                 }
-            }
+                return searched.emplace(key, Component{component_vertices, leaf, result.cubes, result.embeddings}).first->second;
+            };
 
-            auto root = exact(discrete_partition);
+            innards::DecompositionProof::Structure structure;
+            vector<int> guess_nodes;
+            optional<string> fold;
+            set<int> refuted;
+            loooong total = 0;
+
+            vector<bool> on_hub(pattern.size(), false), used(target.size(), false);
+            vector<pair<int, int>> cube;
+            vector<string> decided;
+            auto not_decided = [&] {
+                vector<string> result;
+                for (auto & l : decided)
+                    result.push_back("~" + l);
+                if (fold)
+                    result.push_back(*fold);
+                return proof.derive_clause(result);
+            };
+
+            // The guess that the decisions make, once every vertex is decided.
+            auto leaf_of_tree = [&]() -> long {
+                // the vertices off the hubs, and their lists, as in for_each_guess, except
+                // that a guess that leaves a vertex no list is refuted here
+                vector<int> rest, lists;
+                for (auto v : all)
+                    if (! on_hub[v]) {
+                        vector<int> off_hub_neighbours;
+                        for (auto w : pattern_neighbours[v])
+                            if (! on_hub[w])
+                                off_hub_neighbours.push_back(w);
+                        int list = -1;
+                        if (! hubs.empty()) {
+                            // anywhere adjacent to the hubs of its neighbours, unless it does
+                            // not have enough neighbours there, which needs its own step
+                            int adjacent = with_non_hub_degree_at_least(0);
+                            for (auto & [s, h] : cube)
+                                if (pattern.adjacent(v, s))
+                                    adjacent = intersection(adjacent, hub_neighbourhood(h, pattern_edge_label(v, s)));
+                            list = intersection(adjacent, with_non_hub_degree_at_least(off_hub_neighbours.size()));
+                            for (auto t : list_values[adjacent])
+                                if (! std::binary_search(list_values[list].begin(), list_values[list].end(), t))
+                                    proof.restrict_by_degree(v, t, off_hub_neighbours);
+                            if (list_values[list].empty())
+                                return not_decided();
+                        }
+                        rest.push_back(v);
+                        lists.push_back(list);
+                    }
+                ++guesses;
+
+                innards::DecompositionProof::Structure::Guess guess;
+                optional<int> rest_node;
+                if (! rest.empty()) {
+                    set_vertices(rest, hubs.empty() ? vector<int>{} : lists);
+                    auto rest_quotient = build_quotient(discrete());
+                    if (more_blocks_than_targets(*rest_quotient, non_hubs_with_label)) {
+                        proof.too_many_off_hubs(rest);
+                        return not_decided();
+                    }
+
+                    for (auto & c : rest_quotient->components) {
+                        vector<int> component_vertices;
+                        for (auto b : c)
+                            component_vertices.push_back(vertices[b]);
+                        vector<string> assumed;
+                        if (! hubs.empty()) {
+                            for (auto v : component_vertices)
+                                assumed.push_back(proof.off_hubs(v));
+                            for (auto & [s, h] : cube)
+                                if (std::any_of(component_vertices.begin(), component_vertices.end(), [&](int v) { return pattern.adjacent(v, s); }))
+                                    assumed.push_back(proof.assignment(s, h));
+                        }
+                        auto assumption = assumed.empty() ? optional<string>{} : optional<string>{proof.conjunction(assumed)};
+                        auto & found = search(component_vertices, component_graph(*rest_quotient, c), assumption);
+                        if (aborted)
+                            return 0;
+                        if (! found)
+                            return not_decided();
+                        guess.components.push_back(*found);
+                    }
+
+                    auto e = exact(discrete());
+                    if (aborted)
+                        return 0;
+                    if (! e)
+                        throw UnsupportedConfiguration{"a guess whose components all embed has no node, which cannot happen"};
+                    rest_node = e->first;
+                    total += e->second;
+
+                    // every overlap has a glued leaf, every cube of which sends two pattern
+                    // vertices to one target vertex, so no overlap holds
+                    auto & r = exact_structure.at(e->first);
+                    guess.overlaps = r.overlaps;
+                    for (auto & c : r.children) {
+                        if (refuted.insert(c).second) {
+                            auto & ec = exact_structure.at(c);
+                            auto glued = std::find_if(ec.leaves.begin(), ec.leaves.end(), [&](int l) { return glued_leaves.contains(l); });
+                            if (glued == ec.leaves.end())
+                                throw UnsupportedConfiguration{"an overlap has no glued leaf, which cannot happen"};
+                            proof.refute_glued_leaf(*glued, leaf_cubes.at(*glued));
+                            proof.derive("~" + counting_gate_name(c));
+                        }
+                        vector<vector<int>> partition;
+                        for (auto & [members, _] : exact_blocks.at(c))
+                            partition.push_back(members);
+                        guess.overlaps_by_partition.emplace(partition, c);
+                    }
+                    if (r.overlaps && refuted.insert(*r.overlaps).second)
+                        proof.derive("~" + counting_gate_name(*r.overlaps));
+                }
+                else
+                    total += 1;
+
+                if (cube.empty())
+                    guess.gate = *rest_node;
+                else {
+                    auto cube_node = writer.add_cube(cube);
+                    guess.gate = rest_node ? writer.add_and({cube_node, *rest_node}) : cube_node;
+                }
+                guess_nodes.push_back(guess.gate);
+                fold = proof.fold_guess(guess.gate);
+                structure.guesses.push_back(std::move(guess));
+                return not_decided();
+            };
+
+            auto node_of_tree = [&](auto & self, unsigned i) -> long {
+                if (out_of_time())
+                    return 0;
+                if (hubs.empty() || i == all.size())
+                    return leaf_of_tree();
+
+                auto v = all[i];
+                vector<long> children;
+                decided.push_back(proof.off_hubs(v));
+                children.push_back(self(self, i + 1));
+                decided.pop_back();
+                for (auto h : hubs) {
+                    if (aborted)
+                        return 0;
+                    if (used[h])
+                        continue;
+                    if (fits_on_hub(v, h, cube)) {
+                        on_hub[v] = used[h] = true;
+                        cube.emplace_back(v, h);
+                        decided.push_back(proof.assignment(v, h));
+                        children.push_back(self(self, i + 1));
+                        decided.pop_back();
+                        cube.pop_back();
+                        on_hub[v] = used[h] = false;
+                    }
+                    else if (int(pattern_neighbours[v].size()) > target_degree[h])
+                        proof.hub_too_small(v, h);
+                    else if (pattern.adjacent(v, v) && ! target.adjacent(h, h))
+                        proof.rule_out(v, h);
+                }
+                if (aborted)
+                    return 0;
+                auto result = not_decided();
+                proof.forget(children);
+                return result;
+            };
+            node_of_tree(node_of_tree, 0);
             statement = nullptr;
-            if (aborted || ! root)
+            if (aborted)
                 return std::nullopt;
 
-            // The root: every component's leaf holds, so the product does, and every
-            // overlap has a glued leaf, every cube of which sends two pattern vertices to
-            // one target vertex, so no overlap holds.
-            auto & r = exact_structure.at(root->first);
-            if (r.leaves.size() > 1)
-                proof.derive(counting_gate_name(r.product));
-            if (r.overlaps) {
-                for (auto & c : r.children) {
-                    auto & e = exact_structure.at(c);
-                    auto glued = std::find_if(e.leaves.begin(), e.leaves.end(), [&](int l) { return glued_leaves.contains(l); });
-                    if (glued == e.leaves.end())
-                        throw UnsupportedConfiguration{"an overlap has no glued leaf, which cannot happen"};
-                    proof.refute_glued_leaf(*glued, leaf_cubes.at(*glued));
-                    proof.derive("~" + counting_gate_name(c));
-                }
-                proof.derive("~" + counting_gate_name(*r.overlaps));
+            if (guess_nodes.empty()) {
+                no_statement_because = hubs.empty() ? "some component has no embeddings" : "no way of putting pattern vertices on hubs leaves the rest any embeddings";
+                proof.finish_no_solutions();
+                return std::nullopt;
             }
 
-            // Then the root implies the encoding, which is what lets the encoding's
-            // constraints be deleted, and that needs each overlap's partition.
-            structure.root = root->first;
-            structure.root_line = proof.derive(counting_gate_name(root->first));
-            structure.product = r.product;
-            structure.overlaps = r.overlaps;
-            set<int> children(r.children.begin(), r.children.end());
-            for (auto & [blocks, e] : exact_nodes)
-                if (e && children.contains(e->first)) {
-                    vector<vector<int>> partition;
-                    for (auto & [members, _] : blocks)
-                        partition.push_back(members);
-                    structure.overlaps_by_partition.emplace(partition, e->first);
-                }
+            // The root holds, because the last fold does, and then the root implies the
+            // encoding, which is what lets the encoding's constraints be deleted.
+            auto root = guess_nodes.size() == 1 ? guess_nodes.front() : writer.add_or(guess_nodes);
+            structure.root = root;
+            structure.root_line = proof.derive(counting_gate_name(root));
+            proof.forget_scaffolding();
             proof.finish(structure);
 
-            writer.finish(root->first);
+            writer.finish(root);
             statement_nodes = writer.number_of_nodes();
-            return root->second;
+            return total;
         }
 
         int statement_nodes = 0;
@@ -1472,9 +1640,6 @@ namespace
         vector<int> vertices(pattern.size());
         for (int v = 0; v < pattern.size(); ++v)
             vertices[v] = v;
-
-        if (params.proof_options && ! hubs)
-            hubs = 0;
 
         HomomorphismResult result;
         ComponentCounter counter(pattern, target, params, choose_hubs(pattern, target, vertices, hubs));

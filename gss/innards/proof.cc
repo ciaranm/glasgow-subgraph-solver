@@ -1209,5 +1209,20 @@ auto Proof::at_level_zero(const function<void()> & f) -> void
 
 auto Proof::guard_suffix() const -> string
 {
-    return _imp->guard ? " 1 " + *_imp->guard : "";
+    return assumption_suffix() + (_imp->guard ? " 1 " + *_imp->guard : "");
+}
+
+auto Proof::label_defined(const string & label) const -> bool
+{
+    return _imp->labels.contains(label);
+}
+
+auto Proof::assumption_suffix() const -> string
+{
+    return under_assumption() ? " 1 ~" + *_imp->nested->assumption : "";
+}
+
+auto Proof::under_assumption() const -> bool
+{
+    return _imp->nested && _imp->nested->assumption;
 }

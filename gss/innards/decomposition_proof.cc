@@ -20,6 +20,7 @@ using std::set;
 using std::shared_ptr;
 using std::string;
 using std::to_string;
+using std::tuple;
 using std::unique_ptr;
 using std::vector;
 
@@ -27,6 +28,8 @@ struct DecompositionProof::Imp
 {
     const InputGraph * pattern = nullptr;
     const InputGraph * target = nullptr;
+    vector<int> hubs;
+    vector<bool> is_hub;
     // the two halves of each copy y_p_t <-> x_p_t, and the exactly-one rows over y
     vector<vector<long>> y_implies_x, x_implies_y;
     vector<long> y_at_most_one;
@@ -34,6 +37,20 @@ struct DecompositionProof::Imp
     unique_ptr<HomomorphismProofs> hom_proofs;
     int number_of_folds = 0;
     set<int> refuted_leaves;
+    set<string> derived_units;
+
+    // each cube written so far, by its assignment
+    map<vector<pair<int, int>>, int> cubes_by_assignment;
+
+    // the scaffolding for hubs: off_hubs[v] is v's literal and the line of its definition
+    // that says it puts v on no hub, and the rest is by what it says
+    map<int, pair<string, long>> off_hubs;
+    map<vector<string>, string> conjunctions;
+    set<tuple<int, int, vector<int>>> degree_restrictions;
+    set<pair<int, int>> hubs_too_small, ruled_out;
+    int number_of_guess_folds = 0;
+    optional<string> guess_fold;
+    set<long> scaffolding;
 };
 
 namespace
@@ -44,11 +61,16 @@ namespace
     }
 }
 
-DecompositionProof::DecompositionProof(const ProofOptions & options, const InputGraph & pattern, const InputGraph & target) :
+DecompositionProof::DecompositionProof(const ProofOptions & options, const InputGraph & pattern, const InputGraph & target,
+    const vector<int> & hubs) :
     _imp(make_unique<Imp>())
 {
     _imp->pattern = &pattern;
     _imp->target = &target;
+    _imp->hubs = hubs;
+    _imp->is_hub.resize(target.size(), false);
+    for (auto h : hubs)
+        _imp->is_hub[h] = true;
     _imp->proof = make_shared<Proof>(options);
     _imp->hom_proofs = make_unique<HomomorphismProofs>(_imp->proof, pattern, target);
     auto & proof = *_imp->proof;
@@ -112,17 +134,17 @@ auto DecompositionProof::define_gate(int i, const CountingNode & node) -> void
 }
 
 auto DecompositionProof::search_component(const InputGraph & component, const vector<int> & vertices,
-    HomomorphismParams params, CountingStatementWriter & writer) -> SearchedComponent
+    HomomorphismParams params, CountingStatementWriter & writer, const optional<string> & assumption) -> SearchedComponent
 {
     auto & proof = *_imp->proof;
     SearchedComponent result;
 
     // The fold: guard_k <-> guard_{k-1} or cube_k, over the cubes found so far. Its
     // definitions stay derived, and go once the leaf is derived.
-    vector<long> fold_lines;
     optional<string> guard;
 
     NestedSolve nested;
+    nested.assumption = assumption;
     nested.on_solution = [&](const vector<pair<int, int>> & solution) -> string {
         vector<pair<int, int>> assignment;
         vector<int> embedding(component.size());
@@ -133,20 +155,22 @@ auto DecompositionProof::search_component(const InputGraph & component, const ve
         std::sort(assignment.begin(), assignment.end());
         result.embeddings.push_back(std::move(embedding));
 
-        // the writer's observer defines the cube's gate
-        auto id = writer.add_cube(assignment);
-        result.cubes.push_back(id);
-        auto cube = counting_gate_name(id);
+        // the writer's observer defines the cube's gate, if it is new
+        auto [where, inserted] = _imp->cubes_by_assignment.emplace(assignment, 0);
+        if (inserted)
+            where->second = writer.add_cube(assignment);
+        result.cubes.push_back(where->second);
+        auto cube = counting_gate_name(where->second);
 
         auto fold = "fold" + to_string(++_imp->number_of_folds);
         proof.at_level_zero([&] {
             if (guard) {
-                fold_lines.push_back(proof.emit_proof_line("red 1 ~" + fold + " 1 " + *guard + " 1 " + cube + " >= 1 : " + fold + " -> 0 ;"));
-                fold_lines.push_back(proof.emit_proof_line("red 2 " + fold + " 1 ~" + *guard + " 1 ~" + cube + " >= 2 : " + fold + " -> 1 ;"));
+                result.fold_lines.push_back(proof.emit_proof_line("red 1 ~" + fold + " 1 " + *guard + " 1 " + cube + " >= 1 : " + fold + " -> 0 ;"));
+                result.fold_lines.push_back(proof.emit_proof_line("red 2 " + fold + " 1 ~" + *guard + " 1 ~" + cube + " >= 2 : " + fold + " -> 1 ;"));
             }
             else {
-                fold_lines.push_back(proof.emit_proof_line("red 1 ~" + fold + " 1 " + cube + " >= 1 : " + fold + " -> 0 ;"));
-                fold_lines.push_back(proof.emit_proof_line("red 1 " + fold + " 1 ~" + cube + " >= 1 : " + fold + " -> 1 ;"));
+                result.fold_lines.push_back(proof.emit_proof_line("red 1 ~" + fold + " 1 " + cube + " >= 1 : " + fold + " -> 0 ;"));
+                result.fold_lines.push_back(proof.emit_proof_line("red 1 " + fold + " 1 ~" + cube + " >= 1 : " + fold + " -> 1 ;"));
             }
         });
         guard = fold;
@@ -160,20 +184,21 @@ auto DecompositionProof::search_component(const InputGraph & component, const ve
     proof.emit_proof_directive("% searching a component of the pattern");
     proof.begin_nested_solve(std::move(nested));
     auto solved = solve_homomorphism_problem(component, *_imp->target, params);
-    auto conclusion = proof.end_nested_solve();
-    result.complete = solved.complete && conclusion.has_value();
-    if (! result.complete || result.cubes.empty())
-        return result;
-
-    // the last guard is the or of every cube, and so is the leaf
-    result.leaf = writer.add_or(result.cubes);
-    proof.emit_proof_line(unit(counting_gate_name(*result.leaf)));
-    fold_lines.push_back(*conclusion);
-    string ids;
-    for (auto & id : fold_lines)
-        ids += " " + to_string(id);
-    proof.emit_proof_directive("del id" + ids + " ;");
+    result.conclusion = proof.end_nested_solve();
+    result.complete = solved.complete && result.conclusion.has_value();
+    if (result.cubes.empty() && result.conclusion)
+        _imp->scaffolding.insert(*result.conclusion);
     return result;
+}
+
+auto DecompositionProof::conclude_component(const SearchedComponent & searched, int leaf, const optional<string> & assumption) -> void
+{
+    // the last guard is the or of every cube found, all of which are in the leaf
+    auto & proof = *_imp->proof;
+    proof.emit_proof_line("rup" + (assumption ? " 1 ~" + *assumption : string{}) + " 1 " + counting_gate_name(leaf) + " >= 1 ;");
+    auto lines = searched.fold_lines;
+    lines.push_back(*searched.conclusion);
+    forget(lines);
 }
 
 auto DecompositionProof::derive(const string & literal) -> long
@@ -183,12 +208,202 @@ auto DecompositionProof::derive(const string & literal) -> long
     return result;
 }
 
+auto DecompositionProof::derive_clause(const vector<string> & literals) -> long
+{
+    string line = "rup";
+    for (auto & l : literals)
+        line += " 1 " + l;
+    long result = 0;
+    _imp->proof->at_level_zero([&] { result = _imp->proof->emit_proof_line(line + " >= 1 ;"); });
+    _imp->scaffolding.insert(result);
+    return result;
+}
+
+auto DecompositionProof::forget(const vector<long> & lines) -> void
+{
+    if (lines.empty())
+        return;
+    string ids;
+    for (auto & id : lines) {
+        ids += " " + to_string(id);
+        _imp->scaffolding.erase(id);
+    }
+    _imp->proof->at_level_zero([&] { _imp->proof->emit_proof_directive("del id" + ids + " ;"); });
+}
+
+auto DecompositionProof::forget_scaffolding() -> void
+{
+    forget(vector<long>(_imp->scaffolding.begin(), _imp->scaffolding.end()));
+}
+
+auto DecompositionProof::assignment(int v, int t) const -> string
+{
+    return "x" + _imp->proof->variable_name(v, t);
+}
+
+auto DecompositionProof::off_hubs(int v) -> string
+{
+    if (auto o = _imp->off_hubs.find(v); o != _imp->off_hubs.end())
+        return o->second.first;
+
+    auto & proof = *_imp->proof;
+    auto name = "offhub" + to_string(v);
+    auto c = to_string(_imp->hubs.size());
+    string none = "red " + c + " ~" + name, some = "red 1 " + name;
+    for (auto h : _imp->hubs) {
+        none += " 1 ~x" + proof.variable_name(v, h);
+        some += " 1 x" + proof.variable_name(v, h);
+    }
+    long none_line = 0;
+    proof.at_level_zero([&] {
+        none_line = proof.emit_proof_line(none + " >= " + c + " : " + name + " -> 0 ;");
+        _imp->scaffolding.insert(none_line);
+        _imp->scaffolding.insert(proof.emit_proof_line(some + " >= 1 : " + name + " -> 1 ;"));
+    });
+    _imp->off_hubs.emplace(v, pair{name, none_line});
+    return name;
+}
+
+auto DecompositionProof::conjunction(vector<string> literals) -> string
+{
+    std::sort(literals.begin(), literals.end());
+    if (auto c = _imp->conjunctions.find(literals); c != _imp->conjunctions.end())
+        return c->second;
+
+    auto & proof = *_imp->proof;
+    auto name = "hguess" + to_string(_imp->conjunctions.size() + 1);
+    auto k = to_string(literals.size());
+    string all = "red " + k + " ~" + name, not_all = "red 1 " + name;
+    for (auto & l : literals) {
+        all += " 1 " + l;
+        not_all += " 1 ~" + l;
+    }
+    proof.at_level_zero([&] {
+        _imp->scaffolding.insert(proof.emit_proof_line(all + " >= " + k + " : " + name + " -> 0 ;"));
+        _imp->scaffolding.insert(proof.emit_proof_line(not_all + " >= 1 : " + name + " -> 1 ;"));
+    });
+    _imp->conjunctions.emplace(literals, name);
+    return name;
+}
+
+auto DecompositionProof::restrict_by_degree(int v, int t, const vector<int> & w) -> void
+{
+    if (! _imp->degree_restrictions.emplace(v, t, w).second)
+        return;
+
+    // The adjacency rows for v at t, one per neighbour in w, say that each of them goes to
+    // a neighbour of t. Injectivity on each non-hub neighbour of t, and each neighbour's
+    // being off the hubs, cancel all of those, and what is left says that v is not at t,
+    // or some neighbour is on a hub. (A target loop at t lets t count as a neighbour of
+    // itself here, but injectivity on t also cancels v being there, so it comes out even.)
+    auto & proof = *_imp->proof;
+    auto x = [&](int p, int u) { return "x" + proof.variable_name(p, u); };
+    string pol = "pol";
+    set<long> permitted;
+    bool first = true;
+    for (auto n : w) {
+        auto [label, row] = _imp->hom_proofs->model_adjacency(v, n, t);
+        pol += " " + label + (first ? "" : " +");
+        first = false;
+        permitted.insert(row.begin(), row.end());
+    }
+    bool some_hub = false;
+    for (auto u : permitted) {
+        if (_imp->is_hub[u])
+            some_hub = true;
+        else
+            pol += " " + proof.injectivity_label(u) + " +";
+    }
+    string conclusion = "ia 1 ~" + x(v, t);
+    for (auto n : w) {
+        if (some_hub)
+            pol += " " + to_string(_imp->off_hubs.at(n).second) + " +";
+        conclusion += " 1 ~" + _imp->off_hubs.at(n).first;
+    }
+    proof.at_level_zero([&] {
+        auto sum = proof.emit_proof_line(pol + " s ;");
+        _imp->scaffolding.insert(proof.emit_proof_line(conclusion + " >= 1 : " + to_string(sum) + " ;"));
+        _imp->scaffolding.insert(sum);
+    });
+}
+
+auto DecompositionProof::rule_out(int v, int t) -> void
+{
+    if (_imp->ruled_out.emplace(v, t).second)
+        _imp->proof->at_level_zero([&] { _imp->scaffolding.insert(_imp->proof->emit_proof_line(unit("~" + assignment(v, t)))); });
+}
+
+auto DecompositionProof::hub_too_small(int v, int h) -> void
+{
+    if (! _imp->hubs_too_small.emplace(v, h).second)
+        return;
+
+    // as for restrict_by_degree, but with every neighbour, and every neighbour of h
+    auto & proof = *_imp->proof;
+    auto & pattern = *_imp->pattern;
+    string pol = "pol";
+    set<long> permitted;
+    bool first = true;
+    for (int n = 0; n < pattern.size(); ++n)
+        if (n != v && pattern.adjacent(v, n)) {
+            auto [label, row] = _imp->hom_proofs->model_adjacency(v, n, h);
+            pol += " " + label + (first ? "" : " +");
+            first = false;
+            permitted.insert(row.begin(), row.end());
+        }
+    for (auto u : permitted)
+        pol += " " + proof.injectivity_label(u) + " +";
+    proof.at_level_zero([&] {
+        auto sum = proof.emit_proof_line(pol + " s ;");
+        _imp->scaffolding.insert(proof.emit_proof_line("ia 1 ~x" + proof.variable_name(v, h) + " >= 1 : " + to_string(sum) + " ;"));
+        _imp->scaffolding.insert(sum);
+    });
+}
+
+auto DecompositionProof::too_many_off_hubs(const vector<int> & vertices) -> void
+{
+    // each vertex goes somewhere, on a hub only if it is not off the hubs, and each
+    // non-hub takes at most one of them
+    auto & proof = *_imp->proof;
+    string pol = "pol";
+    bool first = true;
+    for (auto v : vertices) {
+        pol += " " + proof.at_least_one_value_label(v) + (first ? "" : " +");
+        first = false;
+        pol += " " + to_string(_imp->off_hubs.at(v).second) + " +";
+    }
+    for (int t = 0; t < _imp->target->size(); ++t)
+        if (! _imp->is_hub[t])
+            pol += " " + proof.injectivity_label(t) + " +";
+    proof.at_level_zero([&] { _imp->scaffolding.insert(proof.emit_proof_line(pol + " ;")); });
+}
+
+auto DecompositionProof::fold_guess(int gate) -> string
+{
+    auto & proof = *_imp->proof;
+    auto g = counting_gate_name(gate);
+    auto fold = "hfold" + to_string(++_imp->number_of_guess_folds);
+    proof.at_level_zero([&] {
+        if (_imp->guess_fold) {
+            _imp->scaffolding.insert(proof.emit_proof_line("red 1 ~" + fold + " 1 " + *_imp->guess_fold + " 1 " + g + " >= 1 : " + fold + " -> 0 ;"));
+            _imp->scaffolding.insert(proof.emit_proof_line("red 2 " + fold + " 1 ~" + *_imp->guess_fold + " 1 ~" + g + " >= 2 : " + fold + " -> 1 ;"));
+        }
+        else {
+            _imp->scaffolding.insert(proof.emit_proof_line("red 1 ~" + fold + " 1 " + g + " >= 1 : " + fold + " -> 0 ;"));
+            _imp->scaffolding.insert(proof.emit_proof_line("red 1 " + fold + " 1 ~" + g + " >= 1 : " + fold + " -> 1 ;"));
+        }
+    });
+    _imp->guess_fold = fold;
+    return fold;
+}
+
 auto DecompositionProof::refute_glued_leaf(int leaf, const vector<int> & cubes) -> void
 {
     if (! _imp->refuted_leaves.insert(leaf).second)
         return;
     for (auto & c : cubes)
-        derive("~" + counting_gate_name(c));
+        if (_imp->derived_units.insert("~" + counting_gate_name(c)).second)
+            derive("~" + counting_gate_name(c));
     derive("~" + counting_gate_name(leaf));
 }
 
@@ -220,26 +435,36 @@ auto DecompositionProof::finish(const Structure & structure) -> void
 
     proof.emit_proof_directive("core id " + to_string(structure.root_line) + " ;");
 
-    // Every adjacency row goes by unit propagation from the root: it reaches the leaf of
-    // the component, every cube of which the negated row falsifies.
+    // Every adjacency row goes by unit propagation from the root: under the negated row,
+    // every guess fails, either because it puts a vertex somewhere the row rules out, or
+    // because the row falsifies every cube of some component's leaf.
     proof.emit_proof_directive("% the root implies adjacency");
     for (auto & label : _imp->hom_proofs->model_adjacency_labels())
         proof.emit_proof_directive("del id " + label + " ;");
 
-    // Each injectivity row: for each pair of pattern vertices, not both at t. Within a
-    // component, every cube separates them. Across components, the collision lemma: if
+    // Each injectivity row: for each pair of pattern vertices, not both at t. Every guess
+    // puts at most one vertex on each hub and keeps the rest off them, and within a
+    // component, every cube separates them. That leaves two vertices in different
+    // components of what some guess leaves off the hubs, which is the collision lemma: if
     // they collide, then whichever pair of cubes holds completes a cube of some overlap ρ,
-    // so ρ's product holds, and so either ρ does, or one of ρ's own overlaps does. Every one
-    // of those is an overlap of the root, which the root says do not hold, so unit
+    // so ρ's product holds, and so either ρ does, or one of ρ's own overlaps does. Every
+    // one of those is an overlap of the guess, which the guess says do not hold, so unit
     // propagation finds the contradiction once the pair of cubes is fixed. Then recover
     // the at most one from the pairs.
-    vector<int> component_of(pattern.size());
-    vector<int> position_of(pattern.size());
-    for (unsigned c = 0; c < structure.components.size(); ++c)
-        for (unsigned i = 0; i < structure.components[c].vertices.size(); ++i) {
-            component_of[structure.components[c].vertices[i]] = c;
-            position_of[structure.components[c].vertices[i]] = i;
-        }
+    struct Where
+    {
+        vector<int> component_of, position_of;
+    };
+    vector<Where> where;
+    for (auto & guess : structure.guesses) {
+        Where w{vector<int>(pattern.size(), -1), vector<int>(pattern.size(), -1)};
+        for (unsigned c = 0; c < guess.components.size(); ++c)
+            for (unsigned i = 0; i < guess.components[c].vertices.size(); ++i) {
+                w.component_of[guess.components[c].vertices[i]] = c;
+                w.position_of[guess.components[c].vertices[i]] = i;
+            }
+        where.push_back(std::move(w));
+    }
 
     proof.emit_proof_directive("% the root implies injectivity");
     for (int t = 0; t < target.size(); ++t) {
@@ -252,23 +477,23 @@ auto DecompositionProof::finish(const Structure & structure) -> void
         proof.emit_proof_directive("del id " + label + " : : subproof");
         auto negated = "@neg" + to_string(t);
         proof.emit_proof_line(negated + " pol -1 ;");
-        auto b = structure.overlaps ? vector<string>{g(*structure.overlaps)} : vector<string>{};
-        auto with_b = [&](vector<string> literals) {
-            literals.insert(literals.end(), b.begin(), b.end());
-            return literals;
-        };
 
         auto pair_label = [&](int u, int v) { return "@p" + to_string(t) + "_" + to_string(u) + "_" + to_string(v); };
         for (int u = 0; u < pattern.size(); ++u)
             for (int v = u + 1; v < pattern.size(); ++v) {
-                if (component_of[u] != component_of[v]) {
-                    auto & k1 = structure.components[component_of[u]];
-                    auto & k2 = structure.components[component_of[v]];
+                for (unsigned gi = 0; gi < structure.guesses.size(); ++gi) {
+                    auto & guess = structure.guesses[gi];
+                    auto & w = where[gi];
+                    if (w.component_of[u] == -1 || w.component_of[v] == -1 || w.component_of[u] == w.component_of[v])
+                        continue;
+                    auto not_guess = "~" + g(guess.gate);
+                    auto & k1 = guess.components[w.component_of[u]];
+                    auto & k2 = guess.components[w.component_of[v]];
                     for (unsigned i = 0; i < k1.cubes.size(); ++i) {
-                        if (k1.embeddings[i][position_of[u]] != t)
+                        if (k1.embeddings[i][w.position_of[u]] != t)
                             continue;
                         for (unsigned j = 0; j < k2.cubes.size(); ++j) {
-                            if (k2.embeddings[j][position_of[v]] != t)
+                            if (k2.embeddings[j][w.position_of[v]] != t)
                                 continue;
                             // the overlap these two cubes complete, gluing every pair
                             // of their vertices that share an image
@@ -284,17 +509,18 @@ auto DecompositionProof::finish(const Structure & structure) -> void
                                 glued.insert(w1);
                                 glued.insert(w2);
                             }
-                            for (int w = 0; w < pattern.size(); ++w)
-                                if (! glued.contains(w))
-                                    partition.push_back({w});
+                            for (auto & k : guess.components)
+                                for (auto z : k.vertices)
+                                    if (! glued.contains(z))
+                                        partition.push_back({z});
                             std::sort(partition.begin(), partition.end());
-                            if (! structure.overlaps_by_partition.contains(partition))
+                            if (! guess.overlaps_by_partition.contains(partition))
                                 throw ProofError{"two cubes collide in an overlap that has no node"};
-                            proof.emit_proof_line(join(with_b({"~" + g(structure.product), "~" + g(k1.cubes[i]), "~" + g(k2.cubes[j])})));
+                            proof.emit_proof_line(join({not_guess, "~" + g(k1.cubes[i]), "~" + g(k2.cubes[j])}));
                         }
-                        proof.emit_proof_line(join(with_b({"~" + g(structure.product), "~" + g(k1.cubes[i]), "~" + y(v, t)})));
+                        proof.emit_proof_line(join({not_guess, "~" + g(k1.cubes[i]), "~" + y(v, t)}));
                     }
-                    proof.emit_proof_line(join(with_b({"~" + g(structure.product), "~" + y(u, t), "~" + y(v, t)})));
+                    proof.emit_proof_line(join({not_guess, "~" + y(u, t), "~" + y(v, t)}));
                 }
                 proof.emit_proof_line(pair_label(u, v) + " " + join({"~" + x(u, t), "~" + x(v, t)}));
             }

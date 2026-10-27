@@ -4,10 +4,9 @@ A design plan for counting subgraph embeddings by decomposition, following Secti
 Jessica Ryan's PhD thesis, and for certifying those counts with VeriPB without enumerating
 the solutions. This is forward-looking: it describes where the code is going, not where it
 is. The algorithm exists in `gss/sip_decomposer.cc`, including the hub guesses (phase 3).
-It can state its argument as a counting statement (phase 1). Without hubs, it can also prove
-that the solver's encoding of the instance is equienumerable with that statement (phases 4
-and 5). The side-condition proofs and the pipeline (phase 6), and proofs with hubs, are
-still a plan. For the current architecture see
+It can state its argument as a counting statement (phase 1), and prove that the solver's
+encoding of the instance is equienumerable with that statement, with or without hubs (phases 4
+and 5). The side-condition proofs and the pipeline (phase 6) are still a plan. For the current architecture see
 [architecture.md](architecture.md); for proof logging see
 [proof-logging.md](proof-logging.md).
 
@@ -159,7 +158,7 @@ brief:
   `decomposition_coarsenings_considered`, and `decomposition_rejected_before_search = true`
   when the checks on the whole instance ruled it out.
 - It produces no mapping when counting. It allows proof logging only when writing a
-  statement, and then without hubs, unless they are asked for, which it refuses.
+  statement, and then makes the same choice of hubs as without it.
 - With `--decomposition-statement FILE` it also writes its argument as a counting
   statement; see phase 1 below.
 
@@ -588,10 +587,8 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
     10⁹ solutions) takes c = 1 and counts at once. A wider sweep of 400 random instances
     into small heavy-tailed targets, with c up to 6, also agreed with the plain solver
     and `count_statement` every time.
-  - Under proof logging there are no hubs, unless they are asked for, which is refused.
-    Proofs with hubs need each guess's search to run under its cube and its lists as
-    assumptions, and the side conditions to cover the guesses' disjointness. That belongs
-    with phases 5 and 6.
+  - Proofs with hubs came later, in phase 5. The side conditions still have to cover the
+    guesses' disjointness, which is phase 6.
   - Counting, on a 300-vertex preferential-attachment graph (maximum degree 43), and on a
     120-vertex G(n, 0.06):
 
@@ -662,7 +659,7 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
   quotients, which have no nodes, need a counting argument instead.
 - Done when: `EQUIENUMERABLE` verifies end to end against the counter's file, for c = 0
   and then c > 0.
-- Status: done for c = 0.
+- Status for c = 0: done.
   - The proof now ends with `output EQUIENUMERABLE FILE` against `count_statement --opb`'s
     file. VeriPB accepts it with `--force-checked-deletion`.
   - After the root (phase 4):
@@ -706,6 +703,90 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
     loopy instances. The loop-cancelled rows now have labels of their own (`…_loopfree`),
     which the adjacency cache points at.
 
+- Status for c > 0: done, but certificates on the instances where hubs win are too big to
+  check (see the sizes below).
+  - The proof walks the same tree of guesses as `for_each_guess`. The decisions at a node
+    are literals, each saying that a pattern vertex is on some hub (x) or on none of them
+    (`offhubv`, defined as the and of v's negated hub literals). Each node derives "not
+    all of these, or the fold so far", where the fold is over the guesses' gates in the
+    order they are written, f_k ↔ f_{k−1} ∨ G_k, as in a component search.
+    - At a leaf with embeddings, this is unit propagation through the guess's gate: its
+      cube from the decisions, its rest's leaves from their searches, and its rest's
+      overlaps from their glued leaves, which are refuted as for c = 0.
+    - At a leaf without, it is unit propagation from why there are none: a component's
+      search failed, or some vertex has no list, or more vertices are off the hubs than
+      there are non-hubs. The last needs a `pol`: each such vertex's at-least-one row and
+      `offhub` definition, plus injectivity on every non-hub.
+    - At any other node, it is unit propagation from the node's children. The vertex it
+      decides goes off the hubs, or onto a hub that the node either tried or can rule out.
+      A hub already in use, or not adjacent to the hub of a neighbour, goes by unit
+      propagation from the decisions. A hub without a loop, for a vertex with one, needs
+      its own one-line `rup`, because the adjacency row only conflicts once the
+      assignment is assumed. A hub with fewer neighbours than the vertex needs a degree
+      `pol`.
+
+    The root of the tree is the last fold as a unit, and the statement's root follows from
+    it.
+  - Each component of a guess's rest is searched under an *assumption*: a literal defined
+    as the and of its vertices' `offhub` literals and the decisions that put its
+    neighbours on hubs. The search depends on nothing else, so guesses that agree on it
+    share the search and its leaf.
+    - The nested solve carries the assumption's negation on every line it writes: its
+      nogoods, its solutions, its propagation failures, any value it rules out before
+      searching, and its conclusion (`NestedSolve::assumption`). It may then restrict its
+      initial domains to the lists, which is otherwise refused under proof.
+    - Unit propagation from the assumption gives the hub and hub-adjacency parts of the
+      lists. The degree part needs a `pol` for each vertex and target vertex it removes.
+      It sums the adjacency rows for the vertex's off-hub neighbours, injectivity on the
+      target vertex's non-hub neighbours, and the neighbours' `offhub` definitions. That
+      gives "not there, or some neighbour is on a hub", which guesses also share.
+  - All of this is scaffolding: derived, never in the core, and deleted once the root is
+    derived.
+  - Root ⇒ input is as for c = 0, except that the collision lemma is per guess, with the
+    guess's gate in place of the root. Under a negated adjacency row, unit propagation
+    still falsifies every guess, so those rows still need no subproof.
+  - A loop-free adjacency row that an earlier nested solve derived is reused rather than
+    derived again under the same label, now that one component can be searched several
+    times.
+  - `decomposition_proof_sweep` now runs each instance twice: with the decomposer's own
+    choice of hubs, and with two hubs. A wider sweep agreed with the plain solver and
+    `count_statement`, and VeriPB accepted every proof. It had 480 instances: 60 seeds,
+    with and without loops, with c from 1 to 3 and the decomposer's own choice. Every kind
+    of new step came up in it.
+  - Each of ten planted bugs makes some of those 480 fail:
+    - no degree restrictions: 70;
+    - no pigeonhole `pol`: 194;
+    - no loop units: 7;
+    - no hub-degree `pol`: 2;
+    - propagation failures without the assumption: 20;
+    - nogoods without it: 341;
+    - no collision cases: 95;
+    - an `offhub` definition missing a hub: 360;
+    - leaving the hubs' literals out of a search's assumption: 271.
+
+    So does dropping a guess from the statement. On every instance where that changes the
+    count, VeriPB rejects the proof, not just `count_statement`'s disagreement with the
+    solver.
+  - Sizes, on the instances where decomposition beat the plain solver in the generated
+    sweep (2 blocks of 3 to 5 vertices, joined through 2 to 4 vertices):
+    - s17 into LV g25 (3 hubs, 748 guesses, 31,424,939 solutions) takes 242 s with proof
+      logging, against 7.4 s without. Its statement has 24.1M nodes, 1.7 GB, all but
+      8.6k of them cubes, and its proof is 15 GB. Of that:
+      - 6.1 GB defines the statement's gates;
+      - about 8 GB is the component searches, which found 12.7M embeddings between them
+        under the guesses' various assumptions;
+      - 1.5 GB is the collision cases.
+    - s3, s12 and s17 into LV g23 (2 × 10⁸ to 1.6 × 10⁹ solutions) each exceed a 20 GB
+      cap on the proof.
+
+    The cubes are the glued leaves' embeddings, written out one by one, so the
+    certificate is about as large as the enumeration the decomposition does, which here
+    is close to the number of solutions. That is inherent to leaves being plain
+    enumerations. The renaming node would share isomorphic leaves, but with lists those
+    are few: counting without a statement needed 2481 isomorphism classes where the
+    statement has 4990 quotients. A certificate that is small where decomposition wins
+    needs leaves whose counts are themselves certified some other way.
+
 ### Phase 6: side conditions, and the pipeline
 
 - Have the solver produce UNSAT proofs for the translator's side-condition instances.
@@ -729,5 +810,6 @@ Before building proof plumbing, settle the questions VeriPB has to answer:
   With a decision tree instead of pairwise exclusion, the side proof is about 10 to 20
   lines per statement node on small random instances.
 - How big do certificates get on instances where decomposition actually wins, compared
-  with enumeration proofs of the same counts?
+  with enumeration proofs of the same counts? On the generated instances where hubs win,
+  about as big as an enumeration (phase 5), because the glued leaves are enumerations.
 - When should the solver choose to decompose at all?

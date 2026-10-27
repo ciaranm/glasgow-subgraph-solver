@@ -171,7 +171,7 @@ auto HomomorphismProofs::propagation_failure(const std::vector<std::pair<int, in
     std::string line = "rup ";
     for (auto & [var, val] : decisions)
         line += " 1 ~x" + _proof->variable_name(var, val);
-    line += " >= 1 ;";
+    line += _proof->assumption_suffix() + " >= 1 ;";
     _proof->emit_proof_line(line);
 }
 
@@ -229,7 +229,7 @@ auto HomomorphismProofs::need_elimination(int p, int t) -> void
 {
     if (! _eliminations.contains(std::pair{p, t})) {
         _proof->emit_proof_directive("setlvl 0;");
-        _eliminations[std::pair{p, t}] = _proof->emit_proof_line("rup 1 ~x" + _proof->variable_name(p, t) + " >= 1 ;");
+        _eliminations[std::pair{p, t}] = _proof->emit_proof_line("rup 1 ~x" + _proof->variable_name(p, t) + _proof->assumption_suffix() + " >= 1 ;");
         _proof->emit_proof_directive("setlvl " + std::to_string(_proof->active_level()) + ";");
     }
 }
@@ -974,13 +974,17 @@ auto HomomorphismProofs::derive_loop_fixed_adjacencies() -> void
             continue;
         if (std::find(pit->second.begin(), pit->second.end(), t) == pit->second.end())
             continue; // t is not a neighbour of itself: no loop term to cancel
+        // An earlier nested solve over the same vertices may have derived this already,
+        // at level 0, where it is still there.
         auto loop_free = label + "_loopfree";
-        std::string line = loop_free + " rup 1 ~x" + _proof->variable_name(p, t);
-        for (auto & u : pit->second)
-            if (u != t)
-                line += " 1 x" + _proof->variable_name(q, u);
-        line += " >= 1 ;";
-        _proof->emit_proof_line(line);
+        if (! _proof->label_defined(loop_free)) {
+            std::string line = loop_free + " rup 1 ~x" + _proof->variable_name(p, t);
+            for (auto & u : pit->second)
+                if (u != t)
+                    line += " 1 x" + _proof->variable_name(q, u);
+            line += " >= 1 ;";
+            _proof->emit_proof_line(line);
+        }
         label = loop_free;
         // (The original loop-bearing constraint is now redundant, but it is left in place:
         // deleting it needs `del id <number>`, and that number does not correspond to the
@@ -1123,4 +1127,10 @@ auto HomomorphismProofs::forget_transient_supplemental_adjacencies() -> void
 auto HomomorphismProofs::model_adjacency_labels() const -> const std::vector<std::string> &
 {
     return _model_adjacency_labels;
+}
+
+auto HomomorphismProofs::model_adjacency(int p, int q, int t) const -> std::pair<std::string, std::vector<long>>
+{
+    std::tuple<long, long, long, long> key{0, p, q, t};
+    return {_adjacency.labels.at(key), _adjacency.permitted.at(key)};
 }

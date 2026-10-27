@@ -694,10 +694,4 @@ TEST_CASE("decomposition hubs are refused where they cannot be used")
     directed.add_directed_edge(0, 1, "");
     directed.add_directed_edge(1, 2, "");
     CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, directed, params, DecompositionOptions{nullptr, 1}), UnsupportedConfiguration);
-
-    // not with proof logging, yet, which has no hubs unless asked
-    auto proving = counting_params();
-    proving.proof_options = ProofOptions{};
-    stringstream out;
-    CHECK_THROWS_AS(solve_sip_by_decomposition(pattern, target, proving, DecompositionOptions{&out, 1}), UnsupportedConfiguration);
 }
