@@ -21,6 +21,7 @@ add_library(glasgow_subgraphs
         innards/cheap_all_different.cc
         innards/clique_size_constraints.cc
         innards/decomposition_proof.cc
+        innards/split_proof.cc
         innards/filter_activations.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc

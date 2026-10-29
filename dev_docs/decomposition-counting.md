@@ -193,7 +193,8 @@ Known limits:
 
 `HomomorphismParams::split_components` (the hidden `--split-components S`) is a second way
 of not multiplying across components, which works inside the ordinary search rather than
-before it. It is not Ryan's algorithm, and it has no proofs yet.
+before it. It is not Ryan's algorithm. With `--prove` and `--split-statement FILE` it writes
+a counting statement as it goes, and proves the count by it (see [Proofs](#proofs) below).
 
 ### What it does
 
@@ -267,8 +268,9 @@ this, some instances filled 12 GB in well under the timeout. The searcher report
 ### Restrictions and testing
 
 It is refused, rather than silently disabled, with induced mappings, less-constraints,
-threads, restarts, staging, proof logging, an enumerate callback, or when not counting; see
-[option-compatibility.md](option-compatibility.md).
+threads, restarts, staging, an enumerate callback, or when not counting; and with proof
+logging, unless there is a counting statement to prove, under local injectivity, or in a
+nested solve. See [option-compatibility.md](option-compatibility.md).
 
 `random_homomorphism_test.cc` checks it against the brute-force oracle on the oracle's
 instances, and against plain counting on 1,600 sparser instances with up to 8 pattern
@@ -285,6 +287,71 @@ when finding components; ordering by component number rather than by search posi
 swapping where a combined key comes from; and leaving the domains or the relevance out of
 either cache key. The weakest of these is leaving the enclosing relevance out of the split
 cache's key, which only two of the test's checks catch.
+
+### Proofs
+
+With a statement, the proof does not log solutions. Instead the search builds the statement
+as it goes (`gss/innards/split_proof.cc`), and derives that every solution lies in its root;
+then, as in phase 5 below, that the root implies the encoding, so that the two are
+equienumerable. The statement mirrors the search:
+
+- A search node's node is the `or`, over its children, of the `and` of a cube for what the
+  child's decision assigned (the decision and its propagation) with the child's node. A
+  solution is just its cube. With a tally, a node has one such `or` per signature.
+- A split's component searches are proved under an assumption of their own, a fresh
+  literal `sa<k>` defined to mean that none of the values outside the component's domains
+  are taken, in place of the decisions above the split. So a component's result is a
+  level-0 fact, `~sa<k>` or one of its entries' nodes, and a cached result can be used
+  again wherever the domains are the same. The split itself has such an assumption for
+  all its vertices, which implies each component's by unit propagation.
+- Combining two tables makes, for each new entry, the `or` of the `and`s of its pairs. The
+  proof then derives, for each left entry, that under the split's assumption it goes into
+  one of its new entries: each compatible right entry by the pair's definition, and each
+  colliding one by injectivity. That last needs to know where both entries put the
+  vertices they collide on. When either entry is a cube or an `and` of cubes, unit
+  propagation sees it; when both are `or`s, it cannot, so each entry's node gets a
+  *signature lemma* `~g ∨ y_v_t` for each recorded image, derived when the entry is made.
+  Only two fixed instances in `test-instances/split` need these, found by searching 2,000
+  random instances for a collision between two `or`s; without the lemmas the random part
+  of the sweep still verifies.
+- A split's result, regrouped by the enclosing tally's signature, goes back to the search
+  node as that node's entries.
+
+Every node's gate is defined into the core, both ways, when the node is written: VeriPB
+checks a definition's `red` against the derived constraints too, so the downward rows
+cannot be added later, once the search has derived things about the gate. At the end, the
+root is derived, the adjacency and injectivity constraints are deleted as implied by it
+(injectivity a pair at a time, then summed into the at-most-ones), and the `x` variables
+are swapped for the statement's `y` in the preserved set, as in phase 5. With no
+solutions there is no statement, and the proof ends as an ordinary enumeration of zero
+solutions; the statement file is removed then, and on a timeout, as for `--decomposition`.
+
+`test-instances/split_proof_sweep.bash` (ctest `split_proof_sweep`) checks the count, the
+statement's count and the proof on 150 small random instances, half of which split, and
+the two fixed ones. Mutations that leave out a child's cube or the signature lemmas are
+caught. A larger ad hoc sweep of 600 instances up to 9 pattern vertices verified all but
+11, which took VeriPB longer than 600 s.
+
+On the benchmark instances, the eight si and LV instances tried, with targets of 200 or 280
+vertices and up to 280 million solutions, take 3 to 4 s to solve with proofs and give
+proofs of 100 to 220 MB. VeriPB verifies six of them in 26 s to 86 min, and had not
+finished the other two after 3 h. Checking time follows the number of search nodes (135 for
+the 91 s one, 4,208 for the 86 min one) rather than the proof's size. Plain proofs of
+instances like these can be as slow, where the supplemental graphs make each RUP step
+expensive; on top of that, here a search step's unit propagation runs through every gate
+definition written so far, so checking is quadratic in the size of the search. Deleting
+injectivity needs a step per pair of pattern vertices per target vertex, which is about
+half of each of these proofs.
+
+Not done yet:
+
+- The statements' `or`s are disjoint, but only those over cubes are discharged
+  syntactically, so `count_statement` reports side conditions: 780 to 3,654 on the
+  benchmark instances. The decision `or`s differ on the decision's variable, so a counter
+  that looked through `and`s for a variable fixed differently in each pair of children
+  would discharge those. The combining and regrouping `or`s differ on an entry's
+  signature, where −1 fixes nothing, so some of those would need more.
+- Local injectivity, and nested solves.
 
 ### Complexity
 

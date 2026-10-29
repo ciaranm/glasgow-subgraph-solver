@@ -100,6 +100,7 @@ struct Proof::Imp
     optional<OuterNumbering> outer;
     optional<NestedSolve> nested;
     optional<string> guard;
+    optional<string> split_assumption;
     vector<long> nested_scratch_lines;
     optional<long> nested_conclusion;
     int number_of_nested_solves = 0;
@@ -1219,7 +1220,15 @@ auto Proof::label_defined(const string & label) const -> bool
 
 auto Proof::assumption_suffix() const -> string
 {
-    return under_assumption() ? " 1 ~" + *_imp->nested->assumption : "";
+    if (under_assumption())
+        return " 1 ~" + *_imp->nested->assumption;
+    return _imp->split_assumption ? " 1 ~" + *_imp->split_assumption : "";
+}
+
+auto Proof::set_split_assumption(optional<string> assumption) -> optional<string>
+{
+    std::swap(assumption, _imp->split_assumption);
+    return assumption;
 }
 
 auto Proof::under_assumption() const -> bool

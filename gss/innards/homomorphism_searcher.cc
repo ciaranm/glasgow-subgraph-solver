@@ -1,12 +1,16 @@
 #include <gss/innards/cheap_all_different.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_searcher.hh>
+#include <gss/innards/proof.hh>
+#include <gss/innards/split_proof.hh>
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <tuple>
 #include <unordered_map>
 
 using namespace gss;
@@ -41,6 +45,9 @@ namespace
 
     using TallyCounts = std::unordered_map<vector<int>, loooong, TallyKeyHash>;
 
+    // With a counting statement, the statement node for each entry of a tally or table.
+    using TallyGates = std::unordered_map<vector<int>, int, TallyKeyHash>;
+
     // A split's subproblem, as a cache key: see split_into_components.
     using CacheKey = vector<unsigned long long>;
 
@@ -70,6 +77,20 @@ namespace gss::innards
     {
         vector<unsigned> layout;
         TallyCounts combined;
+
+        // With a counting statement: each entry's node, and the assumption that the split's
+        // vertices stay within their domains, under which the entries' nodes cover every
+        // solution.
+        TallyGates gates;
+        string assumption;
+    };
+
+    // A component's tally, and with a counting statement, as for SplitResult.
+    struct ComponentResult
+    {
+        TallyCounts counts;
+        TallyGates gates;
+        string assumption;
     };
 
     // A split's result, and a component's tally, depend only on the domains of the vertices
@@ -78,7 +99,7 @@ namespace gss::innards
     struct SplitCaches
     {
         std::unordered_map<CacheKey, SplitResult, CacheKeyHash> splits;
-        std::unordered_map<CacheKey, TallyCounts, CacheKeyHash> components;
+        std::unordered_map<CacheKey, ComponentResult, CacheKeyHash> components;
         unsigned long long split_hits = 0, component_hits = 0;
 
         // Roughly what the caches hold, and how many times they have been emptied for
@@ -158,11 +179,56 @@ HomomorphismSearcher::~HomomorphismSearcher() = default;
 
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
 {
+    // inside a split's component search, only the decisions it made itself
     vector<pair<int, int>> trail;
-    for (auto & a : assignments.values)
-        if (a.is_decision)
-            trail.emplace_back(a.assignment.pattern_vertex, a.assignment.target_vertex);
+    for (auto i = _decision_base; i < assignments.values.size(); ++i)
+        if (assignments.values[i].is_decision)
+            trail.emplace_back(assignments.values[i].assignment.pattern_vertex, assignments.values[i].assignment.target_vertex);
     return trail;
+}
+
+auto HomomorphismSearcher::statement_line(const HomomorphismAssignments & assignments, const vector<string> & literals) -> long
+{
+    string line = "rup";
+    for (auto & [v, t] : assignments_as_proof_decisions(assignments))
+        line += " 1 ~x" + proof->variable_name(v, t);
+    line += proof->assumption_suffix();
+    for (auto & l : literals)
+        line += " 1 " + l;
+    return proof->emit_proof_line(line + " >= 1 ;");
+}
+
+auto HomomorphismSearcher::set_split_proof(SplitProof * split_proof) -> void
+{
+    _split_proof = split_proof;
+}
+
+auto HomomorphismSearcher::statement_entries() const -> const StatementEntries &
+{
+    return _entries;
+}
+
+auto HomomorphismSearcher::add_contributions(const HomomorphismAssignments & assignments, std::size_t assignments_size,
+    std::map<vector<int>, vector<int>> & contributions) -> void
+{
+    // The child's line has gone with its level, so this is the child's line again, one
+    // decision up, with each of the child's nodes behind what the child assigned. The
+    // decisions give those values by unit propagation.
+    auto child_entries = move(_entries);
+    _entries.clear();
+    vector<string> gates;
+    if (! child_entries.empty()) {
+        vector<pair<int, int>> assigned;
+        for (auto i = assignments_size; i < assignments.values.size(); ++i)
+            assigned.emplace_back(assignments.values[i].assignment.pattern_vertex, assignments.values[i].assignment.target_vertex);
+        auto cube = _split_proof->cube(assigned);
+        for (auto & [key, node] : child_entries) {
+            auto contribution = -1 == node ? cube : _split_proof->conjunction({cube, node});
+            contributions[key].push_back(contribution);
+            gates.push_back(_split_proof->gate(contribution));
+        }
+    }
+    statement_line(assignments, gates);
 }
 
 auto HomomorphismSearcher::solution_in_proof_form(const HomomorphismAssignments & assignments) const -> vector<pair<NamedVertex, NamedVertex>>
@@ -243,10 +309,14 @@ auto HomomorphismSearcher::restarting_search(
                 if (auto i = _tally->index_of(a.assignment.pattern_vertex))
                     key[*i] = _tally->image(*i, int(a.assignment.target_vertex));
             ++_tally->counts[key];
+            if (_split_proof)
+                _entries = {{key, -1}};
             return SearchResult::SatisfiableButKeepGoing;
         }
 
-        if (proof)
+        if (_split_proof)
+            _entries = {{{}, -1}};
+        else if (proof)
             proof->post_solution(solution_in_proof_form(assignments));
 
         if (params.count_solutions) {
@@ -305,6 +375,11 @@ auto HomomorphismSearcher::restarting_search(
 
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
+
+    // With a counting statement: for each signature, the statement nodes for each child
+    // with solutions of that signature, each the child's newly assigned values and then
+    // what lies below the child.
+    std::map<vector<int>, vector<int>> contributions;
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
@@ -367,7 +442,12 @@ auto HomomorphismSearcher::restarting_search(
             return SearchResult::Restart;
 
         case SearchResult::SatisfiableButKeepGoing:
-            if (proof) {
+            if (_split_proof) {
+                proof->back_up_to_level(depth + 1);
+                add_contributions(assignments, assignments_size, contributions);
+                proof->forget_level(depth + 2);
+            }
+            else if (proof) {
                 proof->back_up_to_level(depth + 1);
                 proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
                 proof->forget_level(depth + 2);
@@ -378,7 +458,12 @@ auto HomomorphismSearcher::restarting_search(
             break;
 
         case SearchResult::Unsatisfiable:
-            if (proof) {
+            if (_split_proof) {
+                proof->back_up_to_level(depth + 1);
+                add_contributions(assignments, assignments_size, contributions);
+                proof->forget_level(depth + 2);
+            }
+            else if (proof) {
                 proof->back_up_to_level(depth + 1);
                 proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
                 proof->forget_level(depth + 2);
@@ -394,7 +479,17 @@ auto HomomorphismSearcher::restarting_search(
     }
 
     // no values remaining, backtrack, or possibly kick off a restart
-    if (proof)
+    if (_split_proof) {
+        // every solution below here lies in one of these, one per signature
+        _entries.clear();
+        vector<string> gates;
+        for (auto & [key, nodes] : contributions) {
+            _entries.emplace_back(key, _split_proof->disjunction(nodes));
+            gates.push_back(_split_proof->gate(_entries.back().second));
+        }
+        statement_line(assignments, gates);
+    }
+    else if (proof)
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
     if (actually_hit_a_failure)
@@ -531,15 +626,42 @@ auto HomomorphismSearcher::split_into_components(
     if (_tally)
         ++_nested_splits;
 
-    // Hand a result to the enclosing tally, or at the top, to the count.
+    // With a counting statement, the literal for this split's vertices staying within their
+    // domains: the split's result is proved under it, so that a cached result can be used
+    // wherever the domains are the same.
+    auto domain_assumption = [&](const vector<const HomomorphismDomain *> & which) -> string {
+        vector<pair<int, int>> excluded;
+        for (auto * d : which)
+            for (unsigned t = 0; t < model.target_size; ++t)
+                if (! d->values.test(t))
+                    excluded.emplace_back(d->v, t);
+        return _split_proof->assumption(excluded);
+    };
+
+    // Hand a result to the enclosing tally, or at the top, to the count. With a counting
+    // statement, also hand back the statement's nodes, by the enclosing tally's signature,
+    // and derive that the decisions lead to one of them.
     auto deliver = [&](const SplitResult & result) -> SearchResult {
-        if (result.combined.empty())
+        if (_split_proof) {
+            statement_line(assignments, {result.assumption});
+            _entries.clear();
+        }
+
+        if (result.combined.empty()) {
+            if (_split_proof)
+                statement_line(assignments, {});
             return SearchResult::Unsatisfiable;
+        }
 
         if (! enclosing) {
             // layout is empty, and so combined has the one entry
             for (auto & [_, count] : result.combined)
                 solution_count += count;
+            if (_split_proof) {
+                auto node = result.gates.begin()->second;
+                _entries = {{{}, node}};
+                statement_line(assignments, {_split_proof->gate(node)});
+            }
         }
         else {
             // The enclosing tally's vertices are either assigned already, or in layout.
@@ -550,10 +672,21 @@ auto HomomorphismSearcher::split_into_components(
             vector<unsigned> layout_to_enclosing;
             for (auto v : result.layout)
                 layout_to_enclosing.push_back(*enclosing->index_of(v));
+            std::map<vector<int>, vector<int>> nodes;
             for (auto & [combined_key, count] : result.combined) {
                 for (unsigned k = 0; k < result.layout.size(); ++k)
                     key[layout_to_enclosing[k]] = enclosing->image(layout_to_enclosing[k], combined_key[k]);
                 enclosing->counts[key] += count;
+                if (_split_proof)
+                    nodes[key].push_back(result.gates.at(combined_key));
+            }
+            if (_split_proof) {
+                vector<string> gates;
+                for (auto & [k, n] : nodes) {
+                    _entries.emplace_back(k, _split_proof->disjunction(n));
+                    gates.push_back(_split_proof->gate(_entries.back().second));
+                }
+                statement_line(assignments, gates);
             }
         }
 
@@ -618,18 +751,37 @@ auto HomomorphismSearcher::split_into_components(
     };
 
     SplitResult result;
+    if (_split_proof)
+        result.assumption = domain_assumption(by_vertex);
+
+    // With a counting statement, for each entry, that its node puts each recorded vertex
+    // where the entry says, by unit propagation through the node's definition. The
+    // combining needs these to see which pairs of entries collide.
+    auto derive_signatures = [&](const TallyGates & gates, const vector<unsigned> & vertices) {
+        vector<std::tuple<int, int, int>> lemmas;
+        for (auto & [key, node] : gates)
+            for (unsigned i = 0; i < key.size(); ++i)
+                if (-1 != key[i])
+                    lemmas.emplace_back(node, vertices[i], key[i]);
+        _split_proof->derive_signatures(lemmas);
+    };
 
     // Count each component on its own, into its own tally, and combine the tallies into
     // result. Returns false if aborted, and leaves result empty if there are no solutions.
+    // With a counting statement, also derive that under the split's assumption, its
+    // solutions lie in one of result's nodes.
     auto count_and_combine = [&]() -> bool {
         vector<ComponentTally> tallies(n_components);
+        vector<TallyGates> tally_gates(n_components);
         for (int s = 0; s < n_components; ++s) {
             int c = order[s];
             auto & tally = tallies[s];
             Domains component_domains;
+            vector<const HomomorphismDomain *> component_vertices;
             for (auto * d : by_vertex)
                 if (component[d->v] == c) {
                     component_domains.push_back(*d);
+                    component_vertices.push_back(d);
                     if (enclosing_index(d->v) || shared[index_in_unassigned[d->v]])
                         tally.vertices.push_back(d->v);
                 }
@@ -655,12 +807,30 @@ auto HomomorphismSearcher::split_into_components(
 
             if (auto cached = _split_caches->components.find(component_key); cached != _split_caches->components.end()) {
                 ++_split_caches->component_hits;
-                tally.counts = cached->second;
+                tally.counts = cached->second.counts;
+                tally_gates[s] = cached->second.gates;
             }
             else {
+                // The component's search makes its own decisions, under its own assumption,
+                // and ends having derived that under it, its solutions lie in one of its
+                // nodes. That goes to level 0, with each node's signature, to be cached.
+                ComponentResult searched;
+                optional<string> outer_assumption;
+                auto outer_base = _decision_base;
+                if (_split_proof) {
+                    searched.assumption = domain_assumption(component_vertices);
+                    outer_assumption = proof->set_split_assumption(searched.assumption);
+                    _decision_base = assignments.values.size();
+                }
+
                 _tally = &tally;
                 auto search_result = restarting_search(assignments, component_domains, nodes, propagations, solution_count, depth, restarts_schedule);
                 _tally = enclosing;
+
+                if (_split_proof) {
+                    proof->set_split_assumption(outer_assumption);
+                    _decision_base = outer_base;
+                }
 
                 switch (search_result) {
                 case SearchResult::Aborted:
@@ -674,12 +844,27 @@ auto HomomorphismSearcher::split_into_components(
                     throw std::logic_error{"split component search did not run to completion"};
                 }
 
+                if (_split_proof) {
+                    vector<string> conclusion{"~" + searched.assumption};
+                    for (auto & [key, node] : _entries) {
+                        tally_gates[s].emplace(key, node);
+                        conclusion.push_back(_split_proof->gate(node));
+                    }
+                    _split_proof->rup(conclusion, true);
+                    derive_signatures(tally_gates[s], tally.vertices);
+                    searched.gates = tally_gates[s];
+                }
+
+                searched.counts = tally.counts;
                 _split_caches->make_room(approximate_bytes(component_key, tally.counts, tally.vertices.size()), params.split_cache_limit);
-                _split_caches->components.emplace(move(component_key), tally.counts);
+                _split_caches->components.emplace(move(component_key), move(searched));
             }
 
-            if (tally.counts.empty())
+            if (tally.counts.empty()) {
+                if (_split_proof)
+                    _split_proof->rup({"~" + result.assumption}, true);
                 return true;
+            }
         }
 
         // Combine the tallies one component at a time, keeping in the key only the images
@@ -687,6 +872,10 @@ auto HomomorphismSearcher::split_into_components(
         vector<unsigned> layout;
         TallyCounts combined;
         combined.emplace(vector<int>{}, loooong{1});
+        // with a counting statement, -1 for the empty key's node, which is true
+        TallyGates combined_gates;
+        combined_gates.emplace(vector<int>{}, -1);
+        optional<long> combined_line;
         for (int s = 0; s < n_components; ++s) {
             auto & tally = tallies[s];
 
@@ -711,6 +900,10 @@ auto HomomorphismSearcher::split_into_components(
                 }
 
             TallyCounts next;
+            // with a counting statement, the pairs that make up each new entry, and the new
+            // entries each combined entry goes into
+            std::map<vector<int>, vector<int>> next_parts;
+            std::unordered_map<vector<int>, std::set<vector<int>>, TallyKeyHash> goes_into;
             vector<int> key(take.size());
             unsigned long long pairs_considered = 0;
             for (auto & [left_key, left_count] : combined)
@@ -731,7 +924,44 @@ auto HomomorphismSearcher::split_into_components(
                     for (unsigned k = 0; k < take.size(); ++k)
                         key[k] = take[k].first ? right_key[take[k].second] : left_key[take[k].second];
                     next[key].add_product(left_count, right_count);
+
+                    if (_split_proof) {
+                        auto left = combined_gates.at(left_key), right = tally_gates[s].at(right_key);
+                        next_parts[key].push_back(-1 == left ? right : _split_proof->conjunction({left, right}));
+                        goes_into[left_key].insert(key);
+                    }
                 }
+
+            if (_split_proof) {
+                // Each new entry's node is the or of its pairs. Then, for each combined entry,
+                // that under the assumption it goes into one of its new entries: every
+                // pair it is in is one of those, and every pair it is not in collides, by
+                // the two entries' signatures and injectivity. Then that the split's
+                // solutions so far lie in one of the new entries.
+                TallyGates next_gates;
+                for (auto & [k, parts] : next_parts)
+                    next_gates.emplace(k, _split_proof->disjunction(parts));
+                vector<long> steps;
+                for (auto & [left_key, left_node] : combined_gates) {
+                    vector<string> literals{"~" + result.assumption};
+                    if (-1 != left_node)
+                        literals.push_back("~" + _split_proof->gate(left_node));
+                    if (auto g = goes_into.find(left_key); g != goes_into.end())
+                        for (auto & k : g->second)
+                            literals.push_back(_split_proof->gate(next_gates.at(k)));
+                    steps.push_back(_split_proof->rup(literals, true));
+                }
+                vector<string> literals{"~" + result.assumption};
+                for (auto & [k, node] : next_gates)
+                    literals.push_back(_split_proof->gate(node));
+                auto line = _split_proof->rup(literals, true);
+                if (combined_line)
+                    steps.push_back(*combined_line);
+                _split_proof->forget(steps);
+                combined_line = line;
+                derive_signatures(next_gates, new_layout);
+                combined_gates = move(next_gates);
+            }
 
             if (next.empty())
                 return true;
@@ -742,6 +972,8 @@ auto HomomorphismSearcher::split_into_components(
 
         result.layout = move(layout);
         result.combined = move(combined);
+        if (_split_proof)
+            result.gates = move(combined_gates);
         return true;
     };
 

@@ -8,7 +8,9 @@
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/watches.hh>
 
+#include <cstddef>
 #include <functional>
+#include <map>
 #include <random>
 
 namespace gss::innards
@@ -75,6 +77,13 @@ namespace gss::innards
 
     struct ComponentTally;
     struct SplitCaches;
+    class SplitProof;
+
+    // With a counting statement (see SplitProof), what a search node hands back to its
+    // parent: for each signature of the solutions below it (empty when not inside a split's
+    // component), the statement node they lie in, over the vertices unassigned at the node,
+    // or -1 if there are none of those and the node is a solution.
+    using StatementEntries = std::vector<std::pair<std::vector<int>, int>>;
 
     class HomomorphismSearcher
     {
@@ -103,6 +112,23 @@ namespace gss::innards
         ComponentTally * _tally = nullptr;
         unsigned long long _splits = 0, _nested_splits = 0;
         std::unique_ptr<SplitCaches> _split_caches;
+
+        // With a counting statement: what the last search node returned, and where the
+        // decisions of the component search under way begin in the assignments, so that its
+        // lines mention only its own decisions and its assumption.
+        SplitProof * _split_proof = nullptr;
+        StatementEntries _entries;
+        std::size_t _decision_base = 0;
+
+        // "rup", the negated decisions, the assumption's negation if there is one, these
+        // literals, at the current level.
+        auto statement_line(const HomomorphismAssignments & assignments, const std::vector<std::string> & literals) -> long;
+
+        // After a child of a search node has returned, with the child's assignments still
+        // made: add its statement nodes to the node's, by signature, and derive that the
+        // child's decision leads to one of them.
+        auto add_contributions(const HomomorphismAssignments & assignments, std::size_t assignments_size,
+            std::map<std::vector<int>, std::vector<int>> & contributions) -> void;
 
         auto split_into_components(
             HomomorphismAssignments & assignments,
@@ -172,6 +198,11 @@ namespace gss::innards
         auto add_extra_stats(std::list<std::string> & stats) const -> void;
 
         auto set_seed(int n) -> void;
+
+        // Build a counting statement as the search goes, and prove it, instead of logging each
+        // solution. After a complete search, statement_entries() is the root's.
+        auto set_split_proof(SplitProof *) -> void;
+        auto statement_entries() const -> const StatementEntries &;
 
         // The nogood store is owned by the carried SolveState (sequential path) or
         // by a per-thread vector (threaded path), not by the searcher, so that

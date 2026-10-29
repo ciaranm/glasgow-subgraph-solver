@@ -178,6 +178,12 @@ namespace gss::innards
         [[nodiscard]] auto assumption_suffix() const -> std::string;
         [[nodiscard]] auto under_assumption() const -> bool;
 
+        // Outside a nested solve, a search that splits into components runs each
+        // component's search under an assumption of its own (see SplitProof). Every line
+        // that assumption_suffix() is appended to then carries its negation. Returns the
+        // assumption this replaces, so that it can be put back.
+        auto set_split_assumption(std::optional<std::string>) -> std::optional<std::string>;
+
         // when we're done
         auto finish_unsat_proof() -> void;
         auto finish_sat_proof() -> void;

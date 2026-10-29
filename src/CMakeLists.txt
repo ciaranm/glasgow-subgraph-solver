@@ -204,6 +204,16 @@ if(VERIPB_EXECUTABLE)
             $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
             $<TARGET_FILE:count_statement> ${CMAKE_CURRENT_BINARY_DIR}/decomposition_proof_sweep)
 
+    # Counting by splitting into components inside the search, with a statement and its
+    # proof ("Proofs", under "Splitting inside the search", in
+    # dev_docs/decomposition-counting.md):
+    # counts, statements and proofs on random sparse patterns, and two fixed instances
+    # that need the signature lemmas.
+    add_test(NAME split_proof_sweep
+        COMMAND ${CMAKE_SOURCE_DIR}/test-instances/split_proof_sweep.bash
+            $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
+            $<TARGET_FILE:count_statement> ${CMAKE_CURRENT_BINARY_DIR}/split_proof_sweep)
+
     # Randomised proof sweep: generate random instances and check the proof verifies
     # on each, across decision/induced/counting combinations. Catches proof-logging
     # bugs that fixed instances miss; complements the in-process correctness oracle in

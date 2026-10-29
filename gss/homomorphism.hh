@@ -151,6 +151,11 @@ namespace gss
         /// With split_components, roughly how many bytes the caches of split and component
         /// results may hold before they are emptied. Emptying them costs only time.
         unsigned long long split_cache_limit = 1ull << 30;
+
+        /// With split_components and proof_options, write a counting statement (see
+        /// dev_docs/counting-statements.md) to this file as the search goes, and prove that
+        /// the instance is equienumerable with it, instead of logging each solution.
+        std::optional<std::string> split_statement;
     };
 
     struct HomomorphismResult

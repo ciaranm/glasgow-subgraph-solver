@@ -41,7 +41,10 @@ apart matters:
 | a cycle in the `--pattern-less-than` constraints | Pattern less than constraints form a loop |
 | `--split-components` without counting | Splitting into components needs `--count-solutions` |
 | `--split-components` with `--print-all-solutions` or `--solution-limit` | …cannot print them or stop at a limit |
-| `--split-components` with proof logging | Proof logging cannot yet be used with splitting into components |
+| `--split-components` with proof logging, without `--split-statement` | Proof logging with splitting into components needs a counting statement |
+| `--split-components` with proof logging and `--locally-injective` | Proof logging cannot yet be used with splitting into components and local injectivity |
+| `--split-components` with proof logging, in a nested solve (library only) | …cannot be used in a nested solve |
+| `--split-statement` without both `--split-components` and `--prove` | `--split-statement needs --split-components and --prove` (the library: …needs proof logging) |
 | `--split-components` with `--induced` | …cannot be used with induced mappings |
 | `--split-components` with threads, restarts or `--staged` | …needs a sequential search without restarts |
 | `--split-components` with less-constraints | …cannot be used with less-constraints |
