@@ -139,6 +139,18 @@ namespace gss
         /// model and a proof of our own; the files in proof_options are then ignored. The
         /// proof must be in a nested solve (see innards::Proof::begin_nested_solve).
         std::shared_ptr<innards::Proof> nested_proof;
+
+        /// When counting, split the search wherever the unassigned pattern vertices fall
+        /// into two or more components, and the images that components could share have at
+        /// most this many combinations: count each component on its own, and combine the
+        /// counts. This bounds the size of every table the combining builds. Counting only,
+        /// and not yet with proof logging, induced mappings, threads, restarts,
+        /// less-constraints or an enumerate callback; see dev_docs/decomposition-counting.md.
+        std::optional<unsigned long long> split_components;
+
+        /// With split_components, roughly how many bytes the caches of split and component
+        /// results may hold before they are emptied. Emptying them costs only time.
+        unsigned long long split_cache_limit = 1ull << 30;
     };
 
     struct HomomorphismResult

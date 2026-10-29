@@ -705,6 +705,24 @@ auto gss::solve_homomorphism_problem(
     // might_have_watches. Under *proof* it is still unsupported, guarded with the other proof
     // restrictions below, because logging an enumeration across a restart is not yet handled.)
 
+    // Splitting into components counts each component's solutions without visiting the
+    // combinations, so it needs everything that relates two components to be a constraint it
+    // knows how to combine: that two images differ, and nothing else.
+    if (params.split_components) {
+        if (! params.count_solutions)
+            throw UnsupportedConfiguration{"Splitting into components needs --count-solutions"};
+        if (params.enumerate_callback)
+            throw UnsupportedConfiguration{"Splitting into components counts solutions without visiting them, so it cannot print them or stop at a limit"};
+        if (params.proof_options)
+            throw UnsupportedConfiguration{"Proof logging cannot yet be used with splitting into components"};
+        if (params.induced)
+            throw UnsupportedConfiguration{"Splitting into components cannot be used with induced mappings"};
+        if (1 != params.n_threads || params.staged || params.restarts_schedule->might_restart())
+            throw UnsupportedConfiguration{"Splitting into components needs a sequential search without restarts, use --restarts none and no --staged"};
+        if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
+            throw UnsupportedConfiguration{"Splitting into components cannot be used with less-constraints"};
+    }
+
     // start by setting up proof logging, if necessary
     shared_ptr<Proof> proof;
     if (params.proof_options) {

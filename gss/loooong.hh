@@ -112,6 +112,13 @@ namespace gss
             return *this;
         }
 
+        // *this += a * b, without a temporary
+        loooong & add_product(const loooong & a, const loooong & b)
+        {
+            mpz_addmul(value, a.value, b.value);
+            return *this;
+        }
+
         loooong & operator++()
         {
             mpz_add_ui(value, value, 1);

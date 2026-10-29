@@ -111,6 +111,8 @@ auto main(int argc, char * argv[]) -> int
             ("decomposition", "Use decomposition") //
             ("decomposition-statement", "With --decomposition, also write a counting statement to this file (see dev_docs/counting-statements.md)", cxxopts::value<string>()) //
             ("decomposition-hubs", "With --decomposition, guess pattern vertices onto this many of the target's highest-degree vertices (chosen automatically if not given)", cxxopts::value<int>()) //
+            ("split-components", "When counting, count each component of the unassigned pattern vertices on its own wherever the images that components could share have at most this many combinations", cxxopts::value<unsigned long long>()) //
+            ("split-cache-limit", "With --split-components, empty the caches of split results when they reach about this many bytes", cxxopts::value<unsigned long long>()) //
             ("cliques", "Use clique size constraints") //
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
             ("shape", "Specify an extra shape graph, as a CSV file with one vertex labelled from and one labelled to, and any other labels on the rest (slow, experimental, injective only)", cxxopts::value<std::vector<std::string>>(shapes)) //
@@ -383,6 +385,22 @@ auto main(int argc, char * argv[]) -> int
                 cerr << "Cannot write to " << *statement_file << endl;
                 return EXIT_FAILURE;
             }
+        }
+
+        if (options_vars.count("split-components")) {
+            if (options_vars.count("decomposition")) {
+                cerr << "--split-components cannot be used with --decomposition" << endl;
+                return EXIT_FAILURE;
+            }
+            params.split_components = options_vars["split-components"].as<unsigned long long>();
+        }
+
+        if (options_vars.count("split-cache-limit")) {
+            if (! options_vars.count("split-components")) {
+                cerr << "--split-cache-limit needs --split-components" << endl;
+                return EXIT_FAILURE;
+            }
+            params.split_cache_limit = options_vars["split-cache-limit"].as<unsigned long long>();
         }
 
         if (options_vars.count("decomposition-hubs") && ! options_vars.count("decomposition")) {

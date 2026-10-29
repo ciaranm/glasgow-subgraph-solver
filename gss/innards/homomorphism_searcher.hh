@@ -73,6 +73,9 @@ namespace gss::innards
 
     using DuplicateSolutionFilterer = const std::function<auto(const HomomorphismAssignments &)->bool>;
 
+    struct ComponentTally;
+    struct SplitCaches;
+
     class HomomorphismSearcher
     {
     private:
@@ -94,6 +97,21 @@ namespace gss::innards
         // tested inside its loop.
         const bool _record_filter_activations, _verbose_proof_comments, _track_removals;
         FilterActivations _filter_activations;
+
+        // While one component of a split is being searched, its solutions go into this tally
+        // rather than into the solution count (see split_into_components). Null otherwise.
+        ComponentTally * _tally = nullptr;
+        unsigned long long _splits = 0, _nested_splits = 0;
+        std::unique_ptr<SplitCaches> _split_caches;
+
+        auto split_into_components(
+            HomomorphismAssignments & assignments,
+            const Domains & domains,
+            unsigned long long & nodes,
+            unsigned long long & propagations,
+            loooong & solution_count,
+            int depth,
+            RestartsSchedule & restarts_schedule) -> std::optional<SearchResult>;
 
         auto assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<int, int>>;
 
@@ -133,6 +151,7 @@ namespace gss::innards
         HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
             const DuplicateSolutionFilterer &, const std::shared_ptr<Proof> &,
             Watches<HomomorphismAssignment, HomomorphismAssignmentWatchTable> & watches);
+        ~HomomorphismSearcher();
 
         auto expand_to_full_result(const HomomorphismAssignments & assignments, VertexToVertexMapping & mapping) -> void;
 

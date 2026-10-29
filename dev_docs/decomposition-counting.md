@@ -6,7 +6,9 @@ the solutions. This is forward-looking: it describes where the code is going, no
 is. The algorithm exists in `gss/sip_decomposer.cc`, including the hub guesses (phase 3).
 It can state its argument as a counting statement (phase 1), and prove that the solver's
 encoding of the instance is equienumerable with that statement, with or without hubs (phases 4
-and 5). The side-condition proofs and the pipeline (phase 6) are still a plan. For the current architecture see
+and 5). The side-condition proofs and the pipeline (phase 6) are still a plan. Separately, the ordinary
+search can split itself into components as it goes, without proofs so far (see
+[Splitting inside the search](#splitting-inside-the-search)). For the current architecture see
 [architecture.md](architecture.md); for proof logging see
 [proof-logging.md](proof-logging.md).
 
@@ -186,6 +188,145 @@ Known limits:
   pattern into four small dense graphs that each fit in LV g13 many times. That case takes
   38,635 solver calls and times out at 100 s, where the plain solver refutes the whole
   pattern in 1.5 s.
+
+## Splitting inside the search
+
+`HomomorphismParams::split_components` (the hidden `--split-components S`) is a second way
+of not multiplying across components, which works inside the ordinary search rather than
+before it. It is not Ryan's algorithm, and it has no proofs yet.
+
+### What it does
+
+At each search node, the unassigned pattern vertices fall into connected components of the
+pattern (edges in either direction join a component). Every constraint between an assigned
+and an unassigned vertex has already been propagated into the domains, so the solutions
+below the node are the combinations of one solution per component that satisfy the
+constraints between components. Without induced mappings or less-constraints, those are only
+injectivity: a pair of vertices in different components may not share an image (under local
+injectivity, only a pair with a common in-neighbour; under non-injectivity, no pair at all).
+Call a pair that could share an image, because its domains intersect, a *collision pair*.
+
+A split counts each component on its own, and combines the counts:
+
+- Each component is searched on its own, by the same searcher, from the node's domains.
+  Rather than counting its solutions, the search tallies them by their *signature*: the
+  images of the component's vertices that are in collision pairs, with an image recorded
+  only if a partner could also take it, and otherwise as −1, which collides with nothing.
+- The tallies are combined one component at a time: a sum of products over pairs of
+  signatures that do not collide, keeping in the key only the images that a later
+  component could still collide with.
+- Components are searched smallest first, by the product of their domain sizes, and a
+  component with no solutions ends the split at once. So a split whose answer is zero
+  costs at most a search of the components up to the empty one, which the plain search
+  would also have had to refute.
+- Splits nest. A node inside a component's search can split again, and then its result
+  goes into the enclosing component's tally rather than the count. So the tally also
+  records the images the enclosing split needs, which are part of the signature at every
+  level.
+
+There is no inclusion–exclusion and no subtraction, so every number in the computation is
+a sum of products of counts of solutions. Nor are there any new models or solver calls: a
+component is searched with the model, the supplemental graphs and the propagation the plain
+search already has. The supplemental graphs stay sound inside a component, because they are
+implied by the original constraints, and any combination of component solutions that is a
+solution of the whole satisfies them.
+
+### When it splits
+
+A node with at least two components is split if the signatures have at most S possible
+values: the product, over the recorded vertices, of one more than the number of images
+recorded for each. Every table the split builds is keyed by some of those images, so S
+bounds each tally, each intermediate table, and the pairs each combining step looks at. A
+first version bounded the number of collision pairs instead, which is the wrong measure. It
+allowed four nearly isolated vertices sharing about 4,400 target vertices, whose second
+combining step would have looked at 10¹¹ pairs; it ran out of memory on 179 benchmark
+instances and overran the timeout on 43 more. That case, a few vertices sharing a huge
+domain, is where Ryan's inclusion–exclusion is cheap and signatures are not, so the two
+are complementary.
+
+Finding the components costs a pass over the unassigned vertices at every node, and the
+collision pairs a pass over pairs of them wherever there are two or more components. On an
+instance that never splits, that costs about 20%.
+
+### Caching
+
+The result of a split depends only on the domains of its unassigned vertices and on which
+of their images the enclosing tally records, so it is cached on exactly that, and so is
+each component's tally. This turned out to matter more than anything else. On the si
+instance below, 10,373 splits had only 28 distinct subproblems, and 53,002 component
+searches had only 51, because in a sparse pattern what is left far from the assigned
+vertices sees the same domains whichever way the search got there. This is the component
+caching of #SAT solvers.
+
+The caches are emptied when they reach about `HomomorphismParams::split_cache_limit` bytes
+(1 GiB by default, the hidden `--split-cache-limit`), which can only cost time. Without
+this, some instances filled 12 GB in well under the timeout. The searcher reports
+`splits`, `nested_splits`, `split_cache_hits`, `split_cache_entries`,
+`component_cache_hits`, `component_cache_entries` and `split_cache_clears`.
+
+### Restrictions and testing
+
+It is refused, rather than silently disabled, with induced mappings, less-constraints,
+threads, restarts, staging, proof logging, an enumerate callback, or when not counting; see
+[option-compatibility.md](option-compatibility.md).
+
+`random_homomorphism_test.cc` checks it against the brute-force oracle on the oracle's
+instances, and against plain counting on 1,600 sparser instances with up to 8 pattern
+vertices, in all sixteen families and all three injectivity modes, with S from 1 (split
+only where nothing is recorded) to unlimited, and with caches that are emptied at every
+insertion. Seventeen hand-made mutations of the splitting code are
+all caught by the second of these, each by a wrong count except one that crashes: ignoring
+collisions in the combining, or the −1 exception to them; recording every image as −1, or
+leaving out the images a partner could share; recording only one end of each collision pair;
+dropping an image before the last component that could collide with it, or ignoring the
+enclosing tally's need for it; leaving the assigned vertices or the enclosing relevance out of
+a nested result; ignoring local injectivity's common in-neighbours; following only out-edges
+when finding components; ordering by component number rather than by search position;
+swapping where a combined key comes from; and leaving the domains or the relevance out of
+either cache key. The weakest of these is leaving the enclosing relevance out of the split
+cache's key, which only two of the test's checks catch.
+
+### Complexity
+
+Each component is searched once per distinct subproblem, so the components' counts add
+rather than multiply. The combining is bounded by S per split, so for a fixed S it is
+polynomial, but it is not FPT in the number of collision pairs, as Ryan's recursion is.
+That recursion could be applied to the signatures instead.
+
+### Results
+
+The same 2,153 counting instances as the prototype above, without proofs, with a 100 s
+timeout, at S = 10⁶. The geometric mean is of split time over plain time, on the instances
+both finish where either takes at least 100 ms. The prototype was an uncommitted
+experiment that split at the first node on each branch with at most eight collision
+pairs, and handed what was left to the inclusion–exclusion above, with the
+domains as lists.
+
+| Family | Instances | Plain finishes | Split finishes | Geomean | Prototype geomean |
+|---|---|---|---|---|---|
+| si | 380 | 159 | 226 | 0.08 | 0.46 |
+| gen-s | 427 | 142 | 188 | 0.24 | 2.39 |
+| gen-m | 308 | 30 | 39 | 0.34 | 2.83 |
+| LV | 722 | 79 | 83 | 0.80 | 1.21 |
+
+Neither finishes any meshes or phase-transition instance. In all, 410 instances finish
+plainly and 536 with splitting; at S = 10⁴, 506 do. The largest gains are on the very
+sparse si patterns: si4_r001_m200.04 goes from 75 s to 4 ms, si4_r001_m200.03 from 81 s to
+36 ms, and si4_r001_m200.09, the caching example above, from 41 s to 35 ms. g6-g59-normed
+goes from 87 s to 0.12 s.
+
+Every count agrees with plain counting on the 410 instances both finish, and with S = 10⁴
+on the 506 both of those finish. Of the 127 instances only splitting finishes, the
+prototype also finishes 41, and agrees on all of them, which is a check by a different
+method. The other 86
+counts have no independent check yet.
+
+On the 63 finished instances that never split, it is 1.20× slower (at worst 1.36×), which is
+the cost of looking for components. That cost loses the one instance only plain counting
+finishes, si2_r005_m600.08, which takes 91 s plainly. Where it does split, the worst case of
+note is gen-m15-LV-g23 at 1.7×: nearly all of its 2.5 million splits are cache hits, so the
+time goes on building cache keys. 24 finished instances emptied their caches, at most five
+times.
 
 ## The counting language
 
