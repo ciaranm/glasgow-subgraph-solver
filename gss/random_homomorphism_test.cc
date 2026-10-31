@@ -1,3 +1,4 @@
+#include <gss/configuration.hh>
 #include <gss/formats/input_graph.hh>
 #include <gss/homomorphism.hh>
 #include <gss/innards/verify.hh>
@@ -19,6 +20,7 @@ using std::make_shared;
 using std::make_unique;
 using std::map;
 using std::mt19937;
+using std::pair;
 using std::set;
 using std::string;
 using std::to_string;
@@ -177,6 +179,14 @@ namespace
         params.induced = induced;
         return params;
     }
+
+    auto stat(const HomomorphismResult & result, const string & name) -> unsigned long long
+    {
+        for (auto & s : result.extra_stats)
+            if (s.starts_with(name + " = "))
+                return std::stoull(s.substr(name.size() + 3));
+        return 0;
+    }
 }
 
 // The oracle is exponential (nt^np), so the instances stay tiny -- but there are only a
@@ -253,6 +263,20 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                     CHECK(staged_count.solution_count == int(expected.size()));
                     CHECK(staged_count.complete);
 
+                    // Splitting into components counts without enumerating, and is refused
+                    // for induced mappings, whose non-edges relate components.
+                    params.staged = false;
+                    params.enumerate_callback = {};
+                    params.split_components = ~0ull;
+                    if (induced)
+                        CHECK_THROWS_AS(solve_homomorphism_problem(pattern, target, params), UnsupportedConfiguration);
+                    else {
+                        auto split_count = solve_homomorphism_problem(pattern, target, params);
+                        CHECK(split_count.solution_count == int(expected.size()));
+                        CHECK(split_count.complete);
+                    }
+                    params.split_components = std::nullopt;
+
                     // Decision mode takes a different route through the pipeline: the
                     // pattern-bigger-than-target refutation, the target-loop shortcut and the
                     // clique reduction all conclude without searching, and each is only sound
@@ -272,4 +296,62 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
             }
         }
     }
+}
+
+// Splitting into components must not change the count. The oracle above can only afford
+// patterns too small to split much, so this compares against plain counting -- which the
+// oracle does check -- on sparser and larger patterns, where the unassigned vertices fall
+// apart into components often, and the components themselves split again once some of
+// their vertices are assigned.
+TEST_CASE("random instances: splitting into components matches plain counting")
+{
+    mt19937 rng{0x5b1e};
+
+    unsigned long long splits = 0, nested_splits = 0, clears = 0;
+    for (auto & family : all_families()) {
+        for (int iter = 0; iter < 100; ++iter) {
+            int np = 4 + int(rng() % 5); // 4..8
+            int nt = 4 + int(rng() % 4); // 4..7
+            double pattern_density = 0.05 + (rng() % 30) / 100.0;
+            double target_density = 0.2 + (rng() % 80) / 100.0;
+
+            auto pattern = random_graph(np, pattern_density, 0.3, family, rng);
+            auto target = random_graph(nt, target_density, 0.3, family, rng);
+
+            for (auto injectivity : {Injectivity::Injective, Injectivity::LocallyInjective, Injectivity::NonInjective}) {
+                auto params = make_params(injectivity, false);
+                params.count_solutions = true;
+                auto plain = solve_homomorphism_problem(pattern, target, params);
+                REQUIRE(plain.complete);
+
+                // The thresholds cover splitting only where nothing is recorded, a little,
+                // and always. Without a limit, the caches are also run with room for one
+                // entry, so that they are emptied all the time.
+                for (auto [threshold, cache_limit] : {pair{1ull, 1ull << 30}, pair{64ull, 1ull << 30}, pair{4096ull, 1ull << 30},
+                         pair{~0ull, 1ull << 30}, pair{~0ull, 1ull}}) {
+                    INFO("family " << family.name() << ", iteration " << iter
+                                   << ", |pattern|=" << np << ", |target|=" << nt
+                                   << ", injectivity=" << int(injectivity) << ", threshold=" << threshold
+                                   << ", cache limit=" << cache_limit
+                                   << "\n  pattern:" << describe(pattern)
+                                   << "\n  target:" << describe(target)
+                                   << "\n  plain=" << plain.solution_count);
+
+                    params.split_components = threshold;
+                    params.split_cache_limit = cache_limit;
+                    auto split = solve_homomorphism_problem(pattern, target, params);
+                    CHECK(split.solution_count == plain.solution_count);
+                    CHECK(split.complete);
+                    splits += stat(split, "splits");
+                    nested_splits += stat(split, "nested_splits");
+                    clears += stat(split, "split_cache_clears");
+                }
+            }
+        }
+    }
+
+    // otherwise the above has tested nothing
+    CHECK(splits > 1000);
+    CHECK(nested_splits > 100);
+    CHECK(clears > 100);
 }

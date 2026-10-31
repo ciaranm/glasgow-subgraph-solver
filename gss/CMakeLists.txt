@@ -13,12 +13,14 @@ add_library(glasgow_subgraphs
         clique.cc
         common_subgraph.cc
         configuration.cc
+        counting_statement.cc
         homomorphism.cc
         restarts.cc
         sip_decomposer.cc
         timeout.cc
         innards/cheap_all_different.cc
         innards/clique_size_constraints.cc
+        innards/split_proof.cc
         innards/filter_activations.cc
         innards/graph_traits.cc
         innards/homomorphism_domain.cc
@@ -108,3 +110,7 @@ add_test(NAME option_sweep_test COMMAND $<TARGET_FILE:option_sweep_test>)
 add_executable(extra_shapes_test extra_shapes_test.cc)
 target_link_libraries(extra_shapes_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
 add_test(NAME extra_shapes_test COMMAND $<TARGET_FILE:extra_shapes_test>)
+
+add_executable(counting_statement_test counting_statement_test.cc)
+target_link_libraries(counting_statement_test PRIVATE glasgow_subgraphs Catch2::Catch2WithMain)
+add_test(NAME counting_statement_test COMMAND $<TARGET_FILE:counting_statement_test>)

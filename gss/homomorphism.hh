@@ -128,6 +128,24 @@ namespace gss
 
         /// Optional proof options
         std::optional<ProofOptions> proof_options;
+
+        /// When counting, split the search wherever the unassigned pattern vertices fall
+        /// into two or more components, and the images that components could share have at
+        /// most this many combinations: count each component on its own, and combine the
+        /// counts. This bounds the size of every table the combining builds. Counting only,
+        /// and not with induced mappings, threads, restarts, less-constraints or an
+        /// enumerate callback, and with proof logging only through split_statement; see
+        /// dev_docs/split-counting.md.
+        std::optional<unsigned long long> split_components;
+
+        /// With split_components, roughly how many bytes the caches of split and component
+        /// results may hold before they are emptied. Emptying them costs only time.
+        unsigned long long split_cache_limit = 1ull << 30;
+
+        /// With split_components and proof_options, write a counting statement (see
+        /// dev_docs/counting-statements.md) to this file as the search goes, and prove that
+        /// the instance is equienumerable with it, instead of logging each solution.
+        std::optional<std::string> split_statement;
     };
 
     struct HomomorphismResult

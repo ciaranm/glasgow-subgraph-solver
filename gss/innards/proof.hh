@@ -129,6 +129,18 @@ namespace gss::innards
 
         auto finalise_model() -> void;
 
+        // Run f with the proof at level 0, so that what it emits survives the search's
+        // backtracking, and then go back to the active level.
+        auto at_level_zero(const std::function<void()> & f) -> void;
+        // A search that splits into components runs each component's search under an
+        // assumption of its own (see SplitProof). assumption_suffix() is " 1 ~<assumption>",
+        // to append to a line that holds only under it, or "" when there is none.
+        [[nodiscard]] auto assumption_suffix() const -> std::string;
+
+        // Sets the assumption that assumption_suffix() negates. Returns the assumption
+        // this replaces, so that it can be put back.
+        auto set_split_assumption(std::optional<std::string>) -> std::optional<std::string>;
+
         // when we're done
         auto finish_unsat_proof() -> void;
         auto finish_sat_proof() -> void;
