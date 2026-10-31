@@ -193,6 +193,14 @@ if(VERIPB_EXECUTABLE)
             $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
             $<TARGET_FILE:count_statement> ${CMAKE_CURRENT_BINARY_DIR}/split_proof_sweep)
 
+    # Splitting a decision search into components (dev_docs/split-decision.md): answers and
+    # proofs on random patterns that fall apart, and fixed instances whose proofs need a
+    # component search's nogoods kept at the split's level.
+    add_test(NAME decision_split_proof_sweep
+        COMMAND ${CMAKE_SOURCE_DIR}/test-instances/decision_split_proof_sweep.bash
+            $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
+            ${CMAKE_CURRENT_BINARY_DIR}/decision_split_proof_sweep)
+
     # Randomised proof sweep: generate random instances and check the proof verifies
     # on each, across decision/induced/counting combinations. Catches proof-logging
     # bugs that fixed instances miss; complements the in-process correctness oracle in

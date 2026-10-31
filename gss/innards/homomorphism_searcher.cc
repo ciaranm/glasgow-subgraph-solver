@@ -319,6 +319,14 @@ auto HomomorphismSearcher::add_extra_stats(std::list<std::string> & stats) const
 {
     if (_record_filter_activations)
         _filter_activations.add_search_stats(stats);
+    if (params.split_decision) {
+        stats.push_back("decision_split_nodes = " + to_string(_dsplit_nodes));
+        stats.push_back("decision_split_searches = " + to_string(_dsplit_searches));
+        stats.push_back("decision_split_reuses = " + to_string(_dsplit_reuses));
+        stats.push_back("decision_split_refutations = " + to_string(_dsplit_refutations));
+        stats.push_back("decision_split_solutions = " + to_string(_dsplit_solutions));
+        stats.push_back("decision_split_mixed = " + to_string(_dsplit_mixed));
+    }
     if (params.split_components) {
         stats.push_back("splits = " + to_string(_splits));
         stats.push_back("nested_splits = " + to_string(_nested_splits));
@@ -370,6 +378,10 @@ auto HomomorphismSearcher::restarting_search(
                 _entries = {{key, -1}};
             return SearchResult::SatisfiableButKeepGoing;
         }
+
+        // a solution of one component of a decision split, which is not a solution
+        if (_in_component)
+            return SearchResult::Satisfiable;
 
         if (_split_proof)
             _entries = {{{}, -1}};
@@ -433,6 +445,35 @@ auto HomomorphismSearcher::restarting_search(
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
 
+    // When splitting a decision search, the components are looked at once a child has
+    // failed, and not before: a search heading straight for a solution never pays for it,
+    // while one that keeps failing finds a component with no solutions after one failure
+    // at each level, rather than proving it again under every value of the others.
+    bool split_checked = false, refuted_by_split = false;
+    auto split_after_failure = [&](decltype(branch_v.begin()) last_tried) -> optional<SearchResult> {
+        if (! params.split_decision || split_checked)
+            return nullopt;
+        split_checked = true;
+        auto result = split_decision(assignments, domains, nodes, propagations, solution_count, depth, restarts_schedule);
+        if (! result)
+            return nullopt;
+        switch (*result) {
+        case SearchResult::Unsatisfiable:
+            refuted_by_split = true;
+            return nullopt;
+        case SearchResult::Restart:
+            // as for a child restarting, but the value just tried has failed too
+            for (auto l = branch_v.begin(); l != last_tried + 1; ++l) {
+                assignments.values.push_back({{branch_domain->v, unsigned(*l)}, true, -2, -2});
+                post_nogood(assignments);
+                assignments.values.pop_back();
+            }
+            return SearchResult::Restart;
+        default:
+            return result;
+        }
+    };
+
     // With a counting statement: for each signature, the statement nodes for each child
     // with solutions of that signature, each the child's newly assigned values and then
     // what lies below the child, with the child's value for the branching vertex.
@@ -468,6 +509,10 @@ auto HomomorphismSearcher::restarting_search(
             assignments.values.resize(assignments_size);
             actually_hit_a_failure = true;
 
+            if (auto result = split_after_failure(f_v))
+                return *result;
+            if (refuted_by_split)
+                break;
             continue;
         }
 
@@ -529,8 +574,14 @@ auto HomomorphismSearcher::restarting_search(
             // restore assignments
             assignments.values.resize(assignments_size);
             actually_hit_a_failure = true;
+
+            if (auto result = split_after_failure(f_v))
+                return *result;
             break;
         }
+
+        if (refuted_by_split)
+            break;
 
         ++discrepancy_count;
     }
@@ -677,6 +728,158 @@ auto HomomorphismSearcher::worth_splitting(const Domains & domains) -> bool
     return true;
 }
 
+auto HomomorphismSearcher::find_components(const Domains & domains, vector<int> & component) -> int
+{
+    // edges in either direction join a component, numbered in the order of their first
+    // vertex in the domains
+    component.assign(model.pattern_size, -1);
+    SVOBitset unvisited(model.pattern_size, 0);
+    for (auto & d : domains)
+        if (! d.fixed)
+            unvisited.set(d.v);
+    int n_components = 0;
+    vector<unsigned> todo;
+    for (auto & d : domains) {
+        if (d.fixed || ! unvisited.test(d.v))
+            continue;
+        unvisited.reset(d.v);
+        component[d.v] = n_components;
+        todo.push_back(d.v);
+        while (! todo.empty()) {
+            auto v = todo.back();
+            todo.pop_back();
+            auto row = model.pattern_graph_row(0, v);
+            row |= model.pattern_in_neighbour_row(v);
+            row &= unvisited;
+            unvisited.intersect_with_complement(row);
+            for (auto w = row.find_first(); w != decltype(row)::npos; w = row.find_first()) {
+                row.reset(w);
+                component[w] = n_components;
+                todo.push_back(w);
+            }
+        }
+        ++n_components;
+    }
+    return n_components;
+}
+
+auto HomomorphismSearcher::split_decision(
+    HomomorphismAssignments & assignments,
+    const Domains & domains,
+    unsigned long long & nodes,
+    unsigned long long & propagations,
+    loooong & solution_count,
+    int depth,
+    RestartsSchedule & restarts_schedule) -> optional<SearchResult>
+{
+    // Every constraint between an assigned and an unassigned vertex has already been
+    // propagated into the domains, and induced mappings and local injectivity are refused,
+    // so a component's solutions depend only on its own domains, and the only constraint
+    // between components is injectivity. Without it, each component's solutions are a
+    // relaxation: if one component has none, the node has none. This is only a choice of
+    // which vertices to branch on, so the search's own proof logging covers it.
+    vector<int> component;
+    int n_components = find_components(domains, component);
+    if (n_components < 2)
+        return nullopt;
+    ++_dsplit_nodes;
+
+    if (_witness_image.empty()) {
+        _witness_image.assign(model.pattern_size, -1);
+        _witness_id.assign(model.pattern_size, 0);
+    }
+
+    // which components still have their last solution, and which must be searched again,
+    // smallest looking first
+    vector<unsigned long long> id(n_components, 0);
+    vector<bool> has_solution(n_components, true);
+    vector<double> size_estimate(n_components, 0.0);
+    for (auto & d : domains)
+        if (! d.fixed) {
+            auto c = component[d.v];
+            size_estimate[c] += std::log2(double(d.count));
+            if (0 == _witness_id[d.v] || ! d.values.test(_witness_image[d.v]))
+                has_solution[c] = false;
+            else if (0 == id[c])
+                id[c] = _witness_id[d.v];
+            else if (id[c] != _witness_id[d.v]) {
+                // after a backtrack, a component can join vertices whose images came from
+                // different solutions, which need not agree on the edges between them
+                has_solution[c] = false;
+                ++_dsplit_mixed;
+            }
+        }
+    vector<int> order;
+    for (int c = 0; c < n_components; ++c) {
+        if (has_solution[c])
+            ++_dsplit_reuses;
+        else
+            order.push_back(c);
+    }
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return size_estimate[a] < size_estimate[b]; });
+
+    for (auto c : order) {
+        Domains component_domains;
+        for (auto & d : domains)
+            if (! d.fixed && component[d.v] == c)
+                component_domains.push_back(d);
+
+        ++_dsplit_searches;
+        auto base = assignments.values.size();
+        bool was_in_component = _in_component;
+        _in_component = true;
+        auto result = restarting_search(assignments, component_domains, nodes, propagations, solution_count, depth, restarts_schedule);
+        _in_component = was_in_component;
+
+        switch (result) {
+        case SearchResult::Satisfiable: {
+            auto solution_id = ++_witness_ids;
+            for (auto i = base; i < assignments.values.size(); ++i) {
+                auto & a = assignments.values[i].assignment;
+                _witness_image[a.pattern_vertex] = int(a.target_vertex);
+                _witness_id[a.pattern_vertex] = solution_id;
+            }
+            assignments.values.resize(base);
+            if (proof) {
+                proof->back_up_to_level(depth + 1);
+                proof->keep_deeper_lines_at_active_level();
+            }
+        } break;
+
+        case SearchResult::Unsatisfiable:
+            ++_dsplit_refutations;
+            return SearchResult::Unsatisfiable;
+
+        case SearchResult::Restart:
+        case SearchResult::Aborted:
+            return result;
+
+        case SearchResult::SatisfiableButKeepGoing:
+            throw std::logic_error{"decision split component search kept going"};
+        }
+    }
+
+    // Every component has a solution. If no two of them share an image, they are a
+    // solution together; otherwise, search the node as usual.
+    if (params.injectivity == Injectivity::Injective) {
+        SVOBitset used(model.target_size, 0);
+        for (auto & d : domains)
+            if (! d.fixed) {
+                if (used.test(_witness_image[d.v]))
+                    return nullopt;
+                used.set(_witness_image[d.v]);
+            }
+    }
+
+    ++_dsplit_solutions;
+    for (auto & d : domains)
+        if (! d.fixed)
+            assignments.values.push_back({{d.v, unsigned(_witness_image[d.v])}, false, -1, -1});
+    if (! _in_component && proof)
+        proof->post_solution(solution_in_proof_form(assignments));
+    return SearchResult::Satisfiable;
+}
+
 auto HomomorphismSearcher::split_into_components(
     HomomorphismAssignments & assignments,
     const Domains & domains,
@@ -701,39 +904,12 @@ auto HomomorphismSearcher::split_into_components(
     // has already found the components and the vertices that could collide, but cheaply
     // and in its own workspace, which the component searches below would overwrite.
     vector<const HomomorphismDomain *> unassigned;
-    SVOBitset unassigned_mask(model.pattern_size, 0);
     for (auto & d : domains)
-        if (! d.fixed) {
+        if (! d.fixed)
             unassigned.push_back(&d);
-            unassigned_mask.set(d.v);
-        }
 
-    // edges in either direction join a component
-    vector<int> component(model.pattern_size, -1);
-    int n_components = 0;
-    SVOBitset unvisited = unassigned_mask;
-    vector<unsigned> todo;
-    for (auto * d : unassigned) {
-        if (! unvisited.test(d->v))
-            continue;
-        unvisited.reset(d->v);
-        component[d->v] = n_components;
-        todo.push_back(d->v);
-        while (! todo.empty()) {
-            auto v = todo.back();
-            todo.pop_back();
-            auto row = model.pattern_graph_row(0, v);
-            row |= model.pattern_in_neighbour_row(v);
-            row &= unvisited;
-            unvisited.intersect_with_complement(row);
-            for (auto w = row.find_first(); w != decltype(row)::npos; w = row.find_first()) {
-                row.reset(w);
-                component[w] = n_components;
-                todo.push_back(w);
-            }
-        }
-        ++n_components;
-    }
+    vector<int> component;
+    int n_components = find_components(domains, component);
 
     // If this split is itself inside a component of an enclosing split, its solutions go to
     // that component's tally, which needs the images of some of these vertices too.

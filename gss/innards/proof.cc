@@ -394,6 +394,27 @@ auto Proof::back_up_to_top() -> void
     _imp->deletable_core_lines_by_level.clear();
 }
 
+auto Proof::keep_deeper_lines_at_active_level() -> void
+{
+    vector<long> kept;
+    for (auto it = _imp->deletable_core_lines_by_level.begin(); it != _imp->deletable_core_lines_by_level.end();) {
+        if (it->first > _imp->active_level) {
+            for (auto & id : it->second) {
+                *_imp->proof_stream << "pol " << id << " ;\n";
+                ++_imp->proof_line;
+                *_imp->proof_stream << "core id " << _imp->proof_line << " ;\n";
+                *_imp->proof_stream << "del id " << id << " ;\n";
+                kept.push_back(_imp->proof_line);
+            }
+            it = _imp->deletable_core_lines_by_level.erase(it);
+        }
+        else
+            ++it;
+    }
+    auto & here = _imp->deletable_core_lines_by_level[_imp->active_level];
+    here.insert(here.end(), kept.begin(), kept.end());
+}
+
 auto Proof::post_restart_nogood(const vector<pair<int, int>> & decisions) -> void
 {
     *_imp->proof_stream << "% [" << decisions.size() << "] restart nogood\n";

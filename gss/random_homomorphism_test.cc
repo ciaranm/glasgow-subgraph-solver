@@ -117,6 +117,49 @@ namespace
         return g;
     }
 
+    // Small dense blocks joined through a few hub vertices. Assigning the hubs splits the
+    // blocks apart, and unassigning them joins the blocks again, so the components a search
+    // sees keep changing.
+    auto hub_graph(double loop_probability, const Family & family, mt19937 & rng) -> InputGraph
+    {
+        uniform_real_distribution<double> dist{0.0, 1.0};
+        int n_blocks = 2 + int(rng() % 3), n_hubs = 1 + int(rng() % 2);
+        vector<vector<int>> blocks;
+        int n = n_hubs;
+        for (int b = 0; b < n_blocks; ++b) {
+            blocks.emplace_back();
+            for (int s = 2 + int(rng() % 2); s > 0; --s)
+                blocks.back().push_back(n++);
+        }
+
+        InputGraph g{n, family.vertex_labels, family.edge_labels, family.directed};
+        auto add = [&](int a, int b) {
+            if (family.directed)
+                g.add_directed_edge(a, b, family.edge_labels ? random_label(rng) : "");
+            else if (family.edge_labels)
+                g.add_edge(a, b, random_label(rng));
+            else
+                g.add_edge(a, b);
+        };
+        for (int v = 0; v < n; ++v) {
+            if (family.vertex_labels)
+                g.set_vertex_label(v, random_label(rng));
+            if (family.loops && dist(rng) < loop_probability)
+                add(v, v);
+        }
+        for (auto & block : blocks)
+            for (auto v : block)
+                for (auto w : block)
+                    if (v < w && dist(rng) < 0.7)
+                        add(v, w);
+        for (int h = 0; h < n_hubs; ++h)
+            for (auto & block : blocks)
+                add(h, block[rng() % block.size()]);
+        if (n_hubs == 2 && dist(rng) < 0.5)
+            add(0, 1);
+        return g;
+    }
+
     auto describe(const InputGraph & g) -> string
     {
         string s;
@@ -293,10 +336,108 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                         CHECK((! decision.mapping.empty()) == (! expected.empty()));
                         CHECK((decision.mapping.empty() || expected.contains(decision.mapping)));
                     }
+
+                    // Splitting a decision search into components, with and without restarts
+                    // (restarting after every backtrack, so that restarts fire inside the
+                    // components' own searches), and staged, is refused for induced mappings
+                    // and local injectivity.
+                    params.split_decision = true;
+                    for (bool staged : {false, true})
+                        for (bool restarts : {false, true}) {
+                            params.staged = staged;
+                            if (restarts)
+                                params.restarts_schedule = make_unique<LubyRestartsSchedule>(1);
+                            else
+                                params.restarts_schedule = make_unique<NoRestartsSchedule>();
+                            INFO("decision split, staged=" << staged << ", restarts=" << restarts);
+                            if (induced || injectivity == Injectivity::LocallyInjective)
+                                CHECK_THROWS_AS(solve_homomorphism_problem(pattern, target, params), UnsupportedConfiguration);
+                            else {
+                                auto decision = solve_homomorphism_problem(pattern, target, params);
+                                CHECK((! decision.mapping.empty()) == (! expected.empty()));
+                                CHECK((decision.mapping.empty() || expected.contains(decision.mapping)));
+                                CHECK(decision.complete);
+                            }
+                        }
+                    params.split_decision = false;
+                    params.staged = false;
+                    params.restarts_schedule = make_unique<NoRestartsSchedule>();
                 }
             }
         }
     }
+}
+
+// Splitting a decision search into components must not change satisfiability, and what it
+// returns must be a solution. As for counting, this compares against the plain solver, which
+// the oracle checks, on patterns sparse enough to fall apart often, and on blocks joined by
+// hubs, whose components split and join again, with and without restarts, and staged. The
+// iteration count is what it takes to catch reusing a component's solution when its
+// vertices' images came from different solutions.
+TEST_CASE("random instances: splitting a decision search into components matches plain search")
+{
+    mt19937 rng{0xd5b1};
+
+    unsigned long long split_nodes = 0, refutations = 0, solutions = 0, reuses = 0, mixed = 0;
+    for (auto & family : all_families()) {
+        for (int iter = 0; iter < 2000; ++iter) {
+            int np = 4 + int(rng() % 7); // 4..10
+            int nt = 4 + int(rng() % 5); // 4..8
+            double pattern_density = 0.05 + (rng() % 30) / 100.0;
+            double target_density = 0.1 + (rng() % 80) / 100.0;
+
+            // every other pattern is blocks joined through hubs, which split and join again
+            auto pattern = (iter % 2) ? hub_graph(0.3, family, rng) : random_graph(np, pattern_density, 0.3, family, rng);
+            // hub patterns go into sparser targets, where reusing a solution whose images came
+            // from two solutions is more likely to break an edge
+            auto target = (iter % 2) ? random_graph(nt + 6, 0.1 + (rng() % 40) / 100.0, 0.3, family, rng)
+                                     : random_graph(nt, target_density, 0.3, family, rng);
+            np = pattern.size();
+
+            for (auto injectivity : {Injectivity::Injective, Injectivity::NonInjective}) {
+                auto params = make_params(injectivity, false);
+                auto plain = solve_homomorphism_problem(pattern, target, params);
+                REQUIRE(plain.complete);
+
+                // without restarts, restarting after every backtrack, and staged, whose first
+                // round is a restart after one backtrack
+                for (int mode : {0, 1, 2}) {
+                    bool restarts = (1 == mode), staged = (2 == mode);
+                    INFO("family " << family.name() << ", iteration " << iter
+                                   << ", |pattern|=" << np << ", |target|=" << nt
+                                   << ", injectivity=" << int(injectivity) << ", restarts=" << restarts << ", staged=" << staged
+                                   << "\n  pattern:" << describe(pattern)
+                                   << "\n  target:" << describe(target)
+                                   << "\n  plain=" << (! plain.mapping.empty()));
+
+                    params.split_decision = true;
+                    params.staged = staged;
+                    params.staged_first_round_backtracks = 1;
+                    if (restarts)
+                        params.restarts_schedule = make_unique<LubyRestartsSchedule>(1);
+                    else
+                        params.restarts_schedule = make_unique<NoRestartsSchedule>();
+                    auto split = solve_homomorphism_problem(pattern, target, params);
+                    CHECK(split.complete);
+                    CHECK(split.mapping.empty() == plain.mapping.empty());
+                    if (! split.mapping.empty())
+                        CHECK_NOTHROW(verify_homomorphism(pattern, target, injectivity == Injectivity::Injective, false, false, split.mapping));
+                    split_nodes += stat(split, "decision_split_nodes");
+                    refutations += stat(split, "decision_split_refutations");
+                    solutions += stat(split, "decision_split_solutions");
+                    reuses += stat(split, "decision_split_reuses");
+                    mixed += stat(split, "decision_split_mixed");
+                }
+            }
+        }
+    }
+
+    // otherwise the above has tested nothing
+    CHECK(split_nodes > 1000);
+    CHECK(refutations > 100);
+    CHECK(solutions > 100);
+    CHECK(reuses > 100);
+    CHECK(mixed > 100);
 }
 
 // Splitting into components must not change the count. The oracle above can only afford

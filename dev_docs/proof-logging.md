@@ -51,6 +51,11 @@ a counting statement as it searches, and ends with `output EQUIENUMERABLE FILE` 
 tagged formula that `count_statement --opb` writes for the statement. See
 [split-counting.md](split-counting.md).
 
+A decision search with `--split-decision` needs nothing new in the proof: refuting a node by
+searching one component of the pattern first is only a choice of branching order. Its one
+piece of bookkeeping, keeping a component search's nogoods at the split's level, is in
+[split-decision.md](split-decision.md#proofs).
+
 Every label is defined once: `Proof` throws if a model row or proof line reuses one. VeriPB
 itself would let a later line take a label over, silently changing what every later citation
 of it means.

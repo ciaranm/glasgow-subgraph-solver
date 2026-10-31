@@ -5,7 +5,8 @@ without multiplying out independent parts of the pattern, inside the ordinary se
 `--prove` and `--split-statement FILE`, it writes a counting statement as it goes, in the
 format of [counting-statements.md](counting-statements.md). It proves that the instance has
 exactly as many solutions as the statement's tagged formula, so a count is certified by one
-VeriPB check (see [Proofs](#proofs)).
+VeriPB check (see [Proofs](#proofs)). Its decision-search counterpart, which looks for a
+component with no solutions, is [split-decision.md](split-decision.md).
 
 ## What it does
 

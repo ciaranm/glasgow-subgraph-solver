@@ -765,6 +765,19 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Splitting into components cannot be used with less-constraints"};
     }
 
+    if (params.split_decision) {
+        if (params.count_solutions || params.enumerate_callback)
+            throw UnsupportedConfiguration{"Splitting a decision search into components cannot be used when counting or enumerating, use --split-components"};
+        if (params.injectivity == Injectivity::LocallyInjective)
+            throw UnsupportedConfiguration{"Splitting a decision search into components cannot be used with local injectivity"};
+        if (params.induced)
+            throw UnsupportedConfiguration{"Splitting a decision search into components cannot be used with induced mappings"};
+        if (1 != params.n_threads)
+            throw UnsupportedConfiguration{"Splitting a decision search into components cannot be used with threads"};
+        if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
+            throw UnsupportedConfiguration{"Splitting a decision search into components cannot be used with less-constraints"};
+    }
+
     // start by setting up proof logging, if necessary
     shared_ptr<Proof> proof;
     if (params.proof_options) {

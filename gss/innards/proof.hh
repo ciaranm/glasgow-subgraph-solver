@@ -173,6 +173,13 @@ namespace gss::innards
         auto back_up_to_level(int level) -> void;
         auto forget_level(int level) -> void;
         auto back_up_to_top() -> void;
+
+        // After a search below the current level has stopped without backtracking out of
+        // its levels, as when a component of a decision split has a solution: move the core
+        // nogoods it left at deeper levels to the current one, where the current level's own
+        // backtrack nogood will subsume them, so that wiping the deeper levels does not
+        // delete core constraints unchecked.
+        auto keep_deeper_lines_at_active_level() -> void;
         auto post_restart_nogood(const std::vector<std::pair<int, int>> & decisions) -> void;
 
         // cliques

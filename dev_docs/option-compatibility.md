@@ -48,6 +48,12 @@ apart matters:
 | `--split-components` with threads, restarts or `--staged` | …needs a sequential search without restarts |
 | `--split-components` with less-constraints | …cannot be used with less-constraints |
 | `--split-components` with `--decomposition` | `--split-components cannot be used with --decomposition` |
+| `--split-decision` with counting, `--print-all-solutions` or `--solution-limit` | Splitting a decision search into components cannot be used when counting or enumerating |
+| `--split-decision` with `--locally-injective` | …cannot be used with local injectivity |
+| `--split-decision` with `--induced` | …cannot be used with induced mappings |
+| `--split-decision` with threads | …cannot be used with threads |
+| `--split-decision` with less-constraints | …cannot be used with less-constraints |
+| `--split-decision` with `--decomposition` | `--split-decision cannot be used with --decomposition` |
 
 ## What is silently disabled
 
@@ -170,6 +176,10 @@ Not covered, and worth deciding on separately:
 - **`--split-components`**, which `random_homomorphism_test.cc` checks against plain counting
   in every family, injective and non-injective, instead, with the filters at their
   defaults. It refuses local injectivity.
+- **`--split-decision`**, likewise: `random_homomorphism_test.cc` runs it against the oracle
+  and against plain search, with and without restarts, and staged, and
+  `test-instances/decision_split_proof_sweep.bash` checks its proofs. See
+  [split-decision.md](split-decision.md).
 - **Mixed instances**, as above.
 
 ## The golden table

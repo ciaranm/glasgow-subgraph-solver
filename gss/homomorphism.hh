@@ -138,6 +138,13 @@ namespace gss
         /// dev_docs/split-counting.md.
         std::optional<unsigned long long> split_components;
 
+        /// In a decision search, at a node whose first child has failed and whose unassigned
+        /// pattern vertices fall into two or more components, look for a solution of each
+        /// component on its own. If one has none, neither has the node, and if their
+        /// solutions do not collide, together they are one. Injective or non-injective only,
+        /// and not induced. See dev_docs/split-decision.md.
+        bool split_decision = false;
+
         /// With split_components, roughly how many bytes the caches of split and component
         /// results may hold before they are emptied. Emptying them costs only time.
         unsigned long long split_cache_limit = 1ull << 30;

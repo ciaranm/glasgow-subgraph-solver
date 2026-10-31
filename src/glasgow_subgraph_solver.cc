@@ -107,6 +107,7 @@ auto main(int argc, char * argv[]) -> int
             ("decomposition", "Use decomposition") //
             ("split-components", "When counting, count each component of the unassigned pattern vertices on its own wherever the images that components could share have at most this many combinations", cxxopts::value<unsigned long long>()) //
             ("split-cache-limit", "With --split-components, empty the caches of split results when they reach about this many bytes", cxxopts::value<unsigned long long>()) //
+            ("split-decision", "When deciding, search each component of the unassigned pattern vertices on its own first") //
             ("split-statement", "With --split-components and --prove, write a counting statement to this file, and prove the count by it (see dev_docs/counting-statements.md)", cxxopts::value<string>()) //
             ("cliques", "Use clique size constraints") //
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
@@ -373,6 +374,14 @@ auto main(int argc, char * argv[]) -> int
                 return EXIT_FAILURE;
             }
             params.split_components = options_vars["split-components"].as<unsigned long long>();
+        }
+
+        if (options_vars.count("split-decision")) {
+            if (options_vars.count("decomposition")) {
+                cerr << "--split-decision cannot be used with --decomposition" << endl;
+                return EXIT_FAILURE;
+            }
+            params.split_decision = true;
         }
 
         if (options_vars.count("split-cache-limit")) {

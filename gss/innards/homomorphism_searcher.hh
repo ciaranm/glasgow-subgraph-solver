@@ -136,6 +136,38 @@ namespace gss::innards
         auto worth_splitting(const Domains & domains) -> bool;
         std::unique_ptr<SplitScreen> _split_screen;
 
+        // The connected components of the pattern among the unassigned vertices: sets
+        // component[v] for each, and -1 for assigned vertices, and returns how many.
+        auto find_components(const std::vector<HomomorphismDomain> & domains, std::vector<int> & component) -> int;
+
+        // Decision splitting (see HomomorphismParams::split_decision): for each pattern
+        // vertex, its image in the last solution found for a component containing it, and
+        // which solution that was (0 for none). A component whose vertices all come from one
+        // solution, with their images still in their domains, still has that solution.
+        std::vector<int> _witness_image;
+        std::vector<unsigned long long> _witness_id;
+        unsigned long long _witness_ids = 0;
+
+        // While a component of a decision split is being searched, an assignment of every
+        // vertex in it is a solution of that component, not of the instance, so it is
+        // neither logged nor returned as one.
+        bool _in_component = false;
+        unsigned long long _dsplit_nodes = 0, _dsplit_searches = 0, _dsplit_reuses = 0, _dsplit_refutations = 0, _dsplit_solutions = 0, _dsplit_mixed = 0;
+
+        // At a node where the unassigned vertices fall into two or more components, search
+        // those without a witness on their own. Unsatisfiable if one has no solutions,
+        // Satisfiable (with the solution's assignments appended) if the witnesses do not
+        // collide, a restart or abort from a component's search, and otherwise nullopt, for
+        // the node to be searched as usual.
+        auto split_decision(
+            HomomorphismAssignments & assignments,
+            const std::vector<HomomorphismDomain> & domains,
+            unsigned long long & nodes,
+            unsigned long long & propagations,
+            loooong & solution_count,
+            int depth,
+            RestartsSchedule & restarts_schedule) -> std::optional<SearchResult>;
+
         auto split_into_components(
             HomomorphismAssignments & assignments,
             const Domains & domains,
