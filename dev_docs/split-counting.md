@@ -231,8 +231,19 @@ goes up. For 36 such mutants, VeriPB rejects every proof:
 
 ### Cost
 
-On the benchmark instances, with targets of 200 or 280 vertices and up to 280 million
-solutions, solving with proofs takes a few seconds and gives proofs of 100 to 220 MB.
+These are six si instances, with targets of 200 or 280 vertices, solved with proofs and
+checked with `veripb --force-checked-deletion`. Every one verifies `OUTPUT EQUIENUMERABLE`
+with the plain count:
+
+| Instance | Count | Solve | Check | Proof |
+|---|---:|---:|---:|---:|
+| si4_r001_m200.06 | 6,434,208 | 3.5 s | 25 s | 116 MB |
+| si6_r001_m200.06 | 21,504,000 | 6.5 s | 27 s | 192 MB |
+| si4_r001_m200.02 | 15,454,800 | 4.3 s | 102 s | 164 MB |
+| si6_r001_m200.01 | 70,447,104 | 6.7 s | 101 s | 224 MB |
+| si4_r001_m200.04 | 283,557,120 | 3.9 s | 106 s | 142 MB |
+| si4_r001_m200.09 | 153,135,360 | 25 s | 7,220 s | 1.0 GB |
+
 Checking time follows the number of search nodes rather than the proof's size. Plain proofs
 of instances like these can be as slow, where the supplemental graphs make each RUP step
 expensive. On top of that, here a search step's unit propagation runs through every gate
