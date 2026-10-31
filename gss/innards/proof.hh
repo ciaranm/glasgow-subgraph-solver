@@ -129,6 +129,11 @@ namespace gss::innards
 
         auto finalise_model() -> void;
 
+        // Writes a checked deletion that opens a subproof, "del ... : : subproof". VeriPB
+        // gives the subproof's negated goal the next constraint number, which this returns,
+        // so that later line numbers stay right.
+        auto begin_deletion_subproof(const std::string & deletion) -> long;
+
         // Run f with the proof at level 0, so that what it emits survives the search's
         // backtracking, and then go back to the active level.
         auto at_level_zero(const std::function<void()> & f) -> void;

@@ -46,6 +46,15 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
 | not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
 
+Counting with `--split-components` logs no solutions. It needs `--split-statement`, writes
+a counting statement as it searches, and ends with `output EQUIENUMERABLE FILE` against the
+tagged formula that `count_statement --opb` writes for the statement. See
+[split-counting.md](split-counting.md).
+
+Every label is defined once: `Proof` throws if a model row or proof line reuses one. VeriPB
+itself would let a later line take a label over, silently changing what every later citation
+of it means.
+
 `--staged` on its own *is* supported: the supplemental graphs are derived mid-proof at the level-0
 restart boundary, and an instance that concludes in the cheap first round emits no supplemental
 derivations at all.

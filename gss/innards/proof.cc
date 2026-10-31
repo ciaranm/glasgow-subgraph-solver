@@ -1049,6 +1049,12 @@ auto Proof::super_extra_verbose() const -> bool
     return _imp->super_extra_verbose;
 }
 
+auto Proof::begin_deletion_subproof(const string & deletion) -> long
+{
+    *_imp->proof_stream << deletion << "\n";
+    return ++_imp->proof_line;
+}
+
 auto Proof::at_level_zero(const function<void()> & f) -> void
 {
     auto level = _imp->active_level;

@@ -39,6 +39,15 @@ apart matters:
 | proof logging, counting, with restarts | …when counting with restarts, use `--restarts none` |
 | more than 8 graph pairs (`--n-exact-path-graphs` too large, with `--distance3` and `--k4`) | Supplemental graphs won't fit in the chosen bitset size |
 | a cycle in the `--pattern-less-than` constraints | Pattern less than constraints form a loop |
+| `--split-components` without counting | Splitting into components needs `--count-solutions` |
+| `--split-components` with `--print-all-solutions` or `--solution-limit` | …cannot print them or stop at a limit |
+| `--split-components` with proof logging, without `--split-statement` | Proof logging with splitting into components needs a counting statement |
+| `--split-components` with proof logging and `--locally-injective` | Proof logging cannot yet be used with splitting into components and local injectivity |
+| `--split-statement` without both `--split-components` and `--prove` | `--split-statement needs --split-components and --prove` (the library: …needs proof logging) |
+| `--split-components` with `--induced` | …cannot be used with induced mappings |
+| `--split-components` with threads, restarts or `--staged` | …needs a sequential search without restarts |
+| `--split-components` with less-constraints | …cannot be used with less-constraints |
+| `--split-components` with `--decomposition` | `--split-components cannot be used with --decomposition` |
 
 ## What is silently disabled
 
@@ -158,6 +167,8 @@ Not covered, and worth deciding on separately:
 - **`--decomposition`** (`sip_decomposer`), the clique solver and the common-subgraph solver:
   different top levels, each with its own option space.
 - **`--solution-limit`**, which deliberately returns an incomplete search.
+- **`--split-components`**, which `random_homomorphism_test.cc` checks against plain counting
+  in every family and injectivity mode instead, with the filters at their defaults.
 - **Mixed instances**, as above.
 
 ## The golden table

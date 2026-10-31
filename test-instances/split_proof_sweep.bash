@@ -5,9 +5,8 @@
 #   - the count agrees with the plain solver's;
 #   - count_statement agrees with both;
 #   - VeriPB accepts the proof as showing that the solver's encoding is equienumerable
-#     with count_statement's counting formula ("Proofs", under "Splitting inside the
-#     search", in dev_docs/decomposition-counting.md), or, when there is no statement, as
-#     concluding that there are no solutions.
+#     with count_statement's tagged formula (dev_docs/split-counting.md), or, when there
+#     is no statement, as concluding that there are no solutions.
 #
 # Patterns have four to seven vertices and are sparse, so that the search often splits
 # them, and targets have five to seven. A third of the instances have loops, and a third
@@ -73,7 +72,7 @@ check() {
     shift 4
     local stmt="${workdir}/${tag}.stmt"
     local proof="${workdir}/${tag}"
-    rm -f "${stmt}" "${proof}.opb" "${proof}.pbp" "${proof}.counting.opb"
+    rm -f "${stmt}" "${proof}.opb" "${proof}.pbp" "${proof}.tagged.opb"
     checked=$((checked + 1))
 
     local want got out counted verified
@@ -90,15 +89,15 @@ check() {
     echo "${out}" | grep -q '^nested_splits = [1-9]' && nested=$((nested + 1))
 
     if [ -s "${stmt}" ]; then
-        counted=$("${count_statement}" "${stmt}" --opb "${proof}.counting.opb" | grep '^count' | sed 's/count/solution_count/')
+        counted=$("${count_statement}" "${stmt}" --opb "${proof}.tagged.opb" | grep '^count' | sed 's/count/solution_count/')
         if [ "${counted}" != "${want}" ]; then
             echo "${tag}: count_statement says '${counted}', not '${want}'"
             fails=$((fails + 1))
             return
         fi
-        verified=$("${veripb}" --force-checked-deletion "${proof}.opb" "${proof}.pbp" "${proof}.counting.opb" 2>&1 | grep '^s ')
+        verified=$("${veripb}" --force-checked-deletion "${proof}.opb" "${proof}.pbp" "${proof}.tagged.opb" 2>&1 | grep '^s ')
         if ! echo "${verified}" | grep -q '^s VERIFIED OUTPUT EQUIENUMERABLE'; then
-            echo "${tag}: the proof does not verify as equienumerable with the counting formula"
+            echo "${tag}: the proof does not verify as equienumerable with the tagged formula"
             fails=$((fails + 1))
         fi
     else

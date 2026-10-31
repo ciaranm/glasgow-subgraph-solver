@@ -128,7 +128,7 @@ namespace gss::innards
         // made: add its statement nodes to the node's, by signature, and derive that the
         // child's decision leads to one of them.
         auto add_contributions(const HomomorphismAssignments & assignments, std::size_t assignments_size,
-            std::map<std::vector<int>, std::vector<int>> & contributions) -> void;
+            std::map<std::vector<int>, std::vector<std::pair<int, int>>> & contributions) -> void;
 
         auto split_into_components(
             HomomorphismAssignments & assignments,

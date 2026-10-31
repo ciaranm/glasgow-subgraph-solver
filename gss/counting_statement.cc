@@ -5,8 +5,8 @@
 #include <functional>
 #include <istream>
 #include <iterator>
-#include <optional>
 #include <ostream>
+#include <sstream>
 #include <string>
 
 using namespace gss;
@@ -14,7 +14,6 @@ using namespace gss;
 using std::function;
 using std::istream;
 using std::istreambuf_iterator;
-using std::optional;
 using std::ostream;
 using std::pair;
 using std::string;
@@ -34,58 +33,70 @@ auto CountingStatementError::what() const noexcept -> const char *
 CountingStatementWriter::CountingStatementWriter(ostream & out, const vector<int> & domain_sizes) :
     _out(out)
 {
-    _out << "(\n(version 1)\n(domain";
+    _out << "(\n(version 2)\n(domain";
     for (auto & n : domain_sizes)
         _out << " " << n;
     _out << ")\n(nodes\n";
 }
 
-auto CountingStatementWriter::start_node(const char * kind) -> int
+auto CountingStatementWriter::add(CountingNode node) -> int
 {
-    _out << "(" << _next_id << " " << kind;
-    return _next_id++;
+    int id = _counts.size();
+    for (unsigned i = 0; i < node.children.size(); ++i)
+        if (node.children[i] < 0 || node.children[i] >= id || (i > 0 && node.children[i - 1] >= node.children[i]))
+            throw CountingStatementError{"node " + to_string(id) + ": children are not earlier nodes in strictly increasing order"};
+
+    switch (node.kind) {
+    case CountingNodeKind::Cube:
+        node.count = loooong{1};
+        break;
+    case CountingNodeKind::And:
+        node.count = loooong{1};
+        for (auto & c : node.children)
+            node.count *= _counts[c];
+        break;
+    case CountingNodeKind::Or:
+        node.count = loooong{0};
+        for (auto & c : node.children)
+            node.count += _counts[c];
+        break;
+    }
+
+    _out << "(" << id << " " << node.count << " ";
+    switch (node.kind) {
+    case CountingNodeKind::Cube:
+        _out << "cube";
+        for (auto & [u, t] : node.assignment)
+            _out << " (" << u << " " << t << ")";
+        break;
+    case CountingNodeKind::And:
+    case CountingNodeKind::Or:
+        _out << (node.kind == CountingNodeKind::And ? "and" : "or");
+        for (auto & c : node.children)
+            _out << " " << c;
+        break;
+    }
+    _out << ")\n";
+
+    _counts.push_back(node.count);
+    if (_observer)
+        _observer(id, node);
+    return id;
 }
 
 auto CountingStatementWriter::add_cube(const vector<pair<int, int>> & assignment) -> int
 {
-    auto id = start_node("cube");
-    for (auto & [u, t] : assignment)
-        _out << " (" << u << " " << t << ")";
-    _out << ")\n";
-    if (_observer)
-        _observer(id, CountingNode{CountingNodeKind::Cube, assignment, {}});
-    return id;
+    return add(CountingNode{CountingNodeKind::Cube, 0, assignment, {}});
 }
 
 auto CountingStatementWriter::add_and(const vector<int> & children) -> int
 {
-    auto id = start_node("and");
-    for (auto & c : children)
-        _out << " " << c;
-    _out << ")\n";
-    if (_observer)
-        _observer(id, CountingNode{CountingNodeKind::And, {}, children});
-    return id;
+    return add(CountingNode{CountingNodeKind::And, 0, {}, children});
 }
 
 auto CountingStatementWriter::add_or(const vector<int> & children) -> int
 {
-    auto id = start_node("or");
-    for (auto & c : children)
-        _out << " " << c;
-    _out << ")\n";
-    if (_observer)
-        _observer(id, CountingNode{CountingNodeKind::Or, {}, children});
-    return id;
-}
-
-auto CountingStatementWriter::add_minus(int a, int b) -> int
-{
-    auto id = start_node("minus");
-    _out << " " << a << " " << b << ")\n";
-    if (_observer)
-        _observer(id, CountingNode{CountingNodeKind::Minus, {}, {a, b}});
-    return id;
+    return add(CountingNode{CountingNodeKind::Or, 0, {}, children});
 }
 
 auto CountingStatementWriter::set_observer(function<void(int, const CountingNode &)> observer) -> void
@@ -100,7 +111,12 @@ auto CountingStatementWriter::finish(int root) -> void
 
 auto CountingStatementWriter::number_of_nodes() const -> int
 {
-    return _next_id;
+    return _counts.size();
+}
+
+auto CountingStatementWriter::count(int node) const -> const loooong &
+{
+    return _counts.at(node);
 }
 
 namespace
@@ -244,6 +260,23 @@ namespace
             return int(value);
         }
 
+        // A number of any size: a count.
+        auto read_count() -> loooong
+        {
+            if (_kind != TokenKind::Atom)
+                fail("a count");
+            bool ok = (! _atom.empty()) && (_atom == "0" || _atom[0] != '0');
+            for (char c : _atom)
+                if (c < '0' || c > '9')
+                    ok = false;
+            if (! ok)
+                fail("a count");
+            loooong result;
+            mpz_set_str(result.raw(), _atom.c_str(), 10);
+            advance();
+            return result;
+        }
+
         auto line() const -> long
         {
             return _line;
@@ -255,183 +288,121 @@ namespace
         throw CountingStatementError{"node " + to_string(id) + ": " + message};
     }
 
-    // The scope of every node, as a sorted list of variables, checking well-formedness
-    // along the way.
-    auto check_and_compute_scopes(const CountingStatement & statement) -> vector<vector<int>>
-    {
-        for (auto & n : statement.domain_sizes)
-            if (n < 0)
-                throw CountingStatementError{"negative domain size"};
-        int number_of_variables = statement.domain_sizes.size();
-
-        vector<vector<int>> scopes;
-        scopes.reserve(statement.nodes.size());
-        for (int id = 0; id < int(statement.nodes.size()); ++id) {
-            auto & node = statement.nodes[id];
-            for (auto & c : node.children)
-                if (c < 0 || c >= id)
-                    fail_node(id, "child " + to_string(c) + " is not an earlier node");
-
-            vector<int> scope;
-            switch (node.kind) {
-            case CountingNodeKind::Cube:
-                if (! node.children.empty())
-                    fail_node(id, "a cube has no children");
-                for (auto & [u, t] : node.assignment) {
-                    if (u < 0 || u >= number_of_variables)
-                        fail_node(id, "variable " + to_string(u) + " out of range");
-                    if (t < 0 || t >= statement.domain_sizes[u])
-                        fail_node(id, "value " + to_string(t) + " out of range for variable " + to_string(u));
-                    if ((! scope.empty()) && scope.back() >= u)
-                        fail_node(id, "cube variables are not strictly increasing");
-                    scope.push_back(u);
-                }
-                break;
-
-            case CountingNodeKind::And:
-                for (auto & c : node.children) {
-                    vector<int> merged;
-                    std::merge(scope.begin(), scope.end(), scopes[c].begin(), scopes[c].end(), std::back_inserter(merged));
-                    if (std::adjacent_find(merged.begin(), merged.end()) != merged.end())
-                        fail_node(id, "children of an and have overlapping scopes");
-                    scope = std::move(merged);
-                }
-                break;
-
-            case CountingNodeKind::Or:
-                if (node.children.empty())
-                    fail_node(id, "an or has no children");
-                for (auto & c : node.children)
-                    if (scopes[c] != scopes[node.children.front()])
-                        fail_node(id, "children of an or have different scopes");
-                scope = scopes[node.children.front()];
-                break;
-
-            case CountingNodeKind::Minus:
-                if (node.children.size() != 2)
-                    fail_node(id, "a minus has exactly two children");
-                if (scopes[node.children[0]] != scopes[node.children[1]])
-                    fail_node(id, "children of a minus have different scopes");
-                scope = scopes[node.children[0]];
-                break;
-            }
-
-            if (node.kind != CountingNodeKind::Cube && ! node.assignment.empty())
-                fail_node(id, "only a cube has an assignment");
-
-            scopes.push_back(std::move(scope));
-        }
-
-        if (statement.root < 0 || statement.root >= int(statement.nodes.size()))
-            throw CountingStatementError{"root " + to_string(statement.root) + " is not a node"};
-        auto & root_scope = scopes[statement.root];
-        bool covers_everything = int(root_scope.size()) == number_of_variables;
-        for (int u = 0; covers_everything && u < number_of_variables; ++u)
-            covers_everything = root_scope[u] == u;
-        if (! covers_everything)
-            throw CountingStatementError{"the root's scope is not every variable"};
-
-        return scopes;
-    }
-
-    // An or of cubes is disjoint if no two of its children are the same cube: they have
-    // equal scopes, so different cubes give some variable different values.
-    auto syntactically_disjoint(const CountingStatement & statement, const CountingNode & node) -> bool
-    {
-        vector<const vector<pair<int, int>> *> cubes;
-        for (auto & c : node.children) {
-            if (statement.nodes[c].kind != CountingNodeKind::Cube)
-                return false;
-            cubes.push_back(&statement.nodes[c].assignment);
-        }
-        std::sort(cubes.begin(), cubes.end(), [](auto a, auto b) { return *a < *b; });
-        return cubes.end() == std::adjacent_find(cubes.begin(), cubes.end(), [](auto a, auto b) { return *a == *b; });
-    }
-
     auto y(int u, int t) -> string
     {
         return "y" + to_string(u) + "_" + to_string(t);
     }
 
-    auto g(int i) -> string
+    auto a(int i) -> string
     {
-        return "g" + to_string(i);
+        return "a" + to_string(i);
     }
 
-    auto write_definitions(ostream & out, const CountingStatement & statement) -> void
+    auto t(int i, int j) -> string
     {
-        for (int u = 0; u < int(statement.domain_sizes.size()); ++u) {
-            for (int t = 0; t < statement.domain_sizes[u]; ++t)
-                out << "1 " << y(u, t) << " ";
-            out << ">= 1 ;\n";
-            for (int t = 0; t < statement.domain_sizes[u]; ++t)
-                out << "1 " << y(u, t) << " ";
-            out << "<= 1 ;\n";
+        return "t" + to_string(i) + "_" + to_string(j);
+    }
+}
+
+auto gss::counting_variable_name(int u, int value) -> string
+{
+    return y(u, value);
+}
+
+auto gss::counting_activity_name(int i) -> string
+{
+    return a(i);
+}
+
+auto gss::counting_tag_name(int i, int j) -> string
+{
+    return t(i, j);
+}
+
+auto gss::check_counting_statement(const CountingStatement & statement) -> void
+{
+    for (auto & n : statement.domain_sizes)
+        if (n < 0)
+            throw CountingStatementError{"negative domain size"};
+    int number_of_variables = statement.domain_sizes.size();
+
+    // the scope of every node, as a sorted list of variables
+    vector<vector<int>> scopes;
+    scopes.reserve(statement.nodes.size());
+    for (int id = 0; id < int(statement.nodes.size()); ++id) {
+        auto & node = statement.nodes[id];
+        for (unsigned i = 0; i < node.children.size(); ++i) {
+            auto c = node.children[i];
+            if (c < 0 || c >= id)
+                fail_node(id, "child " + to_string(c) + " is not an earlier node");
+            if (i > 0 && node.children[i - 1] >= c)
+                fail_node(id, "children are not strictly increasing");
         }
 
-        for (int i = 0; i < int(statement.nodes.size()); ++i)
-            for (auto & row : counting_node_definition(i, statement.nodes[i]))
-                out << row << "\n";
-    }
-}
-
-auto gss::counting_variable_name(int u, int t) -> string
-{
-    return y(u, t);
-}
-
-auto gss::counting_gate_name(int i) -> string
-{
-    return g(i);
-}
-
-auto gss::counting_node_definition(int i, const CountingNode & node) -> vector<string>
-{
-    vector<string> rows;
-    switch (node.kind) {
-    case CountingNodeKind::Cube:
-    case CountingNodeKind::And: {
-        vector<string> literals;
-        if (node.kind == CountingNodeKind::Cube)
-            for (auto & [u, t] : node.assignment)
-                literals.push_back(y(u, t));
-        else
-            for (auto & c : node.children)
-                literals.push_back(g(c));
-
-        auto k = to_string(literals.size());
-        if (literals.empty())
-            rows.push_back("1 " + g(i) + " >= 1 ;");
-        else {
-            string forward = k + " ~" + g(i), backward = "1 " + g(i);
-            for (auto & l : literals) {
-                forward += " 1 " + l;
-                backward += " 1 ~" + l;
+        vector<int> scope;
+        loooong count;
+        switch (node.kind) {
+        case CountingNodeKind::Cube:
+            if (! node.children.empty())
+                fail_node(id, "a cube has no children");
+            for (auto & [u, value] : node.assignment) {
+                if (u < 0 || u >= number_of_variables)
+                    fail_node(id, "variable " + to_string(u) + " out of range");
+                if (value < 0 || value >= statement.domain_sizes[u])
+                    fail_node(id, "value " + to_string(value) + " out of range for variable " + to_string(u));
+                if ((! scope.empty()) && scope.back() >= u)
+                    fail_node(id, "cube variables are not strictly increasing");
+                scope.push_back(u);
             }
-            rows.push_back(forward + " >= " + k + " ;");
-            rows.push_back(backward + " >= 1 ;");
-        }
-    } break;
+            count = loooong{1};
+            break;
 
-    case CountingNodeKind::Or: {
-        auto k = to_string(node.children.size());
-        string forward = "1 ~" + g(i), backward = k + " " + g(i);
-        for (auto & c : node.children) {
-            forward += " 1 " + g(c);
-            backward += " 1 ~" + g(c);
-        }
-        rows.push_back(forward + " >= 1 ;");
-        rows.push_back(backward + " >= " + k + " ;");
-    } break;
+        case CountingNodeKind::And:
+            count = loooong{1};
+            for (auto & c : node.children) {
+                vector<int> merged;
+                std::merge(scope.begin(), scope.end(), scopes[c].begin(), scopes[c].end(), std::back_inserter(merged));
+                if (std::adjacent_find(merged.begin(), merged.end()) != merged.end())
+                    fail_node(id, "children of an and have overlapping scopes");
+                scope = std::move(merged);
+                count *= statement.nodes[c].count;
+            }
+            break;
 
-    case CountingNodeKind::Minus: {
-        auto a = node.children[0], b = node.children[1];
-        rows.push_back("1 ~" + g(i) + " 1 " + g(a) + " >= 1 ;");
-        rows.push_back("1 ~" + g(i) + " 1 ~" + g(b) + " >= 1 ;");
-        rows.push_back("1 " + g(i) + " 1 ~" + g(a) + " 1 " + g(b) + " >= 1 ;");
-    } break;
+        case CountingNodeKind::Or:
+            if (node.children.empty())
+                fail_node(id, "an or has no children");
+            count = loooong{0};
+            for (auto & c : node.children) {
+                if (scopes[c] != scopes[node.children.front()])
+                    fail_node(id, "children of an or have different scopes");
+                count += statement.nodes[c].count;
+            }
+            scope = scopes[node.children.front()];
+            if (scope.empty())
+                fail_node(id, "an or has an empty scope");
+            break;
+        }
+
+        if (node.kind != CountingNodeKind::Cube && ! node.assignment.empty())
+            fail_node(id, "only a cube has an assignment");
+        if (count != node.count) {
+            std::ostringstream message;
+            message << "its count is " << count << ", not " << node.count;
+            fail_node(id, message.str());
+        }
+
+        scopes.push_back(std::move(scope));
     }
-    return rows;
+
+    if (statement.root < 0 || statement.root >= int(statement.nodes.size()))
+        throw CountingStatementError{"root " + to_string(statement.root) + " is not a node"};
+    auto & root_scope = scopes[statement.root];
+    bool covers_everything = int(root_scope.size()) == number_of_variables;
+    for (int u = 0; covers_everything && u < number_of_variables; ++u)
+        covers_everything = root_scope[u] == u;
+    if (! covers_everything)
+        throw CountingStatementError{"the root's scope is not every variable"};
 }
 
 auto gss::read_counting_statement(istream & in) -> CountingStatement
@@ -443,7 +414,7 @@ auto gss::read_counting_statement(istream & in) -> CountingStatement
 
     reader.expect_open();
     reader.expect_keyword("version");
-    reader.expect_keyword("1");
+    reader.expect_keyword("2");
     reader.expect_close();
 
     reader.expect_open();
@@ -461,21 +432,19 @@ auto gss::read_counting_statement(istream & in) -> CountingStatement
         if (id != int(result.nodes.size()))
             throw CountingStatementError{"line " + to_string(line) + ": expected node " + to_string(result.nodes.size()) + ", found node " + to_string(id)};
 
+        CountingNode node{CountingNodeKind::Cube, reader.read_count(), {}, {}};
         auto kind = reader.read_atom();
-        CountingNode node;
         if (kind == "cube") {
-            node.kind = CountingNodeKind::Cube;
             while (reader.at_open()) {
                 reader.expect_open();
                 auto u = reader.read_number();
-                auto t = reader.read_number();
+                auto value = reader.read_number();
                 reader.expect_close();
-                node.assignment.emplace_back(u, t);
+                node.assignment.emplace_back(u, value);
             }
         }
-        else if (kind == "and" || kind == "or" || kind == "minus") {
-            node.kind = kind == "and" ? CountingNodeKind::And : kind == "or" ? CountingNodeKind::Or
-                                                                             : CountingNodeKind::Minus;
+        else if (kind == "and" || kind == "or") {
+            node.kind = kind == "and" ? CountingNodeKind::And : CountingNodeKind::Or;
             while (reader.at_atom())
                 node.children.push_back(reader.read_number());
         }
@@ -499,98 +468,75 @@ auto gss::read_counting_statement(istream & in) -> CountingStatement
     return result;
 }
 
-auto gss::check_counting_statement(const CountingStatement & statement) -> void
+auto gss::counting_selectors(const CountingStatement & statement) -> vector<vector<string>>
 {
-    check_and_compute_scopes(statement);
-}
-
-auto gss::counting_side_conditions(const CountingStatement & statement) -> vector<int>
-{
-    vector<int> result;
-    for (int i = 0; i < int(statement.nodes.size()); ++i) {
-        auto & node = statement.nodes[i];
-        if (node.kind == CountingNodeKind::Minus || (node.kind == CountingNodeKind::Or && ! syntactically_disjoint(statement, node)))
-            result.push_back(i);
+    vector<vector<string>> result(statement.nodes.size());
+    for (int p = 0; p < int(statement.nodes.size()); ++p) {
+        auto & node = statement.nodes[p];
+        for (unsigned j = 0; j < node.children.size(); ++j)
+            result[node.children[j]].push_back(node.kind == CountingNodeKind::And ? a(p) : t(p, j));
     }
     return result;
 }
 
-auto gss::count_counting_nodes(const CountingStatement & statement) -> vector<loooong>
-{
-    vector<loooong> counts;
-    counts.reserve(statement.nodes.size());
-    for (int i = 0; i < int(statement.nodes.size()); ++i) {
-        auto & node = statement.nodes[i];
-        switch (node.kind) {
-        case CountingNodeKind::Cube:
-            counts.emplace_back(1);
-            break;
-        case CountingNodeKind::And: {
-            loooong r = 1;
-            for (auto & c : node.children)
-                r *= counts[c];
-            counts.push_back(r);
-        } break;
-        case CountingNodeKind::Or: {
-            loooong r = 0;
-            for (auto & c : node.children)
-                r += counts[c];
-            counts.push_back(r);
-        } break;
-        case CountingNodeKind::Minus: {
-            auto r = counts[node.children[0]] - counts[node.children[1]];
-            if (r < loooong{0})
-                fail_node(i, "minus is negative, so its second child cannot imply its first");
-            counts.push_back(r);
-        } break;
-        }
-    }
-    return counts;
-}
-
-auto gss::count_counting_statement(const CountingStatement & statement) -> loooong
-{
-    return count_counting_nodes(statement).at(statement.root);
-}
-
-auto gss::write_counting_opb(ostream & out, const CountingStatement & statement) -> void
+auto gss::write_tagged_opb(ostream & out, const CountingStatement & statement) -> void
 {
     out << "preserved:";
     for (int u = 0; u < int(statement.domain_sizes.size()); ++u)
-        for (int t = 0; t < statement.domain_sizes[u]; ++t)
-            out << " " << y(u, t);
+        for (int value = 0; value < statement.domain_sizes[u]; ++value)
+            out << " " << y(u, value);
+    for (int i = 0; i < int(statement.nodes.size()); ++i)
+        if (statement.nodes[i].kind == CountingNodeKind::Or)
+            for (unsigned j = 0; j < statement.nodes[i].children.size(); ++j)
+                out << " " << t(i, j);
     out << " ;\n";
 
-    write_definitions(out, statement);
-
-    out << "1 " << g(statement.root) << " >= 1 ;\n";
-}
-
-auto gss::write_side_condition_opb(ostream & out, const CountingStatement & statement) -> bool
-{
-    auto conditions = counting_side_conditions(statement);
-    if (conditions.empty())
-        return false;
-
-    write_definitions(out, statement);
-
-    for (auto & i : conditions) {
-        auto & node = statement.nodes[i];
-        auto v = "v" + to_string(i);
-        if (node.kind == CountingNodeKind::Or) {
-            out << "2 ~" << v;
-            for (auto & c : node.children)
-                out << " 1 " << g(c);
-            out << " >= 2 ;\n";
-        }
-        else {
-            out << "1 ~" << v << " 1 " << g(node.children[1]) << " >= 1 ;\n";
-            out << "1 ~" << v << " 1 ~" << g(node.children[0]) << " >= 1 ;\n";
-        }
+    for (int u = 0; u < int(statement.domain_sizes.size()); ++u) {
+        for (int value = 0; value < statement.domain_sizes[u]; ++value)
+            out << "1 " << y(u, value) << " ";
+        out << ">= 1 ;\n";
+        for (int value = 0; value < statement.domain_sizes[u]; ++value)
+            out << "1 " << y(u, value) << " ";
+        out << "<= 1 ;\n";
     }
 
-    for (auto & i : conditions)
-        out << "1 v" << i << " ";
-    out << ">= 1 ;\n";
-    return true;
+    out << "1 " << a(statement.root) << " >= 1 ;\n";
+
+    auto selectors = counting_selectors(statement);
+    for (int i = 0; i < int(statement.nodes.size()); ++i) {
+        auto & node = statement.nodes[i];
+        if (i != statement.root) {
+            out << "1 ~" << a(i);
+            for (auto & s : selectors[i])
+                out << " 1 " << s;
+            out << " >= 1 ;\n";
+            for (auto & s : selectors[i])
+                out << "1 " << a(i) << " 1 ~" << s << " >= 1 ;\n";
+        }
+
+        switch (node.kind) {
+        case CountingNodeKind::Cube:
+            for (auto & [u, value] : node.assignment)
+                out << "1 ~" << a(i) << " 1 " << y(u, value) << " >= 1 ;\n";
+            break;
+
+        case CountingNodeKind::And:
+            break;
+
+        case CountingNodeKind::Or: {
+            auto k = node.children.size();
+            out << "1 ~" << a(i);
+            for (unsigned j = 0; j < k; ++j)
+                out << " 1 " << t(i, j);
+            out << " >= 1 ;\n";
+            for (unsigned j = 0; j < k; ++j)
+                out << "1 ~" << t(i, j) << " 1 " << a(i) << " >= 1 ;\n";
+            if (k >= 2) {
+                for (unsigned j = 0; j < k; ++j)
+                    out << "1 ~" << t(i, j) << " ";
+                out << ">= " << k - 1 << " ;\n";
+            }
+        } break;
+        }
+    }
 }

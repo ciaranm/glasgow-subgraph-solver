@@ -66,6 +66,28 @@ namespace
     {
         key.insert(key.end(), bits.words(), bits.words() + bits.number_of_words());
     }
+
+    // The disjunction of these nodes, each with its distinct signature over these vertices,
+    // as a tree of disjunctions each telling its children apart by one vertex: the first
+    // where the signatures differ. A -1 in a signature is an image not recorded, so not
+    // any of the recorded ones that another child has there.
+    auto told_apart_disjunction(SplitProof & split_proof, vector<pair<vector<int>, int>> items, const vector<unsigned> & vertices) -> int
+    {
+        if (1 == items.size())
+            return items[0].second;
+        unsigned p = 0;
+        while (std::all_of(items.begin(), items.end(), [&](const auto & i) { return i.first.at(p) == items[0].first.at(p); }))
+            ++p;
+        std::map<int, vector<pair<vector<int>, int>>> groups;
+        for (auto & i : items)
+            groups[i.first[p]].push_back(move(i));
+        vector<int> children, values;
+        for (auto & [value, group] : groups) {
+            values.push_back(value);
+            children.push_back(told_apart_disjunction(split_proof, move(group), vertices));
+        }
+        return split_proof.disjunction(children, int(vertices.at(p)), values);
+    }
 }
 
 namespace gss::innards
@@ -209,7 +231,7 @@ auto HomomorphismSearcher::statement_entries() const -> const StatementEntries &
 }
 
 auto HomomorphismSearcher::add_contributions(const HomomorphismAssignments & assignments, std::size_t assignments_size,
-    std::map<vector<int>, vector<int>> & contributions) -> void
+    std::map<vector<int>, vector<pair<int, int>>> & contributions) -> void
 {
     // The child's line has gone with its level, so this is the child's line again, one
     // decision up, with each of the child's nodes behind what the child assigned. The
@@ -224,7 +246,7 @@ auto HomomorphismSearcher::add_contributions(const HomomorphismAssignments & ass
         auto cube = _split_proof->cube(assigned);
         for (auto & [key, node] : child_entries) {
             auto contribution = -1 == node ? cube : _split_proof->conjunction({cube, node});
-            contributions[key].push_back(contribution);
+            contributions[key].emplace_back(int(assignments.values[assignments_size].assignment.target_vertex), contribution);
             gates.push_back(_split_proof->gate(contribution));
         }
     }
@@ -378,8 +400,8 @@ auto HomomorphismSearcher::restarting_search(
 
     // With a counting statement: for each signature, the statement nodes for each child
     // with solutions of that signature, each the child's newly assigned values and then
-    // what lies below the child.
-    std::map<vector<int>, vector<int>> contributions;
+    // what lies below the child, with the child's value for the branching vertex.
+    std::map<vector<int>, vector<pair<int, int>>> contributions;
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
@@ -483,8 +505,13 @@ auto HomomorphismSearcher::restarting_search(
         // every solution below here lies in one of these, one per signature
         _entries.clear();
         vector<string> gates;
-        for (auto & [key, nodes] : contributions) {
-            _entries.emplace_back(key, _split_proof->disjunction(nodes));
+        for (auto & [key, children] : contributions) {
+            vector<int> nodes, values;
+            for (auto & [value, node] : children) {
+                values.push_back(value);
+                nodes.push_back(node);
+            }
+            _entries.emplace_back(key, _split_proof->disjunction(nodes, int(branch_domain->v), values));
             gates.push_back(_split_proof->gate(_entries.back().second));
         }
         statement_line(assignments, gates);
@@ -672,18 +699,18 @@ auto HomomorphismSearcher::split_into_components(
             vector<unsigned> layout_to_enclosing;
             for (auto v : result.layout)
                 layout_to_enclosing.push_back(*enclosing->index_of(v));
-            std::map<vector<int>, vector<int>> nodes;
+            std::map<vector<int>, vector<pair<vector<int>, int>>> nodes;
             for (auto & [combined_key, count] : result.combined) {
                 for (unsigned k = 0; k < result.layout.size(); ++k)
                     key[layout_to_enclosing[k]] = enclosing->image(layout_to_enclosing[k], combined_key[k]);
                 enclosing->counts[key] += count;
                 if (_split_proof)
-                    nodes[key].push_back(result.gates.at(combined_key));
+                    nodes[key].emplace_back(combined_key, result.gates.at(combined_key));
             }
             if (_split_proof) {
                 vector<string> gates;
                 for (auto & [k, n] : nodes) {
-                    _entries.emplace_back(k, _split_proof->disjunction(n));
+                    _entries.emplace_back(k, told_apart_disjunction(*_split_proof, n, result.layout));
                     gates.push_back(_split_proof->gate(_entries.back().second));
                 }
                 statement_line(assignments, gates);
@@ -902,7 +929,7 @@ auto HomomorphismSearcher::split_into_components(
             TallyCounts next;
             // with a counting statement, the pairs that make up each new entry, and the new
             // entries each combined entry goes into
-            std::map<vector<int>, vector<int>> next_parts;
+            std::map<vector<int>, vector<pair<vector<int>, int>>> next_parts;
             std::unordered_map<vector<int>, std::set<vector<int>>, TallyKeyHash> goes_into;
             vector<int> key(take.size());
             unsigned long long pairs_considered = 0;
@@ -927,7 +954,9 @@ auto HomomorphismSearcher::split_into_components(
 
                     if (_split_proof) {
                         auto left = combined_gates.at(left_key), right = tally_gates[s].at(right_key);
-                        next_parts[key].push_back(-1 == left ? right : _split_proof->conjunction({left, right}));
+                        auto both = left_key;
+                        both.insert(both.end(), right_key.begin(), right_key.end());
+                        next_parts[key].emplace_back(move(both), -1 == left ? right : _split_proof->conjunction({left, right}));
                         goes_into[left_key].insert(key);
                     }
                 }
@@ -939,8 +968,10 @@ auto HomomorphismSearcher::split_into_components(
                 // the two entries' signatures and injectivity. Then that the split's
                 // solutions so far lie in one of the new entries.
                 TallyGates next_gates;
+                auto both_vertices = layout;
+                both_vertices.insert(both_vertices.end(), tally.vertices.begin(), tally.vertices.end());
                 for (auto & [k, parts] : next_parts)
-                    next_gates.emplace(k, _split_proof->disjunction(parts));
+                    next_gates.emplace(k, told_apart_disjunction(*_split_proof, parts, both_vertices));
                 vector<long> steps;
                 for (auto & [left_key, left_node] : combined_gates) {
                     vector<string> literals{"~" + result.assumption};

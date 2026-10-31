@@ -15,19 +15,22 @@ namespace gss::innards
 
     // The proof that goes with a counting statement written by a search that splits into
     // components (HomomorphismParams::split_components): from the solver's own encoding of
-    // the instance to the statement's root, and then back, ending EQUIENUMERABLE against the
-    // statement's counting formula. See "Splitting inside the search" in
-    // dev_docs/decomposition-counting.md, and counting-statements.md for the steps that move
-    // the preserved set across.
+    // the instance to the statement's root, and then on to the statement's tagged formula,
+    // ending EQUIENUMERABLE. See dev_docs/split-counting.md, and counting-statements.md for
+    // the format and the tagged formula.
     //
     // The searcher builds the statement as it goes, through the node functions here, each of
-    // which defines its node's gate into the core as soon as the node is written. Everything
-    // else this writes is derived.
+    // which defines its node's gate into the core as soon as the node is written. The gates
+    // are the proof's own: the tagged formula does not mention them.
     class SplitProof
     {
     private:
         struct Imp;
         std::unique_ptr<Imp> _imp;
+
+        // From the core that the search leaves, the gates' definitions and the root, to
+        // exactly the tagged formula.
+        auto finish_tagged(int root, long root_line) -> void;
 
     public:
         SplitProof(const std::shared_ptr<Proof> &, HomomorphismProofs &, int pattern_size, int target_size,
@@ -43,10 +46,14 @@ namespace gss::innards
         // across. Call once, at level 0, before searching.
         auto begin() -> void;
 
-        // Statement nodes. A conjunction or disjunction of one node is that node.
+        // Statement nodes. A conjunction or disjunction of one node is that node. The
+        // children of a disjunction are told apart by one pattern vertex: each child puts it
+        // at its value, distinct from the others', except that at most one child may have
+        // the value -1, meaning that it puts the vertex at none of the others' values. The
+        // proof of the statement's count relies on this.
         auto cube(std::vector<std::pair<int, int>> assignment) -> int;
-        auto conjunction(const std::vector<int> & children) -> int;
-        auto disjunction(const std::vector<int> & children) -> int;
+        auto conjunction(std::vector<int> children) -> int;
+        auto disjunction(const std::vector<int> & children, int vertex, const std::vector<int> & values) -> int;
 
         auto gate(int node) const -> std::string;
         auto statement_variable(int v, int t) const -> std::string;
@@ -65,9 +72,9 @@ namespace gss::innards
         // Delete these derived lines.
         auto forget(const std::vector<long> & lines) -> void;
 
-        // The search found solutions, and the proof has derived that the root holds. Delete
-        // everything but the counting formula from the core, and conclude that the core is
-        // equienumerable with the counting formula.
+        // The search found solutions, and the proof has derived that the root holds. Turn
+        // the core into exactly the statement's tagged formula, and conclude that it is
+        // equienumerable with the input.
         auto finish(int root) -> void;
     };
 }
