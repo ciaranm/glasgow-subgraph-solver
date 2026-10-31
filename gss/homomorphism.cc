@@ -9,6 +9,7 @@
 #include <gss/innards/homomorphism_traits.hh>
 #include <gss/innards/proof.hh>
 #include <gss/innards/solve_state.hh>
+#include <gss/innards/split_proof.hh>
 #include <gss/innards/thread_utils.hh>
 
 #include <algorithm>
@@ -80,6 +81,11 @@ namespace
     {
         using HomomorphismSolver::HomomorphismSolver;
 
+        // With a counting statement: the statement to build as the search goes, and once
+        // the search has found solutions, its root.
+        SplitProof * split_proof = nullptr;
+        optional<int> statement_root;
+
         auto solve() -> HomomorphismResult
         {
             HomomorphismResult result;
@@ -107,6 +113,8 @@ namespace
 
             HomomorphismSearcher searcher(
                 model, params, [](const HomomorphismAssignments &) -> bool { return true; }, proof, state.watches);
+            if (split_proof)
+                searcher.set_split_proof(split_proof);
 
             // Staging: Stage 1 searches under a small fixed backtrack-budget schedule; at its
             // first restart we build the supplemental graphs (deriving them at the level-0
@@ -159,13 +167,23 @@ namespace
                         break;
 
                     case SearchResult::SatisfiableButKeepGoing:
-                        result.complete = true;
-                        done = true;
-                        break;
-
                     case SearchResult::Unsatisfiable:
                         result.complete = true;
                         done = true;
+                        // the statement's root: what root propagation fixed, and the node
+                        // the search derived that everything else lies in
+                        if (split_proof && ! searcher.statement_entries().empty()) {
+                            vector<pair<int, int>> fixed;
+                            for (auto & a : assignments.values)
+                                fixed.emplace_back(a.assignment.pattern_vertex, a.assignment.target_vertex);
+                            auto below = searcher.statement_entries().front().second;
+                            if (fixed.empty())
+                                statement_root = below;
+                            else {
+                                auto cube = split_proof->cube(fixed);
+                                statement_root = -1 == below ? cube : split_proof->conjunction({cube, below});
+                            }
+                        }
                         break;
 
                     case SearchResult::Aborted:
@@ -655,10 +673,21 @@ namespace
                 return StepOutcome::Concluded;
             }
 
+            // With a counting statement, the search writes it and proves the count by it,
+            // instead of logging each solution.
+            unique_ptr<SplitProof> split_proof;
+            if (proof && params.split_components) {
+                split_proof = make_unique<SplitProof>(proof, *ctx.hom_proofs, pattern.size(), target.size(), *params.split_statement);
+                split_proof->begin();
+            }
+
             HomomorphismResult result;
+            optional<int> statement_root;
             if (1 == params.n_threads) {
                 SequentialSolver solver(ctx.state, params, proof);
+                solver.split_proof = split_proof.get();
                 result = solver.solve();
+                statement_root = solver.statement_root;
             }
             else {
                 if (! params.restarts_schedule->might_restart())
@@ -669,7 +698,17 @@ namespace
                 result = solver.solve();
             }
 
-            if (proof) {
+            if (split_proof) {
+                if (statement_root) {
+                    split_proof->finish(*statement_root);
+                    result.extra_stats.emplace_back("split_statement_file = " + *params.split_statement);
+                }
+                else if (result.complete)
+                    proof->finish_enumeration_proof(0, true);
+                else
+                    proof->finish_unknown_proof();
+            }
+            else if (proof) {
                 if (params.count_solutions)
                     // counting / enumeration: a complete search yields ENUMERATION_COMPLETE,
                     // otherwise (timeout or solution limit) ENUMERATION_PARTIAL
@@ -702,6 +741,29 @@ auto gss::solve_homomorphism_problem(
     // counted -- as long as the watch machinery is enabled under staging, see
     // might_have_watches. Under *proof* it is still unsupported, guarded with the other proof
     // restrictions below, because logging an enumeration across a restart is not yet handled.)
+
+    // Splitting into components counts each component's solutions without visiting the
+    // combinations, so it needs everything that relates two components to be a constraint it
+    // knows how to combine: that two images differ, and nothing else. Local injectivity
+    // would fit that too, but it is refused because its proofs are not written.
+    if (params.split_components) {
+        if (! params.count_solutions)
+            throw UnsupportedConfiguration{"Splitting into components needs --count-solutions"};
+        if (params.enumerate_callback)
+            throw UnsupportedConfiguration{"Splitting into components counts solutions without visiting them, so it cannot print them or stop at a limit"};
+        if (params.proof_options && ! params.split_statement)
+            throw UnsupportedConfiguration{"Proof logging with splitting into components needs a counting statement"};
+        if (params.split_statement && ! params.proof_options)
+            throw UnsupportedConfiguration{"A counting statement for splitting into components needs proof logging"};
+        if (params.injectivity == Injectivity::LocallyInjective)
+            throw UnsupportedConfiguration{"Splitting into components cannot be used with local injectivity"};
+        if (params.induced)
+            throw UnsupportedConfiguration{"Splitting into components cannot be used with induced mappings"};
+        if (1 != params.n_threads || params.staged || params.restarts_schedule->might_restart())
+            throw UnsupportedConfiguration{"Splitting into components needs a sequential search without restarts, use --restarts none and no --staged"};
+        if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
+            throw UnsupportedConfiguration{"Splitting into components cannot be used with less-constraints"};
+    }
 
     // start by setting up proof logging, if necessary
     shared_ptr<Proof> proof;

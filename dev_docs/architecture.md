@@ -22,7 +22,7 @@ call the matching `solve_*` function, and print the `*Result`.
 
 ```
             src/glasgow_subgraph_solver.cc   glasgow_clique_solver.cc   glasgow_common_subgraph_solver.cc
-                          │                          │                          │   (also create_random_graph, convert_to_lad, convert_to_json)
+                          │                          │                          │   (also create_random_graph, convert_to_lad, convert_to_json, count_statement)
                           ▼                          ▼                          ▼
   ┌───────────────────────────────────────────────────────────────────────────────────────┐
   │ Public API  (gss/*.hh)                                                                   │
@@ -94,6 +94,14 @@ homomorphism variants are all configurations of it.
 
 `sip_decomposer` offers an alternative top level that solves subgraph isomorphism by decomposing the
 pattern into biconnected components.
+
+When counting with `HomomorphismParams::split_components`, the searcher counts the components
+of the unassigned pattern vertices separately wherever they fall apart, and combines the counts
+(see [split-counting.md](split-counting.md)). With proof logging it writes its argument as a
+counting statement (`counting_statement`, specified in
+[counting-statements.md](counting-statements.md)), and `innards/split_proof` writes the proof
+that the instance has as many solutions as the statement says. The `count_statement` driver
+reads, checks and counts a statement, and writes the tagged formula the proof ends against.
 
 ## The clique and common-subgraph solvers
 

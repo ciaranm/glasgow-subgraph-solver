@@ -21,6 +21,9 @@ target_link_libraries(convert_to_lad PRIVATE cxxopts)
 add_executable(convert_to_json convert_to_json.cc)
 target_link_libraries(convert_to_json PRIVATE cxxopts)
 
+add_executable(count_statement count_statement.cc)
+target_link_libraries(count_statement PRIVATE cxxopts)
+
 # The JSON format over the real corpus: convert each instance, check the solver gets
 # the same answer through JSON as through the original format, and check the writer's
 # output is a fixed point. Needs no external tools, so it runs in every lane.
@@ -181,6 +184,14 @@ if(VERIPB_EXECUTABLE)
         ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
     gss_add_proof_test(proof_mcs_clique glasgow_common_subgraph_solver --clique
         ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+
+    # Counting by splitting into components inside the search, with a statement and its
+    # proof (dev_docs/split-counting.md): counts, statements and proofs on random sparse
+    # patterns, and two fixed instances that need the signature lemmas.
+    add_test(NAME split_proof_sweep
+        COMMAND ${CMAKE_SOURCE_DIR}/test-instances/split_proof_sweep.bash
+            $<TARGET_FILE:glasgow_subgraph_solver> ${VERIPB_EXECUTABLE}
+            $<TARGET_FILE:count_statement> ${CMAKE_CURRENT_BINARY_DIR}/split_proof_sweep)
 
     # Randomised proof sweep: generate random instances and check the proof verifies
     # on each, across decision/induced/counting combinations. Catches proof-logging
