@@ -545,7 +545,7 @@ auto HomomorphismSearcher::split_into_components(
     // propagated into the domains, so what is left is the constraints among the unassigned
     // vertices. Those inside a connected component are the component's own business. Between
     // two components there are no edges, and since induced mappings are refused, the only
-    // constraint left is (local) injectivity: two vertices may not share an image. So the
+    // constraint left is injectivity: two vertices may not share an image. So the
     // solutions below this node are the combinations of one solution per component in which
     // no two such vertices collide, and each component can be searched on its own, keeping
     // only enough of each solution to tell which combinations collide.
@@ -590,15 +590,6 @@ auto HomomorphismSearcher::split_into_components(
     if (n_components < 2)
         return nullopt;
 
-    auto may_collide = [&](unsigned v, unsigned w) -> bool {
-        switch (params.injectivity) {
-        case Injectivity::Injective: return true;
-        case Injectivity::LocallyInjective: return both_in_the_neighbourhood_of_some_vertex(v, w);
-        case Injectivity::NonInjective: return false;
-        }
-        return true;
-    };
-
     // If this split is itself inside a component of an enclosing split, its solutions go to
     // that component's tally, which needs the images of some of these vertices too.
     ComponentTally * const enclosing = _tally;
@@ -611,27 +602,30 @@ auto HomomorphismSearcher::split_into_components(
     // also take. Every table the combining builds is keyed by some of the recorded images, so
     // the number of possible signatures bounds them all, and a split with too many is not
     // made. Each vertex in a pair at least doubles that number, so the scan can stop early.
+    // Local injectivity is refused, so under injectivity every pair may collide, and
+    // otherwise none may.
     const double log_limit = std::log2(double(*params.split_components));
     vector<pair<unsigned, unsigned>> collisions;
     vector<optional<SVOBitset>> shared(unassigned.size());
     unsigned vertices_in_collisions = 0;
-    for (unsigned i = 0; i < unassigned.size(); ++i)
-        for (unsigned j = i + 1; j < unassigned.size(); ++j)
-            if (component[unassigned[i]->v] != component[unassigned[j]->v] && may_collide(unassigned[i]->v, unassigned[j]->v)) {
-                auto both = unassigned[i]->values;
-                both &= unassigned[j]->values;
-                if (both.any()) {
-                    collisions.emplace_back(i, j);
-                    for (auto k : {i, j}) {
-                        if (! shared[k]) {
-                            if (++vertices_in_collisions > log_limit)
-                                return nullopt;
-                            shared[k] = SVOBitset(model.target_size, 0);
+    if (params.injectivity == Injectivity::Injective)
+        for (unsigned i = 0; i < unassigned.size(); ++i)
+            for (unsigned j = i + 1; j < unassigned.size(); ++j)
+                if (component[unassigned[i]->v] != component[unassigned[j]->v]) {
+                    auto both = unassigned[i]->values;
+                    both &= unassigned[j]->values;
+                    if (both.any()) {
+                        collisions.emplace_back(i, j);
+                        for (auto k : {i, j}) {
+                            if (! shared[k]) {
+                                if (++vertices_in_collisions > log_limit)
+                                    return nullopt;
+                                shared[k] = SVOBitset(model.target_size, 0);
+                            }
+                            *shared[k] |= both;
                         }
-                        *shared[k] |= both;
                     }
                 }
-            }
 
     // A recorded image is one of the relevant ones, or -1.
     double log_signatures = 0.0;

@@ -264,11 +264,12 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                     CHECK(staged_count.complete);
 
                     // Splitting into components counts without enumerating, and is refused
-                    // for induced mappings, whose non-edges relate components.
+                    // for induced mappings, whose non-edges relate components, and for local
+                    // injectivity, which it has no proofs for.
                     params.staged = false;
                     params.enumerate_callback = {};
                     params.split_components = ~0ull;
-                    if (induced)
+                    if (induced || injectivity == Injectivity::LocallyInjective)
                         CHECK_THROWS_AS(solve_homomorphism_problem(pattern, target, params), UnsupportedConfiguration);
                     else {
                         auto split_count = solve_homomorphism_problem(pattern, target, params);
@@ -318,7 +319,7 @@ TEST_CASE("random instances: splitting into components matches plain counting")
             auto pattern = random_graph(np, pattern_density, 0.3, family, rng);
             auto target = random_graph(nt, target_density, 0.3, family, rng);
 
-            for (auto injectivity : {Injectivity::Injective, Injectivity::LocallyInjective, Injectivity::NonInjective}) {
+            for (auto injectivity : {Injectivity::Injective, Injectivity::NonInjective}) {
                 auto params = make_params(injectivity, false);
                 params.count_solutions = true;
                 auto plain = solve_homomorphism_problem(pattern, target, params);

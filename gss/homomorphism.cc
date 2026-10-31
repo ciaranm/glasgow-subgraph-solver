@@ -744,7 +744,8 @@ auto gss::solve_homomorphism_problem(
 
     // Splitting into components counts each component's solutions without visiting the
     // combinations, so it needs everything that relates two components to be a constraint it
-    // knows how to combine: that two images differ, and nothing else.
+    // knows how to combine: that two images differ, and nothing else. Local injectivity
+    // would fit that too, but it is refused because its proofs are not written.
     if (params.split_components) {
         if (! params.count_solutions)
             throw UnsupportedConfiguration{"Splitting into components needs --count-solutions"};
@@ -754,8 +755,8 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Proof logging with splitting into components needs a counting statement"};
         if (params.split_statement && ! params.proof_options)
             throw UnsupportedConfiguration{"A counting statement for splitting into components needs proof logging"};
-        if (params.proof_options && params.injectivity == Injectivity::LocallyInjective)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with splitting into components and local injectivity"};
+        if (params.injectivity == Injectivity::LocallyInjective)
+            throw UnsupportedConfiguration{"Splitting into components cannot be used with local injectivity"};
         if (params.induced)
             throw UnsupportedConfiguration{"Splitting into components cannot be used with induced mappings"};
         if (1 != params.n_threads || params.staged || params.restarts_schedule->might_restart())

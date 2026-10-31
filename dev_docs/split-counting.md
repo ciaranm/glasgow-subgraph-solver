@@ -16,10 +16,9 @@ below the node are the combinations of one solution per component that satisfy t
 constraints between components.
 
 Without induced mappings or less-constraints, those constraints are only injectivity: a
-pair of vertices in different components may not share an image. Under local injectivity
-that holds only for a pair with a common in-neighbour, and under non-injectivity for no pair
-at all. Call a pair that could share an image, because its domains intersect, a *collision
-pair*.
+pair of vertices in different components may not share an image. Under non-injectivity
+there are none at all, and the components' counts just multiply. Call a pair that could
+share an image, because its domains intersect, a *collision pair*.
 
 A split counts each component on its own, and combines the counts:
 
@@ -87,9 +86,11 @@ It is refused, rather than silently disabled, in these cases:
 
 - with induced mappings, less-constraints, threads, restarts, staging or an enumerate
   callback;
+- with local injectivity, because there are no proofs for it. Splitting would work: two
+  vertices in different components could collide only if they have a common in-neighbour.
+  Everything splitting does, though, is meant to be provable;
 - when not counting;
-- with proof logging, unless there is a counting statement to prove;
-- with proof logging under local injectivity.
+- with proof logging, unless there is a counting statement to prove.
 
 See [option-compatibility.md](option-compatibility.md).
 
@@ -97,11 +98,11 @@ See [option-compatibility.md](option-compatibility.md).
 instances. It also checks it against plain counting on 1,600 sparser instances:
 
 - with up to 8 pattern vertices;
-- in all sixteen families and all three injectivity modes;
+- in all sixteen families, both injective and non-injective;
 - with S from 1 (split only where nothing is recorded) to unlimited;
 - with caches that are emptied at every insertion.
 
-Seventeen hand-made mutations of the splitting code are all caught by the second of these
+Sixteen hand-made mutations of the splitting code are all caught by the second of these
 checks. Each gives a wrong count, except one, which crashes. The mutations are:
 
 - ignoring collisions in the combining, or the −1 exception to them;
@@ -110,7 +111,6 @@ checks. Each gives a wrong count, except one, which crashes. The mutations are:
 - dropping an image before the last component that could collide with it, or ignoring the
   enclosing tally's need for it;
 - leaving the assigned vertices or the enclosing relevance out of a nested result;
-- ignoring local injectivity's common in-neighbours;
 - following only out-edges when finding components;
 - ordering by component number rather than by search position;
 - swapping where a combined key comes from;
@@ -249,8 +249,6 @@ of instances like these can be as slow, where the supplemental graphs make each 
 expensive. On top of that, here a search step's unit propagation runs through every gate
 definition written so far, so checking is quadratic in the size of the search. Deleting
 injectivity needs a step per pair of pattern vertices per target vertex.
-
-Not done yet: proofs under local injectivity.
 
 ## Complexity
 
