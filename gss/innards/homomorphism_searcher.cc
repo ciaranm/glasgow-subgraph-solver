@@ -288,6 +288,84 @@ auto HomomorphismSearcher::add_contributions(const HomomorphismAssignments & ass
     statement_line(assignments, gates);
 }
 
+auto HomomorphismSearcher::finish_statement_node(const HomomorphismAssignments & assignments, unsigned branch_v,
+    const std::map<vector<int>, vector<pair<int, int>>> & contributions) -> void
+{
+    // every solution below here lies in one of these, one per signature
+    _entries.clear();
+    vector<string> gates;
+    for (auto & [key, children] : contributions) {
+        vector<int> nodes, values;
+        for (auto & [value, node] : children) {
+            values.push_back(value);
+            nodes.push_back(node);
+        }
+        _entries.emplace_back(key, _split_proof->disjunction(nodes, int(branch_v), values));
+        gates.push_back(_split_proof->gate(_entries.back().second));
+    }
+    statement_line(assignments, gates);
+}
+
+auto HomomorphismSearcher::tally_key(const HomomorphismAssignments & assignments) const -> vector<int>
+{
+    vector<int> key(_tally->vertices.size(), -1);
+    for (auto & a : assignments.values)
+        if (auto i = _tally->index_of(a.assignment.pattern_vertex))
+            key[*i] = _tally->image(*i, int(a.assignment.target_vertex));
+    return key;
+}
+
+auto HomomorphismSearcher::count_last_vertex(HomomorphismAssignments & assignments, const HomomorphismDomain & last,
+    loooong & solution_count) -> SearchResult
+{
+    // Every constraint between the last vertex and an assigned one has been propagated into
+    // its domain. Splitting refuses everything that is not propagated that way (induced
+    // mappings, local injectivity, less-constraints, and the nogoods that restarts post), so
+    // each value is a solution: this is what branching on it would find, one child per
+    // value, without the children. With a tally, the values it records are counted one by
+    // one and the rest together.
+    ++_last_vertices;
+    if (_tally) {
+        auto key = tally_key(assignments);
+        if (auto i = _tally->index_of(last.v)) {
+            auto recorded = last.values;
+            recorded &= _tally->relevant[*i];
+            auto n_recorded = recorded.count();
+            for (auto t = recorded.find_first(); t != decltype(recorded)::npos; t = recorded.find_first()) {
+                recorded.reset(t);
+                key[*i] = int(t);
+                ++_tally->counts[key];
+            }
+            if (last.count > n_recorded) {
+                key[*i] = -1;
+                _tally->counts[key] += loooong{static_cast<unsigned long>(last.count - n_recorded)};
+            }
+        }
+        else
+            _tally->counts[key] += loooong{static_cast<unsigned long>(last.count)};
+    }
+    else
+        solution_count += loooong{static_cast<unsigned long>(last.count)};
+
+    // With a counting statement, the same lines and nodes as the children would have given:
+    // each child's node is the cube of its decision alone, under its signature.
+    if (_split_proof) {
+        std::map<vector<int>, vector<pair<int, int>>> contributions;
+        auto assignments_size = assignments.values.size();
+        auto values = last.values;
+        for (auto t = values.find_first(); t != decltype(values)::npos; t = values.find_first()) {
+            values.reset(t);
+            assignments.values.push_back({{last.v, unsigned(t)}, true, 0, int(last.count)});
+            _entries = {{_tally ? tally_key(assignments) : vector<int>{}, -1}};
+            add_contributions(assignments, assignments_size, contributions);
+            assignments.values.resize(assignments_size);
+        }
+        finish_statement_node(assignments, last.v, contributions);
+    }
+
+    return SearchResult::SatisfiableButKeepGoing;
+}
+
 auto HomomorphismSearcher::solution_in_proof_form(const HomomorphismAssignments & assignments) const -> vector<pair<NamedVertex, NamedVertex>>
 {
     vector<pair<NamedVertex, NamedVertex>> solution;
@@ -321,6 +399,7 @@ auto HomomorphismSearcher::add_extra_stats(std::list<std::string> & stats) const
         _filter_activations.add_search_stats(stats);
     if (params.split_components) {
         stats.push_back("splits = " + to_string(_splits));
+        stats.push_back("last_vertices = " + to_string(_last_vertices));
         stats.push_back("nested_splits = " + to_string(_nested_splits));
         stats.push_back("split_cache_hits = " + to_string(_split_caches ? _split_caches->split_hits : 0));
         stats.push_back("split_cache_entries = " + to_string(_split_caches ? _split_caches->splits.size() : 0));
@@ -361,10 +440,7 @@ auto HomomorphismSearcher::restarting_search(
     const HomomorphismDomain * branch_domain = find_branch_domain(domains);
     if (! branch_domain) {
         if (_tally) {
-            vector<int> key(_tally->vertices.size(), -1);
-            for (auto & a : assignments.values)
-                if (auto i = _tally->index_of(a.assignment.pattern_vertex))
-                    key[*i] = _tally->image(*i, int(a.assignment.target_vertex));
+            auto key = tally_key(assignments);
             ++_tally->counts[key];
             if (_split_proof)
                 _entries = {{key, -1}};
@@ -394,9 +470,12 @@ auto HomomorphismSearcher::restarting_search(
             return SearchResult::Satisfiable;
     }
 
-    if (params.split_components)
+    if (params.split_components) {
+        if (1 == std::count_if(domains.begin(), domains.end(), [](const auto & d) { return ! d.fixed; }))
+            return count_last_vertex(assignments, *branch_domain, solution_count);
         if (auto result = split_into_components(assignments, domains, nodes, propagations, solution_count, depth, restarts_schedule))
             return *result;
+    }
 
     // pull out the remaining values in this domain for branching
     auto remaining = branch_domain->values;
@@ -536,21 +615,8 @@ auto HomomorphismSearcher::restarting_search(
     }
 
     // no values remaining, backtrack, or possibly kick off a restart
-    if (_split_proof) {
-        // every solution below here lies in one of these, one per signature
-        _entries.clear();
-        vector<string> gates;
-        for (auto & [key, children] : contributions) {
-            vector<int> nodes, values;
-            for (auto & [value, node] : children) {
-                values.push_back(value);
-                nodes.push_back(node);
-            }
-            _entries.emplace_back(key, _split_proof->disjunction(nodes, int(branch_domain->v), values));
-            gates.push_back(_split_proof->gate(_entries.back().second));
-        }
-        statement_line(assignments, gates);
-    }
+    if (_split_proof)
+        finish_statement_node(assignments, branch_domain->v, contributions);
     else if (proof)
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 

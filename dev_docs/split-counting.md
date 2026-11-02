@@ -73,6 +73,31 @@ On the 339 instances of the November sweep that took at least 1 s and never spli
 again 80 at a time, splitting had cost 1.10× (at worst 1.73×) before this, and costs 1.02×
 (at worst 1.15×) with it. Instances that split got 9% faster too.
 
+## The last vertex
+
+A search node with only one unassigned vertex left, in the whole search or in a component's,
+does not branch. Every constraint between that vertex and an assigned one is already
+propagated into its domain, and everything splitting refuses is what would not be, so each
+value is a solution. The node counts them from the domain: with a tally, the recorded images
+one by one and the rest together under −1. With a counting statement, it writes the nodes
+and lines that branching would have, one cube per value, without the propagation. The
+searcher reports how often this happens as `last_vertices`. It applies only when splitting,
+so plain counting's node counts are unchanged.
+
+A one-vertex component is the commonest case: a split that cuts off a pendant vertex now
+costs a pass over its domain rather than a search node per value. A two-vertex component
+gets a node per value of one vertex, and each of those counts the other.
+
+On the 2,153 instances of [Results](#results), which predate it, it finishes 546 rather than
+536 and loses none. The geometric mean of its time over the old is 0.85: 0.72 on gen-s, 0.82
+on LV, 0.94 on gen-m, and 0.99 on si, where it applies at only a tenth of the search nodes
+(against two thirds to three quarters on the others). Every count agrees. A temporary check, that each
+value it counts survives propagation as branching would find it, never failed on these
+instances or on the randomised tests. Mutations of the shortcut (ignoring the tally,
+recording no images, leaving out the −1 remainder, firing with two vertices left) are all
+caught by the randomised tests, and giving the proof's entries the wrong signatures by
+`split_proof_sweep`.
+
 ## Caching
 
 The result of a split depends only on the domains of its unassigned vertices and on which of
@@ -88,6 +113,7 @@ this, some instances filled 12 GB in well under the timeout. The searcher report
 counts:
 
 - `splits` and `nested_splits`;
+- `last_vertices` (see [The last vertex](#the-last-vertex));
 - `split_cache_hits` and `split_cache_entries`;
 - `component_cache_hits` and `component_cache_entries`;
 - `split_cache_clears`.
