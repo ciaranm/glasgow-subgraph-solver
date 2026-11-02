@@ -161,6 +161,37 @@ On the 311 instances of the sweep in [Results](#results) that never split, searc
 number of nodes either way, and take at least 1 s plainly, splitting costs 1.03× (p90 1.07×,
 at worst 1.18×).
 
+## The last vertex
+
+A search node with only one unassigned vertex left, in the whole search or in a component's,
+does not branch. Every constraint between that vertex and an assigned one is already
+propagated into its domain, and everything splitting refuses is what would not be, so each
+value is a solution. The node counts them from the domain: with a tally, the recorded images
+one by one and the rest together under −1. With a counting statement, it writes the nodes
+and lines that branching would have, one cube per value, without the propagation. The
+searcher reports how often this happens as `last_vertices`. It applies only when splitting,
+so plain counting's node counts are unchanged.
+
+A one-vertex component is the commonest case: a split that cuts off a pendant vertex now
+costs a pass over its domain rather than a search node per value. A two-vertex component
+gets a node per value of one vertex, and each of those counts the other.
+
+On the 15,356 instances of [Results](#results), which predate it, rerun alongside the old
+code in the same way, it finishes 13,751 rather than 13,741 (six gen-s and four LV more),
+loses none, and every count agrees. Over the 195 instances where it fires and either run
+takes at least 1 s, the geometric mean of its time over the old is 0.76: 0.65 on gen-s, 0.80
+on LV, 0.90 on gen-m, and 0.95 on si, where it replaces under 1% of the search nodes
+(against 12% on gen-s and 17% on LV). The largest gain is gen-s3-LV-g45, from 65 s to 4.7 s.
+Over every instance both finish, by the measure of [Results](#results), it is 0.97. Where it
+never fires, the cost is counting the unassigned vertices at each node: at most 0.14% more
+instructions on the ten instances that looked worst when timed 80 at a time, whose times
+agree to within noise when rerun alone. A temporary check, that each value it counts
+survives propagation as branching would find it, never failed, over a billion values on
+these instances with a 10 s timeout, or on the randomised tests. Mutations of the shortcut
+(ignoring the tally, recording no images, leaving out the −1 remainder, firing with two
+vertices left) are all caught by the randomised tests, and giving the proof's entries the
+wrong signatures by `split_proof_sweep`.
+
 ## Caching
 
 The result of a split depends only on the domains of its unassigned vertices and on which of
@@ -176,6 +207,7 @@ this, some instances filled 12 GB in well under the timeout. The searcher report
 counts:
 
 - `splits` and `nested_splits`;
+- `last_vertices` (see [The last vertex](#the-last-vertex));
 - `split_cache_hits` and `split_cache_entries`;
 - `component_cache_hits` and `component_cache_entries`;
 - `split_cache_clears`.

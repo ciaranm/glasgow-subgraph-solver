@@ -112,6 +112,9 @@ namespace gss::innards
         // rather than into the solution count (see split_into_components). Null otherwise.
         ComponentTally * _tally = nullptr;
         unsigned long long _splits = 0, _nested_splits = 0;
+
+        // When splitting, search nodes whose last unassigned vertex was counted directly.
+        unsigned long long _last_vertices = 0;
         std::unique_ptr<SplitCaches> _split_caches;
 
         // With a counting statement: what the last search node returned, and where the
@@ -130,6 +133,21 @@ namespace gss::innards
         // child's decision leads to one of them.
         auto add_contributions(const HomomorphismAssignments & assignments, std::size_t assignments_size,
             std::map<std::vector<int>, std::vector<std::pair<int, int>>> & contributions) -> void;
+
+        // With a counting statement, once all of a search node's children have returned:
+        // the node's entries, one per signature, each the or of its children's contributions
+        // told apart by the branching vertex, and the line deriving that the decisions lead to
+        // one of them.
+        auto finish_statement_node(const HomomorphismAssignments & assignments, unsigned branch_v,
+            const std::map<std::vector<int>, std::vector<std::pair<int, int>>> & contributions) -> void;
+
+        // With a tally, the signature of the current assignments.
+        auto tally_key(const HomomorphismAssignments & assignments) const -> std::vector<int>;
+
+        // When splitting, a search node with only one vertex left unassigned: every value in
+        // its domain is a solution, so count them without a search node for each.
+        auto count_last_vertex(HomomorphismAssignments & assignments, const HomomorphismDomain & last,
+            loooong & solution_count) -> SearchResult;
 
         // When splitting, whether the unassigned vertices fall into two or more components
         // and the split is not too large to make (see split_into_components).
