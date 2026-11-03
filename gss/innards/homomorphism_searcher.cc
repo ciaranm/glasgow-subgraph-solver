@@ -148,6 +148,41 @@ namespace gss::innards
         return 64 + 8 * key.size() + counts.size() * (96 + 4 * width);
     }
 
+    // What worth_splitting works in, kept from one call to the next so that a node that is
+    // not split allocates nothing. Bitsets here are bare words at their real width: a
+    // SVOBitset works on all of its inline words whatever its size, which is several times
+    // the work for the pattern and target sizes this runs on.
+    struct SplitScreen
+    {
+        using Word = unsigned long long;
+        static constexpr unsigned bits_per_word = 64;
+
+        unsigned pattern_words, target_words;
+
+        // For each pattern vertex, its neighbours in either direction.
+        vector<Word> rows;
+
+        vector<Word> unvisited, images, in_some, in_two;
+        vector<int> component;
+        vector<unsigned> todo;
+
+        explicit SplitScreen(const HomomorphismModel & model) :
+            pattern_words((model.pattern_size + bits_per_word - 1) / bits_per_word),
+            target_words((model.target_size + bits_per_word - 1) / bits_per_word),
+            rows(model.pattern_size * pattern_words),
+            unvisited(pattern_words),
+            in_some(target_words),
+            in_two(target_words),
+            component(model.pattern_size)
+        {
+            for (unsigned v = 0; v < model.pattern_size; ++v) {
+                auto row = model.pattern_graph_row(0, v);
+                row |= model.pattern_in_neighbour_row(v);
+                std::copy(row.words(), row.words() + pattern_words, rows.begin() + v * pattern_words);
+            }
+        }
+    };
+
     // The solutions of one component of a split, keyed by the images of the vertices that the
     // split still needs to see: those that could collide with another component, and those
     // the enclosing tally needs, if this split is itself inside a component. An image that
@@ -532,6 +567,116 @@ auto HomomorphismSearcher::restarting_search(
         return SearchResult::Unsatisfiable;
 }
 
+auto HomomorphismSearcher::worth_splitting(const Domains & domains) -> bool
+{
+    // This runs at every node, and most nodes are not split, so it is kept cheap: see
+    // SplitScreen.
+    if (! _split_screen)
+        _split_screen = std::make_unique<SplitScreen>(model);
+    auto & s = *_split_screen;
+    using Word = SplitScreen::Word;
+    const unsigned pw = s.pattern_words, tw = s.target_words, bpw = SplitScreen::bits_per_word;
+
+    std::fill(s.unvisited.begin(), s.unvisited.end(), 0);
+    unsigned n_unassigned = 0;
+    for (auto & d : domains)
+        if (! d.fixed) {
+            s.unvisited[d.v / bpw] |= Word{1} << (d.v % bpw);
+            ++n_unassigned;
+        }
+    if (n_unassigned < 2)
+        return false;
+
+    // Edges in either direction join a component.
+    int n_components = 0;
+    for (auto & d : domains) {
+        if (d.fixed || ! (s.unvisited[d.v / bpw] & (Word{1} << (d.v % bpw))))
+            continue;
+        s.unvisited[d.v / bpw] &= ~(Word{1} << (d.v % bpw));
+        s.component[d.v] = n_components;
+        s.todo.push_back(d.v);
+        while (! s.todo.empty()) {
+            auto v = s.todo.back();
+            s.todo.pop_back();
+            const Word * row = &s.rows[v * pw];
+            for (unsigned w = 0; w < pw; ++w) {
+                auto reached = row[w] & s.unvisited[w];
+                s.unvisited[w] &= ~reached;
+                for (; reached; reached &= reached - 1) {
+                    auto u = w * bpw + unsigned(countr_zero(reached));
+                    s.component[u] = n_components;
+                    s.todo.push_back(u);
+                }
+            }
+        }
+        ++n_components;
+    }
+    if (n_components < 2)
+        return false;
+
+    // Every table the combining builds is keyed by some of the recorded images, so the number
+    // of possible signatures bounds them all, and a split with too many is not made. A
+    // recorded image is one of the relevant ones, or -1, and a vertex's relevant images are
+    // those that a vertex in another component could also take, and those the enclosing
+    // tally needs, if this split is itself inside a component. Each vertex that could collide
+    // at least doubles the number of signatures, so the count can stop early. Local
+    // injectivity is refused, so under injectivity every pair of vertices in different
+    // components may collide, and otherwise none may.
+    //
+    // The images that a vertex in another component than v's could take are those in the
+    // union of the other components' domains. An image not in v's own component's union is
+    // in another's exactly when it is in some component's, and one in v's own component's
+    // union exactly when it is in two components' unions.
+    const bool injective = params.injectivity == Injectivity::Injective;
+    if (injective) {
+        s.images.assign(std::size_t(n_components) * tw, 0);
+        for (auto & d : domains)
+            if (! d.fixed) {
+                const Word * values = d.values.words();
+                Word * images = &s.images[std::size_t(s.component[d.v]) * tw];
+                for (unsigned w = 0; w < tw; ++w)
+                    images[w] |= values[w];
+            }
+        std::fill(s.in_some.begin(), s.in_some.end(), 0);
+        std::fill(s.in_two.begin(), s.in_two.end(), 0);
+        for (int c = 0; c < n_components; ++c) {
+            const Word * images = &s.images[std::size_t(c) * tw];
+            for (unsigned w = 0; w < tw; ++w) {
+                s.in_two[w] |= images[w] & s.in_some[w];
+                s.in_some[w] |= images[w];
+            }
+        }
+    }
+
+    const double log_limit = std::log2(double(*params.split_components));
+    unsigned vertices_in_collisions = 0;
+    double log_signatures = 0.0;
+    for (auto & d : domains) {
+        if (d.fixed)
+            continue;
+        auto e = _tally ? _tally->index_of(d.v) : nullopt;
+        const Word * values = d.values.words();
+        const Word * own = injective ? &s.images[std::size_t(s.component[d.v]) * tw] : nullptr;
+        const Word * enclosing = e ? _tally->relevant[*e].words() : nullptr;
+        bool collides = false;
+        unsigned relevant = 0;
+        for (unsigned w = 0; w < tw; ++w) {
+            Word shared = injective ? values[w] & ((s.in_some[w] & ~own[w]) | (s.in_two[w] & own[w])) : 0;
+            collides = collides || shared;
+            relevant += unsigned(popcount(shared | (enclosing ? enclosing[w] : 0)));
+        }
+        if (collides && ++vertices_in_collisions > log_limit)
+            return false;
+        if (collides || e) {
+            log_signatures += std::log2(double(relevant) + 1.0);
+            if (log_signatures > log_limit)
+                return false;
+        }
+    }
+
+    return true;
+}
+
 auto HomomorphismSearcher::split_into_components(
     HomomorphismAssignments & assignments,
     const Domains & domains,
@@ -549,6 +694,12 @@ auto HomomorphismSearcher::split_into_components(
     // solutions below this node are the combinations of one solution per component in which
     // no two such vertices collide, and each component can be searched on its own, keeping
     // only enough of each solution to tell which combinations collide.
+    if (! worth_splitting(domains))
+        return nullopt;
+
+    // From here on the split is made, so what follows can take its time: worth_splitting
+    // has already found the components and the vertices that could collide, but cheaply
+    // and in its own workspace, which the component searches below would overwrite.
     vector<const HomomorphismDomain *> unassigned;
     SVOBitset unassigned_mask(model.pattern_size, 0);
     for (auto & d : domains)
@@ -556,9 +707,6 @@ auto HomomorphismSearcher::split_into_components(
             unassigned.push_back(&d);
             unassigned_mask.set(d.v);
         }
-
-    if (unassigned.size() < 2)
-        return nullopt;
 
     // edges in either direction join a component
     vector<int> component(model.pattern_size, -1);
@@ -587,9 +735,6 @@ auto HomomorphismSearcher::split_into_components(
         ++n_components;
     }
 
-    if (n_components < 2)
-        return nullopt;
-
     // If this split is itself inside a component of an enclosing split, its solutions go to
     // that component's tally, which needs the images of some of these vertices too.
     ComponentTally * const enclosing = _tally;
@@ -597,51 +742,46 @@ auto HomomorphismSearcher::split_into_components(
         return enclosing ? enclosing->index_of(v) : nullopt;
     };
 
-    // The pairs of vertices in different components that could take the same image, by index
-    // into unassigned, and for each vertex in such a pair, the images that a partner could
-    // also take. Every table the combining builds is keyed by some of the recorded images, so
-    // the number of possible signatures bounds them all, and a split with too many is not
-    // made. Each vertex in a pair at least doubles that number, so the scan can stop early.
-    // Local injectivity is refused, so under injectivity every pair may collide, and
-    // otherwise none may.
-    const double log_limit = std::log2(double(*params.split_components));
-    vector<pair<unsigned, unsigned>> collisions;
+    // For each vertex that could collide with a vertex in another component, by index into
+    // unassigned, the images that such a partner could also take: as in worth_splitting.
     vector<optional<SVOBitset>> shared(unassigned.size());
-    unsigned vertices_in_collisions = 0;
-    if (params.injectivity == Injectivity::Injective)
-        for (unsigned i = 0; i < unassigned.size(); ++i)
+    if (params.injectivity == Injectivity::Injective) {
+        vector<SVOBitset> component_images(n_components, SVOBitset(model.target_size, 0));
+        for (auto * d : unassigned)
+            component_images[component[d->v]] |= d->values;
+        SVOBitset in_some(model.target_size, 0), in_two(model.target_size, 0);
+        for (auto & images : component_images) {
+            auto again = images;
+            again &= in_some;
+            in_two |= again;
+            in_some |= images;
+        }
+
+        for (unsigned i = 0; i < unassigned.size(); ++i) {
+            auto & own = component_images[component[unassigned[i]->v]];
+            auto elsewhere = in_some;
+            elsewhere.intersect_with_complement(own);
+            auto own_and_elsewhere = in_two;
+            own_and_elsewhere &= own;
+            elsewhere |= own_and_elsewhere;
+            elsewhere &= unassigned[i]->values;
+            if (elsewhere.any())
+                shared[i] = move(elsewhere);
+        }
+    }
+
+    // The pairs of vertices in different components that could take the same image, by index
+    // into unassigned: only vertices with a shared image can be in one.
+    vector<pair<unsigned, unsigned>> collisions;
+    for (unsigned i = 0; i < unassigned.size(); ++i)
+        if (shared[i])
             for (unsigned j = i + 1; j < unassigned.size(); ++j)
-                if (component[unassigned[i]->v] != component[unassigned[j]->v]) {
+                if (shared[j] && component[unassigned[i]->v] != component[unassigned[j]->v]) {
                     auto both = unassigned[i]->values;
                     both &= unassigned[j]->values;
-                    if (both.any()) {
+                    if (both.any())
                         collisions.emplace_back(i, j);
-                        for (auto k : {i, j}) {
-                            if (! shared[k]) {
-                                if (++vertices_in_collisions > log_limit)
-                                    return nullopt;
-                                shared[k] = SVOBitset(model.target_size, 0);
-                            }
-                            *shared[k] |= both;
-                        }
-                    }
                 }
-
-    // A recorded image is one of the relevant ones, or -1.
-    double log_signatures = 0.0;
-    for (unsigned i = 0; i < unassigned.size(); ++i) {
-        auto e = enclosing_index(unassigned[i]->v);
-        if (! e && ! shared[i])
-            continue;
-        SVOBitset relevant(model.target_size, 0);
-        if (e)
-            relevant |= enclosing->relevant[*e];
-        if (shared[i])
-            relevant |= *shared[i];
-        log_signatures += std::log2(double(relevant.count()) + 1.0);
-    }
-    if (log_signatures > log_limit)
-        return nullopt;
 
     ++_splits;
     if (_tally)

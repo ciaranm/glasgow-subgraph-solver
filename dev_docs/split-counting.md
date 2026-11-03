@@ -57,9 +57,21 @@ It allowed four nearly isolated vertices sharing about 4,400 target vertices, wh
 combining step would have looked at 10¹¹ pairs. It ran out of memory on 179 benchmark
 instances and overran the timeout on 43 more.
 
-Finding the components costs a pass over the unassigned vertices at every node, and the
-collision pairs a pass over pairs of them wherever there are two or more components. On an
-instance that never splits, that costs about 20%.
+Most nodes are not split, but every node has to ask, and on an instance whose unassigned
+vertices stay in two components throughout, every node is refused for the same reason. So
+the question is answered apart from the split itself, by `worth_splitting`, which finds the
+components and counts the colliding vertices and the signatures in one pass over the
+unassigned vertices. It works on bare words at the graphs' real widths, since a `SVOBitset`
+works on all of its inline words whatever its size, in a workspace kept from one node to
+the next, so that a node it refuses allocates nothing. It finds the images a partner of v
+could take without looking at pairs: they are v's domain intersected with the images some
+other component could take, which are those outside v's own component's union that some
+component could take, together with those inside it that two components could take. Only a
+split it lets through builds its components again and lists its collision pairs.
+
+On the 339 instances of the November sweep that took at least 1 s and never split, run
+again 80 at a time, splitting had cost 1.10× (at worst 1.73×) before this, and costs 1.02×
+(at worst 1.15×) with it. Instances that split got 9% faster too.
 
 ## Caching
 
@@ -283,8 +295,9 @@ Every count agrees with plain counting on the 410 instances both finish, and wit
 the 506 both of those finish.
 
 On the 63 finished instances that never split, it is 1.20× slower (at worst 1.36×), which is
-the cost of looking for components. That cost loses the one instance only plain counting
-finishes, si2_r005_m600.08, which takes 91 s plainly.
+the cost of looking for components, before `worth_splitting` (above) made that cheaper. That
+cost loses the one instance only plain counting finishes, si2_r005_m600.08, which takes 91 s
+plainly.
 
 Where it does split, the worst case of note is gen-m15-LV-g23 at 1.7×. Nearly all of its 2.5
 million splits are cache hits, so the time goes on building cache keys. 24 finished

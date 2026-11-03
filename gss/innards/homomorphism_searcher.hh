@@ -77,6 +77,7 @@ namespace gss::innards
 
     struct ComponentTally;
     struct SplitCaches;
+    struct SplitScreen;
     class SplitProof;
 
     // With a counting statement (see SplitProof), what a search node hands back to its
@@ -129,6 +130,11 @@ namespace gss::innards
         // child's decision leads to one of them.
         auto add_contributions(const HomomorphismAssignments & assignments, std::size_t assignments_size,
             std::map<std::vector<int>, std::vector<std::pair<int, int>>> & contributions) -> void;
+
+        // When splitting, whether the unassigned vertices fall into two or more components
+        // and the split is not too large to make (see split_into_components).
+        auto worth_splitting(const Domains & domains) -> bool;
+        std::unique_ptr<SplitScreen> _split_screen;
 
         auto split_into_components(
             HomomorphismAssignments & assignments,
