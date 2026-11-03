@@ -62,6 +62,12 @@ auto HomomorphismSearcher::initialise_symmetry() -> void {
                 return -model.pattern_degree(0,a) < -model.pattern_degree(0,b);
             });
         }
+        if (params.dynamic_var_order) {
+            var_pos.resize(var_order.size());
+            for (unsigned int i = 0; i < var_order.size(); i++) {
+                var_pos[var_order[i]] = i;
+            }
+        }
         val_order.resize(model.target_size, model.target_size);
         latest_value_index = -1;
         if (!params.dynamic_target && !params.flexible_target && !params.semi_flexible_target) {
@@ -348,12 +354,13 @@ auto HomomorphismSearcher::restarting_search(
 
     // remember what the base was in case we're doing dynamic symmetries
     std::vector<int> pattern_base_cpy, ipb_cpy, target_base_cpy, itb_cpy, mapping_cpy;
-    std::vector<unsigned int> val_order_cpy;
+    std::vector<unsigned int> var_order_cpy, val_order_cpy;
     SVOBitset searched(model.target_size, 0);
 
-    if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0)) {
+    if (params.dynamic_pattern || (params.semi_flexible_pattern && rep_solution_count == 0) || params.dynamic_var_order) {
         pattern_base_cpy = pattern_base;
         ipb_cpy = irredundant_pattern_base;
+        var_order_cpy = var_order;
     }
     if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
         target_base_cpy = target_base;
@@ -374,6 +381,11 @@ auto HomomorphismSearcher::restarting_search(
             pattern_base = pattern_base_cpy;
             irredundant_pattern_base = ipb_cpy;
         }
+
+        // if (params.dynamic_var_order) {
+        //     var_order = var_order_cpy;
+        //     var_order.push_back(branch_domain->v);
+        // }
 
         if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
             if (did_filter && !branch_domain->values.test(*f_v)) continue;
@@ -1531,7 +1543,7 @@ auto HomomorphismSearcher::occurs_before(int a, int b) -> bool {
  * Adjust the variable order when the pattern base changes
  */
 auto HomomorphismSearcher::adjust_variable_order() -> void {
-    if (!model.do_dynamic_less_thans()) {       // Leave the variable order as it is
+    if (!model.do_dynamic_less_thans() || params.dynamic_var_order) {       // Leave the variable order as it is
         return;
     }
     var_order.resize(0);        // reconstruct the var order
@@ -1605,6 +1617,29 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             // ok, make the assignment
             branch_domain->fixed = true;
             assignments.values.push_back({*current_assignment, false, -1, -1});
+
+            if (params.dynamic_var_order) {
+                unsigned int k = 0;
+
+                // prefix the variable order with the current branch variables
+                for (unsigned int i = 0; i < assignments.values.size(); i++) {
+                    unsigned int x = assignments.values[i].assignment.pattern_vertex;
+                    unsigned int j = var_pos[x];
+
+                    if (j < k) continue;
+
+                    if (j != k) {
+                        unsigned int y = var_order[k];
+
+                        std::swap(var_order[k], var_order[j]);
+                    
+                        var_pos[x] = k;
+                        var_pos[y] = j;
+                    }
+
+                    ++k;
+                }
+            }
 
             if (proof)
                 proof->unit_propagating(

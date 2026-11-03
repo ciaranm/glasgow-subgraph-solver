@@ -125,6 +125,7 @@ namespace gss
         bool degree_sym_pattern = false, degree_sym_target = false;
         bool natural_pattern = false, natural_target = false;
         bool semi_flexible_pattern = false, semi_flexible_target = false;
+        bool dynamic_var_order = false;
         bool composite_symmetries = false;
         bool symmetric_nogoods = false, symmetric_nogoods_only = false;
         bool delayed_symmetry = false;

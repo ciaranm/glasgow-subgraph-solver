@@ -99,6 +99,7 @@ namespace gss::innards
         std::vector<int> target_base, pattern_base;
         std::vector<int> irredundant_target_base, irredundant_pattern_base;
         std::vector<unsigned int> var_order, val_order;
+        std::vector<unsigned int> var_pos;
         int latest_value_index;
         std::vector<int> target_orbit_sizes, pattern_orbit_sizes;
         loooong pattern_aut_grp_size = 1;

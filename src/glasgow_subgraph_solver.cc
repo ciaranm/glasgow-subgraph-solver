@@ -533,6 +533,9 @@ namespace
         if (options_vars.count("composite-symmetries")) {
             params.composite_symmetries = true;
         }
+        if (options_vars.count("dynamic-var-order")) {
+            params.dynamic_var_order = true;
+        }
         if (options_vars.count("symmetric-nogoods")) {
             params.symmetric_nogoods = true;
         }
@@ -664,6 +667,7 @@ auto main(int argc, char * argv[]) -> int
                 "Eliminate pattern and target symmetries on partial assignments (requires Dejavu)",
                 cxxopts::value<string>())
             ("composite-symmetries", "Compute combinations of automorphisms to break extra symmetries (requires Dejavu)")
+            ("dynamic-var-order", "Allow dynamic variable order for symmetry breaking with a fixed stabiliser")
             ("symmetric-nogoods", "Log symmetric branches as nogoods on restarts (requires Dejavu)")
             ("symmetric-nogoods-only", "Log symmetric branches as nogoods on restarts, and don't propagate symmetries elsewhere (requires Dejavu)")
             ("delay-symmetry", "Specify symmetry delay policy (timed / backtracks)", cxxopts::value<string>())
