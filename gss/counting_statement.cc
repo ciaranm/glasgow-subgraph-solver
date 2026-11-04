@@ -30,10 +30,18 @@ auto CountingStatementError::what() const noexcept -> const char *
     return _what.c_str();
 }
 
+auto gss::distinct_count(std::size_t k, std::size_t d) -> loooong
+{
+    loooong result{1};
+    for (std::size_t i = 0; i < k; ++i)
+        result *= loooong{(unsigned long)(d >= i ? d - i : 0)};
+    return result;
+}
+
 CountingStatementWriter::CountingStatementWriter(ostream & out, const vector<int> & domain_sizes) :
     _out(out)
 {
-    _out << "(\n(version 2)\n(domain";
+    _out << "(\n(version 3)\n(domain";
     for (auto & n : domain_sizes)
         _out << " " << n;
     _out << ")\n(nodes\n";
@@ -60,6 +68,9 @@ auto CountingStatementWriter::add(CountingNode node) -> int
         for (auto & c : node.children)
             node.count += _counts[c];
         break;
+    case CountingNodeKind::Distinct:
+        node.count = distinct_count(node.variables.size(), node.values.size());
+        break;
     }
 
     _out << "(" << id << " " << node.count << " ";
@@ -75,6 +86,15 @@ auto CountingStatementWriter::add(CountingNode node) -> int
         for (auto & c : node.children)
             _out << " " << c;
         break;
+    case CountingNodeKind::Distinct:
+        _out << "distinct (";
+        for (unsigned i = 0; i < node.variables.size(); ++i)
+            _out << (0 == i ? "" : " ") << node.variables[i];
+        _out << ") (";
+        for (unsigned i = 0; i < node.values.size(); ++i)
+            _out << (0 == i ? "" : " ") << node.values[i];
+        _out << ")";
+        break;
     }
     _out << ")\n";
 
@@ -86,17 +106,22 @@ auto CountingStatementWriter::add(CountingNode node) -> int
 
 auto CountingStatementWriter::add_cube(const vector<pair<int, int>> & assignment) -> int
 {
-    return add(CountingNode{CountingNodeKind::Cube, 0, assignment, {}});
+    return add(CountingNode{CountingNodeKind::Cube, 0, assignment, {}, {}, {}});
 }
 
 auto CountingStatementWriter::add_and(const vector<int> & children) -> int
 {
-    return add(CountingNode{CountingNodeKind::And, 0, {}, children});
+    return add(CountingNode{CountingNodeKind::And, 0, {}, children, {}, {}});
 }
 
 auto CountingStatementWriter::add_or(const vector<int> & children) -> int
 {
-    return add(CountingNode{CountingNodeKind::Or, 0, {}, children});
+    return add(CountingNode{CountingNodeKind::Or, 0, {}, children, {}, {}});
+}
+
+auto CountingStatementWriter::add_distinct(const vector<int> & variables, const vector<int> & values) -> int
+{
+    return add(CountingNode{CountingNodeKind::Distinct, 0, {}, {}, variables, values});
 }
 
 auto CountingStatementWriter::set_observer(function<void(int, const CountingNode &)> observer) -> void
@@ -382,10 +407,36 @@ auto gss::check_counting_statement(const CountingStatement & statement) -> void
             if (scope.empty())
                 fail_node(id, "an or has an empty scope");
             break;
+
+        case CountingNodeKind::Distinct:
+            if (! node.children.empty())
+                fail_node(id, "a distinct node has no children");
+            if (node.variables.empty())
+                fail_node(id, "a distinct node has no variables");
+            if (node.values.size() < node.variables.size())
+                fail_node(id, "a distinct node has fewer values than variables");
+            for (unsigned i = 0; i < node.variables.size(); ++i) {
+                auto u = node.variables[i];
+                if (u < 0 || u >= number_of_variables)
+                    fail_node(id, "variable " + to_string(u) + " out of range");
+                if (i > 0 && node.variables[i - 1] >= u)
+                    fail_node(id, "distinct variables are not strictly increasing");
+                for (auto & value : node.values)
+                    if (value < 0 || value >= statement.domain_sizes[u])
+                        fail_node(id, "value " + to_string(value) + " out of range for variable " + to_string(u));
+                scope.push_back(u);
+            }
+            for (unsigned i = 1; i < node.values.size(); ++i)
+                if (node.values[i - 1] >= node.values[i])
+                    fail_node(id, "distinct values are not strictly increasing");
+            count = distinct_count(node.variables.size(), node.values.size());
+            break;
         }
 
         if (node.kind != CountingNodeKind::Cube && ! node.assignment.empty())
             fail_node(id, "only a cube has an assignment");
+        if (node.kind != CountingNodeKind::Distinct && ! (node.variables.empty() && node.values.empty()))
+            fail_node(id, "only a distinct node has variables and values");
         if (count != node.count) {
             std::ostringstream message;
             message << "its count is " << count << ", not " << node.count;
@@ -414,7 +465,7 @@ auto gss::read_counting_statement(istream & in) -> CountingStatement
 
     reader.expect_open();
     reader.expect_keyword("version");
-    reader.expect_keyword("2");
+    reader.expect_keyword("3");
     reader.expect_close();
 
     reader.expect_open();
@@ -432,7 +483,7 @@ auto gss::read_counting_statement(istream & in) -> CountingStatement
         if (id != int(result.nodes.size()))
             throw CountingStatementError{"line " + to_string(line) + ": expected node " + to_string(result.nodes.size()) + ", found node " + to_string(id)};
 
-        CountingNode node{CountingNodeKind::Cube, reader.read_count(), {}, {}};
+        CountingNode node{CountingNodeKind::Cube, reader.read_count(), {}, {}, {}, {}};
         auto kind = reader.read_atom();
         if (kind == "cube") {
             while (reader.at_open()) {
@@ -447,6 +498,17 @@ auto gss::read_counting_statement(istream & in) -> CountingStatement
             node.kind = kind == "and" ? CountingNodeKind::And : CountingNodeKind::Or;
             while (reader.at_atom())
                 node.children.push_back(reader.read_number());
+        }
+        else if (kind == "distinct") {
+            node.kind = CountingNodeKind::Distinct;
+            reader.expect_open();
+            while (reader.at_atom())
+                node.variables.push_back(reader.read_number());
+            reader.expect_close();
+            reader.expect_open();
+            while (reader.at_atom())
+                node.values.push_back(reader.read_number());
+            reader.expect_close();
         }
         else
             throw CountingStatementError{"line " + to_string(line) + ": unknown node kind '" + kind + "'"};
@@ -536,6 +598,23 @@ auto gss::write_tagged_opb(ostream & out, const CountingStatement & statement) -
                     out << "1 ~" << t(i, j) << " ";
                 out << ">= " << k - 1 << " ;\n";
             }
+        } break;
+
+        case CountingNodeKind::Distinct: {
+            for (auto & u : node.variables) {
+                out << "1 ~" << a(i);
+                for (auto & value : node.values)
+                    out << " 1 " << y(u, value);
+                out << " >= 1 ;\n";
+            }
+            auto k = node.variables.size();
+            if (k >= 2)
+                for (auto & value : node.values) {
+                    out << k - 1 << " ~" << a(i);
+                    for (auto & u : node.variables)
+                        out << " 1 ~" << y(u, value);
+                    out << " >= " << k - 1 << " ;\n";
+                }
         } break;
         }
     }

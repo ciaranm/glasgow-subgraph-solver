@@ -8,6 +8,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace gss;
@@ -28,7 +29,7 @@ namespace
 
     auto statement(const string & domain, const string & nodes, const string & root) -> string
     {
-        return "((version 2) (domain " + domain + ") (nodes " + nodes + ") (root " + root + "))";
+        return "((version 3) (domain " + domain + ") (nodes " + nodes + ") (root " + root + "))";
     }
 
     // one variable, three values, either of the first two
@@ -40,7 +41,7 @@ namespace
     {
         struct Row
         {
-            vector<std::pair<string, bool>> literals;
+            vector<std::tuple<int, string, bool>> literals;
             bool at_most;
             int degree;
         };
@@ -65,11 +66,12 @@ namespace
                     words >> row.degree;
                     break;
                 }
-                REQUIRE(word == "1");
+                int coefficient = std::stoi(word);
+                REQUIRE(coefficient >= 1);
                 words >> word;
                 bool negated = word[0] == '~';
                 auto name = negated ? word.substr(1) : word;
-                row.literals.emplace_back(name, negated);
+                row.literals.emplace_back(coefficient, name, negated);
                 variables.insert(name);
                 words >> word;
             }
@@ -86,8 +88,8 @@ namespace
             bool ok = true;
             for (auto & row : rows) {
                 int sum = 0;
-                for (auto & [name, negated] : row.literals)
-                    sum += value[name] != negated;
+                for (auto & [coefficient, name, negated] : row.literals)
+                    sum += coefficient * (value[name] != negated);
                 if (row.at_most ? sum > row.degree : sum < row.degree) {
                     ok = false;
                     break;
@@ -143,8 +145,10 @@ TEST_CASE("counting statements reject anything malformed")
         string{"("},
         one_of_two + " extra",
         string{"((version 1) (domain 1) (nodes (0 1 cube (0 0))) (root 0))"},
-        string{"((domain 1) (version 2) (nodes (0 1 cube (0 0))) (root 0))"},
-        string{"((version 2) (domain 1) (nodes (0 1 cube (0 0))))"},
+        // version 2 had no distinct nodes, and is not read as 3
+        string{"((version 2) (domain 1) (nodes (0 1 cube (0 0))) (root 0))"},
+        string{"((domain 1) (version 3) (nodes (0 1 cube (0 0))) (root 0))"},
+        string{"((version 3) (domain 1) (nodes (0 1 cube (0 0))))"},
         statement("03", "(0 1 cube (0 0))", "0"),
         statement("-3", "(0 1 cube (0 0))", "0"),
         statement("3", "(0 cube (0 0))", "0"),
@@ -187,7 +191,21 @@ TEST_CASE("counting statements reject anything malformed")
         statement("3 3", "(0 1 cube (0 0) (1 0)) (1 1 cube (0 0))", "1"),
         // each variable has its own domain
         statement("2 3", "(0 1 cube (0 2) (1 0))", "0"),
-        statement("3 0", "(0 1 cube (0 0))", "0"));
+        statement("3 0", "(0 1 cube (0 0))", "0"),
+        // distinct nodes
+        statement("3 3", "(0 6 distinct (0 1) (0 1 2))", "1"),
+        statement("3 3", "(0 5 distinct (0 1) (0 1 2))", "0"),
+        statement("3 3", "(0 6 distinct (1 0) (0 1 2))", "0"),
+        statement("3 3", "(0 6 distinct (0 1) (0 2 1))", "0"),
+        statement("3 3", "(0 2 distinct (0 1) (0 0 1))", "0"),
+        statement("3 3", "(0 0 distinct (0 1) (0))", "0"),
+        statement("3 3", "(0 1 distinct () (0 1))", "0"),
+        statement("3 3", "(0 2 distinct (0 1) (0 1)) (1 1 cube (0 0)) (2 2 and 0 1)", "2"),
+        statement("3 2", "(0 6 distinct (0 1) (0 1 2))", "0"),
+        statement("3 3", "(0 6 distinct (0 2) (0 1 2))", "0"),
+        statement("3 3", "(0 6 distinct (0 1) (0 1 2) (3))", "0"),
+        statement("3 3", "(0 6 distinct 0 1 (0 1 2))", "0"),
+        statement("3 3", "(0 1 cube (0 0)) (1 6 distinct (0 1) (0 1 2) 0)", "1"));
 
     INFO(bad);
     CHECK_THROWS_AS(read(bad), CountingStatementError);
@@ -273,7 +291,16 @@ TEST_CASE("the tagged formula has as many solutions as the statement's count")
             "(5 1 cube (0 0) (1 0)) (6 3 or 4 5)",
             "6"),
         // empty cubes and ands under an and
-        statement("2", "(0 1 cube) (1 1 and) (2 1 cube (0 1)) (3 1 and 0 1 2)", "3"));
+        statement("2", "(0 1 cube) (1 1 and) (2 1 cube (0 1)) (3 1 and 0 1 2)", "3"),
+        // distinct values, all of them, a set of one, and one variable
+        statement("4 4 4", "(0 24 distinct (0 1 2) (0 1 2 3))", "0"),
+        statement("3 3 3", "(0 6 distinct (0 1 2) (0 1 2))", "0"),
+        statement("4 4", "(0 3 distinct (0) (1 2 3)) (1 1 cube (1 0)) (2 3 and 0 1)", "2"),
+        // under an or, beside a cube that overlaps it, and shared
+        statement("3 3",
+            "(0 2 distinct (0 1) (1 2)) (1 1 cube (0 1) (1 2)) (2 3 or 0 1) (3 6 distinct (0 1) (0 1 2)) "
+            "(4 8 or 0 3) (5 11 or 2 4)",
+            "5"));
 
     INFO(text);
     auto s = read(text);
@@ -357,4 +384,24 @@ TEST_CASE("rendering a statement names products and factors tables")
                        "  | (0->2 1->3) * 2 in {0 1}  [2]\n"
                        "n2 [2] = {0 1} = {0 1}  [2]\n"
                        "n5 [2] = 2 in {2 3}  [2]\n");
+}
+
+TEST_CASE("a distinct node's objects are every way of giving its variables distinct values")
+{
+    // vertex 2 at 3, and vertices 0 and 1 at distinct values of {0, 1, 2}; or vertex 2 at
+    // 0, and vertices 0 and 1 at 1 and 2 either way round
+    auto s = read(statement("4 4 4",
+        "(0 6 distinct (0 1) (0 1 2)) (1 1 cube (2 3)) (2 6 and 0 1) "
+        "(3 2 distinct (0 1) (1 2)) (4 1 cube (2 0)) (5 2 and 3 4) (6 8 or 2 5)",
+        "6"));
+    set<vector<int>> seen;
+    for (long i = 0; i < 8; ++i)
+        seen.insert(unrank_counting_statement(s, loooong{i}));
+    CHECK(seen == set<vector<int>>{{0, 1, 3}, {0, 2, 3}, {1, 0, 3}, {1, 2, 3}, {2, 0, 3}, {2, 1, 3}, {1, 2, 0}, {2, 1, 0}});
+
+    stringstream out;
+    render_counting_statement(out, s);
+    CHECK(out.str() == "root [8] = one of\n"
+                       "  | (2->3) * {0 1} distinct in {0 1 2}  [6]\n"
+                       "  | (2->0) * {0 1} = {1 2}  [2]\n");
 }

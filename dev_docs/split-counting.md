@@ -94,6 +94,46 @@ counts:
 - `component_cache_hits` and `component_cache_entries`;
 - `split_cache_clears`.
 
+## Interchangeable vertices
+
+Under injectivity, a split's components often include single vertices whose neighbours are
+all assigned, several with the same domain: the leaves of a hub, say, once the hub is placed.
+Such vertices are interchangeable. Searched and combined one at a time, five of them sharing
+nine values make 15,120 entries, one for each way of placing them, and on si2_b06m_m400.07
+that was every pair the combining looked at.
+
+So a split first collects its **free sets**: the vertices that are components on their own,
+whose images the enclosing tally does not need, with the same domain. It keeps some free
+sets, largest first, whose domains are pairwise disjoint, and does not search those
+vertices. Free sets whose domains overlap a kept one's are searched as ordinary components.
+It searches and combines the rest as before, keeping the images that could collide with a
+free set's vertices, until the last combining step. There, for each compatible pair, each
+kept free set's k vertices take distinct values from its domain less the pair's images. That
+is d (d − 1) ⋯ (d − k + 1) ways, for d values left, and none if d < k. The new table is then
+keyed only by what the enclosing tally needs. Not under non-injective mappings, where nothing
+collides anyway.
+
+A vertex alone in its component has exactly its domain as solutions. Every constraint
+between it and the assigned vertices has already been propagated into its domain, and there
+is nothing else in the component.
+
+Placing the free sets in a step of their own, after combining, was simpler, but the last
+combining step then kept every pair as its own entry, keyed by the images the free sets
+needed, and on gen-s17-LV-g45 counting took 2.6× as long. Placing them pair by pair brings
+that down to 1.4×. A free set of one vertex is kept too: it gains little for counting, but a
+statement gets one node for it rather than one per value.
+
+On the 269 splitting instances of the November sweep, against no free sets:
+
+- si2_b06m_m400.07: counting 0.42 s → 0.06 s, writing the statement 8.5 s → 0.13 s and
+  175 MB → 1.4 MB;
+- statements, in total: 5.7× smaller in si2_b06, 25× in si2_r01, 14× in si4_r00, 7.5× in
+  si6_r00, 1.8× in si2_m4D and 1.2× in LV, where most combining is of components of two or
+  three vertices; median per instance 1.06×;
+- time: unchanged at the median with and without a statement. Counting is at worst 1.41×
+  slower (gen-s17-LV-g45; three instances above 1.1×), and writing the statement is 10%
+  faster in total.
+
 ## The statement as the solutions
 
 A statement is a DAG of cubes, `and`s whose children have disjoint scopes, and `or`s whose
@@ -116,26 +156,30 @@ from inside the proof.
   in front of them. Alternatives that differ only in their values become a table, and a table
   is factored into the product of its projections where it is one, with a block that is every
   ordering of one set of values written as `{u v} = {3 4}`, and one that is every way of
-  giving its vertices distinct values from a larger set as `{u v} distinct in {3 4 5}`.
+  giving its vertices distinct values from a larger set as `{u v} distinct in {3 4 5}`. A
+  `distinct` node is written the same way in place, or as `u in {3 4 5}` for one vertex.
   `--pattern` and `--target` give vertex names.
 
 None of this needs a proof, and none of it is part of what checks a count: it reads a
 statement that has already been checked for well-formedness. The statement is written the
 same, byte for byte, with or without `--prove`.
 
-For example, si2_b09m_m400.08 has 6,451,200 solutions. Its statement is 170 KB, and it renders
-in 64 lines, starting:
+For example, si2_b09m_m400.08 has 6,451,200 solutions. Its statement is 136 KB, and it renders
+in 20 lines, starting:
 
 ```
 root [6451200] = (0->0 1->4 2->15 3->18 ...) * one of
   | (7->329) * {12 16} = {137 182} * {23 25 28} = {86 109 155} * {32 34} = {8 78} *
         {45 49} = {134 186} * {67 69} = {135 188} * {68 71} = {144 279} * {70 73} = {211 307} *
-        n501  [1935360]
+        n2  [1935360]
   | ...
-n501 [5040] = one of
-  | 79 in {41 90 98 104 216 284} * n451  [720]
-  | ...
+n2 [5040] = {47 51 52 54 55} = {156 200 203 235 306} * {78 79} distinct in {1 41 90 98 104 216
+    284}  [5040]
 ```
+
+Without free sets (see [Interchangeable vertices](#interchangeable-vertices)) it renders in 64
+lines: in place of `n2`, seven alternatives, one per value of vertex 78, each with 79 at one of
+the other six and a further node for the permutation.
 
 ## Restrictions and testing
 
@@ -218,6 +262,17 @@ The statement mirrors the search.
   recorded image, derived when the entry is made. Only the two fixed instances in
   `test-instances/split` need these. They were found by searching 2,000 random instances for
   a collision between two `or`s.
+- **Free sets.** In the last combining step, each pair's node is the `and` of the two
+  entries' nodes and a `distinct` node per kept free set, for its vertices and the values
+  the pair leaves them. Its gate is the
+  `and` of sub-gates of the proof's own: each vertex is at one of the values, and at most
+  one of the vertices is at each value. The second kind are facts, from injectivity by one
+  cutting planes step each. The first follow, for each pair, by unit propagation from the
+  split's assumption, the entries' signature lemmas and injectivity, and then that the pair
+  leads to its new entry. A pair whose free set has fewer values than vertices is refuted by
+  pigeonhole, as one cutting planes step adding up each vertex's "at one of the values" and
+  each value's at-most-one. With these, each left entry goes into its new entries by unit
+  propagation, as before.
 - **Regrouping.** A split's result, regrouped by the enclosing tally's signature, goes back
   to the search node as that node's entries.
 

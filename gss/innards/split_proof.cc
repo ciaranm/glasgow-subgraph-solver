@@ -58,12 +58,16 @@ namespace
         string backward, constraint;
     };
 
-    auto gate_definition(int i, const CountingNode & node) -> GateDefinition
+    // A distinct node's gate is the and of its sub-gates (see SplitProof::distinct), which
+    // are given.
+    auto gate_definition(int i, const CountingNode & node, const vector<string> & sub_gates) -> GateDefinition
     {
         vector<string> literals;
         if (node.kind == CountingNodeKind::Cube)
             for (auto & [u, v] : node.assignment)
                 literals.push_back(y(u, v));
+        else if (node.kind == CountingNodeKind::Distinct)
+            literals = sub_gates;
         else
             for (auto & c : node.children)
                 literals.push_back(g(c));
@@ -121,6 +125,108 @@ struct SplitProof::Imp
     CountingStatement statement;
     vector<long> forward, backward;
     map<int, pair<int, vector<int>>> separators;
+
+    map<pair<vector<int>, vector<int>>, int> distincts;
+
+    // A distinct node's gate is the and of sub-gates, each defined over y, and shared
+    // between nodes: "u is at one of these values", and "at most one of these vertices is
+    // at t". Each at-most-one sub-gate holds, by the input's injectivity, and those facts,
+    // with the at-most-one rows over y they come from, are deleted before injectivity is.
+    struct SubGate
+    {
+        string name, constraint;
+        long forward = 0, backward = 0;
+    };
+    vector<SubGate> sub_gates;
+    map<pair<int, vector<int>>, int> in_set_gates;
+    map<pair<vector<int>, int>, int> at_most_one_gates;
+    map<pair<vector<int>, int>, long> y_at_most_one_over;
+    vector<long> injectivity_lemmas;
+
+    // For each distinct node, its sub-gates, by index: one per vertex, then, with two or
+    // more vertices, one per value. The observer takes the next node's from pending.
+    map<int, vector<int>> distinct_sub_gates;
+    vector<int> pending_sub_gates;
+
+    auto sub_gate_names(int node) const -> vector<string>
+    {
+        vector<string> result;
+        if (auto d = distinct_sub_gates.find(node); d != distinct_sub_gates.end())
+            for (auto & i : d->second)
+                result.push_back(sub_gates[i].name);
+        return result;
+    }
+
+    auto define_sub_gate(const string & name, const string & forward, const string & backward, const string & constraint) -> int
+    {
+        SubGate gate{name, constraint};
+        proof->at_level_zero([&] {
+            gate.forward = proof->emit_proof_line("red " + forward + " : " + name + " -> 0 ;");
+            gate.backward = proof->emit_proof_line("red " + backward + " : " + name + " -> 1 ;");
+            proof->emit_proof_directive("core id " + to_string(gate.forward) + " " + to_string(gate.backward) + " ;");
+        });
+        sub_gates.push_back(gate);
+        return sub_gates.size() - 1;
+    }
+
+    // u is at one of these values: an or over y
+    auto in_set_gate(int u, const vector<int> & values) -> int
+    {
+        auto [where, inserted] = in_set_gates.emplace(pair{u, values}, -1);
+        if (inserted) {
+            auto name = "ds" + to_string(sub_gates.size());
+            auto d = to_string(values.size());
+            string forward = "1 ~" + name, backward = d + " " + name, constraint;
+            for (auto & t : values) {
+                forward += " 1 " + y(u, t);
+                backward += " 1 ~" + y(u, t);
+                constraint += "1 " + y(u, t) + " ";
+            }
+            where->second = define_sub_gate(name, forward + " >= 1", backward + " >= " + d, constraint + ">= 1");
+        }
+        return where->second;
+    }
+
+    // At most one of these vertices is at t, over y, from the input's injectivity row on t
+    // and the copies y -> x, weakening away the other vertices.
+    auto y_at_most_one_of(const vector<int> & vertices, int t) -> long
+    {
+        auto [where, inserted] = y_at_most_one_over.emplace(pair{vertices, t}, 0);
+        if (inserted) {
+            string line = "pol " + proof->injectivity_labels().at(t);
+            for (auto & u : vertices)
+                line += " " + to_string(y_implies_x[u][t]) + " +";
+            for (int v = 0; v < pattern_size; ++v)
+                if (! std::ranges::binary_search(vertices, v))
+                    line += " x" + proof->variable_name(v, t) + " w";
+            proof->at_level_zero([&] { where->second = proof->emit_proof_line(line + " ;"); });
+            injectivity_lemmas.push_back(where->second);
+        }
+        return where->second;
+    }
+
+    // At most one of these vertices is at t: a reified cardinality constraint, which holds.
+    auto at_most_one_gate(const vector<int> & vertices, int t) -> int
+    {
+        auto [where, inserted] = at_most_one_gates.emplace(pair{vertices, t}, -1);
+        if (inserted) {
+            auto name = "ds" + to_string(sub_gates.size());
+            auto k = to_string(vertices.size() - 1);
+            string forward = k + " ~" + name, backward = "2 " + name, constraint;
+            for (auto & u : vertices) {
+                forward += " 1 ~" + y(u, t);
+                backward += " 1 " + y(u, t);
+                constraint += "1 ~" + y(u, t) + " ";
+            }
+            where->second = define_sub_gate(name, forward + " >= " + k, backward + " >= 2", constraint + ">= " + k);
+            auto amo = y_at_most_one_of(vertices, t);
+            proof->at_level_zero([&] {
+                injectivity_lemmas.push_back(proof->emit_proof_line(
+                    "pol " + to_string(sub_gates[where->second].backward) + " " + to_string(amo) + " + s ;"));
+            });
+        }
+        return where->second;
+    }
 };
 
 SplitProof::SplitProof(const shared_ptr<Proof> & proof, HomomorphismProofs * hom_proofs, int pattern_size, int target_size,
@@ -145,7 +251,11 @@ SplitProof::SplitProof(const shared_ptr<Proof> & proof, HomomorphismProofs * hom
     // gate implies cannot wait until the search has derived things about it.
     _imp->writer->set_observer([this](int i, const CountingNode & node) {
         auto & proof = *_imp->proof;
-        auto definition = gate_definition(i, node);
+        if (node.kind == CountingNodeKind::Distinct) {
+            _imp->distinct_sub_gates.emplace(i, std::move(_imp->pending_sub_gates));
+            _imp->pending_sub_gates.clear();
+        }
+        auto definition = gate_definition(i, node, _imp->sub_gate_names(i));
         proof.at_level_zero([&] {
             long forward = 0;
             if (definition.forward)
@@ -155,7 +265,7 @@ SplitProof::SplitProof(const shared_ptr<Proof> & proof, HomomorphismProofs * hom
             _imp->forward.push_back(forward);
             _imp->backward.push_back(backward);
         });
-        _imp->statement.nodes.push_back(CountingNode{node.kind, 0, node.assignment, node.children});
+        _imp->statement.nodes.push_back(CountingNode{node.kind, 0, node.assignment, node.children, node.variables, node.values});
     });
 }
 
@@ -247,6 +357,62 @@ auto SplitProof::disjunction(const vector<int> & children, int vertex, const vec
     if (_imp->proof)
         _imp->separators.emplace(id, pair{vertex, move(sorted_values)});
     return id;
+}
+
+auto SplitProof::distinct(const vector<int> & vertices, const vector<int> & values) -> int
+{
+    auto [where, inserted] = _imp->distincts.emplace(pair{vertices, values}, -1);
+    if (inserted) {
+        if (_imp->proof) {
+            _imp->pending_sub_gates.clear();
+            for (auto & u : vertices)
+                _imp->pending_sub_gates.push_back(_imp->in_set_gate(u, values));
+            if (vertices.size() >= 2)
+                for (auto & t : values)
+                    _imp->pending_sub_gates.push_back(_imp->at_most_one_gate(vertices, t));
+        }
+        where->second = _imp->writer->add_distinct(vertices, values);
+    }
+    return where->second;
+}
+
+auto SplitProof::distinct_lemmas(const vector<string> & premises, const vector<int> & vertices, const vector<int> & values) -> vector<long>
+{
+    vector<long> result;
+    if (! _imp->proof)
+        return result;
+    for (auto & u : vertices) {
+        auto h = _imp->in_set_gates.at(pair{u, values});
+        auto literals = premises;
+        literals.push_back(_imp->sub_gates[h].name);
+        result.push_back(rup(literals, true));
+    }
+    return result;
+}
+
+auto SplitProof::distinct_impossible(const vector<string> & premises, const vector<int> & vertices, const vector<int> & values) -> vector<long>
+{
+    vector<long> result;
+    if (! _imp->proof)
+        return result;
+    // each vertex is at one of the values, and each value has at most one of them, so
+    // adding everything up, k vertices fit into fewer than k values, which they cannot
+    for (auto & u : vertices) {
+        auto literals = premises;
+        for (auto & t : values)
+            literals.push_back(y(u, t));
+        result.push_back(rup(literals, true));
+    }
+    if (! values.empty()) {
+        string line = "pol";
+        for (unsigned i = 0; i < result.size(); ++i)
+            line += " " + to_string(result[i]) + (0 == i ? "" : " +");
+        for (auto & t : values)
+            line += " " + to_string(_imp->y_at_most_one_of(vertices, t)) + " +";
+        line += " " + to_string(vertices.size()) + " d ;";
+        _imp->proof->at_level_zero([&] { result.push_back(_imp->proof->emit_proof_line(line)); });
+    }
+    return result;
 }
 
 auto SplitProof::gate(int node) const -> string
@@ -408,6 +574,12 @@ namespace
                 if (_how.contains({m, key}))
                     continue;
                 auto & node = _statement.nodes[m];
+                if (node.kind == CountingNodeKind::Distinct) {
+                    // never needed: an or's children are told apart by vertices outside
+                    // any distinct node below them
+                    _how.emplace(pair{m, key}, -3);
+                    continue;
+                }
                 if (node.kind == CountingNodeKind::Cube) {
                     bool ok = std::ranges::any_of(node.assignment, [&](const auto & uv) { return uv.first == v && supports(key, uv.second); });
                     _how.emplace(pair{m, key}, ok ? -1 : -3);
@@ -500,6 +672,10 @@ auto SplitProof::finish(int root) -> void
     proof.emit_proof_directive("setlvl 0;");
     auto root_line = proof.emit_proof_line("rup 1 " + gate(root) + " >= 1 ;");
     proof.emit_proof_directive("core id " + to_string(root_line) + " ;");
+
+    // what the distinct nodes' sub-gates took from injectivity goes before it does
+    if (! _imp->injectivity_lemmas.empty())
+        proof.emit_proof_directive("del id" + ids(_imp->injectivity_lemmas) + " ;");
 
     // Every adjacency row goes by unit propagation from the root: under the negated row,
     // every cube that puts its first vertex where the row says has its second vertex
@@ -603,9 +779,12 @@ auto SplitProof::finish_tagged(int root, long root_line) -> void
         return result + ">= 1";
     };
 
-    proof.emit_proof_directive("% the tagged formula: gates join the preserved set, for now");
+    auto & sub_gates = _imp->sub_gates;
+    proof.emit_proof_directive("% the tagged formula: gates, and distinct nodes' sub-gates, join the preserved set, for now");
+    for (auto & sub : sub_gates)
+        proof.emit_proof_directive("preserved_add " + sub.name + " : " + sub.constraint + " ;");
     for (int i = 0; i < size; ++i)
-        proof.emit_proof_directive("preserved_add " + g(i) + " : " + gate_definition(i, nodes[i]).constraint + " ;");
+        proof.emit_proof_directive("preserved_add " + g(i) + " : " + gate_definition(i, nodes[i], _imp->sub_gate_names(i)).constraint + " ;");
 
     // Activity and tags, top down, each defined from the gates. The root is active when
     // its gate holds, any other node when one of its selectors is, and a tag when its or
@@ -675,6 +854,37 @@ auto SplitProof::finish_tagged(int root, long root_line) -> void
             if (! cube_rows[i].empty())
                 proof.emit_proof_directive("core id" + ids(cube_rows[i]) + " ;");
         }
+
+    // An active distinct node's vertices are each at one of its values, from its sub-gate
+    // "in the set", and at most one is at each value, from its at-most-one sub-gate, which
+    // is a cutting planes step.
+    proof.emit_proof_directive("% an active distinct node's rows hold");
+    vector<vector<long>> distinct_in(size), distinct_at_most(size);
+    vector<long> scratch;
+    for (int i = 0; i < size; ++i)
+        if (CountingNodeKind::Distinct == nodes[i].kind) {
+            auto & sub = _imp->distinct_sub_gates.at(i);
+            auto & variables = nodes[i].variables;
+            auto k = variables.size();
+            for (unsigned j = 0; j < k; ++j) {
+                string row = "1 ~" + a(i);
+                for (auto & value : nodes[i].values)
+                    row += " 1 " + y(variables[j], value);
+                distinct_in[i].push_back(proof.emit_proof_line("rup " + row + " >= 1 : ~ " + to_string(active[i]) + " " + to_string(forward[i]) + " " + to_string(sub_gates[sub[j]].forward) + " ;"));
+            }
+            if (k >= 2)
+                for (unsigned j = 0; j < nodes[i].values.size(); ++j) {
+                    auto & m = sub_gates[sub[k + j]];
+                    auto holds = proof.emit_proof_line("rup 1 ~" + a(i) + " 1 " + m.name + " >= 1 : ~ " + to_string(active[i]) + " " + to_string(forward[i]) + " ;");
+                    scratch.push_back(holds);
+                    distinct_at_most[i].push_back(proof.emit_proof_line("pol " + to_string(holds) + " " + to_string(k - 1) + " * " + to_string(m.forward) + " + ;"));
+                }
+            vector<long> rows = distinct_in[i];
+            rows.insert(rows.end(), distinct_at_most[i].begin(), distinct_at_most[i].end());
+            proof.emit_proof_directive("core id" + ids(rows) + " ;");
+        }
+    if (! scratch.empty())
+        proof.emit_proof_directive("del id" + ids(scratch) + " ;");
 
     // For each or, each child's lemma about the vertex that tells the children apart, and
     // for a child at none of the others' values, that it is at none of them one by one.
@@ -817,6 +1027,21 @@ auto SplitProof::finish_tagged(int root, long root_line) -> void
             }
             hints.push_back(at_least_one_tag[i]);
             break;
+        case CountingNodeKind::Distinct: {
+            // each sub-gate holds, from the node's rows, and then so does its gate
+            auto & sub = _imp->distinct_sub_gates.at(i);
+            auto k = nodes[i].variables.size();
+            auto negated = proof.begin_deletion_subproof("del id " + to_string(active[i]) + " : : subproof");
+            vector<long> lemmas;
+            for (unsigned j = 0; j < k; ++j)
+                lemmas.push_back(proof.emit_proof_line("rup 1 ~" + a(i) + " 1 " + sub_gates[sub[j]].name + " >= 1 : ~ " +
+                    to_string(distinct_in[i][j]) + " " + to_string(sub_gates[sub[j]].backward) + " ;"));
+            for (unsigned j = 0; j < distinct_at_most[i].size(); ++j)
+                lemmas.push_back(proof.emit_proof_line("pol " + to_string(sub_gates[sub[k + j]].backward) + " " + to_string(distinct_at_most[i][j]) + " + s ;"));
+            proof.emit_proof_line("rup >= 1 : " + to_string(negated) + ids(lemmas) + " " + to_string(backward[i]) + " ;");
+            proof.emit_proof_directive("qed : -1 ;");
+            continue;
+        }
         }
         del(active[i], hints);
     }
@@ -831,10 +1056,16 @@ auto SplitProof::finish_tagged(int root, long root_line) -> void
             proof.emit_proof_directive("preserved_rm " + a(i) + " : " + selectors(i) + " ;");
     proof.emit_proof_directive("preserved_rm " + a(root) + " : >= 0 ;");
     for (int i = size - 1; i >= 0; --i)
-        proof.emit_proof_directive("preserved_rm " + g(i) + " : " + gate_definition(i, nodes[i]).constraint + " ;");
+        proof.emit_proof_directive("preserved_rm " + g(i) + " : " + gate_definition(i, nodes[i], _imp->sub_gate_names(i)).constraint + " ;");
+    for (auto & sub : sub_gates | std::views::reverse)
+        proof.emit_proof_directive("preserved_rm " + sub.name + " : " + sub.constraint + " ;");
     for (int i = size - 1; i >= 0; --i) {
         proof.emit_proof_directive("del id " + to_string(backward[i]) + " : " + g(i) + " -> 1 ;");
         if (forward[i])
             proof.emit_proof_directive("del id " + to_string(forward[i]) + " : " + g(i) + " -> 0 ;");
+    }
+    for (auto & sub : sub_gates | std::views::reverse) {
+        proof.emit_proof_directive("del id " + to_string(sub.backward) + " : " + sub.name + " -> 1 ;");
+        proof.emit_proof_directive("del id " + to_string(sub.forward) + " : " + sub.name + " -> 0 ;");
     }
 }

@@ -57,14 +57,32 @@ namespace
                 index -= count;
             }
             throw CountingStatementError{"index out of range"};
+
+        case CountingNodeKind::Distinct: {
+            // each variable in turn takes one of the values the earlier ones left
+            auto left = n.values;
+            for (auto & u : n.variables) {
+                loooong quotient, remainder;
+                mpz_fdiv_qr_ui(quotient.raw(), remainder.raw(), index.raw(), left.size());
+                auto r = mpz_get_ui(remainder.raw());
+                if (-1 != values.at(u))
+                    throw CountingStatementError{"an object assigns variable " + to_string(u) + " twice"};
+                values.at(u) = left.at(r);
+                left.erase(left.begin() + r);
+                index = quotient;
+            }
+            return;
+        }
         }
     }
 
-    // One alternative of a definition: a cube, times some named nodes.
+    // One alternative of a definition: a cube, times some named nodes, times some distinct
+    // nodes, which are written out in place.
     struct Alternative
     {
         vector<pair<int, int>> cube;
         vector<int> names;
+        vector<int> distincts;
     };
 
     struct Renderer
@@ -86,16 +104,20 @@ namespace
         // A node's objects, as alternatives: a named node other than the one being defined
         // is left as its name, and everything else is multiplied out. At most one child of
         // an and has more than one alternative, because any child with more than one
-        // object beside another such child is named.
+        // object beside another such child is named, unless it is a distinct node, which is
+        // one alternative.
         auto expand(int node, bool defining) const -> vector<Alternative>
         {
             if (named[node] && ! defining)
-                return {Alternative{{}, {node}}};
+                return {Alternative{{}, {node}, {}}};
 
             auto & n = statement.nodes.at(node);
             switch (n.kind) {
             case CountingNodeKind::Cube:
-                return {Alternative{n.assignment, {}}};
+                return {Alternative{n.assignment, {}, {}}};
+
+            case CountingNodeKind::Distinct:
+                return {Alternative{{}, {}, {node}}};
 
             case CountingNodeKind::Or: {
                 vector<Alternative> result;
@@ -115,6 +137,7 @@ namespace
                             Alternative both = a;
                             both.cube.insert(both.cube.end(), b.cube.begin(), b.cube.end());
                             both.names.insert(both.names.end(), b.names.begin(), b.names.end());
+                            both.distincts.insert(both.distincts.end(), b.distincts.begin(), b.distincts.end());
                             next.push_back(std::move(both));
                         }
                     result = std::move(next);
@@ -131,6 +154,7 @@ namespace
         {
             vector<int> variables;
             vector<int> names;
+            vector<int> distincts;
             vector<vector<int>> rows;
         };
 
@@ -237,6 +261,21 @@ namespace
             return text + "}";
         }
 
+        // A distinct node: "u in {3 4 5}" for one variable, otherwise as a table block.
+        auto distinct_text(int node) const -> string
+        {
+            auto & n = statement.nodes.at(node);
+            auto list = [&](const vector<int> & items, auto && f) {
+                string s;
+                for (auto & i : items)
+                    s += (s.empty() ? "" : " ") + f(i);
+                return s;
+            };
+            if (1 == n.variables.size())
+                return names.variable(n.variables.front()) + " in {" + list(n.values, names.value) + "}";
+            return "{" + list(n.variables, names.variable) + (n.values.size() == n.variables.size() ? "} = {" : "} distinct in {") + list(n.values, names.value) + "}";
+        }
+
         // One table of alternatives, on one line: its fixed values, a table of the rest, and its
         // names, with how many objects it has.
         auto table_text(const Table & table) const -> string
@@ -263,6 +302,10 @@ namespace
                 parts.push_back(block_text(table, block));
 
             loooong objects{(unsigned long)table.rows.size()};
+            for (auto & d : table.distincts) {
+                parts.push_back(distinct_text(d));
+                objects *= count(d);
+            }
             for (auto & n : table.names) {
                 parts.push_back(name(n));
                 objects *= count(n);
@@ -340,7 +383,7 @@ namespace
                 common.clear();
 
             vector<Table> tables;
-            map<pair<vector<int>, vector<int>>, unsigned> table_of;
+            map<pair<vector<int>, pair<vector<int>, vector<int>>>, unsigned> table_of;
             for (auto & a : alternatives) {
                 vector<int> variables, row;
                 for (auto & assignment : a.cube)
@@ -348,10 +391,11 @@ namespace
                         variables.push_back(assignment.first);
                         row.push_back(assignment.second);
                     }
-                auto key = pair{variables, a.names};
+                std::sort(a.distincts.begin(), a.distincts.end());
+                auto key = pair{variables, pair{a.names, a.distincts}};
                 auto [where, inserted] = table_of.emplace(key, unsigned(tables.size()));
                 if (inserted)
-                    tables.push_back(Table{std::move(variables), a.names, {}});
+                    tables.push_back(Table{std::move(variables), a.names, a.distincts, {}});
                 tables[where->second].rows.push_back(std::move(row));
             }
 
@@ -447,7 +491,8 @@ auto gss::render_counting_statement(ostream & out, const CountingStatement & sta
 
     // A node with more than one object gets a name if it is shared, or if it is multiplied
     // by another child of an and with more than one object. A node with one object is a
-    // single assignment, and is always written out.
+    // single assignment, and a distinct node is a single set, and both are always written
+    // out.
     Renderer renderer{statement, names, vector<bool>(n, false)};
     loooong one{1};
     for (unsigned i = 0; i < n; ++i) {
@@ -455,15 +500,15 @@ auto gss::render_counting_statement(ostream & out, const CountingStatement & sta
             continue;
         unsigned many = 0;
         for (auto & c : nodes[i].children)
-            if (one < nodes[c].count)
+            if (one < nodes[c].count && nodes[c].kind != CountingNodeKind::Distinct)
                 ++many;
         if (many >= 2)
             for (auto & c : nodes[i].children)
-                if (one < nodes[c].count)
+                if (one < nodes[c].count && nodes[c].kind != CountingNodeKind::Distinct)
                     renderer.named[c] = true;
     }
     for (unsigned i = 0; i < n; ++i)
-        if (reached[i] && one < nodes[i].count && parents[i] >= 2)
+        if (reached[i] && one < nodes[i].count && parents[i] >= 2 && nodes[i].kind != CountingNodeKind::Distinct)
             renderer.named[i] = true;
     renderer.named.at(statement.root) = true;
 

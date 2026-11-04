@@ -39,7 +39,7 @@ other maximal run of characters is an atom. There are no comments and no quoted 
 Two kinds of atom are meaningful:
 
 - **keywords**, compared as exact strings: `version`, `domain`, `nodes`, `root`, `cube`,
-  `and`, `or`;
+  `and`, `or`, `distinct`;
 - **numbers**: a non-empty run of the digits `0`–`9`, with no sign and no leading zero, so
   `0` is the only number starting with `0`. A number is read as a natural number in
   decimal, with no bound on its size, since counts get large.
@@ -50,19 +50,20 @@ Anything else is an error.
 
 ```
 statement ::= "(" version domain nodes root ")"
-version   ::= "(" "version" "2" ")"
+version   ::= "(" "version" "3" ")"
 domain    ::= "(" "domain" NAT* ")"
 nodes     ::= "(" "nodes" node* ")"
 node      ::= "(" NAT NAT "cube" pair* ")"
            |  "(" NAT NAT "and" NAT* ")"
            |  "(" NAT NAT "or" NAT NAT* ")"
+           |  "(" NAT NAT "distinct" "(" NAT NAT* ")" "(" NAT NAT* ")" ")"
 pair      ::= "(" NAT NAT ")"
 root      ::= "(" "root" NAT ")"
 ```
 
-The four sections are all required and come in this order. The only version is `2`, and a
+The four sections are all required and come in this order. The only version is `3`, and a
 reader rejects any other, so that a change to the format fails cleanly instead of being
-misread.
+misread. (Version 2 was the same, without `distinct` nodes.)
 
 `(domain n₀ n₁ … nₘ₋₁)` declares m **variables**, numbered `0` to m − 1, where variable u
 takes one of the **values** `0` to nᵤ − 1. What they stand for is up to whoever writes the
@@ -92,6 +93,7 @@ assignment. The node's **count** is the number of its objects.
 | `(i n cube (u₁ t₁) … (uₖ tₖ))` | {u₁, …, uₖ} | one, assigning tⱼ to each uⱼ | 1 |
 | `(i n and c₁ … cₖ)` | the union of the cⱼ's scopes | a tuple of one object of each cⱼ, assigning what each of them assigns | the product of the cⱼ's counts |
 | `(i n or c₁ … cₖ)` | the cⱼ's common scope | a pair (j, o) of a position j and an object o of cⱼ, assigning what o assigns | the sum of the cⱼ's counts |
+| `(i n distinct (u₁ … uₖ) (t₁ … t_d))` | {u₁, …, uₖ} | one for each way of giving the uⱼ pairwise distinct values from {t₁, …, t_d} | d (d − 1) ⋯ (d − k + 1) |
 
 So an `or` is a **tagged** sum: an assignment that two of its children both allow gives two
 objects, one through each child. Nothing needs the children to be disjoint for the count to
@@ -109,6 +111,9 @@ A reader must reject a statement unless all of these hold.
 - Every variable u is less than m, and every value given to it is less than nᵤ.
 - In a cube, the variables are strictly increasing, so a cube names each of its variables
   once.
+- In a `distinct` node, the variables are strictly increasing and there is at least one of
+  them, the values are strictly increasing, every value is in range for every variable, and
+  there are at least as many values as variables.
 - In an `and` or an `or`, the children are strictly increasing, so no node is a child of the
   same parent twice.
 - The children of an `and` have pairwise disjoint scopes.
@@ -124,7 +129,8 @@ which nodes it will end up using.
 An `and` may have no children, and a cube no pairs. Either then has an empty scope and one
 object.
 
-There is no way to write a node with no objects. An empty `or` would have no children to
+There is no way to write a node with no objects: a `distinct` node with fewer values than
+variables is refused. An empty `or` would have no children to
 take its scope from. When a solver finds no way to place some part of the pattern at all,
 the instance is better certified by an ordinary unsatisfiability proof anyway.
 
@@ -171,6 +177,10 @@ In this order:
    3. if i is an `or` with k children, the at-least-one `1 ~ai 1 ti_0 … 1 ti_<k−1> >= 1 ;`.
       Then `1 ~ti_j 1 ai >= 1 ;` for each j. Then, if k ≥ 2, the at-most-one
       `1 ~ti_0 … 1 ~ti_<k−1> >= k−1 ;`.
+   4. if i is a `distinct` node with variables u₁ … uₖ and values t₁ … t_d, for each
+      variable u in order, `1 ~ai 1 yu_t₁ … 1 yu_t_d >= 1 ;`. Then, if k ≥ 2, for each value
+      t in order, `k−1 ~ai 1 ~yu₁_t … 1 ~yuₖ_t >= k−1 ;`: at most one of the variables takes
+      t.
 
 Numbers are written in decimal, terms are separated by single spaces, and every row ends
 `;` and a newline. There is no `*` header line.
@@ -197,18 +207,24 @@ assignment f.
    This satisfies T:
    - each node is active exactly when one of its selectors is;
    - each active `or` has exactly one tag, and an inactive one has none;
-   - each active cube is consistent with f, because the object determines f.
+   - each active cube is consistent with f, because the object determines f;
+   - each active `distinct` node's variables take distinct values from its set under f, for
+     the same reason.
 2. **No node is passed through twice.** Passing through a node twice would need two
    children of an active `and` to lead to it. Its scope would then lie in both of their
    scopes, which are disjoint, so it would be empty. A node with an empty scope is not an
-   `or`, and has no `or` below it, so there is no choice that could differ between the two
-   visits. So the activity of one object is a set of nodes, and the tags record every
-   choice it makes. Different objects therefore give different tag assignments.
+   `or` or a `distinct` node, and has neither below it, so there is no choice that could
+   differ between the two visits. So the activity of one object is a set of nodes, the tags
+   record every choice it makes at an `or`, and f records every choice it makes at a
+   `distinct` node, since that is a choice of values. Different objects therefore give
+   different assignments to y and t together.
 3. **Solutions to objects.** Take a solution of T that extends f. The root is active. By the
    rows of item 4.1, a node is active exactly when one of its selectors is. By item 4.3,
    each active `or` has exactly one tag true, and each tag implies its `or` is active.
    Following the tags from the root therefore gives one object of the root, and the active
-   nodes are exactly the ones it passes through. By item 4.2, its cubes agree with f, so it
+   nodes are exactly the ones it passes through, except that at each `distinct` node it has
+   still to choose values. By item 4.4, f gives the node's variables distinct values from its
+   set, so let the object choose those. By item 4.2, its cubes agree with f, so it
    determines f. This inverts step 1, and the a variables are determined by the t
    variables.
 4. **The count.** So the solutions of T, projected onto y and t, are in one-to-one
@@ -217,7 +233,9 @@ assignment f.
    count in the table:
    - an `and`'s objects are tuples;
    - an `or`'s objects are tagged pairs;
-   - a cube has one object.
+   - a cube has one object;
+   - a `distinct` node's objects are its variables' values, chosen in order, each from the
+     values the earlier ones have not taken.
 
 VeriPB checks, with `EQUIENUMERABLE`, that T has as many solutions projected onto its
 preserved set as the solver's encoding of the instance has projected onto its own. So the
@@ -250,7 +268,12 @@ searcher's proof does it in three parts.
    assignments holds:
    - a cube's literals all hold;
    - all of an `and`'s children hold;
-   - some child of an `or` holds.
+   - some child of an `or` holds;
+   - all of a `distinct` node's sub-gates hold. These are the proof's own, defined over y and
+     shared between nodes: one per variable u, that u takes one of the node's values, and,
+     with two or more variables, one per value t, that at most one of them takes t. In the
+     subgraph solver, the second kind holds by injectivity, which a short cutting planes
+     step shows, and the node's tagged rows come from its sub-gates in the same way.
 
    From the input, derive the root's gate, and delete the input's other constraints. This
    is the solver's search, and it is the same proof whatever the count turns out to be.
@@ -278,7 +301,7 @@ choices for vertex 2, then two ways to place the edge on the other two target ve
 
 ```
 (
-  (version 2)
+  (version 3)
   (domain 3 3 3)
   (nodes
     (0 1 cube (2 2))

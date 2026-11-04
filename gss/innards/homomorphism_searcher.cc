@@ -1,3 +1,4 @@
+#include <gss/counting_statement.hh>
 #include <gss/innards/cheap_all_different.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_searcher.hh>
@@ -884,17 +885,61 @@ auto HomomorphismSearcher::split_into_components(
         return deliver(cached->second);
     }
 
-    // Search the components that look smallest first, so that a component with no
-    // solutions is found as early as possible.
+    // Under injectivity, vertices that are components on their own, whose images the
+    // enclosing tally does not need, and that have the same domain, are interchangeable:
+    // their solutions are every way of giving them distinct values from that domain that
+    // the rest of the split leaves free. Some such free sets, with pairwise disjoint
+    // domains, the largest first, are counted that way, in the last combining step, rather
+    // than searched and combined one vertex at a time. Even a set of one vertex is worth
+    // it for a counting statement, which gets one node for it rather than one per value.
+    struct FreeSet
+    {
+        vector<int> vertices;
+        SVOBitset values;
+    };
+    vector<FreeSet> free_sets;
+    vector<bool> in_free_set(n_components, false);
+    if (params.injectivity == Injectivity::Injective) {
+        vector<unsigned> component_size(n_components, 0);
+        for (auto * d : unassigned)
+            ++component_size[component[d->v]];
+        std::map<vector<unsigned long long>, FreeSet> by_domain;
+        for (auto * d : by_vertex)
+            if (1 == component_size[component[d->v]] && ! enclosing_index(d->v)) {
+                vector<unsigned long long> domain_key(d->values.words(), d->values.words() + d->values.number_of_words());
+                by_domain.try_emplace(domain_key, FreeSet{{}, d->values}).first->second.vertices.push_back(d->v);
+            }
+        vector<FreeSet *> candidates;
+        for (auto & [_, free_set] : by_domain)
+            candidates.push_back(&free_set);
+        std::stable_sort(candidates.begin(), candidates.end(), [](auto * a, auto * b) { return a->vertices.size() > b->vertices.size(); });
+        SVOBitset taken(model.target_size, 0);
+        for (auto * free_set : candidates) {
+            auto overlap = free_set->values;
+            overlap &= taken;
+            if (overlap.any())
+                continue;
+            taken |= free_set->values;
+            for (auto & v : free_set->vertices)
+                in_free_set[component[v]] = true;
+            free_sets.push_back(std::move(*free_set));
+        }
+    }
+
+    // Search the other components, those that look smallest first, so that a component
+    // with no solutions is found as early as possible. The free sets come after all of
+    // them.
     vector<double> size_estimate(n_components, 0.0);
     for (auto * d : unassigned)
         size_estimate[component[d->v]] += std::log2(double(d->count));
-    vector<int> order(n_components);
+    vector<int> order;
     for (int c = 0; c < n_components; ++c)
-        order[c] = c;
+        if (! in_free_set[c])
+            order.push_back(c);
     std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return size_estimate[a] < size_estimate[b]; });
-    vector<int> position(n_components);
-    for (int s = 0; s < n_components; ++s)
+    const int n_searched = order.size();
+    vector<int> position(n_components, n_searched);
+    for (int s = 0; s < n_searched; ++s)
         position[order[s]] = s;
 
     // For each unassigned vertex, the last position in the order of a component holding a
@@ -940,9 +985,9 @@ auto HomomorphismSearcher::split_into_components(
     // With a counting statement, also derive that under the split's assumption, its
     // solutions lie in one of result's nodes.
     auto count_and_combine = [&]() -> bool {
-        vector<ComponentTally> tallies(n_components);
-        vector<TallyGates> tally_gates(n_components);
-        for (int s = 0; s < n_components; ++s) {
+        vector<ComponentTally> tallies(n_searched);
+        vector<TallyGates> tally_gates(n_searched);
+        for (int s = 0; s < n_searched; ++s) {
             int c = order[s];
             auto & tally = tallies[s];
             Domains component_domains;
@@ -1038,8 +1083,63 @@ auto HomomorphismSearcher::split_into_components(
             }
         }
 
+        // Each free set's vertices take distinct values from its domain, less the images of
+        // these keys. Whether there are enough values for every free set, and if so, how
+        // many ways there are, and with a counting statement, each free set's values.
+        auto place_free_sets = [&](const vector<int> & left_key, const vector<int> * right_key, loooong & ways,
+                                   vector<vector<int>> * set_values) -> bool {
+            ways = loooong{1};
+            for (auto & free_set : free_sets) {
+                auto values = free_set.values;
+                for (auto & t : left_key)
+                    if (-1 != t)
+                        values.reset(t);
+                if (right_key)
+                    for (auto & t : *right_key)
+                        if (-1 != t)
+                            values.reset(t);
+                auto d = values.count();
+                if (set_values) {
+                    set_values->emplace_back();
+                    for (auto t = values.find_first(); t != decltype(values)::npos; t = values.find_first()) {
+                        values.reset(t);
+                        set_values->back().push_back(t);
+                    }
+                }
+                if (d < free_set.vertices.size())
+                    return false;
+                ways *= distinct_count(free_set.vertices.size(), d);
+            }
+            return true;
+        };
+
+        // With a counting statement and a proof, for a combined entry and perhaps a pair, that
+        // under the split's assumption they lead to the new entry, through their free sets'
+        // distinct nodes: each free set's vertices are each at one of their values, because
+        // the assumption keeps them in their domains, and the entries' signatures and
+        // injectivity keep them off their images; and at most one is at each value, by
+        // injectivity. Or that they cannot both hold, because some free set has more
+        // vertices than values. Returns the lines, for forgetting.
+        auto place_free_sets_proof = [&](vector<string> premises, const vector<vector<int>> & set_values, bool possible,
+                                         optional<int> new_node) -> vector<long> {
+            vector<long> lines;
+            for (unsigned f = 0; f < set_values.size(); ++f) {
+                auto more = possible || f + 1 < set_values.size()
+                    ? _split_proof->distinct_lemmas(premises, free_sets[f].vertices, set_values[f])
+                    : _split_proof->distinct_impossible(premises, free_sets[f].vertices, set_values[f]);
+                lines.insert(lines.end(), more.begin(), more.end());
+            }
+            if (possible) {
+                premises.push_back(_split_proof->gate(*new_node));
+                lines.push_back(_split_proof->rup(premises, true));
+            }
+            return lines;
+        };
+
         // Combine the tallies one component at a time, keeping in the key only the images
-        // that a later component could collide with, or that the enclosing tally needs.
+        // that a later component could collide with, or that the enclosing tally needs. With
+        // free sets, the last step places them too, pair by pair, so that its table is keyed
+        // only by what the enclosing tally needs.
         vector<unsigned> layout;
         TallyCounts combined;
         combined.emplace(vector<int>{}, loooong{1});
@@ -1047,8 +1147,10 @@ auto HomomorphismSearcher::split_into_components(
         TallyGates combined_gates;
         combined_gates.emplace(vector<int>{}, -1);
         optional<long> combined_line;
-        for (int s = 0; s < n_components; ++s) {
+        for (int s = 0; s < n_searched; ++s) {
             auto & tally = tallies[s];
+            const bool place = s + 1 == n_searched && ! free_sets.empty();
+            const int after = place ? n_searched : s;
 
             vector<pair<unsigned, unsigned>> compare;
             for (unsigned a = 0; a < layout.size(); ++a)
@@ -1060,12 +1162,12 @@ auto HomomorphismSearcher::split_into_components(
             vector<unsigned> new_layout;
             vector<pair<bool, unsigned>> take;
             for (unsigned a = 0; a < layout.size(); ++a)
-                if (needed_after(layout[a], s)) {
+                if (needed_after(layout[a], after)) {
                     new_layout.push_back(layout[a]);
                     take.emplace_back(false, a);
                 }
             for (unsigned b = 0; b < tally.vertices.size(); ++b)
-                if (needed_after(tally.vertices[b], s)) {
+                if (needed_after(tally.vertices[b], after)) {
                     new_layout.push_back(tally.vertices[b]);
                     take.emplace_back(true, b);
                 }
@@ -1075,7 +1177,19 @@ auto HomomorphismSearcher::split_into_components(
             // entries each combined entry goes into
             std::map<vector<int>, vector<pair<vector<int>, int>>> next_parts;
             std::unordered_map<vector<int>, std::set<vector<int>>, TallyKeyHash> goes_into;
+            // with free sets to place and a proof, each compatible pair, its new entry, its
+            // free sets' values, and whether they can be placed
+            struct Placed
+            {
+                const vector<int> *left_key, *right_key;
+                vector<int> key;
+                vector<vector<int>> values;
+                bool possible;
+            };
+            vector<Placed> placed;
             vector<int> key(take.size());
+            loooong ways;
+            vector<vector<int>> set_values;
             unsigned long long pairs_considered = 0;
             for (auto & [left_key, left_count] : combined)
                 for (auto & [right_key, right_count] : tally.counts) {
@@ -1094,13 +1208,32 @@ auto HomomorphismSearcher::split_into_components(
 
                     for (unsigned k = 0; k < take.size(); ++k)
                         key[k] = take[k].first ? right_key[take[k].second] : left_key[take[k].second];
-                    next[key].add_product(left_count, right_count);
+
+                    set_values.clear();
+                    bool possible = ! place || place_free_sets(left_key, &right_key, ways, _split_proof ? &set_values : nullptr);
+                    if (place && _split_proof && _split_proof->proving())
+                        placed.push_back(Placed{&left_key, &right_key, key, set_values, possible});
+                    if (! possible)
+                        continue;
+
+                    if (place) {
+                        loooong both_counts;
+                        both_counts.add_product(left_count, right_count);
+                        next[key].add_product(both_counts, ways);
+                    }
+                    else
+                        next[key].add_product(left_count, right_count);
 
                     if (_split_proof) {
                         auto left = combined_gates.at(left_key), right = tally_gates[s].at(right_key);
+                        vector<int> children{right};
+                        if (-1 != left)
+                            children.push_back(left);
+                        for (unsigned f = 0; f < set_values.size(); ++f)
+                            children.push_back(_split_proof->distinct(free_sets[f].vertices, set_values[f]));
                         auto both = left_key;
                         both.insert(both.end(), right_key.begin(), right_key.end());
-                        next_parts[key].emplace_back(move(both), -1 == left ? right : _split_proof->conjunction({left, right}));
+                        next_parts[key].emplace_back(move(both), _split_proof->conjunction(children));
                         goes_into[left_key].insert(key);
                     }
                 }
@@ -1109,14 +1242,24 @@ auto HomomorphismSearcher::split_into_components(
                 // Each new entry's node is the or of its pairs. Then, for each combined entry,
                 // that under the assumption it goes into one of its new entries: every
                 // pair it is in is one of those, and every pair it is not in collides, by
-                // the two entries' signatures and injectivity. Then that the split's
-                // solutions so far lie in one of the new entries.
+                // the two entries' signatures and injectivity. With free sets to place, a
+                // pair leads to its new entry, or cannot happen, by a lemma of its own
+                // first. Then that the split's solutions so far lie in one of the new
+                // entries.
                 TallyGates next_gates;
                 auto both_vertices = layout;
                 both_vertices.insert(both_vertices.end(), tally.vertices.begin(), tally.vertices.end());
                 for (auto & [k, parts] : next_parts)
                     next_gates.emplace(k, told_apart_disjunction(*_split_proof, parts, both_vertices));
                 vector<long> steps;
+                for (auto & pair_placed : placed) {
+                    vector<string> premises{"~" + result.assumption, "~" + _split_proof->gate(tally_gates[s].at(*pair_placed.right_key))};
+                    if (auto left = combined_gates.at(*pair_placed.left_key); -1 != left)
+                        premises.push_back("~" + _split_proof->gate(left));
+                    auto lines = place_free_sets_proof(premises, pair_placed.values, pair_placed.possible,
+                        pair_placed.possible ? optional<int>{next_gates.at(pair_placed.key)} : nullopt);
+                    steps.insert(steps.end(), lines.begin(), lines.end());
+                }
                 for (auto & [left_key, left_node] : combined_gates) {
                     if (! _split_proof->proving())
                         break;
@@ -1145,6 +1288,40 @@ auto HomomorphismSearcher::split_into_components(
 
             combined = move(next);
             layout = move(new_layout);
+        }
+
+        // With nothing searched, the free sets are placed on their own.
+        if (! free_sets.empty() && 0 == n_searched) {
+            vector<int> empty;
+            loooong ways;
+            vector<vector<int>> set_values;
+            bool possible = place_free_sets(empty, nullptr, ways, _split_proof ? &set_values : nullptr);
+            if (_split_proof) {
+                optional<int> node;
+                if (possible) {
+                    vector<int> children;
+                    for (unsigned f = 0; f < set_values.size(); ++f)
+                        children.push_back(_split_proof->distinct(free_sets[f].vertices, set_values[f]));
+                    node = _split_proof->conjunction(children);
+                }
+                if (_split_proof->proving()) {
+                    auto lines = place_free_sets_proof({"~" + result.assumption}, set_values, possible, node);
+                    if (possible)
+                        lines.pop_back();
+                    vector<string> literals{"~" + result.assumption};
+                    if (node)
+                        literals.push_back(_split_proof->gate(*node));
+                    auto line = _split_proof->rup(literals, true);
+                    _split_proof->forget(lines);
+                    combined_line = line;
+                }
+                combined_gates.clear();
+                if (node)
+                    combined_gates.emplace(vector<int>{}, *node);
+            }
+            if (! possible)
+                return true;
+            combined = TallyCounts{{vector<int>{}, ways}};
         }
 
         result.layout = move(layout);

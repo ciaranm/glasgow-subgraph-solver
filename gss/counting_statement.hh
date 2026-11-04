@@ -32,7 +32,8 @@ namespace gss
     {
         Cube,
         And,
-        Or
+        Or,
+        Distinct
     };
 
     struct CountingNode
@@ -45,8 +46,12 @@ namespace gss
         /// For a cube, its (variable, value) pairs, in increasing order of variable.
         std::vector<std::pair<int, int>> assignment;
 
-        /// For anything else, its children's ids, in increasing order.
+        /// For an and or an or, its children's ids, in increasing order.
         std::vector<int> children;
+
+        /// For a distinct node, its variables and the values they take, one each, both in
+        /// increasing order.
+        std::vector<int> variables, values;
     };
 
     struct CountingStatement
@@ -77,6 +82,7 @@ namespace gss
         auto add_cube(const std::vector<std::pair<int, int>> & assignment) -> int;
         auto add_and(const std::vector<int> & children) -> int;
         auto add_or(const std::vector<int> & children) -> int;
+        auto add_distinct(const std::vector<int> & variables, const std::vector<int> & values) -> int;
 
         /// Called with each node's id and contents as soon as it is written.
         auto set_observer(std::function<void(int, const CountingNode &)>) -> void;
@@ -93,6 +99,10 @@ namespace gss
     /// Parses a statement and checks that it is well-formed, counts included, throwing
     /// CountingStatementError if it is not.
     auto read_counting_statement(std::istream &) -> CountingStatement;
+
+    /// The number of ways of giving k variables distinct values from a set of d: the count
+    /// of a distinct node.
+    auto distinct_count(std::size_t k, std::size_t d) -> loooong;
 
     /// Checks that a statement is well-formed, counts included, throwing
     /// CountingStatementError if not.

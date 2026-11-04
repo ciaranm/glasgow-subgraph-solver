@@ -56,10 +56,12 @@ namespace gss
 
     /// The statement, written for people to read, as a list of definitions starting with
     /// the root's. A definition is one or more alternatives, each a set of assignments
-    /// (fixed values, and a table of rows for the rest) times some named definitions. Its
-    /// objects are, for each alternative, each row of its table together with an object of
-    /// each name. Nodes that are shared, or that are multiplied by something else with
-    /// more than one object, get a name; everything else is multiplied out in place.
+    /// (fixed values, and a table of rows for the rest) times some distinct nodes, written
+    /// in place, times some named definitions. Its objects are, for each alternative, each
+    /// row of its table together with an object of each distinct node and of each name.
+    /// Nodes other than distinct nodes that are shared, or that are multiplied by something
+    /// else with more than one object, get a name; everything else is multiplied out in
+    /// place.
     auto render_counting_statement(std::ostream &, const CountingStatement &, const CountingStatementNames & = {}) -> void;
 }
 

@@ -62,6 +62,24 @@ namespace gss::innards
         auto conjunction(std::vector<int> children) -> int;
         auto disjunction(const std::vector<int> & children, int vertex, const std::vector<int> & values) -> int;
 
+        // Every way of giving these pattern vertices distinct values from this set, which
+        // must have at least as many members. Both are sorted. The same node is returned for
+        // the same arguments.
+        auto distinct(const std::vector<int> & vertices, const std::vector<int> & values) -> int;
+
+        // At level 0, for each vertex, that if the premises (negated literals, as for rup)
+        // all fail, it is at one of these values, as the distinct node for these
+        // arguments, which must exist, needs. Each must follow by unit propagation. Returns
+        // the lines, for forgetting.
+        auto distinct_lemmas(const std::vector<std::string> & premises, const std::vector<int> & vertices,
+            const std::vector<int> & values) -> std::vector<long>;
+
+        // At level 0, that the premises cannot all fail, because then each of these
+        // vertices, which are more than the values, would be at one of the values, which
+        // must follow by unit propagation. Returns the lines, the conclusion last.
+        auto distinct_impossible(const std::vector<std::string> & premises, const std::vector<int> & vertices,
+            const std::vector<int> & values) -> std::vector<long>;
+
         auto gate(int node) const -> std::string;
         auto statement_variable(int v, int t) const -> std::string;
 
