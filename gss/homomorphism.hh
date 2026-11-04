@@ -142,9 +142,12 @@ namespace gss
         /// results may hold before they are emptied. Emptying them costs only time.
         unsigned long long split_cache_limit = 1ull << 30;
 
-        /// With split_components and proof_options, write a counting statement (see
-        /// dev_docs/counting-statements.md) to this file as the search goes, and prove that
-        /// the instance is equienumerable with it, instead of logging each solution.
+        /// With split_components, write a counting statement (see
+        /// dev_docs/counting-statements.md) to this file as the search goes: a compressed
+        /// form of the solutions, which count_statement can render, sample from, or list.
+        /// With proof_options too, prove that the instance is equienumerable with it,
+        /// instead of logging each solution. No file is left if there are no solutions, or
+        /// if the search does not finish.
         std::optional<std::string> split_statement;
     };
 

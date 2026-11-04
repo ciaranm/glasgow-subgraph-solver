@@ -1,4 +1,5 @@
 #include <gss/counting_statement.hh>
+#include <gss/counting_statement_views.hh>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -304,4 +305,56 @@ TEST_CASE("counting statement writer writes what the reader reads")
 
     CHECK_THROWS_AS(writer.add_or({e, c}), CountingStatementError);
     CHECK_THROWS_AS(writer.add_and({a, a}), CountingStatementError);
+}
+
+namespace
+{
+    // Six maps of an edge 0-1 and a vertex 2 to four values: the edge to (0 1) or (1 0) and
+    // the vertex to 2 or 3, or the edge to (2 3) and the vertex to 0 or 1.
+    const string edge_and_vertex = statement("4 4 4",
+        "(0 1 cube (0 0) (1 1)) (1 1 cube (0 1) (1 0)) (2 2 or 0 1) "
+        "(3 1 cube (2 2)) (4 1 cube (2 3)) (5 2 or 3 4) (6 4 and 2 5) "
+        "(7 1 cube (0 2) (1 3)) (8 1 cube (2 0)) (9 1 cube (2 1)) (10 2 or 8 9) (11 2 and 7 10) "
+        "(12 6 or 6 11)",
+        "12");
+}
+
+TEST_CASE("unranking a statement lists each of its objects once")
+{
+    auto s = read(edge_and_vertex);
+    set<vector<int>> seen;
+    for (long i = 0; i < 6; ++i) {
+        auto values = unrank_counting_statement(s, loooong{i});
+        REQUIRE(values.size() == 3);
+        seen.insert(values);
+    }
+    CHECK(seen == set<vector<int>>{{0, 1, 2}, {0, 1, 3}, {1, 0, 2}, {1, 0, 3}, {2, 3, 0}, {2, 3, 1}});
+    CHECK_THROWS_AS(unrank_counting_statement(s, loooong{6}), CountingStatementError);
+    CHECK_THROWS_AS(unrank_counting_statement(s, loooong{-1}), CountingStatementError);
+}
+
+TEST_CASE("sampling a statement gives only its objects, and all of them")
+{
+    auto s = read(edge_and_vertex);
+    CountingStatementSampler sample{s, 1};
+    map<vector<int>, int> seen;
+    for (int i = 0; i < 6000; ++i)
+        ++seen[sample()];
+    REQUIRE(seen.size() == 6);
+    for (auto & [values, n] : seen) {
+        CHECK(n > 800);
+        CHECK(n < 1200);
+    }
+}
+
+TEST_CASE("rendering a statement names products and factors tables")
+{
+    auto s = read(edge_and_vertex);
+    stringstream out;
+    render_counting_statement(out, s);
+    CHECK(out.str() == "root [6] = one of\n"
+                       "  | n2 * n5  [4]\n"
+                       "  | (0->2 1->3) * 2 in {0 1}  [2]\n"
+                       "n2 [2] = {0 1} = {0 1}  [2]\n"
+                       "n5 [2] = 2 in {2 3}  [2]\n");
 }

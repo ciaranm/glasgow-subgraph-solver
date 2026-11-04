@@ -2,10 +2,12 @@
 
 `HomomorphismParams::split_components` (the hidden `--split-components S`) counts solutions
 without multiplying out independent parts of the pattern, inside the ordinary search. With
-`--prove` and `--split-statement FILE`, it writes a counting statement as it goes, in the
-format of [counting-statements.md](counting-statements.md). It proves that the instance has
-exactly as many solutions as the statement's tagged formula, so a count is certified by one
-VeriPB check (see [Proofs](#proofs)).
+`--split-statement FILE`, it writes a counting statement as it goes, in the format of
+[counting-statements.md](counting-statements.md). With `--prove` too, it proves that the
+instance has exactly as many solutions as the statement's tagged formula, so a count is
+certified by one VeriPB check (see [Proofs](#proofs)). Either way, the statement is also a
+compressed form of the solutions themselves (see
+[The statement as the solutions](#the-statement-as-the-solutions)).
 
 ## What it does
 
@@ -91,6 +93,49 @@ counts:
 - `split_cache_hits` and `split_cache_entries`;
 - `component_cache_hits` and `component_cache_entries`;
 - `split_cache_clears`.
+
+## The statement as the solutions
+
+A statement is a DAG of cubes, `and`s whose children have disjoint scopes, and `or`s whose
+children are told apart by one pattern vertex: a decision-DNNF. The search writes it so that
+its root's objects are the instance's solutions, one each, so it serves as a compressed listing
+of them, and since every node knows its count, it answers a lot without being multiplied out.
+The proof certifies the count, not which assignments the objects are. That is as for any
+VeriPB or CakePB proof: even for a satisfiable decision problem with a witness, the checker
+certifies that there is a solution, not what it is, and anything more would have to come
+from inside the proof.
+`count_statement` (`gss/counting_statement_views.hh`) does three things with one:
+
+- `--solution K` and `--list` unrank: an `or` numbers its children's objects in turn, and an
+  `and` its tuples as a mixed-radix number. Each solution costs time in proportion to the
+  nodes it passes through.
+- `--sample N --seed S` unranks uniformly random indices, so its samples are exactly uniform.
+- `--render` writes it for people to read, as definitions. A node gets a name if it has more
+  than one object and is either shared or multiplied by another such node. Everything else is
+  multiplied out in place. What all of a definition's alternatives assign alike is written once
+  in front of them. Alternatives that differ only in their values become a table, and a table
+  is factored into the product of its projections where it is one, with a block that is every
+  ordering of one set of values written as `{u v} = {3 4}`, and one that is every way of
+  giving its vertices distinct values from a larger set as `{u v} distinct in {3 4 5}`.
+  `--pattern` and `--target` give vertex names.
+
+None of this needs a proof, and none of it is part of what checks a count: it reads a
+statement that has already been checked for well-formedness. The statement is written the
+same, byte for byte, with or without `--prove`.
+
+For example, si2_b09m_m400.08 has 6,451,200 solutions. Its statement is 170 KB, and it renders
+in 64 lines, starting:
+
+```
+root [6451200] = (0->0 1->4 2->15 3->18 ...) * one of
+  | (7->329) * {12 16} = {137 182} * {23 25 28} = {86 109 155} * {32 34} = {8 78} *
+        {45 49} = {134 186} * {67 69} = {135 188} * {68 71} = {144 279} * {70 73} = {211 307} *
+        n501  [1935360]
+  | ...
+n501 [5040] = one of
+  | 79 in {41 90 98 104 216 284} * n451  [720]
+  | ...
+```
 
 ## Restrictions and testing
 

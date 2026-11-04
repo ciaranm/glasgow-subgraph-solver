@@ -123,12 +123,12 @@ struct SplitProof::Imp
     map<int, pair<int, vector<int>>> separators;
 };
 
-SplitProof::SplitProof(const shared_ptr<Proof> & proof, HomomorphismProofs & hom_proofs, int pattern_size, int target_size,
+SplitProof::SplitProof(const shared_ptr<Proof> & proof, HomomorphismProofs * hom_proofs, int pattern_size, int target_size,
     const string & statement_file) :
     _imp(make_unique<Imp>())
 {
     _imp->proof = proof;
-    _imp->hom_proofs = &hom_proofs;
+    _imp->hom_proofs = hom_proofs;
     _imp->pattern_size = pattern_size;
     _imp->target_size = target_size;
     _imp->statement_file = statement_file;
@@ -137,6 +137,9 @@ SplitProof::SplitProof(const shared_ptr<Proof> & proof, HomomorphismProofs & hom
         throw ProofError{"Error writing counting statement to '" + statement_file + "'"};
     _imp->statement.domain_sizes.assign(pattern_size, target_size);
     _imp->writer.emplace(_imp->statement_stream, _imp->statement.domain_sizes);
+    // Without a proof, the statement is only written, as a compressed form of the solutions.
+    if (! _imp->proof)
+        return;
     // Each node's gate is defined, both ways, into the core, while it is still fresh: VeriPB
     // checks a definition against the derived constraints too, so the rows that say what a
     // gate implies cannot wait until the search has derived things about it.
@@ -166,8 +169,15 @@ SplitProof::~SplitProof()
     }
 }
 
+auto SplitProof::proving() const -> bool
+{
+    return bool(_imp->proof);
+}
+
 auto SplitProof::begin() -> void
 {
+    if (! _imp->proof)
+        return;
     auto & proof = *_imp->proof;
 
     // Each y_p_t is a copy of x_p_t, and joins the preserved set. (The x side leaves it in
@@ -234,7 +244,8 @@ auto SplitProof::disjunction(const vector<int> & children, int vertex, const vec
     }
 
     auto id = _imp->writer->add_or(sorted_children);
-    _imp->separators.emplace(id, pair{vertex, move(sorted_values)});
+    if (_imp->proof)
+        _imp->separators.emplace(id, pair{vertex, move(sorted_values)});
     return id;
 }
 
@@ -250,8 +261,10 @@ auto SplitProof::statement_variable(int v, int t) const -> string
 
 auto SplitProof::assumption(const vector<pair<int, int>> & excluded) -> string
 {
-    auto & proof = *_imp->proof;
     auto name = "sa" + to_string(++_imp->number_of_assumptions);
+    if (! _imp->proof)
+        return name;
+    auto & proof = *_imp->proof;
     auto k = to_string(excluded.size());
     string all = "red " + k + " ~" + name, not_all = "red 1 " + name;
     for (auto & [v, t] : excluded) {
@@ -268,6 +281,8 @@ auto SplitProof::assumption(const vector<pair<int, int>> & excluded) -> string
 
 auto SplitProof::rup(const vector<string> & literals, bool at_level_zero) -> long
 {
+    if (! _imp->proof)
+        return 0;
     string line = "rup";
     for (auto & l : literals)
         line += " 1 " + l;
@@ -285,6 +300,8 @@ auto SplitProof::derive_signatures(const vector<std::tuple<int, int, int>> & lem
     // Each follows by unit propagation through the gates' definitions: every cube below the
     // node, by every path, puts the vertex at the value, or lies below a node with a lemma
     // that says so.
+    if (! _imp->proof)
+        return;
     auto & proof = *_imp->proof;
     proof.at_level_zero([&] {
         for (auto & [node, v, t] : lemmas)
@@ -294,7 +311,7 @@ auto SplitProof::derive_signatures(const vector<std::tuple<int, int, int>> & lem
 
 auto SplitProof::forget(const vector<long> & lines) -> void
 {
-    if (lines.empty())
+    if (lines.empty() || ! _imp->proof)
         return;
     _imp->proof->at_level_zero([&] { _imp->proof->emit_proof_directive("del id" + ids(lines) + " ;"); });
 }
@@ -470,13 +487,15 @@ namespace
 
 auto SplitProof::finish(int root) -> void
 {
-    auto & proof = *_imp->proof;
-    auto x = [&](int p, int t) { return "x" + proof.variable_name(p, t); };
-    auto n = _imp->pattern_size;
-
     _imp->writer->finish(root);
     _imp->statement_stream.close();
     _imp->finished = true;
+    if (! _imp->proof)
+        return;
+
+    auto & proof = *_imp->proof;
+    auto x = [&](int p, int t) { return "x" + proof.variable_name(p, t); };
+    auto n = _imp->pattern_size;
 
     proof.emit_proof_directive("setlvl 0;");
     auto root_line = proof.emit_proof_line("rup 1 " + gate(root) + " >= 1 ;");

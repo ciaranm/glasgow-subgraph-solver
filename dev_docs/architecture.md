@@ -97,11 +97,13 @@ pattern into biconnected components.
 
 When counting with `HomomorphismParams::split_components`, the searcher counts the components
 of the unassigned pattern vertices separately wherever they fall apart, and combines the counts
-(see [split-counting.md](split-counting.md)). With proof logging it writes its argument as a
-counting statement (`counting_statement`, specified in
-[counting-statements.md](counting-statements.md)), and `innards/split_proof` writes the proof
-that the instance has as many solutions as the statement says. The `count_statement` driver
-reads, checks and counts a statement, and writes the tagged formula the proof ends against.
+(see [split-counting.md](split-counting.md)). It can write its argument as a counting
+statement (`counting_statement`, specified in [counting-statements.md](counting-statements.md)),
+and with proof logging, `innards/split_proof` writes the proof that the instance has as many
+solutions as the statement says. The `count_statement` driver reads, checks and counts a
+statement, and writes the tagged formula the proof ends against. A statement is also a
+compressed form of the solutions, which `counting_statement_views` unranks, samples uniformly
+and renders.
 
 ## The clique and common-subgraph solvers
 

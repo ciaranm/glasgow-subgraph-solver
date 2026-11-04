@@ -107,7 +107,7 @@ auto main(int argc, char * argv[]) -> int
             ("decomposition", "Use decomposition") //
             ("split-components", "When counting, count each component of the unassigned pattern vertices on its own wherever the images that components could share have at most this many combinations", cxxopts::value<unsigned long long>()) //
             ("split-cache-limit", "With --split-components, empty the caches of split results when they reach about this many bytes", cxxopts::value<unsigned long long>()) //
-            ("split-statement", "With --split-components and --prove, write a counting statement to this file, and prove the count by it (see dev_docs/counting-statements.md)", cxxopts::value<string>()) //
+            ("split-statement", "With --split-components, write a counting statement to this file, a compressed form of the solutions that count_statement can render or sample from, and with --prove, prove the count by it (see dev_docs/counting-statements.md)", cxxopts::value<string>()) //
             ("cliques", "Use clique size constraints") //
             ("cliques-on-supplementals", "Use clique size constraints on supplemental graphs too") //
             ("shape", "Specify an extra shape graph, as a CSV file with one vertex labelled from and one labelled to, and any other labels on the rest (slow, experimental, injective only)", cxxopts::value<std::vector<std::string>>(shapes)) //
@@ -384,8 +384,8 @@ auto main(int argc, char * argv[]) -> int
         }
 
         if (options_vars.count("split-statement")) {
-            if (! options_vars.count("split-components") || ! options_vars.count("prove")) {
-                cerr << "--split-statement needs --split-components and --prove" << endl;
+            if (! options_vars.count("split-components")) {
+                cerr << "--split-statement needs --split-components" << endl;
                 return EXIT_FAILURE;
             }
             params.split_statement = options_vars["split-statement"].as<string>();

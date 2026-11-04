@@ -22,6 +22,9 @@ namespace gss::innards
     // The searcher builds the statement as it goes, through the node functions here, each of
     // which defines its node's gate into the core as soon as the node is written. The gates
     // are the proof's own: the tagged formula does not mention them.
+    //
+    // With no proof, the statement is still written, as a compressed form of the solutions
+    // (see counting_statement_views.hh), and everything here that would log is a no-op.
     class SplitProof
     {
     private:
@@ -33,7 +36,8 @@ namespace gss::innards
         auto finish_tagged(int root, long root_line) -> void;
 
     public:
-        SplitProof(const std::shared_ptr<Proof> &, HomomorphismProofs &, int pattern_size, int target_size,
+        // Either both of the proofs are given, or neither.
+        SplitProof(const std::shared_ptr<Proof> &, HomomorphismProofs *, int pattern_size, int target_size,
             const std::string & statement_file);
 
         // Removes the statement file, unless finish() wrote it in full.
@@ -41,6 +45,9 @@ namespace gss::innards
 
         SplitProof(const SplitProof &) = delete;
         auto operator=(const SplitProof &) -> SplitProof & = delete;
+
+        // Whether there is a proof to log to.
+        auto proving() const -> bool;
 
         // Copy each assignment variable to the statement's own, and move the preserved set
         // across. Call once, at level 0, before searching.

@@ -246,6 +246,8 @@ auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssi
 
 auto HomomorphismSearcher::statement_line(const HomomorphismAssignments & assignments, const vector<string> & literals) -> long
 {
+    if (! proof)
+        return 0;
     string line = "rup";
     for (auto & [v, t] : assignments_as_proof_decisions(assignments))
         line += " 1 ~x" + proof->variable_name(v, t);
@@ -500,9 +502,11 @@ auto HomomorphismSearcher::restarting_search(
 
         case SearchResult::SatisfiableButKeepGoing:
             if (_split_proof) {
-                proof->back_up_to_level(depth + 1);
+                if (proof)
+                    proof->back_up_to_level(depth + 1);
                 add_contributions(assignments, assignments_size, contributions);
-                proof->forget_level(depth + 2);
+                if (proof)
+                    proof->forget_level(depth + 2);
             }
             else if (proof) {
                 proof->back_up_to_level(depth + 1);
@@ -516,9 +520,11 @@ auto HomomorphismSearcher::restarting_search(
 
         case SearchResult::Unsatisfiable:
             if (_split_proof) {
-                proof->back_up_to_level(depth + 1);
+                if (proof)
+                    proof->back_up_to_level(depth + 1);
                 add_contributions(assignments, assignments_size, contributions);
-                proof->forget_level(depth + 2);
+                if (proof)
+                    proof->forget_level(depth + 2);
             }
             else if (proof) {
                 proof->back_up_to_level(depth + 1);
@@ -919,6 +925,8 @@ auto HomomorphismSearcher::split_into_components(
     // where the entry says, by unit propagation through the node's definition. The
     // combining needs these to see which pairs of entries collide.
     auto derive_signatures = [&](const TallyGates & gates, const vector<unsigned> & vertices) {
+        if (! _split_proof->proving())
+            return;
         vector<std::tuple<int, int, int>> lemmas;
         for (auto & [key, node] : gates)
             for (unsigned i = 0; i < key.size(); ++i)
@@ -980,7 +988,8 @@ auto HomomorphismSearcher::split_into_components(
                 auto outer_base = _decision_base;
                 if (_split_proof) {
                     searched.assumption = domain_assumption(component_vertices);
-                    outer_assumption = proof->set_split_assumption(searched.assumption);
+                    if (proof)
+                        outer_assumption = proof->set_split_assumption(searched.assumption);
                     _decision_base = assignments.values.size();
                 }
 
@@ -989,7 +998,8 @@ auto HomomorphismSearcher::split_into_components(
                 _tally = enclosing;
 
                 if (_split_proof) {
-                    proof->set_split_assumption(outer_assumption);
+                    if (proof)
+                        proof->set_split_assumption(outer_assumption);
                     _decision_base = outer_base;
                 }
 
@@ -1108,6 +1118,8 @@ auto HomomorphismSearcher::split_into_components(
                     next_gates.emplace(k, told_apart_disjunction(*_split_proof, parts, both_vertices));
                 vector<long> steps;
                 for (auto & [left_key, left_node] : combined_gates) {
+                    if (! _split_proof->proving())
+                        break;
                     vector<string> literals{"~" + result.assumption};
                     if (-1 != left_node)
                         literals.push_back("~" + _split_proof->gate(left_node));

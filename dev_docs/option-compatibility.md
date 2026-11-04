@@ -43,7 +43,7 @@ apart matters:
 | `--split-components` with `--print-all-solutions` or `--solution-limit` | …cannot print them or stop at a limit |
 | `--split-components` with proof logging, without `--split-statement` | Proof logging with splitting into components needs a counting statement |
 | `--split-components` with `--locally-injective` | Splitting into components cannot be used with local injectivity |
-| `--split-statement` without both `--split-components` and `--prove` | `--split-statement needs --split-components and --prove` (the library: …needs proof logging) |
+| `--split-statement` without `--split-components` | `--split-statement needs --split-components` |
 | `--split-components` with `--induced` | …cannot be used with induced mappings |
 | `--split-components` with threads, restarts or `--staged` | …needs a sequential search without restarts |
 | `--split-components` with less-constraints | …cannot be used with less-constraints |

@@ -14,6 +14,7 @@ add_library(glasgow_subgraphs
         common_subgraph.cc
         configuration.cc
         counting_statement.cc
+        counting_statement_views.cc
         homomorphism.cc
         restarts.cc
         sip_decomposer.cc

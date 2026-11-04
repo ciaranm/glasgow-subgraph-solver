@@ -676,8 +676,8 @@ namespace
             // With a counting statement, the search writes it and proves the count by it,
             // instead of logging each solution.
             unique_ptr<SplitProof> split_proof;
-            if (proof && params.split_components) {
-                split_proof = make_unique<SplitProof>(proof, *ctx.hom_proofs, pattern.size(), target.size(), *params.split_statement);
+            if (params.split_components && params.split_statement) {
+                split_proof = make_unique<SplitProof>(proof, proof ? ctx.hom_proofs : nullptr, pattern.size(), target.size(), *params.split_statement);
                 split_proof->begin();
             }
 
@@ -703,10 +703,12 @@ namespace
                     split_proof->finish(*statement_root);
                     result.extra_stats.emplace_back("split_statement_file = " + *params.split_statement);
                 }
-                else if (result.complete)
-                    proof->finish_enumeration_proof(0, true);
-                else
-                    proof->finish_unknown_proof();
+                else if (proof) {
+                    if (result.complete)
+                        proof->finish_enumeration_proof(0, true);
+                    else
+                        proof->finish_unknown_proof();
+                }
             }
             else if (proof) {
                 if (params.count_solutions)
@@ -753,8 +755,6 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Splitting into components counts solutions without visiting them, so it cannot print them or stop at a limit"};
         if (params.proof_options && ! params.split_statement)
             throw UnsupportedConfiguration{"Proof logging with splitting into components needs a counting statement"};
-        if (params.split_statement && ! params.proof_options)
-            throw UnsupportedConfiguration{"A counting statement for splitting into components needs proof logging"};
         if (params.injectivity == Injectivity::LocallyInjective)
             throw UnsupportedConfiguration{"Splitting into components cannot be used with local injectivity"};
         if (params.induced)
