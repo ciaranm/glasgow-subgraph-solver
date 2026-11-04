@@ -124,8 +124,6 @@ namespace gss::innards
 
         auto propagate_simple_constraints(Domains & new_domains, const HomomorphismAssignment & current_assignment) -> bool;
 
-        auto propagate_less_thans(Domains & new_domains) -> bool;
-
         auto propagate_less_thans(Domains & new_domains, const std::vector<std::pair<unsigned int, unsigned int>> & constraints) -> bool;
 
         auto propagate_occur_less_thans(const HomomorphismAssignments &, Domains & new_domains, const std::vector<std::pair<unsigned int, unsigned int>> &, const std::optional<HomomorphismAssignment> &current_assignment) -> bool;

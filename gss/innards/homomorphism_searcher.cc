@@ -960,13 +960,6 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
     return true;
 }
 
-// /**
-//  * Propagate less-than symmetry constraints found before search
-//  */
-// auto HomomorphismSearcher::propagate_less_thans(Domains & new_domains) -> bool {
-//     return propagate_less_thans(new_domains, model.pattern_less_thans_in_convenient_order);
-// }
-
 /**
  * Propagate a given list of less-than symmetry constraints
  */
@@ -1394,7 +1387,6 @@ auto HomomorphismSearcher::break_coset_rep_symmetries(
                         if (val_order[mapping[p_aut[i]]] < val_order[mapping[i]]) {       // The permuted mapping is lex-less-than the original
                             return false;
                         }
-                        // else if (occurs_before(mapping[i], mapping[p_aut[i]])) {      // The original mapping is lex-less-than the permutation
                         // else if (val_order[mapping[i]] < val_order[mapping[p_aut[i]]]) {      // The original mapping is lex-less-than the permutation
                         //     break;                          // TODO we don't need to check this particular p_aut again until we backtrack
                         // }
@@ -1713,18 +1705,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             if (!params.symmetric_nogoods_only) {
                     // propagate orbit less thans
                     if (model.has_less_thans() && !params.pattern_rep_syms) {
-                        // if (model.do_dynamic_less_thans()) {
-                        //     if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
-                        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                        //         return false;
-                        //     }
-                        // }
-                        // else {
-                        //     if (!propagate_less_thans(new_domains)) {
-                        //         sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                        //         return false;
-                        //     }
-                        // }
                         if (!propagate_less_thans(new_domains, useful_pattern_constraints)) {
                             sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
                             return false;
@@ -1742,10 +1722,6 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
                         else if (params.dynamic_target || (params.semi_flexible_target && rep_solution_count == 0)) {
                             // Can we actually do anything here?
                         }
-                        // else if (! propagate_occur_less_thans(assignments, new_domains, model.target_occur_less_thans_in_convenient_order, current_assignment)) {
-                        //     sym_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
-                        //     return false;
-                        // }
                     }
                 }
                 sym_prop_time += duration_cast<microseconds>(steady_clock::now() - sym_start_time);
