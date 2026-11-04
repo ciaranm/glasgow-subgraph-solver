@@ -439,19 +439,23 @@ auto HomomorphismModel::_check_degree_compatibility(
                 if (_imp->proof) {
                     vector<int> p_subsequence, t_subsequence, t_remaining;
 
-                    // need to know the NDS together with the actual vertices
+                    // need to know the NDS together with the actual vertices. The degrees
+                    // must be the ones the sequences above were built from, which leave out
+                    // self-loops: a row's count includes the loop that prepare() puts back
+                    // into the original graph's rows, and ordering by it can put a loopy
+                    // vertex in the wrong place, citing an elimination that never happened.
                     vector<pair<int, int>> p_nds, t_nds;
 
                     auto np = pattern_graph_row(g, p);
                     for (auto w = np.find_first(); w != decltype(np)::npos; w = np.find_first()) {
                         np.reset(w);
-                        p_nds.emplace_back(w, pattern_graph_row(g, w).count());
+                        p_nds.emplace_back(w, pattern_degree(g, w));
                     }
 
                     auto nt = target_graph_row(g, t);
                     for (auto w = nt.find_first(); w != decltype(nt)::npos; w = nt.find_first()) {
                         nt.reset(w);
-                        t_nds.emplace_back(w, target_graph_row(g, w).count());
+                        t_nds.emplace_back(w, target_degree(g, w));
                     }
 
                     sort(p_nds.begin(), p_nds.end(), [](const pair<int, int> & a, const pair<int, int> & b) { return a.second > b.second; });

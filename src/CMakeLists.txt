@@ -150,6 +150,14 @@ if(VERIPB_EXECUTABLE)
     # neighbourhood degree sequences: incompatible_by_nds derivations.
     gss_add_proof_test(proof_nds ${SUB} --no-supplementals
         ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    # ... into a target with a self-loop on a neighbour of a vertex whose NDS fails. The
+    # filter's sequences leave loops out of the degrees; the proof once ordered the
+    # neighbours by their rows' counts, which include them, and so cited eliminations that
+    # had never been made.
+    gss_add_proof_test(proof_nds_loopy ${SUB} --no-supplementals --format lad
+        ${GSS_INSTANCES}/nds_loopy_pattern.lad ${GSS_INSTANCES}/nds_loopy_target.lad)
+    gss_add_proof_test(proof_count_nds_loopy ${SUB} --count-solutions --format lad
+        ${GSS_INSTANCES}/nds_loopy_pattern.lad ${GSS_INSTANCES}/nds_loopy_target.lad)
     # clique-size constraints, then the clique-size argument that eliminates an
     # assignment (K4 has a triangle in each neighbourhood; K3,3 is triangle-free, so
     # degree passes but the clique bound fires): the hom-clique proof.
