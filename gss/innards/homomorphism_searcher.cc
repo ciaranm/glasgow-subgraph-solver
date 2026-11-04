@@ -1619,25 +1619,27 @@ auto HomomorphismSearcher::propagate(bool initial, Domains & new_domains, Homomo
             assignments.values.push_back({*current_assignment, false, -1, -1});
 
             if (params.dynamic_var_order) {
-                unsigned int k = 0;
-
                 // prefix the variable order with the current branch variables
+                unsigned int k = 0;
                 for (unsigned int i = 0; i < assignments.values.size(); i++) {
                     unsigned int x = assignments.values[i].assignment.pattern_vertex;
                     unsigned int j = var_pos[x];
-
                     if (j < k) continue;
-
                     if (j != k) {
                         unsigned int y = var_order[k];
-
                         std::swap(var_order[k], var_order[j]);
-                    
                         var_pos[x] = k;
                         var_pos[y] = j;
                     }
-
                     ++k;
+                }
+                // adjust orbit constraints, if there are any
+                if (symmetry_engaged && params.orbit_sym) {
+                    for (auto & [a,b] : useful_pattern_constraints) {
+                        if (var_pos[b] < var_pos[a]) {
+                            std::swap(a,b);
+                        }
+                    }
                 }
             }
 
