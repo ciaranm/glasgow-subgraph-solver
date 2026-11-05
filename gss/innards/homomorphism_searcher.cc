@@ -1,8 +1,18 @@
+#include <gss/counting_statement.hh>
 #include <gss/innards/cheap_all_different.hh>
 #include <gss/innards/homomorphism_proofs.hh>
 #include <gss/innards/homomorphism_searcher.hh>
+#include <gss/innards/proof.hh>
+#include <gss/innards/split_proof.hh>
 
+#include <algorithm>
+#include <cmath>
+#include <map>
 #include <optional>
+#include <set>
+#include <stdexcept>
+#include <tuple>
+#include <unordered_map>
 
 using namespace gss;
 using namespace gss::innards;
@@ -11,6 +21,7 @@ using std::make_optional;
 using std::max;
 using std::move;
 using std::mt19937;
+using std::nullopt;
 using std::numeric_limits;
 using std::optional;
 using std::pair;
@@ -19,6 +30,203 @@ using std::swap;
 using std::to_string;
 using std::uniform_int_distribution;
 using std::vector;
+
+namespace
+{
+    struct TallyKeyHash
+    {
+        auto operator()(const vector<int> & key) const -> size_t
+        {
+            size_t result = key.size();
+            for (auto k : key)
+                result = (result * 1000003u) ^ size_t(unsigned(k));
+            return result;
+        }
+    };
+
+    using TallyCounts = std::unordered_map<vector<int>, loooong, TallyKeyHash>;
+
+    // A tally's entries in order of key. Anything that writes statement nodes or proof
+    // lines while going over a tally goes in this order, so that what it writes does not
+    // depend on the hash table's layout, which differs between standard libraries.
+    template <typename Map_>
+    auto in_key_order(const Map_ & map) -> vector<const typename Map_::value_type *>
+    {
+        vector<const typename Map_::value_type *> result;
+        result.reserve(map.size());
+        for (auto & entry : map)
+            result.push_back(&entry);
+        std::sort(result.begin(), result.end(), [](auto * a, auto * b) { return a->first < b->first; });
+        return result;
+    }
+
+    // With a counting statement, the statement node for each entry of a tally or table.
+    using TallyGates = std::unordered_map<vector<int>, int, TallyKeyHash>;
+
+    // A split's subproblem, as a cache key: see split_into_components.
+    using CacheKey = vector<unsigned long long>;
+
+    struct CacheKeyHash
+    {
+        auto operator()(const CacheKey & key) const -> size_t
+        {
+            size_t result = key.size();
+            for (auto k : key)
+                result = (result * 1000003u) ^ size_t(k ^ (k >> 32));
+            return result;
+        }
+    };
+
+    auto append_to_key(CacheKey & key, const SVOBitset & bits) -> void
+    {
+        key.insert(key.end(), bits.words(), bits.words() + bits.number_of_words());
+    }
+
+    // The disjunction of these nodes, each with its distinct signature over these vertices,
+    // as a tree of disjunctions each telling its children apart by one vertex: the first
+    // where the signatures differ. A -1 in a signature is an image not recorded, so not
+    // any of the recorded ones that another child has there.
+    auto told_apart_disjunction(SplitProof & split_proof, vector<pair<vector<int>, int>> items, const vector<unsigned> & vertices) -> int
+    {
+        if (1 == items.size())
+            return items[0].second;
+        unsigned p = 0;
+        while (std::all_of(items.begin(), items.end(), [&](const auto & i) { return i.first.at(p) == items[0].first.at(p); }))
+            ++p;
+        std::map<int, vector<pair<vector<int>, int>>> groups;
+        for (auto & i : items)
+            groups[i.first[p]].push_back(move(i));
+        vector<int> children, values;
+        for (auto & [value, group] : groups) {
+            values.push_back(value);
+            children.push_back(told_apart_disjunction(split_proof, move(group), vertices));
+        }
+        return split_proof.disjunction(children, int(vertices.at(p)), values);
+    }
+}
+
+namespace gss::innards
+{
+    // What a split contributes to the enclosing tally (or, at the top, to the count): keyed by
+    // the images of layout, which are the enclosing tally's vertices among those unassigned at
+    // the split. Empty if the split has no solutions.
+    struct SplitResult
+    {
+        vector<unsigned> layout;
+        TallyCounts combined;
+
+        // With a counting statement: each entry's node, and the assumption that the split's
+        // vertices stay within their domains, under which the entries' nodes cover every
+        // solution.
+        TallyGates gates;
+        string assumption;
+    };
+
+    // A component's tally, and with a counting statement, as for SplitResult.
+    struct ComponentResult
+    {
+        TallyCounts counts;
+        TallyGates gates;
+        string assumption;
+    };
+
+    // A split's result, and a component's tally, depend only on the domains of the vertices
+    // involved and on which images are recorded, not on how the search got there, so each is
+    // cached on exactly those.
+    struct SplitCaches
+    {
+        std::unordered_map<CacheKey, SplitResult, CacheKeyHash> splits;
+        std::unordered_map<CacheKey, ComponentResult, CacheKeyHash> components;
+        unsigned long long split_hits = 0, component_hits = 0;
+
+        // Roughly what the caches hold, and how many times they have been emptied for
+        // reaching HomomorphismParams::split_cache_limit.
+        unsigned long long bytes = 0, clears = 0;
+
+        // Make room for an entry of about this many bytes: emptying the caches loses only
+        // the work in them, since every entry can be worked out again.
+        auto make_room(unsigned long long entry_bytes, unsigned long long limit) -> void
+        {
+            if (bytes + entry_bytes > limit && bytes > 0) {
+                splits.clear();
+                components.clear();
+                bytes = 0;
+                ++clears;
+            }
+            bytes += entry_bytes;
+        }
+    };
+
+    // Roughly the memory a cache entry takes, counting the hash table's nodes and the keys.
+    auto approximate_bytes(const CacheKey & key, const TallyCounts & counts, std::size_t width) -> unsigned long long
+    {
+        return 64 + 8 * key.size() + counts.size() * (96 + 4 * width);
+    }
+
+    // What worth_splitting works in, kept from one call to the next so that a node that is
+    // not split allocates nothing. Bitsets here are bare words at their real width: a
+    // SVOBitset works on all of its inline words whatever its size, which is several times
+    // the work for the pattern and target sizes this runs on.
+    struct SplitScreen
+    {
+        using Word = unsigned long long;
+        static constexpr unsigned bits_per_word = 64;
+
+        unsigned pattern_words, target_words;
+
+        // For each pattern vertex, its neighbours in either direction.
+        vector<Word> rows;
+
+        vector<Word> unvisited, images, in_some, in_two;
+        vector<int> component;
+        vector<unsigned> todo;
+
+        explicit SplitScreen(const HomomorphismModel & model) :
+            pattern_words((model.pattern_size + bits_per_word - 1) / bits_per_word),
+            target_words((model.target_size + bits_per_word - 1) / bits_per_word),
+            rows(model.pattern_size * pattern_words),
+            unvisited(pattern_words),
+            in_some(target_words),
+            in_two(target_words),
+            component(model.pattern_size)
+        {
+            for (unsigned v = 0; v < model.pattern_size; ++v) {
+                auto row = model.pattern_graph_row(0, v);
+                row |= model.pattern_in_neighbour_row(v);
+                std::copy(row.words(), row.words() + pattern_words, rows.begin() + v * pattern_words);
+            }
+        }
+    };
+
+    // The solutions of one component of a split, keyed by the images of the vertices that the
+    // split still needs to see: those that could collide with another component, and those
+    // the enclosing tally needs, if this split is itself inside a component. An image that
+    // cannot matter to any of them is recorded as -1, so solutions that differ only there
+    // share an entry.
+    struct ComponentTally
+    {
+        // ascending
+        vector<unsigned> vertices;
+
+        // for each of vertices, the images that are recorded rather than collapsed to -1
+        vector<SVOBitset> relevant;
+
+        TallyCounts counts;
+
+        auto index_of(unsigned v) const -> optional<unsigned>
+        {
+            auto i = std::lower_bound(vertices.begin(), vertices.end(), v);
+            if (i == vertices.end() || *i != v)
+                return nullopt;
+            return unsigned(i - vertices.begin());
+        }
+
+        auto image(unsigned i, int t) const -> int
+        {
+            return (t != -1 && relevant[i].test(t)) ? t : -1;
+        }
+    };
+}
 
 HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const HomomorphismParams & p,
     const DuplicateSolutionFilterer & d, const std::shared_ptr<Proof> & f,
@@ -39,13 +247,62 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
     }
 }
 
+HomomorphismSearcher::~HomomorphismSearcher() = default;
+
 auto HomomorphismSearcher::assignments_as_proof_decisions(const HomomorphismAssignments & assignments) const -> vector<pair<int, int>>
 {
+    // inside a split's component search, only the decisions it made itself
     vector<pair<int, int>> trail;
-    for (auto & a : assignments.values)
-        if (a.is_decision)
-            trail.emplace_back(a.assignment.pattern_vertex, a.assignment.target_vertex);
+    for (auto i = _decision_base; i < assignments.values.size(); ++i)
+        if (assignments.values[i].is_decision)
+            trail.emplace_back(assignments.values[i].assignment.pattern_vertex, assignments.values[i].assignment.target_vertex);
     return trail;
+}
+
+auto HomomorphismSearcher::statement_line(const HomomorphismAssignments & assignments, const vector<string> & literals) -> long
+{
+    if (! proof)
+        return 0;
+    string line = "rup";
+    for (auto & [v, t] : assignments_as_proof_decisions(assignments))
+        line += " 1 ~x" + proof->variable_name(v, t);
+    line += proof->assumption_suffix();
+    for (auto & l : literals)
+        line += " 1 " + l;
+    return proof->emit_proof_line(line + " >= 1 ;");
+}
+
+auto HomomorphismSearcher::set_split_proof(SplitProof * split_proof) -> void
+{
+    _split_proof = split_proof;
+}
+
+auto HomomorphismSearcher::statement_entries() const -> const StatementEntries &
+{
+    return _entries;
+}
+
+auto HomomorphismSearcher::add_contributions(const HomomorphismAssignments & assignments, std::size_t assignments_size,
+    std::map<vector<int>, vector<pair<int, int>>> & contributions) -> void
+{
+    // The child's line has gone with its level, so this is the child's line again, one
+    // decision up, with each of the child's nodes behind what the child assigned. The
+    // decisions give those values by unit propagation.
+    auto child_entries = move(_entries);
+    _entries.clear();
+    vector<string> gates;
+    if (! child_entries.empty()) {
+        vector<pair<int, int>> assigned;
+        for (auto i = assignments_size; i < assignments.values.size(); ++i)
+            assigned.emplace_back(assignments.values[i].assignment.pattern_vertex, assignments.values[i].assignment.target_vertex);
+        auto cube = _split_proof->cube(assigned);
+        for (auto & [key, node] : child_entries) {
+            auto contribution = -1 == node ? cube : _split_proof->conjunction({cube, node});
+            contributions[key].emplace_back(int(assignments.values[assignments_size].assignment.target_vertex), contribution);
+            gates.push_back(_split_proof->gate(contribution));
+        }
+    }
+    statement_line(assignments, gates);
 }
 
 auto HomomorphismSearcher::solution_in_proof_form(const HomomorphismAssignments & assignments) const -> vector<pair<NamedVertex, NamedVertex>>
@@ -79,6 +336,15 @@ auto HomomorphismSearcher::add_extra_stats(std::list<std::string> & stats) const
 {
     if (_record_filter_activations)
         _filter_activations.add_search_stats(stats);
+    if (params.split_components) {
+        stats.push_back("splits = " + to_string(_splits));
+        stats.push_back("nested_splits = " + to_string(_nested_splits));
+        stats.push_back("split_cache_hits = " + to_string(_split_caches ? _split_caches->split_hits : 0));
+        stats.push_back("split_cache_entries = " + to_string(_split_caches ? _split_caches->splits.size() : 0));
+        stats.push_back("component_cache_hits = " + to_string(_split_caches ? _split_caches->component_hits : 0));
+        stats.push_back("component_cache_entries = " + to_string(_split_caches ? _split_caches->components.size() : 0));
+        stats.push_back("split_cache_clears = " + to_string(_split_caches ? _split_caches->clears : 0));
+    }
 }
 
 auto HomomorphismSearcher::restarting_search(
@@ -111,7 +377,20 @@ auto HomomorphismSearcher::restarting_search(
     // find ourselves a domain, or succeed if we're all assigned
     const HomomorphismDomain * branch_domain = find_branch_domain(domains);
     if (! branch_domain) {
-        if (proof)
+        if (_tally) {
+            vector<int> key(_tally->vertices.size(), -1);
+            for (auto & a : assignments.values)
+                if (auto i = _tally->index_of(a.assignment.pattern_vertex))
+                    key[*i] = _tally->image(*i, int(a.assignment.target_vertex));
+            ++_tally->counts[key];
+            if (_split_proof)
+                _entries = {{key, -1}};
+            return SearchResult::SatisfiableButKeepGoing;
+        }
+
+        if (_split_proof)
+            _entries = {{{}, -1}};
+        else if (proof)
             proof->post_solution(solution_in_proof_form(assignments));
 
         if (params.count_solutions) {
@@ -131,6 +410,10 @@ auto HomomorphismSearcher::restarting_search(
         else
             return SearchResult::Satisfiable;
     }
+
+    if (params.split_components)
+        if (auto result = split_into_components(assignments, domains, nodes, propagations, solution_count, depth, restarts_schedule))
+            return *result;
 
     // pull out the remaining values in this domain for branching
     auto remaining = branch_domain->values;
@@ -166,6 +449,11 @@ auto HomomorphismSearcher::restarting_search(
 
     int discrepancy_count = 0;
     bool actually_hit_a_failure = false;
+
+    // With a counting statement: for each signature, the statement nodes for each child
+    // with solutions of that signature, each the child's newly assigned values and then
+    // what lies below the child, with the child's value for the branching vertex.
+    std::map<vector<int>, vector<pair<int, int>>> contributions;
 
     // for each value remaining...
     for (auto f_v = branch_v.begin(), f_end = branch_v.begin() + branch_v_end; f_v != f_end; ++f_v) {
@@ -228,7 +516,14 @@ auto HomomorphismSearcher::restarting_search(
             return SearchResult::Restart;
 
         case SearchResult::SatisfiableButKeepGoing:
-            if (proof) {
+            if (_split_proof) {
+                if (proof)
+                    proof->back_up_to_level(depth + 1);
+                add_contributions(assignments, assignments_size, contributions);
+                if (proof)
+                    proof->forget_level(depth + 2);
+            }
+            else if (proof) {
                 proof->back_up_to_level(depth + 1);
                 proof->incorrect_guess(assignments_as_proof_decisions(assignments), false);
                 proof->forget_level(depth + 2);
@@ -239,7 +534,14 @@ auto HomomorphismSearcher::restarting_search(
             break;
 
         case SearchResult::Unsatisfiable:
-            if (proof) {
+            if (_split_proof) {
+                if (proof)
+                    proof->back_up_to_level(depth + 1);
+                add_contributions(assignments, assignments_size, contributions);
+                if (proof)
+                    proof->forget_level(depth + 2);
+            }
+            else if (proof) {
                 proof->back_up_to_level(depth + 1);
                 proof->incorrect_guess(assignments_as_proof_decisions(assignments), true);
                 proof->forget_level(depth + 2);
@@ -255,7 +557,22 @@ auto HomomorphismSearcher::restarting_search(
     }
 
     // no values remaining, backtrack, or possibly kick off a restart
-    if (proof)
+    if (_split_proof) {
+        // every solution below here lies in one of these, one per signature
+        _entries.clear();
+        vector<string> gates;
+        for (auto & [key, children] : contributions) {
+            vector<int> nodes, values;
+            for (auto & [value, node] : children) {
+                values.push_back(value);
+                nodes.push_back(node);
+            }
+            _entries.emplace_back(key, _split_proof->disjunction(nodes, int(branch_domain->v), values));
+            gates.push_back(_split_proof->gate(_entries.back().second));
+        }
+        statement_line(assignments, gates);
+    }
+    else if (proof)
         proof->out_of_guesses(assignments_as_proof_decisions(assignments));
 
     if (actually_hit_a_failure)
@@ -269,6 +586,777 @@ auto HomomorphismSearcher::restarting_search(
     }
     else
         return SearchResult::Unsatisfiable;
+}
+
+auto HomomorphismSearcher::worth_splitting(const Domains & domains) -> bool
+{
+    // This runs at every node, and most nodes are not split, so it is kept cheap: see
+    // SplitScreen.
+    if (! _split_screen)
+        _split_screen = std::make_unique<SplitScreen>(model);
+    auto & s = *_split_screen;
+    using Word = SplitScreen::Word;
+    const unsigned pw = s.pattern_words, tw = s.target_words, bpw = SplitScreen::bits_per_word;
+
+    std::fill(s.unvisited.begin(), s.unvisited.end(), 0);
+    unsigned n_unassigned = 0;
+    for (auto & d : domains)
+        if (! d.fixed) {
+            s.unvisited[d.v / bpw] |= Word{1} << (d.v % bpw);
+            ++n_unassigned;
+        }
+    if (n_unassigned < 2)
+        return false;
+
+    // Edges in either direction join a component.
+    int n_components = 0;
+    for (auto & d : domains) {
+        if (d.fixed || ! (s.unvisited[d.v / bpw] & (Word{1} << (d.v % bpw))))
+            continue;
+        s.unvisited[d.v / bpw] &= ~(Word{1} << (d.v % bpw));
+        s.component[d.v] = n_components;
+        s.todo.push_back(d.v);
+        while (! s.todo.empty()) {
+            auto v = s.todo.back();
+            s.todo.pop_back();
+            const Word * row = &s.rows[v * pw];
+            for (unsigned w = 0; w < pw; ++w) {
+                auto reached = row[w] & s.unvisited[w];
+                s.unvisited[w] &= ~reached;
+                for (; reached; reached &= reached - 1) {
+                    auto u = w * bpw + unsigned(countr_zero(reached));
+                    s.component[u] = n_components;
+                    s.todo.push_back(u);
+                }
+            }
+        }
+        ++n_components;
+    }
+    if (n_components < 2)
+        return false;
+
+    // Every table the combining builds is keyed by some of the recorded images, so the number
+    // of possible signatures bounds them all, and a split with too many is not made. A
+    // recorded image is one of the relevant ones, or -1, and a vertex's relevant images are
+    // those that a vertex in another component could also take, and those the enclosing
+    // tally needs, if this split is itself inside a component. Each vertex that could collide
+    // at least doubles the number of signatures, so the count can stop early. Local
+    // injectivity is refused, so under injectivity every pair of vertices in different
+    // components may collide, and otherwise none may.
+    //
+    // The images that a vertex in another component than v's could take are those in the
+    // union of the other components' domains. An image not in v's own component's union is
+    // in another's exactly when it is in some component's, and one in v's own component's
+    // union exactly when it is in two components' unions.
+    const bool injective = params.injectivity == Injectivity::Injective;
+    if (injective) {
+        s.images.assign(std::size_t(n_components) * tw, 0);
+        for (auto & d : domains)
+            if (! d.fixed) {
+                const Word * values = d.values.words();
+                Word * images = &s.images[std::size_t(s.component[d.v]) * tw];
+                for (unsigned w = 0; w < tw; ++w)
+                    images[w] |= values[w];
+            }
+        std::fill(s.in_some.begin(), s.in_some.end(), 0);
+        std::fill(s.in_two.begin(), s.in_two.end(), 0);
+        for (int c = 0; c < n_components; ++c) {
+            const Word * images = &s.images[std::size_t(c) * tw];
+            for (unsigned w = 0; w < tw; ++w) {
+                s.in_two[w] |= images[w] & s.in_some[w];
+                s.in_some[w] |= images[w];
+            }
+        }
+    }
+
+    const double log_limit = std::log2(double(*params.split_components));
+    unsigned vertices_in_collisions = 0;
+    double log_signatures = 0.0;
+    for (auto & d : domains) {
+        if (d.fixed)
+            continue;
+        auto e = _tally ? _tally->index_of(d.v) : nullopt;
+        const Word * values = d.values.words();
+        const Word * own = injective ? &s.images[std::size_t(s.component[d.v]) * tw] : nullptr;
+        const Word * enclosing = e ? _tally->relevant[*e].words() : nullptr;
+        bool collides = false;
+        unsigned relevant = 0;
+        for (unsigned w = 0; w < tw; ++w) {
+            Word shared = injective ? values[w] & ((s.in_some[w] & ~own[w]) | (s.in_two[w] & own[w])) : 0;
+            collides = collides || shared;
+            relevant += unsigned(popcount(shared | (enclosing ? enclosing[w] : 0)));
+        }
+        if (collides && ++vertices_in_collisions > log_limit)
+            return false;
+        if (collides || e) {
+            log_signatures += std::log2(double(relevant) + 1.0);
+            if (log_signatures > log_limit)
+                return false;
+        }
+    }
+
+    return true;
+}
+
+auto HomomorphismSearcher::split_into_components(
+    HomomorphismAssignments & assignments,
+    const Domains & domains,
+    unsigned long long & nodes,
+    unsigned long long & propagations,
+    loooong & solution_count,
+    int depth,
+    RestartsSchedule & restarts_schedule) -> optional<SearchResult>
+{
+    // Every constraint between an assigned and an unassigned vertex has already been
+    // propagated into the domains, so what is left is the constraints among the unassigned
+    // vertices. Those inside a connected component are the component's own business. Between
+    // two components there are no edges, and since induced mappings are refused, the only
+    // constraint left is injectivity: two vertices may not share an image. So the
+    // solutions below this node are the combinations of one solution per component in which
+    // no two such vertices collide, and each component can be searched on its own, keeping
+    // only enough of each solution to tell which combinations collide.
+    if (! worth_splitting(domains))
+        return nullopt;
+
+    // From here on the split is made, so what follows can take its time: worth_splitting
+    // has already found the components and the vertices that could collide, but cheaply
+    // and in its own workspace, which the component searches below would overwrite.
+    vector<const HomomorphismDomain *> unassigned;
+    SVOBitset unassigned_mask(model.pattern_size, 0);
+    for (auto & d : domains)
+        if (! d.fixed) {
+            unassigned.push_back(&d);
+            unassigned_mask.set(d.v);
+        }
+
+    // edges in either direction join a component
+    vector<int> component(model.pattern_size, -1);
+    int n_components = 0;
+    SVOBitset unvisited = unassigned_mask;
+    vector<unsigned> todo;
+    for (auto * d : unassigned) {
+        if (! unvisited.test(d->v))
+            continue;
+        unvisited.reset(d->v);
+        component[d->v] = n_components;
+        todo.push_back(d->v);
+        while (! todo.empty()) {
+            auto v = todo.back();
+            todo.pop_back();
+            auto row = model.pattern_graph_row(0, v);
+            row |= model.pattern_in_neighbour_row(v);
+            row &= unvisited;
+            unvisited.intersect_with_complement(row);
+            for (auto w = row.find_first(); w != decltype(row)::npos; w = row.find_first()) {
+                row.reset(w);
+                component[w] = n_components;
+                todo.push_back(w);
+            }
+        }
+        ++n_components;
+    }
+
+    // If this split is itself inside a component of an enclosing split, its solutions go to
+    // that component's tally, which needs the images of some of these vertices too.
+    ComponentTally * const enclosing = _tally;
+    auto enclosing_index = [&](unsigned v) -> optional<unsigned> {
+        return enclosing ? enclosing->index_of(v) : nullopt;
+    };
+
+    // For each vertex that could collide with a vertex in another component, by index into
+    // unassigned, the images that such a partner could also take: as in worth_splitting.
+    vector<optional<SVOBitset>> shared(unassigned.size());
+    if (params.injectivity == Injectivity::Injective) {
+        vector<SVOBitset> component_images(n_components, SVOBitset(model.target_size, 0));
+        for (auto * d : unassigned)
+            component_images[component[d->v]] |= d->values;
+        SVOBitset in_some(model.target_size, 0), in_two(model.target_size, 0);
+        for (auto & images : component_images) {
+            auto again = images;
+            again &= in_some;
+            in_two |= again;
+            in_some |= images;
+        }
+
+        for (unsigned i = 0; i < unassigned.size(); ++i) {
+            auto & own = component_images[component[unassigned[i]->v]];
+            auto elsewhere = in_some;
+            elsewhere.intersect_with_complement(own);
+            auto own_and_elsewhere = in_two;
+            own_and_elsewhere &= own;
+            elsewhere |= own_and_elsewhere;
+            elsewhere &= unassigned[i]->values;
+            if (elsewhere.any())
+                shared[i] = move(elsewhere);
+        }
+    }
+
+    // The pairs of vertices in different components that could take the same image, by index
+    // into unassigned: only vertices with a shared image can be in one.
+    vector<pair<unsigned, unsigned>> collisions;
+    for (unsigned i = 0; i < unassigned.size(); ++i)
+        if (shared[i])
+            for (unsigned j = i + 1; j < unassigned.size(); ++j)
+                if (shared[j] && component[unassigned[i]->v] != component[unassigned[j]->v]) {
+                    auto both = unassigned[i]->values;
+                    both &= unassigned[j]->values;
+                    if (both.any())
+                        collisions.emplace_back(i, j);
+                }
+
+    ++_splits;
+    if (_tally)
+        ++_nested_splits;
+
+    // With a counting statement, the literal for this split's vertices staying within their
+    // domains: the split's result is proved under it, so that a cached result can be used
+    // wherever the domains are the same.
+    auto domain_assumption = [&](const vector<const HomomorphismDomain *> & which) -> string {
+        vector<pair<int, int>> excluded;
+        for (auto * d : which)
+            for (unsigned t = 0; t < model.target_size; ++t)
+                if (! d->values.test(t))
+                    excluded.emplace_back(d->v, t);
+        return _split_proof->assumption(excluded);
+    };
+
+    // Hand a result to the enclosing tally, or at the top, to the count. With a counting
+    // statement, also hand back the statement's nodes, by the enclosing tally's signature,
+    // and derive that the decisions lead to one of them.
+    auto deliver = [&](const SplitResult & result) -> SearchResult {
+        if (_split_proof) {
+            statement_line(assignments, {result.assumption});
+            _entries.clear();
+        }
+
+        if (result.combined.empty()) {
+            if (_split_proof)
+                statement_line(assignments, {});
+            return SearchResult::Unsatisfiable;
+        }
+
+        if (! enclosing) {
+            // layout is empty, and so combined has the one entry
+            for (auto & [_, count] : result.combined)
+                solution_count += count;
+            if (_split_proof) {
+                auto node = result.gates.begin()->second;
+                _entries = {{{}, node}};
+                statement_line(assignments, {_split_proof->gate(node)});
+            }
+        }
+        else {
+            // The enclosing tally's vertices are either assigned already, or in layout.
+            vector<int> key(enclosing->vertices.size(), -1);
+            for (auto & a : assignments.values)
+                if (auto e = enclosing->index_of(a.assignment.pattern_vertex))
+                    key[*e] = enclosing->image(*e, int(a.assignment.target_vertex));
+            vector<unsigned> layout_to_enclosing;
+            for (auto v : result.layout)
+                layout_to_enclosing.push_back(*enclosing->index_of(v));
+            std::map<vector<int>, vector<pair<vector<int>, int>>> nodes;
+            for (auto & [combined_key, count] : result.combined) {
+                for (unsigned k = 0; k < result.layout.size(); ++k)
+                    key[layout_to_enclosing[k]] = enclosing->image(layout_to_enclosing[k], combined_key[k]);
+                enclosing->counts[key] += count;
+                if (_split_proof)
+                    nodes[key].emplace_back(combined_key, result.gates.at(combined_key));
+            }
+            if (_split_proof) {
+                vector<string> gates;
+                for (auto & [k, n] : nodes) {
+                    _entries.emplace_back(k, told_apart_disjunction(*_split_proof, n, result.layout));
+                    gates.push_back(_split_proof->gate(_entries.back().second));
+                }
+                statement_line(assignments, gates);
+            }
+        }
+
+        return SearchResult::SatisfiableButKeepGoing;
+    };
+
+    // The result depends only on the unassigned vertices' domains, and on which of their
+    // images the enclosing tally records. Everything else about this split, from the
+    // components to the order they are combined in, follows from those.
+    vector<const HomomorphismDomain *> by_vertex = unassigned;
+    std::sort(by_vertex.begin(), by_vertex.end(), [](auto * a, auto * b) { return a->v < b->v; });
+    CacheKey split_key;
+    split_key.push_back(by_vertex.size());
+    for (auto * d : by_vertex) {
+        split_key.push_back(d->v);
+        append_to_key(split_key, d->values);
+    }
+    for (auto * d : by_vertex)
+        if (auto e = enclosing_index(d->v)) {
+            split_key.push_back(d->v);
+            append_to_key(split_key, enclosing->relevant[*e]);
+        }
+
+    if (! _split_caches)
+        _split_caches = std::make_unique<SplitCaches>();
+    if (auto cached = _split_caches->splits.find(split_key); cached != _split_caches->splits.end()) {
+        ++_split_caches->split_hits;
+        return deliver(cached->second);
+    }
+
+    // Under injectivity, vertices that are components on their own, whose images the
+    // enclosing tally does not need, and that have the same domain, are interchangeable:
+    // their solutions are every way of giving them distinct values from that domain that
+    // the rest of the split leaves free. Some such free sets, with pairwise disjoint
+    // domains, the largest first, are counted that way, in the last combining step, rather
+    // than searched and combined one vertex at a time. Even a set of one vertex is worth
+    // it for a counting statement, which gets one node for it rather than one per value.
+    struct FreeSet
+    {
+        vector<int> vertices;
+        SVOBitset values;
+    };
+    vector<FreeSet> free_sets;
+    vector<bool> in_free_set(n_components, false);
+    if (params.injectivity == Injectivity::Injective) {
+        vector<unsigned> component_size(n_components, 0);
+        for (auto * d : unassigned)
+            ++component_size[component[d->v]];
+        std::map<vector<unsigned long long>, FreeSet> by_domain;
+        for (auto * d : by_vertex)
+            if (1 == component_size[component[d->v]] && ! enclosing_index(d->v)) {
+                vector<unsigned long long> domain_key(d->values.words(), d->values.words() + d->values.number_of_words());
+                by_domain.try_emplace(domain_key, FreeSet{{}, d->values}).first->second.vertices.push_back(d->v);
+            }
+        vector<FreeSet *> candidates;
+        for (auto & [_, free_set] : by_domain)
+            candidates.push_back(&free_set);
+        std::stable_sort(candidates.begin(), candidates.end(), [](auto * a, auto * b) { return a->vertices.size() > b->vertices.size(); });
+        SVOBitset taken(model.target_size, 0);
+        for (auto * free_set : candidates) {
+            auto overlap = free_set->values;
+            overlap &= taken;
+            if (overlap.any())
+                continue;
+            taken |= free_set->values;
+            for (auto & v : free_set->vertices)
+                in_free_set[component[v]] = true;
+            free_sets.push_back(std::move(*free_set));
+        }
+    }
+
+    // Search the other components, those that look smallest first, so that a component
+    // with no solutions is found as early as possible. The free sets come after all of
+    // them.
+    vector<double> size_estimate(n_components, 0.0);
+    for (auto * d : unassigned)
+        size_estimate[component[d->v]] += std::log2(double(d->count));
+    vector<int> order;
+    for (int c = 0; c < n_components; ++c)
+        if (! in_free_set[c])
+            order.push_back(c);
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return size_estimate[a] < size_estimate[b]; });
+    const int n_searched = order.size();
+    vector<int> position(n_components, n_searched);
+    for (int s = 0; s < n_searched; ++s)
+        position[order[s]] = s;
+
+    // For each unassigned vertex, the last position in the order of a component holding a
+    // vertex it could collide with.
+    vector<int> last_partner(unassigned.size(), -1);
+    std::set<pair<unsigned, unsigned>> colliding_vertices;
+    for (auto [i, j] : collisions) {
+        last_partner[i] = max(last_partner[i], position[component[unassigned[j]->v]]);
+        last_partner[j] = max(last_partner[j], position[component[unassigned[i]->v]]);
+        colliding_vertices.emplace(unassigned[i]->v, unassigned[j]->v);
+        colliding_vertices.emplace(unassigned[j]->v, unassigned[i]->v);
+    }
+
+    vector<int> index_in_unassigned(model.pattern_size, -1);
+    for (unsigned i = 0; i < unassigned.size(); ++i)
+        index_in_unassigned[unassigned[i]->v] = i;
+
+    // Is v's image still needed once the components up to position s have been combined?
+    auto needed_after = [&](unsigned v, int s) -> bool {
+        return enclosing_index(v) || last_partner[index_in_unassigned[v]] > s;
+    };
+
+    SplitResult result;
+    if (_split_proof)
+        result.assumption = domain_assumption(by_vertex);
+
+    // With a counting statement, for each entry, that its node puts each recorded vertex
+    // where the entry says, by unit propagation through the node's definition. The
+    // combining needs these to see which pairs of entries collide.
+    auto derive_signatures = [&](const TallyGates & gates, const vector<unsigned> & vertices) {
+        if (! _split_proof->proving())
+            return;
+        vector<std::tuple<int, int, int>> lemmas;
+        for (auto * entry : in_key_order(gates)) {
+            auto & [key, node] = *entry;
+            for (unsigned i = 0; i < key.size(); ++i)
+                if (-1 != key[i])
+                    lemmas.emplace_back(node, vertices[i], key[i]);
+        }
+        _split_proof->derive_signatures(lemmas);
+    };
+
+    // Count each component on its own, into its own tally, and combine the tallies into
+    // result. Returns false if aborted, and leaves result empty if there are no solutions.
+    // With a counting statement, also derive that under the split's assumption, its
+    // solutions lie in one of result's nodes.
+    auto count_and_combine = [&]() -> bool {
+        vector<ComponentTally> tallies(n_searched);
+        vector<TallyGates> tally_gates(n_searched);
+        for (int s = 0; s < n_searched; ++s) {
+            int c = order[s];
+            auto & tally = tallies[s];
+            Domains component_domains;
+            vector<const HomomorphismDomain *> component_vertices;
+            for (auto * d : by_vertex)
+                if (component[d->v] == c) {
+                    component_domains.push_back(*d);
+                    component_vertices.push_back(d);
+                    if (enclosing_index(d->v) || shared[index_in_unassigned[d->v]])
+                        tally.vertices.push_back(d->v);
+                }
+            for (auto v : tally.vertices) {
+                SVOBitset relevant(model.target_size, 0);
+                if (auto e = enclosing_index(v))
+                    relevant |= enclosing->relevant[*e];
+                if (auto & mine = shared[index_in_unassigned[v]])
+                    relevant |= *mine;
+                tally.relevant.push_back(relevant);
+            }
+
+            CacheKey component_key;
+            component_key.push_back(component_domains.size());
+            for (auto & d : component_domains) {
+                component_key.push_back(d.v);
+                append_to_key(component_key, d.values);
+            }
+            for (unsigned i = 0; i < tally.vertices.size(); ++i) {
+                component_key.push_back(tally.vertices[i]);
+                append_to_key(component_key, tally.relevant[i]);
+            }
+
+            if (auto cached = _split_caches->components.find(component_key); cached != _split_caches->components.end()) {
+                ++_split_caches->component_hits;
+                tally.counts = cached->second.counts;
+                tally_gates[s] = cached->second.gates;
+            }
+            else {
+                // The component's search makes its own decisions, under its own assumption,
+                // and ends having derived that under it, its solutions lie in one of its
+                // nodes. That goes to level 0, with each node's signature, to be cached.
+                ComponentResult searched;
+                optional<string> outer_assumption;
+                auto outer_base = _decision_base;
+                if (_split_proof) {
+                    searched.assumption = domain_assumption(component_vertices);
+                    if (proof)
+                        outer_assumption = proof->set_split_assumption(searched.assumption);
+                    _decision_base = assignments.values.size();
+                }
+
+                _tally = &tally;
+                auto search_result = restarting_search(assignments, component_domains, nodes, propagations, solution_count, depth, restarts_schedule);
+                _tally = enclosing;
+
+                if (_split_proof) {
+                    if (proof)
+                        proof->set_split_assumption(outer_assumption);
+                    _decision_base = outer_base;
+                }
+
+                switch (search_result) {
+                case SearchResult::Aborted:
+                    return false;
+                case SearchResult::Unsatisfiable:
+                case SearchResult::SatisfiableButKeepGoing:
+                    break;
+                case SearchResult::Satisfiable:
+                case SearchResult::Restart:
+                    // refused in solve_homomorphism_problem: no enumerate callback, no restarts
+                    throw std::logic_error{"split component search did not run to completion"};
+                }
+
+                if (_split_proof) {
+                    vector<string> conclusion{"~" + searched.assumption};
+                    for (auto & [key, node] : _entries) {
+                        tally_gates[s].emplace(key, node);
+                        conclusion.push_back(_split_proof->gate(node));
+                    }
+                    _split_proof->rup(conclusion, true);
+                    derive_signatures(tally_gates[s], tally.vertices);
+                    searched.gates = tally_gates[s];
+                }
+
+                searched.counts = tally.counts;
+                _split_caches->make_room(approximate_bytes(component_key, tally.counts, tally.vertices.size()), params.split_cache_limit);
+                _split_caches->components.emplace(move(component_key), move(searched));
+            }
+
+            if (tally.counts.empty()) {
+                if (_split_proof)
+                    _split_proof->rup({"~" + result.assumption}, true);
+                return true;
+            }
+        }
+
+        // Each free set's vertices take distinct values from its domain, less the images of
+        // these keys. Whether there are enough values for every free set, and if so, how
+        // many ways there are, and with a counting statement, each free set's values.
+        auto place_free_sets = [&](const vector<int> & left_key, const vector<int> * right_key, loooong & ways,
+                                   vector<vector<int>> * set_values) -> bool {
+            ways = loooong{1};
+            for (auto & free_set : free_sets) {
+                auto values = free_set.values;
+                for (auto & t : left_key)
+                    if (-1 != t)
+                        values.reset(t);
+                if (right_key)
+                    for (auto & t : *right_key)
+                        if (-1 != t)
+                            values.reset(t);
+                auto d = values.count();
+                if (set_values) {
+                    set_values->emplace_back();
+                    for (auto t = values.find_first(); t != decltype(values)::npos; t = values.find_first()) {
+                        values.reset(t);
+                        set_values->back().push_back(t);
+                    }
+                }
+                if (d < free_set.vertices.size())
+                    return false;
+                ways *= distinct_count(free_set.vertices.size(), d);
+            }
+            return true;
+        };
+
+        // With a counting statement and a proof, for a combined entry and perhaps a pair, that
+        // under the split's assumption they lead to the new entry, through their free sets'
+        // distinct nodes: each free set's vertices are each at one of their values, because
+        // the assumption keeps them in their domains, and the entries' signatures and
+        // injectivity keep them off their images; and at most one is at each value, by
+        // injectivity. Or that they cannot both hold, because some free set has more
+        // vertices than values. Returns the lines, for forgetting.
+        auto place_free_sets_proof = [&](vector<string> premises, const vector<vector<int>> & set_values, bool possible,
+                                         optional<int> new_node) -> vector<long> {
+            vector<long> lines;
+            for (unsigned f = 0; f < set_values.size(); ++f) {
+                auto more = possible || f + 1 < set_values.size()
+                    ? _split_proof->distinct_lemmas(premises, free_sets[f].vertices, set_values[f])
+                    : _split_proof->distinct_impossible(premises, free_sets[f].vertices, set_values[f]);
+                lines.insert(lines.end(), more.begin(), more.end());
+            }
+            if (possible) {
+                premises.push_back(_split_proof->gate(*new_node));
+                lines.push_back(_split_proof->rup(premises, true));
+            }
+            return lines;
+        };
+
+        // Combine the tallies one component at a time, keeping in the key only the images
+        // that a later component could collide with, or that the enclosing tally needs. With
+        // free sets, the last step places them too, pair by pair, so that its table is keyed
+        // only by what the enclosing tally needs.
+        vector<unsigned> layout;
+        TallyCounts combined;
+        combined.emplace(vector<int>{}, loooong{1});
+        // with a counting statement, -1 for the empty key's node, which is true
+        TallyGates combined_gates;
+        combined_gates.emplace(vector<int>{}, -1);
+        optional<long> combined_line;
+        for (int s = 0; s < n_searched; ++s) {
+            auto & tally = tallies[s];
+            const bool place = s + 1 == n_searched && ! free_sets.empty();
+            const int after = place ? n_searched : s;
+
+            vector<pair<unsigned, unsigned>> compare;
+            for (unsigned a = 0; a < layout.size(); ++a)
+                for (unsigned b = 0; b < tally.vertices.size(); ++b)
+                    if (colliding_vertices.contains({layout[a], tally.vertices[b]}))
+                        compare.emplace_back(a, b);
+
+            // where each entry of the new key comes from: the combined key, or the tally's
+            vector<unsigned> new_layout;
+            vector<pair<bool, unsigned>> take;
+            for (unsigned a = 0; a < layout.size(); ++a)
+                if (needed_after(layout[a], after)) {
+                    new_layout.push_back(layout[a]);
+                    take.emplace_back(false, a);
+                }
+            for (unsigned b = 0; b < tally.vertices.size(); ++b)
+                if (needed_after(tally.vertices[b], after)) {
+                    new_layout.push_back(tally.vertices[b]);
+                    take.emplace_back(true, b);
+                }
+
+            TallyCounts next;
+            // with a counting statement, the pairs that make up each new entry, and the new
+            // entries each combined entry goes into
+            std::map<vector<int>, vector<pair<vector<int>, int>>> next_parts;
+            std::unordered_map<vector<int>, std::set<vector<int>>, TallyKeyHash> goes_into;
+            // with free sets to place and a proof, each compatible pair, its new entry, its
+            // free sets' values, and whether they can be placed
+            struct Placed
+            {
+                const vector<int> *left_key, *right_key;
+                vector<int> key;
+                vector<vector<int>> values;
+                bool possible;
+            };
+            vector<Placed> placed;
+            vector<int> key(take.size());
+            loooong ways;
+            vector<vector<int>> set_values;
+            unsigned long long pairs_considered = 0;
+            auto right_entries = in_key_order(tally.counts);
+            for (auto * left_entry : in_key_order(combined))
+                for (auto * right_entry : right_entries) {
+                    auto & [left_key, left_count] = *left_entry;
+                    auto & [right_key, right_count] = *right_entry;
+                    // the signatures bound this, but the bound can still be large
+                    if (0 == (++pairs_considered % 65536) && params.timeout->should_abort())
+                        return false;
+
+                    bool compatible = true;
+                    for (auto [a, b] : compare)
+                        if (left_key[a] != -1 && left_key[a] == right_key[b]) {
+                            compatible = false;
+                            break;
+                        }
+                    if (! compatible)
+                        continue;
+
+                    for (unsigned k = 0; k < take.size(); ++k)
+                        key[k] = take[k].first ? right_key[take[k].second] : left_key[take[k].second];
+
+                    set_values.clear();
+                    bool possible = ! place || place_free_sets(left_key, &right_key, ways, _split_proof ? &set_values : nullptr);
+                    if (place && _split_proof && _split_proof->proving())
+                        placed.push_back(Placed{&left_key, &right_key, key, set_values, possible});
+                    if (! possible)
+                        continue;
+
+                    if (place) {
+                        loooong both_counts;
+                        both_counts.add_product(left_count, right_count);
+                        next[key].add_product(both_counts, ways);
+                    }
+                    else
+                        next[key].add_product(left_count, right_count);
+
+                    if (_split_proof) {
+                        auto left = combined_gates.at(left_key), right = tally_gates[s].at(right_key);
+                        vector<int> children{right};
+                        if (-1 != left)
+                            children.push_back(left);
+                        for (unsigned f = 0; f < set_values.size(); ++f)
+                            children.push_back(_split_proof->distinct(free_sets[f].vertices, set_values[f]));
+                        auto both = left_key;
+                        both.insert(both.end(), right_key.begin(), right_key.end());
+                        next_parts[key].emplace_back(move(both), _split_proof->conjunction(children));
+                        goes_into[left_key].insert(key);
+                    }
+                }
+
+            if (_split_proof) {
+                // Each new entry's node is the or of its pairs. Then, for each combined entry,
+                // that under the assumption it goes into one of its new entries: every
+                // pair it is in is one of those, and every pair it is not in collides, by
+                // the two entries' signatures and injectivity. With free sets to place, a
+                // pair leads to its new entry, or cannot happen, by a lemma of its own
+                // first. Then that the split's solutions so far lie in one of the new
+                // entries.
+                TallyGates next_gates;
+                auto both_vertices = layout;
+                both_vertices.insert(both_vertices.end(), tally.vertices.begin(), tally.vertices.end());
+                for (auto & [k, parts] : next_parts)
+                    next_gates.emplace(k, told_apart_disjunction(*_split_proof, parts, both_vertices));
+                vector<long> steps;
+                for (auto & pair_placed : placed) {
+                    vector<string> premises{"~" + result.assumption, "~" + _split_proof->gate(tally_gates[s].at(*pair_placed.right_key))};
+                    if (auto left = combined_gates.at(*pair_placed.left_key); -1 != left)
+                        premises.push_back("~" + _split_proof->gate(left));
+                    auto lines = place_free_sets_proof(premises, pair_placed.values, pair_placed.possible,
+                        pair_placed.possible ? optional<int>{next_gates.at(pair_placed.key)} : nullopt);
+                    steps.insert(steps.end(), lines.begin(), lines.end());
+                }
+                for (auto * left_entry : in_key_order(combined_gates)) {
+                    if (! _split_proof->proving())
+                        break;
+                    auto & [left_key, left_node] = *left_entry;
+                    vector<string> literals{"~" + result.assumption};
+                    if (-1 != left_node)
+                        literals.push_back("~" + _split_proof->gate(left_node));
+                    if (auto g = goes_into.find(left_key); g != goes_into.end())
+                        for (auto & k : g->second)
+                            literals.push_back(_split_proof->gate(next_gates.at(k)));
+                    steps.push_back(_split_proof->rup(literals, true));
+                }
+                vector<string> literals{"~" + result.assumption};
+                for (auto * entry : in_key_order(next_gates))
+                    literals.push_back(_split_proof->gate(entry->second));
+                auto line = _split_proof->rup(literals, true);
+                if (combined_line)
+                    steps.push_back(*combined_line);
+                _split_proof->forget(steps);
+                combined_line = line;
+                derive_signatures(next_gates, new_layout);
+                combined_gates = move(next_gates);
+            }
+
+            if (next.empty())
+                return true;
+
+            combined = move(next);
+            layout = move(new_layout);
+        }
+
+        // With nothing searched, the free sets are placed on their own.
+        if (! free_sets.empty() && 0 == n_searched) {
+            vector<int> empty;
+            loooong ways;
+            vector<vector<int>> set_values;
+            bool possible = place_free_sets(empty, nullptr, ways, _split_proof ? &set_values : nullptr);
+            if (_split_proof) {
+                optional<int> node;
+                if (possible) {
+                    vector<int> children;
+                    for (unsigned f = 0; f < set_values.size(); ++f)
+                        children.push_back(_split_proof->distinct(free_sets[f].vertices, set_values[f]));
+                    node = _split_proof->conjunction(children);
+                }
+                if (_split_proof->proving()) {
+                    auto lines = place_free_sets_proof({"~" + result.assumption}, set_values, possible, node);
+                    if (possible)
+                        lines.pop_back();
+                    vector<string> literals{"~" + result.assumption};
+                    if (node)
+                        literals.push_back(_split_proof->gate(*node));
+                    auto line = _split_proof->rup(literals, true);
+                    _split_proof->forget(lines);
+                    combined_line = line;
+                }
+                combined_gates.clear();
+                if (node)
+                    combined_gates.emplace(vector<int>{}, *node);
+            }
+            if (! possible)
+                return true;
+            combined = TallyCounts{{vector<int>{}, ways}};
+        }
+
+        result.layout = move(layout);
+        result.combined = move(combined);
+        if (_split_proof)
+            result.gates = move(combined_gates);
+        return true;
+    };
+
+    if (! count_and_combine())
+        return SearchResult::Aborted;
+
+    _split_caches->make_room(approximate_bytes(split_key, result.combined, result.layout.size()), params.split_cache_limit);
+    auto & stored = _split_caches->splits.emplace(move(split_key), move(result)).first->second;
+    return deliver(stored);
 }
 
 auto HomomorphismSearcher::degree_sort(
