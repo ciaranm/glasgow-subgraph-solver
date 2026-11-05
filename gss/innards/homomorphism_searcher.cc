@@ -103,7 +103,7 @@ auto HomomorphismSearcher::calculate_groups() -> void {
         if (params.orbit_sym) {
             auto dejavu_start_time = steady_clock::now();
             std::cout << "pattern_";
-            useful_pattern_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, pattern_base, pattern_orbit_sizes, var_order);
+            useful_pattern_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, pattern_base, pattern_orbit_sizes, var_order, model.directed());
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "pattern_less_constraints =";
             for (auto & [a, b] : useful_pattern_constraints)
@@ -113,7 +113,7 @@ auto HomomorphismSearcher::calculate_groups() -> void {
         if (params.pattern_rep_syms) {
             auto dejavu_start_time = steady_clock::now();
             std::cout << "pattern_";
-            pattern_coset_invs = innards::coset_reps(adjacency_matrix, pattern_orbit_sizes, pattern_base, var_order);
+            pattern_coset_invs = innards::coset_reps(adjacency_matrix, pattern_orbit_sizes, pattern_base, var_order, model.directed());
             pattern_coset_reps = innards::invert_list(pattern_coset_invs);
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "pattern_constraints = [";
@@ -139,7 +139,7 @@ auto HomomorphismSearcher::calculate_groups() -> void {
         if (params.orbit_sym) {
             auto dejavu_start_time = steady_clock::now();
             std::cout << "target_";
-            useful_target_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, target_base, target_orbit_sizes, val_order);
+            useful_target_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, target_base, target_orbit_sizes, val_order, model.directed());
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "target_occur_less_constraints =";
             for (auto & [a, b] : useful_target_constraints)
@@ -149,7 +149,7 @@ auto HomomorphismSearcher::calculate_groups() -> void {
         if (params.target_rep_syms) {
             auto dejavu_start_time = steady_clock::now();
             std::cout << "target_";
-            target_coset_invs = innards::coset_reps(adjacency_matrix, target_orbit_sizes, target_base, val_order);
+            target_coset_invs = innards::coset_reps(adjacency_matrix, target_orbit_sizes, target_base, val_order, model.directed());
             target_coset_reps = innards::invert_list(target_coset_invs);
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
             std::cout << "target_constraints = [";

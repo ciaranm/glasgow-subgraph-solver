@@ -12,10 +12,9 @@ using namespace gss::innards;
 /**
  * Uses orbits
 */
-auto gss::innards::automorphisms_as_order_constraints(std::vector<SVOBitset> m, std::vector<int> & base, std::vector<int> &orbit_sizes, const vector<unsigned int> & vertex_order) -> std::vector<std::pair<unsigned, unsigned>>
+auto gss::innards::automorphisms_as_order_constraints(std::vector<SVOBitset> m, std::vector<int> & base, std::vector<int> &orbit_sizes, const vector<unsigned int> & vertex_order, const bool directed) -> std::vector<std::pair<unsigned, unsigned>>
 {
-    // TODO directed graphs
-    dejavu::static_graph g = build_static_graph(m, false);
+    dejavu::static_graph g = build_static_graph(m, directed);
     int nv = g.get_sgraph()->v_size;
 
     dejavu::groups::random_schreier rschreier{nv};        // Random Schreier structure with domain size nv
@@ -120,10 +119,8 @@ auto gss::innards::dynamic_order_constraints(int sz, vector<int> &base, vector<i
 /**
  * Calulcate the generating set for the automorphism group of an input graph (given a [partial] base)
  */
-auto gss::innards::coset_reps(std::vector<SVOBitset> m, std::vector<int> & orbit_sizes, std::vector<int> & base, const std::vector<unsigned int> vertex_order) -> std::vector<std::vector<unsigned int>> {
-    
-    // TODO directed graphs
-    dejavu::static_graph g = build_static_graph(m, false);
+auto gss::innards::coset_reps(std::vector<SVOBitset> m, std::vector<int> & orbit_sizes, std::vector<int> & base, const std::vector<unsigned int> vertex_order, const bool directed) -> std::vector<std::vector<unsigned int>> {
+    dejavu::static_graph g = build_static_graph(m, directed);
     int nv = g.get_sgraph()->v_size;
 
     orbit_sizes.resize(m.size(), 1);
