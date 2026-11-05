@@ -46,6 +46,20 @@ namespace
 
     using TallyCounts = std::unordered_map<vector<int>, loooong, TallyKeyHash>;
 
+    // A tally's entries in order of key. Anything that writes statement nodes or proof
+    // lines while going over a tally goes in this order, so that what it writes does not
+    // depend on the hash table's layout, which differs between standard libraries.
+    template <typename Map_>
+    auto in_key_order(const Map_ & map) -> vector<const typename Map_::value_type *>
+    {
+        vector<const typename Map_::value_type *> result;
+        result.reserve(map.size());
+        for (auto & entry : map)
+            result.push_back(&entry);
+        std::sort(result.begin(), result.end(), [](auto * a, auto * b) { return a->first < b->first; });
+        return result;
+    }
+
     // With a counting statement, the statement node for each entry of a tally or table.
     using TallyGates = std::unordered_map<vector<int>, int, TallyKeyHash>;
 
@@ -973,10 +987,12 @@ auto HomomorphismSearcher::split_into_components(
         if (! _split_proof->proving())
             return;
         vector<std::tuple<int, int, int>> lemmas;
-        for (auto & [key, node] : gates)
+        for (auto * entry : in_key_order(gates)) {
+            auto & [key, node] = *entry;
             for (unsigned i = 0; i < key.size(); ++i)
                 if (-1 != key[i])
                     lemmas.emplace_back(node, vertices[i], key[i]);
+        }
         _split_proof->derive_signatures(lemmas);
     };
 
@@ -1191,8 +1207,11 @@ auto HomomorphismSearcher::split_into_components(
             loooong ways;
             vector<vector<int>> set_values;
             unsigned long long pairs_considered = 0;
-            for (auto & [left_key, left_count] : combined)
-                for (auto & [right_key, right_count] : tally.counts) {
+            auto right_entries = in_key_order(tally.counts);
+            for (auto * left_entry : in_key_order(combined))
+                for (auto * right_entry : right_entries) {
+                    auto & [left_key, left_count] = *left_entry;
+                    auto & [right_key, right_count] = *right_entry;
                     // the signatures bound this, but the bound can still be large
                     if (0 == (++pairs_considered % 65536) && params.timeout->should_abort())
                         return false;
@@ -1260,9 +1279,10 @@ auto HomomorphismSearcher::split_into_components(
                         pair_placed.possible ? optional<int>{next_gates.at(pair_placed.key)} : nullopt);
                     steps.insert(steps.end(), lines.begin(), lines.end());
                 }
-                for (auto & [left_key, left_node] : combined_gates) {
+                for (auto * left_entry : in_key_order(combined_gates)) {
                     if (! _split_proof->proving())
                         break;
+                    auto & [left_key, left_node] = *left_entry;
                     vector<string> literals{"~" + result.assumption};
                     if (-1 != left_node)
                         literals.push_back("~" + _split_proof->gate(left_node));
@@ -1272,8 +1292,8 @@ auto HomomorphismSearcher::split_into_components(
                     steps.push_back(_split_proof->rup(literals, true));
                 }
                 vector<string> literals{"~" + result.assumption};
-                for (auto & [k, node] : next_gates)
-                    literals.push_back(_split_proof->gate(node));
+                for (auto * entry : in_key_order(next_gates))
+                    literals.push_back(_split_proof->gate(entry->second));
                 auto line = _split_proof->rup(literals, true);
                 if (combined_line)
                     steps.push_back(*combined_line);

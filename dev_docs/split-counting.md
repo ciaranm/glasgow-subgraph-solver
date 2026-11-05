@@ -63,30 +63,31 @@ C first, which fixes D and U by propagation, and then splits. Its counting state
 
 ```
 root [28] = (G->1 H->4) * one of
-  | (C->8 D->3 U->2) * {A B} = {9 10} * n6  [4]
-  | (C->7 D->2 U->3) * n16 * n32  [12]
-  | (C->6 D->2 U->3) * n32 * n38  [12]
-n6 [2] = (V->17) * (W X Y Z) in {(13 14 15 16) (16 15 14 13)}  [2]
-n16 [2] = {A B} = {5 6}  [2]
-n32 [6] = (V W X Y Z) in {(8 9 10 11 12) (8 12 11 10 9) (12 8 9 10 11) (12 11 10 9 8)
+  | (C->6 D->2 U->3) * n2 * n18  [12]
+  | (C->7 D->2 U->3) * n18 * n24  [12]
+  | (C->8 D->3 U->2) * {A B} = {9 10} * n37  [4]
+n2 [2] = {A B} = {5 7}  [2]
+n18 [6] = (V W X Y Z) in {(8 9 10 11 12) (8 12 11 10 9) (12 8 9 10 11) (12 11 10 9 8)
     (14 13 17 16 15) (14 15 16 17 13)}  [6]
-n38 [2] = {A B} = {5 7}  [2]
+n24 [2] = {A B} = {5 6}  [2]
+n37 [2] = (V->17) * (W X Y Z) in {(13 14 15 16) (16 15 14 13)}  [2]
 ```
 
 `C->8` is one assignment, and `{A B} = {9 10}` is A and B at 9 and 10 in either order, so two
-ways. The first alternative is the table's row worth 4. The other two, 12 each, are its rows
-worth 16 and 8, regrouped by where C goes. `n32` is written once and used twice, since with
+ways. The last alternative is the table's row worth 4. The first two, 12 each, are its rows
+worth 16 and 8, regrouped by where C goes. `n18` is written once and used twice, since with
 C at 6 or at 7 the pentagon's component faces the same subproblem, so the statement is a DAG
 rather than a tree.
 
 The files are `test-instances/split/worked_example_*.csv`, the `pinned` pair fixing G and H
 by vertex labels. `test-instances/split_worked_example.bash` (ctest `split_worked_example`)
 checks the count and the rendering above, and `split_proof_sweep` checks the whole
-instance's proof. To run it by hand:
+instance's proof. To run it by hand, with the value ordering fixed, since the default one is
+random and differs between standard libraries:
 
 ```shell session
-$ ./build/glasgow_subgraph_solver --count-solutions --split-components 1000 --split-statement pinned.stmt \
-    --format csv test-instances/split/worked_example_pinned_{pattern,target}.csv
+$ ./build/glasgow_subgraph_solver --count-solutions --value-ordering none --split-components 1000 \
+    --split-statement pinned.stmt --format csv test-instances/split/worked_example_pinned_{pattern,target}.csv
 $ ./build/count_statement --render --format csv --pattern test-instances/split/worked_example_pinned_pattern.csv \
     --target test-instances/split/worked_example_pinned_target.csv pinned.stmt
 ```
@@ -243,7 +244,11 @@ giving its vertices distinct values from a larger set as `{u v} distinct in {3 4
 
 None of this needs a proof, and none of it is part of what checks a count: it reads a
 statement that has already been checked for well-formedness. The statement is written the
-same, byte for byte, with or without `--prove`.
+same, byte for byte, with or without `--prove`. Given the search's order, it is also the same
+on every platform: the tallies are hash tables, so wherever nodes or proof lines are written
+while going over one, it is gone over in order of key. The default value ordering is random,
+though, and standard libraries turn the same random numbers into different choices, so for
+the same statement everywhere, fix it, as with `--value-ordering none`.
 
 For example, si2_b09m_m400.08 has 6,451,200 solutions. Its statement is 136 KB, and it renders
 in 20 lines, starting:
