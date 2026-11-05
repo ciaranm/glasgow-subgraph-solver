@@ -27,6 +27,8 @@ covering what you are about to change *before* you change it.
 | writing or debugging proof logging | [`dev_docs/proof-logging.md`](dev_docs/proof-logging.md) — including which option combinations are supported, which is not all of them |
 | touching an option, a filter, or the traits layer | [`dev_docs/option-compatibility.md`](dev_docs/option-compatibility.md) — which combinations are legal, which are silently disabled rather than refused, and what the sweeps cover |
 | changing anything the solver does before search | [`dev_docs/preprocessor-refactor.md`](dev_docs/preprocessor-refactor.md) — where that code is going, which is not where it is |
+| working on `--split-components` or certified counting | [`dev_docs/split-counting.md`](dev_docs/split-counting.md) — how splitting works, its proofs, and what is not done |
+| reading or writing a counting statement, or its PB translation | [`dev_docs/counting-statements.md`](dev_docs/counting-statements.md) — the format and the translation are specified exactly, and a verified implementation is meant to follow it |
 | looking for what an option does, or a file format | [`README.md`](README.md) |
 | about to commit | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
