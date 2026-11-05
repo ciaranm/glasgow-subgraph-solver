@@ -49,10 +49,10 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
 }
 
 auto HomomorphismSearcher::initialise_symmetry() -> void {
+    aut_gp_time = 0us;
+    sym_calc_time = 0us;
+    sym_prop_time = 0us;
     if (params.partial_assignments_sym || params.orbit_sym) {
-        aut_gp_time = 0us;
-        sym_calc_time = 0us;
-        sym_prop_time = 0us;
         mapping.resize(model.pattern_size, -1);
         permuted.resize(model.pattern_size, -1);
         var_order.resize(model.pattern_size);
