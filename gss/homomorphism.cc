@@ -57,6 +57,21 @@ using std::chrono::operator""ms;
 
 namespace
 {
+    // A result is complete only if the timeout had not fired by the time the search
+    // concluded. The search notices the timeout and stops, but the preprocessing does not
+    // always: the extra-shape builders and the clique-size filter run child searches under
+    // the same timeout, and a child search cut short leaves the target with too few
+    // relations, so a refutation reached from them is not one.
+    //
+    // This is asked where the search concludes, before its data is freed, and not by
+    // the caller afterwards. Freeing the search's data can take long enough that the
+    // timeout fires in the meantime, and the search had not been cut short by it.
+    auto keep_complete_only_if_in_time(const HomomorphismParams & params, HomomorphismResult & result) -> void
+    {
+        if (params.timeout->aborted())
+            result.complete = false;
+    }
+
     struct HomomorphismSolver
     {
         using Domains = vector<HomomorphismDomain>;
@@ -90,6 +105,7 @@ namespace
             domains = Domains(model.pattern_size, HomomorphismDomain{model.target_size});
             if (! model.initialise_domains(domains, params.staged)) {
                 result.complete = true;
+                keep_complete_only_if_in_time(params, result);
                 model.add_extra_stats(result.extra_stats);
                 return result;
             }
@@ -200,6 +216,8 @@ namespace
                 round_schedule->did_a_restart();
             }
 
+            keep_complete_only_if_in_time(params, result);
+
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
@@ -264,6 +282,7 @@ namespace
             common_domains = Domains(model.pattern_size, HomomorphismDomain{model.target_size});
             if (! model.initialise_domains(common_domains)) {
                 common_result.complete = true;
+                keep_complete_only_if_in_time(params, common_result);
                 return common_result;
             }
 
@@ -361,7 +380,9 @@ namespace
                             thread_result.solution_count, 0, *thread_restarts_schedule)) {
                         case SearchResult::Satisfiable:
                             searchers[t]->save_result(assignments_copy, thread_result);
-                            thread_result.complete = true;
+                            // as for the sequential search: when counting, the enumerate
+                            // callback asked us to stop, so the search is not complete
+                            thread_result.complete = ! params.count_solutions;
                             params.timeout->trigger_early_abort();
                             searchers[t]->watches.post_nogood(Nogood<HomomorphismAssignment>{});
                             break;
@@ -436,6 +457,8 @@ namespace
                 for (auto & th : threads)
                     th.join();
             }
+
+            keep_complete_only_if_in_time(params, common_result);
 
             common_result.extra_stats.emplace_back("by_thread_nodes =" + by_thread_nodes);
             common_result.extra_stats.emplace_back("by_thread_propagations =" + by_thread_propagations);
@@ -645,11 +668,14 @@ namespace
                 // dropping them made that filter invisible to anything reading the result.
                 model.add_extra_stats(result.extra_stats);
                 result.complete = true;
+                keep_complete_only_if_in_time(params, result);
                 if (proof) {
                     if (params.count_solutions)
-                        proof->finish_enumeration_proof(0, true);
-                    else
+                        proof->finish_enumeration_proof(0, result.complete);
+                    else if (result.complete)
                         proof->finish_unsat_proof();
+                    else
+                        proof->finish_unknown_proof();
                 }
                 ctx.result = move(result);
                 return StepOutcome::Concluded;

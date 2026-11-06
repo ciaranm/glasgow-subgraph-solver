@@ -5,10 +5,12 @@
 
 #include <set>
 #include <sstream>
+#include <thread>
 #include <utility>
 
 using namespace gss;
 
+using std::chrono::operator""ms;
 using std::chrono::operator""s;
 using std::make_shared;
 using std::make_unique;
@@ -288,5 +290,46 @@ R"(1,1
                          {{p("a"), t("1")}, {p("b"), t("1")}, {p("c"), t("2")}}, //
                          {{p("a"), t("1")}, {p("b"), t("2")}, {p("c"), t("1")}}, //
                      });
+    }
+}
+
+// The timeout can cut short the preprocessing as well as the search, and preprocessing cut
+// short can prune too much (an extra shape or a target clique size found by a child search
+// that was stopped early), so a refutation reached after the timeout fired is not a
+// complete search. The status line and the proof's conclusion both follow result.complete.
+TEST_CASE("a refutation reached after the timeout fired is not complete")
+{
+    // a vertex of degree three has nowhere to go in a path
+    auto pattern = read_csv(stringstream{// clang-format off
+R"(a,b
+a,c
+a,d
+)"}, "pattern"); // clang-format on
+
+    auto target = read_csv(stringstream{// clang-format off
+R"(1,2
+2,3
+3,4
+)"}, "target"); // clang-format on
+
+    HomomorphismParams params;
+    params.restarts_schedule = make_unique<NoRestartsSchedule>();
+
+    SECTION("in time")
+    {
+        params.timeout = make_shared<Timeout>(0s);
+        auto result = solve_homomorphism_problem(pattern, target, params);
+        CHECK(result.mapping.empty());
+        CHECK(result.complete);
+    }
+
+    SECTION("after the timeout")
+    {
+        params.timeout = make_shared<Timeout>(1s);
+        std::this_thread::sleep_for(1100ms);
+        REQUIRE(params.timeout->aborted());
+        auto result = solve_homomorphism_problem(pattern, target, params);
+        CHECK(result.mapping.empty());
+        CHECK(! result.complete);
     }
 }

@@ -369,8 +369,11 @@ auto main(int argc, char * argv[]) -> int
         /* Stop the clock. */
         auto overall_time = duration_cast<milliseconds>(steady_clock::now() - params.start_time);
 
+        // Whether the search finished is result.complete, which is also what the proof's
+        // conclusion follows. Asking the timeout here instead would report a search that
+        // finished in time as aborted whenever freeing its data took it past the deadline.
         cout << "status = ";
-        if (params.timeout->aborted() || (solutions_remaining && 0 == *solutions_remaining))
+        if ((! result.complete) || (solutions_remaining && 0 == *solutions_remaining))
             cout << "aborted";
         else if ((! result.mapping.empty()) || (params.count_solutions && result.solution_count > 0))
             cout << "true";
