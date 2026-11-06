@@ -147,7 +147,9 @@ namespace gss
         /// Number of solutions, only if enumerating
         loooong solution_count = 0;
 
-        /// Did we perform a complete search?
+        /// Did we perform a complete search? False if the timeout fired before the search
+        /// concluded, even when the search itself then finished: preprocessing that the
+        /// timeout cut short may have pruned too much.
         bool complete = false;
     };
 

@@ -26,7 +26,7 @@ using std::chrono::system_clock;
 
 struct Timeout::Detail
 {
-    bool aborted = false;
+    atomic<bool> aborted{false};
     thread timeout_thread;
     mutex timeout_mutex;
     condition_variable timeout_cv;
@@ -47,7 +47,7 @@ Timeout::Timeout(const seconds limit) :
                 while (! detail->abort.load()) {
                     if (cv_status::timeout == detail->timeout_cv.wait_until(guard, abort_time)) {
                         /* We've woken up, and it's due to a timeout. */
-                        detail->aborted = true;
+                        detail->aborted.store(true);
                         break;
                     }
                 }
@@ -69,7 +69,7 @@ auto Timeout::should_abort() const -> bool
 
 auto Timeout::aborted() const -> bool
 {
-    return _detail->aborted;
+    return _detail->aborted.load();
 }
 
 auto Timeout::trigger_early_abort() -> void
