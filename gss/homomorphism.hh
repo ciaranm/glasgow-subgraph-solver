@@ -132,6 +132,7 @@ namespace gss
         std::unique_ptr<innards::SymmetrySchedule> symmetry_schedule;
         long double pattern_aut_mantissa, target_aut_mantissa;
         int pattern_aut_exp, target_aut_exp;
+        bool verbose_symmetry_constraints = false;
 
         // If breaking variable and value symmetries, which strategy to use
         bool partial_assignments_sym = false;

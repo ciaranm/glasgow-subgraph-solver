@@ -105,10 +105,6 @@ auto HomomorphismSearcher::calculate_groups() -> void {
             std::cout << "pattern_";
             useful_pattern_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, pattern_base, pattern_orbit_sizes, var_order, model.directed());
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
-            std::cout << "pattern_less_constraints =";
-            for (auto & [a, b] : useful_pattern_constraints)
-                std::cout << " " << a << "<" << b;
-            std::cout << std::endl;
         }
         if (params.pattern_rep_syms) {
             auto dejavu_start_time = steady_clock::now();
@@ -116,17 +112,8 @@ auto HomomorphismSearcher::calculate_groups() -> void {
             pattern_coset_invs = innards::coset_reps(adjacency_matrix, pattern_orbit_sizes, pattern_base, var_order, model.directed());
             pattern_coset_reps = innards::invert_list(pattern_coset_invs);
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
-            std::cout << "pattern_constraints = [";
-            for (auto p : pattern_coset_reps) {
-                for (unsigned int i = 0; i < p.size(); i++) {
-                    if (i != p[i]) {
-                        std::cout << i << "->" << p[i] << " ";
-                    }
-                }
-                std::cout << "\n";
-            }
-            std::cout << "]\n";
         }
+        print_pattern_constraints();
         for (int o: pattern_orbit_sizes) {
             pattern_aut_grp_size *= o;
         }
@@ -141,10 +128,6 @@ auto HomomorphismSearcher::calculate_groups() -> void {
             std::cout << "target_";
             useful_target_constraints = innards::automorphisms_as_order_constraints(adjacency_matrix, target_base, target_orbit_sizes, val_order, model.directed());
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
-            std::cout << "target_occur_less_constraints =";
-            for (auto & [a, b] : useful_target_constraints)
-                std::cout << " " << a << "<" << b;
-            std::cout << std::endl;
         }
         if (params.target_rep_syms) {
             auto dejavu_start_time = steady_clock::now();
@@ -152,17 +135,8 @@ auto HomomorphismSearcher::calculate_groups() -> void {
             target_coset_invs = innards::coset_reps(adjacency_matrix, target_orbit_sizes, target_base, val_order, model.directed());
             target_coset_reps = innards::invert_list(target_coset_invs);
             aut_gp_time += duration_cast<microseconds>(steady_clock::now() - dejavu_start_time);
-            std::cout << "target_constraints = [";
-            for (auto t : target_coset_reps) {
-                for (unsigned int i = 0; i < t.size(); i++) {      // The first representative is the identity
-                    if (i != t[i]) {
-                        std::cout << i << "->" << t[i] << " ";
-                    }
-                }
-                std::cout << "\n";
-            }
-            std::cout << "]\n";
         }
+        print_target_constraints();
     }
     if (model.do_dynamic_occur_less_thans()) {
         std::vector<innards::SVOBitset> adjacency_matrix;
@@ -1794,45 +1768,67 @@ auto HomomorphismSearcher::set_seed(int t) -> void
 }
 
 auto HomomorphismSearcher::print_pattern_constraints() -> void {
-    std::cout << "pattern constraints = ";
-    if (params.partial_assignments_sym) {
-        std::cout << "[";
-        for (auto p : pattern_coset_reps) {
-            for (unsigned int i = 0; i < model.pattern_size; i++) {      // The first representative is the identity
-                if (i != p[i]) {
-                    std::cout << i << "->" << p[i] << " ";
+    if (params.verbose_symmetry_constraints) {
+        std::cout << "pattern_constraints = ";
+        if (params.partial_assignments_sym) {
+            std::cout << "[";
+            for (auto p : pattern_coset_reps) {
+                for (unsigned int i = 0; i < model.pattern_size; i++) {      // The first representative is the identity
+                    if (i != p[i]) {
+                        std::cout << i << "->" << p[i] << " ";
+                    }
                 }
+                std::cout << "\n";
+            }
+            std::cout << "]\n";
+        }
+        else {
+            for (auto & [a,b] : useful_pattern_constraints) {
+                std::cout << a << "<" << b << " ";
             }
             std::cout << "\n";
         }
-        std::cout << "]\n";
     }
     else {
-        for (auto & [a,b] : useful_pattern_constraints) {
-            std::cout << a << "<" << b << " ";
+        std::cout << "pattern_constraint_count = ";
+        if (params.partial_assignments_sym) {
+            std::cout << pattern_coset_reps.size() - 1 << "\n";
         }
-        std::cout << "\n";
+        else {
+            std::cout << useful_pattern_constraints.size() << "\n";
+        }
     }
 }
 
 auto HomomorphismSearcher::print_target_constraints() -> void {
-    std::cout << "target constraints = ";
-    if (params.partial_assignments_sym) {
-        std::cout << "[";
-        for (auto t : target_coset_reps) {
-            for (unsigned int i = 0; i < model.target_size; i++) {      // The first representative is the identity
-                if (i != t[i]) {
-                    std::cout << i << "->" << t[i] << " ";
+    if (params.verbose_symmetry_constraints) {
+        std::cout << "target_constraints = ";
+        if (params.partial_assignments_sym) {
+            std::cout << "[";
+            for (auto t : target_coset_reps) {
+                for (unsigned int i = 0; i < model.target_size; i++) {      // The first representative is the identity
+                    if (i != t[i]) {
+                        std::cout << i << "->" << t[i] << " ";
+                    }
                 }
+                std::cout << "\n";
+            }
+            std::cout << "]\n";
+        }
+        else {
+            for (auto & [a,b] : useful_target_constraints) {
+                std::cout << a << "<" << b << " ";
             }
             std::cout << "\n";
         }
-        std::cout << "]\n";
     }
     else {
-        for (auto & [a,b] : useful_target_constraints) {
-            std::cout << a << "<" << b << " ";
+        std::cout << "target_constraint_count = ";
+        if (params.partial_assignments_sym) {
+            std::cout << target_coset_reps.size() - 1 << "\n";
         }
-        std::cout << "\n";
+        else {
+            std::cout << useful_target_constraints.size() << "\n";
+        }
     }
 }

@@ -476,6 +476,9 @@ namespace
         else {
             params.symmetry_schedule = make_unique<innards::NoSymmetrySchedule>();
         }
+        if (options_vars.count("verbose-symmetry-constraints")) {
+            params.verbose_symmetry_constraints = true;
+        }
 
         if (was_given_target_automorphism_group)
             cout << "target_automorphism_group_size = " << target_automorphism_group_size << endl;
@@ -584,7 +587,8 @@ auto main(int argc, char * argv[]) -> int
             ("symmetric-nogoods-only", "Log symmetric branches as nogoods on restarts, and don't propagate symmetries elsewhere (requires Dejavu)")
             ("delay-symmetry", "Specify symmetry delay policy (timed / backtracks)", cxxopts::value<string>())
             ("sym-delay-duration", "Specify the duration in microseconds bfeore symmetries engage", cxxopts::value<int>())
-            ("sym-delay-backtracks", "Specify the number of backtracks before symmetries engage", cxxopts::value<int>());
+            ("sym-delay-backtracks", "Specify the number of backtracks before symmetries engage", cxxopts::value<int>())
+            ("verbose-symmetry-constraints", "Print individual symmetry breaking constraints");
 
         options.add_options("Advanced input processing options")
             ("no-clique-detection", "Disable clique / independent set detection")
