@@ -12,7 +12,7 @@
 # them, and targets have five to seven. A third of the instances have loops, and a third
 # are non-injective. The signature-space bound cycles through 1, 4, 64 and a million, so
 # that some splits are refused, some accepted with a few shared images, and some nested.
-# Then three fixed instances from test-instances/split, described below.
+# Then four fixed instances from test-instances/split, described below.
 # The instances come from awk's random numbers, so they may differ between awk
 # implementations; every one of them is checked the same way.
 #
@@ -132,6 +132,11 @@ fixed="$(dirname "$0")/split"
 for name in or_or_collision_1 or_or_collision_2; do
     check "${name}" "${fixed}/${name}_pattern.lad" "${fixed}/${name}_target.lad" 1000000
 done
+
+# A fixed instance, from a random search, where the last combining step has two free sets
+# and rejects a pair because the second runs out of values while the first does not. The
+# rejected pair has no distinct nodes, so its proof must use the second set alone.
+check free_set_impossible "${fixed}/free_set_impossible_pattern.lad" "${fixed}/free_set_impossible_target.lad" 1000000
 
 # The worked example in dev_docs/split-counting.md.
 check worked_example "${fixed}/worked_example_pattern.csv" "${fixed}/worked_example_target.csv" 1000

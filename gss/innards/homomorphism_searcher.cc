@@ -1204,17 +1204,21 @@ auto HomomorphismSearcher::split_into_components(
         // vertices than values. Returns the lines, for forgetting.
         auto place_free_sets_proof = [&](vector<string> premises, const vector<vector<int>> & set_values, bool possible,
                                          optional<int> new_node) -> vector<long> {
+            if (! possible) {
+                // place_free_sets stopped at the free set with too few values, which is the
+                // last one it recorded, and that set alone is the contradiction. The sets
+                // before it have no distinct nodes for this pair, which was never made, so
+                // there are no gates to refer to.
+                auto f = set_values.size() - 1;
+                return _split_proof->distinct_impossible(premises, free_sets[f].vertices, set_values[f]);
+            }
             vector<long> lines;
             for (unsigned f = 0; f < set_values.size(); ++f) {
-                auto more = possible || f + 1 < set_values.size()
-                    ? _split_proof->distinct_lemmas(premises, free_sets[f].vertices, set_values[f])
-                    : _split_proof->distinct_impossible(premises, free_sets[f].vertices, set_values[f]);
+                auto more = _split_proof->distinct_lemmas(premises, free_sets[f].vertices, set_values[f]);
                 lines.insert(lines.end(), more.begin(), more.end());
             }
-            if (possible) {
-                premises.push_back(_split_proof->gate(*new_node));
-                lines.push_back(_split_proof->rup(premises, true));
-            }
+            premises.push_back(_split_proof->gate(*new_node));
+            lines.push_back(_split_proof->rup(premises, true));
             return lines;
         };
 
