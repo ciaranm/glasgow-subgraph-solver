@@ -102,6 +102,17 @@ namespace gss::innards
             return *this;
         }
 
+        // The words themselves, for using a bitset as part of a hash key.
+        auto words() const -> const BitWord *
+        {
+            return _is_long() ? _data.long_data : _data.short_data;
+        }
+
+        auto number_of_words() const -> unsigned
+        {
+            return n_words;
+        }
+
         auto any() const -> bool
         {
             if (! _is_long()) {

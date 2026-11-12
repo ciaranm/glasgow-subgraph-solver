@@ -59,6 +59,8 @@ namespace gss::innards
         // Whether the model carries the global injectivity constraints, which the
         // loop-cancelled adjacency derivations rely on.
         bool _injective = false;
+        // The labels of the adjacency constraints emit_model wrote.
+        std::vector<std::string> _model_adjacency_labels;
 
         // For each pattern edge (p,q) whose supplemental adjacency constraint was emitted
         // under subsumption elision, the slot whose (strongest) constraint we kept. Used to
@@ -146,6 +148,9 @@ namespace gss::innards
         // an early conclusion (pattern-too-big, target-loop, clique) then never pays for these
         // derivations, while an instance that reaches search emits a byte-identical proof.
         auto derive_loop_fixed_adjacencies() -> void;
+
+        // The labels of the adjacency constraints emit_model wrote into the model.
+        [[nodiscard]] auto model_adjacency_labels() const -> const std::vector<std::string> &;
 
         // Prove the supplemental graphs that have just been built into the
         // ProcessedGraphsData. max_graphs is the bitset stride; number_of_exact_path_graphs
