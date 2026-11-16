@@ -6,8 +6,8 @@
 # certain structures. Correctness of the *counts* is checked separately and
 # in-process by random_homomorphism_test.
 #
-# Deterministic: create_random_graph is seeded and the solver is run without
-# restarts, so every proof is reproducible.
+# Deterministic: create_random_graph is seeded, and the solver's restarts are driven by
+# backtrack counts and seeded value ordering, so every proof is reproducible.
 #
 # Usage:
 #   random_proof_sweep.bash <solver> <veripb> <create_random_graph> <workdir>
@@ -106,14 +106,19 @@ for loops in "" "--loops 0.3"; do
         # first bounded search round does not conclude. A tiny first-round budget forces the
         # Stage-1 -> Stage-2 transition on most of these instances, so the mid-proof
         # supplemental derivation (at the level-0 restart boundary) is verified here; instances
-        # that conclude in Stage 1 exercise the no-supplemental, smaller-proof path. Staging
-        # uses restarts internally, so counting is not combined with it under proof.
-        for opts in "--staged" "--induced --staged"; do
+        # that conclude in Stage 1 exercise the no-supplemental, smaller-proof path. The
+        # transition is a restart, so the counting arms check that an enumeration proof
+        # survives one, as do the arms that count under a restart schedule: a restart after
+        # every backtrack (geometric 1 x 1) or Luby with unit 1, mostly mid-enumeration.
+        for opts in "--staged" "--induced --staged" "--staged --count-solutions" "--induced --staged --count-solutions" \
+                "--count-solutions --restarts geometric --geometric-constant 1 --geometric-multiplier 1" \
+                "--induced --count-solutions --restarts luby --luby-constant 1"; do
             checked=$((checked + 1))
             proof="${workdir}/rps_proof_${seed}_${checked}"
+            budget=""; [[ "${opts}" == *--staged* ]] && budget="--staged-first-round-backtracks 2"
 
             # shellcheck disable=SC2086
-            if ! "${solver}" --format csv --no-clique-detection ${opts} --staged-first-round-backtracks 2 --prove "${proof}" \
+            if ! "${solver}" --format csv --no-clique-detection ${opts} ${budget} --prove "${proof}" \
                     "${pat}" "${tgt}" > "${proof}.log" 2>&1; then
                 echo "loops='${loops}' seed ${seed}, opts '${opts}': solver failed" 1>&2
                 cat "${proof}.log" 1>&2
@@ -129,7 +134,8 @@ for loops in "" "--loops 0.3"; do
                 verify=FAIL
             fi
 
-            family="staged"; [ -n "${loops}" ] && family="staged-loopy"
+            family="staged"; [[ "${opts}" == *--staged* ]] || family="restarts"
+            [ -n "${loops}" ] && family="${family}-loopy"
             opb_lines=$(wc -l < "${proof}.opb")
             pbp_lines=$(wc -l < "${proof}.pbp")
             shape=$(sed -n 's/^shape_graphs = //p' "${proof}.log"); shape="${shape:-NA}"

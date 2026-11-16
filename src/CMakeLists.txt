@@ -107,6 +107,22 @@ if(VERIPB_EXECUTABLE)
     gss_add_proof_test(proof_distance3_loopy ${SUB} --no-nds --distance3
         --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
 
+    # Counting across restarts, and staged counting, whose stage transition is a restart.
+    # Each solution's solx blocking constraint is at the top level and the resumption
+    # nogoods are derived at level 0, so a restart can neither log a solution twice (the
+    # second solx would not verify) nor lose one (the final enumeration rup would not).
+    # Each of these restarts or changes stage after solutions have already been logged:
+    # three restarts on trident, two on the loopy small/large (--no-nds as above).
+    gss_add_proof_test(proof_count_restarts ${SUB} --count-solutions --restarts luby --luby-constant 1
+        ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    gss_add_proof_test(proof_count_restarts_loopy ${SUB} --no-nds --count-solutions
+        --restarts geometric --geometric-constant 1 --geometric-multiplier 1
+        --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+    gss_add_proof_test(proof_count_staged ${SUB} --count-solutions --staged --staged-first-round-backtracks 1
+        ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+    gss_add_proof_test(proof_count_staged_loopy ${SUB} --no-nds --count-solutions --staged --staged-first-round-backtracks 1
+        --format lad ${GSS_INSTANCES}/small ${GSS_INSTANCES}/large)
+
     # Local injectivity: the neighbourhood-injectivity encoding + the degree and NDS
     # pigeonholes using it. Currently requires --no-supplementals (the supplemental-graph
     # derivations still need locally-injective variants). Loopless and loopy (small/large
