@@ -697,11 +697,11 @@ auto gss::solve_homomorphism_problem(
     // only makes sense for the sequential engine; threaded staging is a later refinement.
     if (params.staged && 1 != params.n_threads)
         throw UnsupportedConfiguration{"Staged solving requires sequential search, use --threads 1"};
-    // (Staged counting works without proof: the Stage-1 -> Stage-2 transition is a restart,
-    // and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1 already
-    // counted -- as long as the watch machinery is enabled under staging, see
-    // might_have_watches. Under *proof* it is still unsupported, guarded with the other proof
-    // restrictions below, because logging an enumeration across a restart is not yet handled.)
+    // (Staged counting works, with or without proof: the Stage-1 -> Stage-2 transition is a
+    // restart, and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1
+    // already counted -- as long as the watch machinery is enabled under staging, see
+    // might_have_watches. Under proof, the solutions Stage 1 logged stay blocked across the
+    // restart; see "Conclusions" in dev_docs/proof-logging.md.)
 
     // start by setting up proof logging, if necessary
     shared_ptr<Proof> proof;
@@ -710,18 +710,12 @@ auto gss::solve_homomorphism_problem(
         // but can be adapted to support most of them
         if (1 != params.n_threads)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with threads"};
-        if (params.staged && params.count_solutions)
-            // the transition restart fires mid-enumeration; the enumeration proof cannot yet
-            // survive a restart (same restriction as counting with restarts, below)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with staged counting, drop --staged or --count-solutions"};
         if (params.clique_detection)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used on labelled graphs"};
-        if (params.count_solutions && params.restarts_schedule && params.restarts_schedule->might_restart())
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used when counting with restarts, use --restarts none"};
         proof = make_shared<Proof>(*params.proof_options);
     }
 

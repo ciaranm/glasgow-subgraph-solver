@@ -252,6 +252,26 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                     CHECK(staged_got == expected);
                     CHECK(staged_count.solution_count == int(expected.size()));
                     CHECK(staged_count.complete);
+                    params.staged = false;
+
+                    // Counting with restarts, at the most aggressive schedule there is: a
+                    // restart after every backtrack, so nearly every resumption crosses
+                    // subtrees that already held solutions. The resumption nogoods must
+                    // neither re-count those solutions nor cut off any that are still to come.
+                    set<map<int, int>> restarts_got;
+                    long long restarts_callbacks = 0;
+                    params.restarts_schedule = make_unique<GeometricRestartsSchedule>(1.0, 1.0);
+                    params.enumerate_callback = [&](const VertexToVertexMapping & mapping) {
+                        restarts_got.insert(mapping);
+                        ++restarts_callbacks;
+                        return true;
+                    };
+                    auto restarts_count = solve_homomorphism_problem(pattern, target, params);
+                    CHECK(restarts_got == expected);
+                    CHECK(restarts_callbacks == (long long)(expected.size()));
+                    CHECK(restarts_count.solution_count == int(expected.size()));
+                    CHECK(restarts_count.complete);
+                    params.restarts_schedule = make_unique<NoRestartsSchedule>();
 
                     // Decision mode takes a different route through the pipeline: the
                     // pattern-bigger-than-target refutation, the target-loop shortcut and the

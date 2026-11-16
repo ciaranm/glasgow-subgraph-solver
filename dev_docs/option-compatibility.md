@@ -32,11 +32,9 @@ apart matters:
 | `--staged` with threads | Staged solving requires sequential search, use `--threads 1` |
 | threads without restarts | Threaded search requires restarts |
 | proof logging with threads | Proof logging cannot yet be used with threads |
-| proof logging with `--staged --count-solutions` | …with staged counting |
 | proof logging with clique detection | …with clique detection, use `--no-clique-detection` |
 | proof logging with less-constraints | …with less-constraints |
 | proof logging on a labelled pattern | …on labelled graphs |
-| proof logging, counting, with restarts | …when counting with restarts, use `--restarts none` |
 | more than 8 graph pairs (`--n-exact-path-graphs` too large, with `--distance3` and `--k4`) | Supplemental graphs won't fit in the chosen bitset size |
 | a cycle in the `--pattern-less-than` constraints | Pattern less than constraints form a loop |
 

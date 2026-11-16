@@ -44,11 +44,11 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | `--no-clique-detection` | the clique-detection shortcut is not yet logged |
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
-| not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
 
-`--staged` on its own *is* supported: the supplemental graphs are derived mid-proof at the level-0
-restart boundary, and an instance that concludes in the cheap first round emits no supplemental
-derivations at all.
+`--staged` is supported, with or without `--count-solutions`: the supplemental graphs are derived
+mid-proof at the level-0 restart boundary, and an instance that concludes in the cheap first round
+emits no supplemental derivations at all. Counting with restarts is supported too (see below for why
+a restart cannot make an enumeration proof over- or under-count).
 
 Injective and non-injective proofs support supplemental graphs, distance-3 (`--distance3`),
 neighbourhood degree sequences, and clique-size constraints (`--cliques`), on both loopless and
@@ -128,6 +128,15 @@ it, so the core nogoods on the current branch are still tagged at search levels.
 next `wiplvl` would wipe them, and wiping a core constraint is an *unchecked* deletion, after which
 VeriPB refuses any later `solx` ([issue #106]). So at a restart each one is copied to level 0
 (`pol <id>`), the copy is put in the core, and the original is checked-deleted.
+
+This is also what makes counting across a restart sound. Each solution's `solx` blocking constraint
+is at the top level, so it outlives the restart, and the restart-resumption nogood for each fully
+explored sibling is derived at level 0 (`rup`, from those blocking constraints and the copied core
+nogoods). The restarted search therefore cannot reach a solution it has already logged, and the
+number of `solx` rules VeriPB counts is the number of solutions the solver reports. Proof logging
+used to refuse counting with restarts, and staged counting, until the #106 fix was in and this had
+been checked empirically (fuzzing with a restart after every backtrack, and real-instance proof
+sweeps under Luby restarts and staging).
 
 ## Current status and known limitations
 
