@@ -350,14 +350,17 @@ auto Proof::back_up_to_top() -> void
 {
     // A restart abandons the whole search tree rather than backtracking out of it level
     // by level, so the per-level deletion bookkeeping never gets its matching
-    // forget_level calls. What it still holds are the backtrack nogoods on the current
-    // branch (counting with restarts is rejected under proof, so no blocking
-    // constraints): each is in the core but tagged at a search level, so the next
-    // wiplvl at or above that level would delete it, and wiping a core constraint is
-    // an unchecked deletion, after which VeriPB refuses any solx (#106). So move each
-    // one to level 0 instead: copy it there, put the copy in the core, and then
-    // checked-delete the original, which the copy trivially implies. The copies are
-    // valid nogoods, so keeping them for the rest of the proof costs only their size.
+    // forget_level calls. What it still holds are the core lines on the current branch:
+    // the backtrack nogoods, and when counting, the blocking constraints of solutions
+    // whose level has not been backtracked out of. A backtrack nogood is in the core but
+    // tagged at a search level, so the next wiplvl at or above that level would delete
+    // it, and wiping a core constraint is an unchecked deletion, after which VeriPB
+    // refuses any solx (#106). So move each one to level 0 instead: copy it there, put
+    // the copy in the core, and then checked-delete the original, which the copy
+    // trivially implies. (A blocking constraint is at level 0 already, so for it this
+    // only swaps one copy for another.) The copies are valid nogoods, and blocking
+    // constraints must stay for the restarted search anyway, so keeping them for the
+    // rest of the proof costs only their size.
     *_imp->proof_stream << "setlvl " << 0 << ";\n";
     _imp->active_level = 0;
 
