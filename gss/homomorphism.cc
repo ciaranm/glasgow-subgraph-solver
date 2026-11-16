@@ -96,6 +96,8 @@ namespace
             domains = Domains(model.pattern_size, HomomorphismDomain{model.target_size});
             if (! model.initialise_domains(domains, params.staged)) {
                 result.complete = true;
+                if (params.staged)
+                    result.extra_stats.emplace_back("staged_rounds = 1");
                 model.add_extra_stats(result.extra_stats);
                 return result;
             }
@@ -122,6 +124,10 @@ namespace
             // schedule for Stage 2. Nogoods accumulated in Stage 1 persist in state.watches
             // across the transition. If Stage 1 concludes first, no supplementals are built.
             bool staging = params.staged;
+            // Under splitting, Stage 1 does not split, and gives up at its first solution
+            // (see HomomorphismSearcher::set_splitting), so it concludes only when there
+            // are none. Stage 2 splits.
+            searcher.set_splitting(! staging);
             unique_ptr<RestartsSchedule> stage1_schedule;
             if (staging)
                 stage1_schedule = make_unique<GeometricRestartsSchedule>(double(params.staged_first_round_backtracks), 1.0);
@@ -212,6 +218,7 @@ namespace
                                 d.fixed = false;
                             assignments.values.clear();
                             staging = false;
+                            searcher.set_splitting(true);
                             active_schedule = params.restarts_schedule.get();
                         }
                         break;
@@ -229,6 +236,8 @@ namespace
 
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
+            if (params.staged)
+                result.extra_stats.emplace_back("staged_rounds = " + to_string(staging ? 1 : 2));
 
             result.extra_stats.emplace_back("shape_graphs = " + to_string(model.max_graphs));
 
@@ -751,7 +760,8 @@ auto gss::solve_homomorphism_problem(
     // and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1 already
     // counted -- as long as the watch machinery is enabled under staging, see
     // might_have_watches. Under *proof* it is still unsupported, guarded with the other proof
-    // restrictions below, because logging an enumeration across a restart is not yet handled.)
+    // restrictions below, because logging an enumeration across a restart is not yet handled,
+    // except when splitting, whose Stage 1 gives up at its first solution.)
 
     // Splitting into components counts each component's solutions without visiting the
     // combinations, so it needs everything that relates two components to be a constraint it
@@ -768,8 +778,8 @@ auto gss::solve_homomorphism_problem(
             throw UnsupportedConfiguration{"Splitting into components cannot be used with local injectivity"};
         if (params.induced)
             throw UnsupportedConfiguration{"Splitting into components cannot be used with induced mappings"};
-        if (1 != params.n_threads || params.staged || params.restarts_schedule->might_restart())
-            throw UnsupportedConfiguration{"Splitting into components needs a sequential search without restarts, use --restarts none and no --staged"};
+        if (1 != params.n_threads || params.restarts_schedule->might_restart())
+            throw UnsupportedConfiguration{"Splitting into components needs a sequential search without restarts, use --restarts none"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
             throw UnsupportedConfiguration{"Splitting into components cannot be used with less-constraints"};
     }
@@ -781,9 +791,11 @@ auto gss::solve_homomorphism_problem(
         // but can be adapted to support most of them
         if (1 != params.n_threads)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with threads"};
-        if (params.staged && params.count_solutions)
+        if (params.staged && params.count_solutions && ! params.split_components)
             // the transition restart fires mid-enumeration; the enumeration proof cannot yet
-            // survive a restart (same restriction as counting with restarts, below)
+            // survive a restart (same restriction as counting with restarts, below). Under
+            // splitting it does not: Stage 1 gives up before its first solution, so the
+            // restart is from a search that has logged no solutions and no nogoods.
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with staged counting, drop --staged or --count-solutions"};
         if (params.clique_detection)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};

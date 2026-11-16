@@ -275,6 +275,14 @@ TEST_CASE("random instances: solver enumeration matches the brute-force oracle")
                         auto split_count = solve_homomorphism_problem(pattern, target, params);
                         CHECK(split_count.solution_count == int(expected.size()));
                         CHECK(split_count.complete);
+
+                        // Staged, the first round gives up at its first solution, so
+                        // whatever it found must not be counted twice or lost.
+                        params.staged = true;
+                        auto staged_split_count = solve_homomorphism_problem(pattern, target, params);
+                        CHECK(staged_split_count.solution_count == int(expected.size()));
+                        CHECK(staged_split_count.complete);
+                        params.staged = false;
                     }
                     params.split_components = std::nullopt;
 
@@ -309,6 +317,7 @@ TEST_CASE("random instances: splitting into components matches plain counting")
     mt19937 rng{0x5b1e};
 
     unsigned long long splits = 0, nested_splits = 0, clears = 0;
+    unsigned long long staged_concluded_early = 0, staged_went_on = 0;
     for (auto & family : all_families()) {
         for (int iter = 0; iter < 100; ++iter) {
             int np = 4 + int(rng() % 5); // 4..8
@@ -347,6 +356,30 @@ TEST_CASE("random instances: splitting into components matches plain counting")
                     nested_splits += stat(split, "nested_splits");
                     clears += stat(split, "split_cache_clears");
                 }
+
+                // Staged, with first rounds of one and of four backtracks. The first round
+                // does not split and gives up at its first solution, so it concludes only
+                // where there are none, and otherwise the second round splits from the
+                // start. Both must be seen, or this has tested only one of them.
+                for (auto budget : {1u, 4u}) {
+                    INFO("family " << family.name() << ", iteration " << iter
+                                   << ", |pattern|=" << np << ", |target|=" << nt
+                                   << ", injectivity=" << int(injectivity) << ", staged, first round " << budget
+                                   << "\n  pattern:" << describe(pattern)
+                                   << "\n  target:" << describe(target)
+                                   << "\n  plain=" << plain.solution_count);
+                    params.split_components = ~0ull;
+                    params.split_cache_limit = 1ull << 30;
+                    params.staged = true;
+                    params.staged_first_round_backtracks = budget;
+                    auto staged = solve_homomorphism_problem(pattern, target, params);
+                    CHECK(staged.solution_count == plain.solution_count);
+                    CHECK(staged.complete);
+                    auto rounds = stat(staged, "staged_rounds");
+                    staged_concluded_early += (1 == rounds);
+                    staged_went_on += (2 == rounds);
+                    params.staged = false;
+                }
             }
         }
     }
@@ -355,4 +388,6 @@ TEST_CASE("random instances: splitting into components matches plain counting")
     CHECK(splits > 1000);
     CHECK(nested_splits > 100);
     CHECK(clears > 100);
+    CHECK(staged_concluded_early > 500);
+    CHECK(staged_went_on > 2000);
 }

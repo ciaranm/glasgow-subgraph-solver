@@ -12,6 +12,10 @@
 # them, and targets have five to seven. A third of the instances have loops, and a third
 # are non-injective. The signature-space bound cycles through 1, 4, 64 and a million, so
 # that some splits are refused, some accepted with a few shared images, and some nested.
+# Every other instance is also run staged, alternately with a first round of one backtrack
+# and the default. That round does not split and gives up at its first solution, so it
+# either concludes that there are none, which needs no statement, or hands over to a second
+# round that splits as usual.
 # Then four fixed instances from test-instances/split, described below.
 # The instances come from awk's random numbers, so they may differ between awk
 # implementations; every one of them is checked the same way.
@@ -65,6 +69,8 @@ fails=0
 checked=0
 splits=0
 nested=0
+staged_one=0
+staged_two=0
 
 # check <tag> <pattern> <target> <bound> [extra options...]
 check() {
@@ -88,6 +94,8 @@ check() {
     fi
     echo "${out}" | grep -q '^splits = [1-9]' && splits=$((splits + 1))
     echo "${out}" | grep -q '^nested_splits = [1-9]' && nested=$((nested + 1))
+    echo "${out}" | grep -q '^staged_rounds = 1' && staged_one=$((staged_one + 1))
+    echo "${out}" | grep -q '^staged_rounds = 2' && staged_two=$((staged_two + 1))
 
     if [ -s "${stmt}" ]; then
         counted=$("${count_statement}" "${stmt}" --opb "${proof}.tagged.opb" | grep '^count' | sed 's/count/solution_count/')
@@ -117,10 +125,16 @@ for seed in $(seq 1 150); do
     tgt="${workdir}/${tag}_target.lad"
     awk -v seed="${seed}" -v which=pattern "${generate}" > "${pat}"
     awk -v seed="${seed}" -v which=target "${generate}" > "${tgt}"
-    if [ $((seed % 3)) -eq 1 ]; then
-        check "${tag}" "${pat}" "${tgt}" "${bounds[$((seed % 4))]}" --noninjective
-    else
-        check "${tag}" "${pat}" "${tgt}" "${bounds[$((seed % 4))]}"
+    injectivity=""
+    [ $((seed % 3)) -eq 1 ] && injectivity="--noninjective"
+    # shellcheck disable=SC2086
+    check "${tag}" "${pat}" "${tgt}" "${bounds[$((seed % 4))]}" ${injectivity}
+    if [ $((seed % 4)) -eq 0 ]; then
+        # shellcheck disable=SC2086
+        check "${tag}_staged" "${pat}" "${tgt}" "${bounds[$((seed % 4))]}" ${injectivity} --staged --staged-first-round-backtracks 1
+    elif [ $((seed % 4)) -eq 2 ]; then
+        # shellcheck disable=SC2086
+        check "${tag}_staged" "${pat}" "${tgt}" "${bounds[$((seed % 4))]}" ${injectivity} --staged
     fi
 done
 
@@ -138,8 +152,13 @@ done
 # rejected pair has no distinct nodes, so its proof must use the second set alone.
 check free_set_impossible "${fixed}/free_set_impossible_pattern.lad" "${fixed}/free_set_impossible_target.lad" 1000000
 
+# Staged, with no solutions, so that the first round refutes it by search, without the
+# supplemental graphs. With them, the instance is refuted before search.
+check staged_k4_k33 "$(dirname "$0")/k4.lad" "$(dirname "$0")/k33.lad" 1000000 --staged
+
 # The worked example in dev_docs/split-counting.md.
 check worked_example "${fixed}/worked_example_pattern.csv" "${fixed}/worked_example_target.csv" 1000
 
 echo "${checked} instances checked, ${splits} of them split, ${nested} with nested splits, ${fails} failed"
+echo "staged: ${staged_one} concluded in the first round, ${staged_two} went on to the second"
 [ "${fails}" -eq 0 ]

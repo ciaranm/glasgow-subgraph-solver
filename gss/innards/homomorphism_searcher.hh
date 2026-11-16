@@ -113,6 +113,11 @@ namespace gss::innards
         ComponentTally * _tally = nullptr;
         unsigned long long _splits = 0, _nested_splits = 0;
 
+        // Whether search nodes may split, when splitting is asked for. Staging turns it off
+        // for its first round, which then gives up at its first solution rather than count
+        // it (see set_splitting).
+        bool _splitting = false;
+
         // When splitting, search nodes whose last unassigned vertex was counted directly.
         unsigned long long _last_vertices = 0;
         std::unique_ptr<SplitCaches> _split_caches;
@@ -226,6 +231,13 @@ namespace gss::innards
         // Build a counting statement as the search goes, and prove it, instead of logging each
         // solution. After a complete search, statement_entries() is the root's.
         auto set_split_proof(SplitProof *) -> void;
+
+        // With splitting asked for, whether to split now. While it is off, the search does
+        // not split, and returns Restart at its first solution without counting or logging
+        // it. That is staging's first round: it can only refute, and a restart from it
+        // leaves nothing behind (splitting never records nogoods), so the second round,
+        // which splits, searches the whole tree from the start.
+        auto set_splitting(bool) -> void;
         auto statement_entries() const -> const StatementEntries &;
 
         // The nogood store is owned by the carried SolveState (sequential path) or

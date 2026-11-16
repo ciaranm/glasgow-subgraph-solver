@@ -241,6 +241,8 @@ HomomorphismSearcher::HomomorphismSearcher(const HomomorphismModel & m, const Ho
     _filter_activations(m.max_graphs),
     watches(w)
 {
+    _splitting = params.split_components.has_value();
+
     if (might_have_watches(params)) {
         watches.table.target_size = model.target_size;
         watches.table.data.resize(model.pattern_size * model.target_size);
@@ -275,6 +277,11 @@ auto HomomorphismSearcher::statement_line(const HomomorphismAssignments & assign
 auto HomomorphismSearcher::set_split_proof(SplitProof * split_proof) -> void
 {
     _split_proof = split_proof;
+}
+
+auto HomomorphismSearcher::set_splitting(bool splitting) -> void
+{
+    _splitting = splitting && params.split_components;
 }
 
 auto HomomorphismSearcher::statement_entries() const -> const StatementEntries &
@@ -464,6 +471,14 @@ auto HomomorphismSearcher::restarting_search(
             return SearchResult::SatisfiableButKeepGoing;
         }
 
+        // Staging's first round under splitting: give up here, before the solution is
+        // counted or logged, and let the second round find it again.
+        if (params.split_components && ! _splitting) {
+            if (proof)
+                proof->back_up_to_top();
+            return SearchResult::Restart;
+        }
+
         if (_split_proof)
             _entries = {{{}, -1}};
         else if (proof)
@@ -487,7 +502,7 @@ auto HomomorphismSearcher::restarting_search(
             return SearchResult::Satisfiable;
     }
 
-    if (params.split_components) {
+    if (_splitting) {
         if (1 == std::count_if(domains.begin(), domains.end(), [](const auto & d) { return ! d.fixed; }))
             return count_last_vertex(assignments, *branch_domain, solution_count);
         if (auto result = split_into_components(assignments, domains, nodes, propagations, solution_count, depth, restarts_schedule))
