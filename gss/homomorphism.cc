@@ -184,6 +184,15 @@ namespace
                                 result.complete = true;
                                 done = true;
                             }
+                            // Root propagation only propagates domains that are not fixed
+                            // yet, so the vertices Stage 1 fixed at the root would never
+                            // have their supplemental adjacency propagated, and Stage 2's
+                            // root would be weaker than an unstaged one. So unfix them, and
+                            // let the next round's root propagation fix them again, with
+                            // the supplementals.
+                            for (auto & d : domains)
+                                d.fixed = false;
+                            assignments.values.clear();
                             staging = false;
                             active_schedule = params.restarts_schedule.get();
                         }
