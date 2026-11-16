@@ -697,11 +697,11 @@ auto gss::solve_homomorphism_problem(
     // only makes sense for the sequential engine; threaded staging is a later refinement.
     if (params.staged && 1 != params.n_threads)
         throw UnsupportedConfiguration{"Staged solving requires sequential search, use --threads 1"};
-    // (Staged counting works without proof: the Stage-1 -> Stage-2 transition is a restart,
-    // and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1 already
-    // counted -- as long as the watch machinery is enabled under staging, see
-    // might_have_watches. Under *proof* it is still unsupported, guarded with the other proof
-    // restrictions below, because logging an enumeration across a restart is not yet handled.)
+    // (Staged counting works, with or without proof: the Stage-1 -> Stage-2 transition is a
+    // restart, and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1
+    // already counted -- as long as the watch machinery is enabled under staging, see
+    // might_have_watches. Under proof, the solutions Stage 1 logged stay blocked across the
+    // restart; see the restarts section of dev_docs/proof-logging.md.)
 
     // start by setting up proof logging, if necessary
     shared_ptr<Proof> proof;
