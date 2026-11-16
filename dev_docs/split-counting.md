@@ -329,8 +329,8 @@ refutes by search.
 
 On the 14,621 pairs of the standard families, without proofs, at S = 10⁶, with a 100 s
 timeout, 128 at a time on one machine, staged and unstaged splitting give the same count on
-every pair both finish. Staged finishes three fewer and two more, each a pair taking over
-79 s either way.
+every pair both finish. Staged finishes five fewer and two more; the five take between 79 s
+and 96 s unstaged.
 Of the 13,503 both finish:
 
 - the first round concludes on 2,272, all with no solutions, mostly images and meshes. They
