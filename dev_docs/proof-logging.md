@@ -44,7 +44,7 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | `--no-clique-detection` | the clique-detection shortcut is not yet logged |
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
-| not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
+| not `--staged` together with `--count-solutions`, except with `--split-components` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts); under splitting the first round logs no solutions (see [split-counting.md](split-counting.md#staging)) |
 
 Counting with `--split-components` logs no solutions. It needs `--split-statement`, writes
 a counting statement as it searches, and ends with `output EQUIENUMERABLE FILE` against the

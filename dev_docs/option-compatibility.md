@@ -32,7 +32,7 @@ apart matters:
 | `--staged` with threads | Staged solving requires sequential search, use `--threads 1` |
 | threads without restarts | Threaded search requires restarts |
 | proof logging with threads | Proof logging cannot yet be used with threads |
-| proof logging with `--staged --count-solutions` | …with staged counting |
+| proof logging with `--staged --count-solutions`, without `--split-components` | …with staged counting |
 | proof logging with clique detection | …with clique detection, use `--no-clique-detection` |
 | proof logging with less-constraints | …with less-constraints |
 | proof logging on a labelled pattern | …on labelled graphs |
@@ -45,7 +45,7 @@ apart matters:
 | `--split-components` with `--locally-injective` | Splitting into components cannot be used with local injectivity |
 | `--split-statement` without `--split-components` | `--split-statement needs --split-components` |
 | `--split-components` with `--induced` | …cannot be used with induced mappings |
-| `--split-components` with threads, restarts or `--staged` | …needs a sequential search without restarts |
+| `--split-components` with threads or restarts | …needs a sequential search without restarts |
 | `--split-components` with less-constraints | …cannot be used with less-constraints |
 | `--split-components` with `--decomposition` | `--split-components cannot be used with --decomposition` |
 
@@ -67,7 +67,7 @@ place to look. `has_loops` means *either* graph has a self-loop.
 | clique-size constraints (`--cliques`) | fully injective, **or** no loops | #91 |
 | …on supplementals | as above, and not non-injective | #91 |
 | clique detection (`--clique-detection`) | not counting, no proof, and fully injective **or** a loopless target | #94 |
-| nogood recording | `--staged`, or the restart schedule might restart | nothing consults a nogood without a restart |
+| nogood recording | `--staged`, or the restart schedule might restart; and not `--split-components` | nothing consults a nogood without a restart; splitting is proved and cached without them (split-counting.md, Staging) |
 
 Two conditions recur, and it is worth seeing why they are the same argument twice. Both the
 clique-size filter and the clique reduction need k pattern vertices to reach k *distinct*

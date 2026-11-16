@@ -299,12 +299,58 @@ Without free sets (see [Interchangeable vertices](#interchangeable-vertices)) it
 lines: in place of `n2`, seven alternatives, one per value of vertex 78, each with 79 at one of
 the other six and a further node for the permutation.
 
+## Staging
+
+With `--staged`, the first round is the cheap one that staging always does (the original graph
+only, no NDS, a small backtrack budget), and it does not split. It also gives up at its first
+solution, before counting or logging it, by restarting into the second round as if it had run
+out of backtracks. So the first round can only conclude that there are no solutions, which is
+where staging pays: an instance with none that the cheap round refutes never builds the
+supplemental graphs. Otherwise the second round builds them and splits as usual, from the
+start.
+
+The second round resumes from nothing, because splitting never records nogoods
+(`might_have_watches`). A nogood can mention a vertex assigned above a split, and a component's
+search is proved under an assumption that says only what its domains are, and is cached under
+those domains, so a nogood propagated inside it would cite a decision that neither the
+assumption nor the cache key has. A nogood cannot change a count, since it only cuts out
+non-solutions, and no test fails with nogoods let in, so this is caution rather than a fix:
+dropping them costs at most the cheap round's budget. Because the first round logs neither
+solutions nor nogoods, nothing it did is left in the core, and the proof's ending is the same as
+without staging; that is why proof logging allows staged counting here although it refuses it
+without splitting.
+
+`random_homomorphism_test.cc` checks staged splitting against the oracle and, with first rounds
+of one and four backtracks, against plain counting on the sparse instances, where both rounds
+are seen many times. Counting the first round's solutions, or letting it split, fails those
+checks. `split_proof_sweep.bash` runs a quarter of its instances staged with a first round of
+one backtrack and a quarter with the default, and a fixed instance that the first round
+refutes by search.
+
+On the 14,621 pairs of the standard families, without proofs, at S = 10⁶, with a 100 s
+timeout, 128 at a time on one machine, staged and unstaged splitting give the same count on
+every pair both finish. Staged finishes five fewer and two more; the five take between 79 s
+and 96 s unstaged.
+Of the 13,503 both finish:
+
+- the first round concludes on 2,272, all with no solutions, mostly images and meshes. They
+  take 55 s in all against 501 s, with a geometric mean of 0.11 over those taking at least
+  100 ms either way;
+- 7,400 go on to the second round, and take 8,727 s against 8,891 s; per pair, the
+  geometric mean is 1.05 and the median 1.08 over those taking at least 100 ms. The worst
+  are si6_m4D pairs with a few dozen solutions, at about 2.3× (230 ms to 540 ms);
+- the remaining 3,831 conclude before the search starts, either way;
+- in all, 8,800 s against 9,410 s.
+
+The second round starts from the same root as an unstaged search: staging used to leave the
+vertices that its first round fixed at the root unpropagated over the supplemental graphs, which
+cost splitting a lot (si4_b06m_m800.09 went from 1.5 s to a timeout), and now refixes them.
+
 ## Restrictions and testing
 
 It is refused, rather than silently disabled, in these cases:
 
-- with induced mappings, less-constraints, threads, restarts, staging or an enumerate
-  callback;
+- with induced mappings, less-constraints, threads, restarts or an enumerate callback;
 - with local injectivity, because there are no proofs for it. Splitting would work: two
   vertices in different components could collide only if they have a common in-neighbour.
   Everything splitting does, though, is meant to be provable;

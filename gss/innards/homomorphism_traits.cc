@@ -47,6 +47,18 @@ auto gss::innards::might_have_watches(const HomomorphismParams & params) -> bool
     // it must enable watches even under a no-restart schedule: the transition's
     // restart-resumption nogoods are what stop Stage 2 re-exploring (and, when counting,
     // re-counting) the region Stage 1 already searched.
+    //
+    // Splitting is the exception. A component's search is proved under an assumption that
+    // says only what its domains are, and its result is cached under those domains, but a
+    // nogood can mention a vertex assigned above the split, so propagating one inside the
+    // component would cite a decision the assumption does not give. (It could not change
+    // the count: a nogood only cuts out non-solutions, and the domains already say all
+    // that the assigned vertices require of the component.) So splitting never records
+    // nogoods, and its staged first round gives up at its first solution instead (see
+    // HomomorphismSearcher::set_splitting), leaving the second round nothing to resume
+    // from: it searches the whole tree.
+    if (params.split_components)
+        return false;
     return params.staged || params.restarts_schedule->might_restart();
 }
 
