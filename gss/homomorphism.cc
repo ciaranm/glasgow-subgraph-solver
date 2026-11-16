@@ -701,7 +701,7 @@ auto gss::solve_homomorphism_problem(
     // restart, and the restart-resumption nogoods keep Stage 2 from re-counting what Stage 1
     // already counted -- as long as the watch machinery is enabled under staging, see
     // might_have_watches. Under proof, the solutions Stage 1 logged stay blocked across the
-    // restart; see the restarts section of dev_docs/proof-logging.md.)
+    // restart; see "Conclusions" in dev_docs/proof-logging.md.)
 
     // start by setting up proof logging, if necessary
     shared_ptr<Proof> proof;
