@@ -26,8 +26,8 @@ namespace
         // Any domain with a count greater than domains.size() is put
         // int the "count==domains.size()" bucket.
         // The "first" array is sized to be able to hold domains.size()+1
-        // elements
-        vector<int> first(target_size + 1, -1), next(target_size, -1);
+        // elements, and next is indexed by domain.
+        vector<int> first(domains.size() + 1, -1), next(domains.size(), -1);
 
         [[maybe_unused]] conditional_t<proof_, vector<int>, tuple<>> lhs, hall_lhs, hall_rhs;
 
