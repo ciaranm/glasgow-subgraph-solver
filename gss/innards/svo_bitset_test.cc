@@ -2,6 +2,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <iterator>
+#include <random>
+#include <ranges>
+#include <set>
+#include <vector>
+
 using namespace gss::innards;
 
 namespace
@@ -173,4 +179,151 @@ TEST_CASE("SVOBitset copy-assignment between heap bitsets of different sizes")
     smaller = back;
     CHECK(smaller.test(7));
     CHECK(smaller.count() == 1);
+}
+
+static_assert(std::forward_iterator<SVOBitset::Iterator>);
+static_assert(std::ranges::forward_range<SVOBitset>);
+static_assert(std::ranges::forward_range<const SVOBitset>);
+
+namespace
+{
+    // Sizes either side of every boundary the representation has: within a word, at a word
+    // edge, at the inline/heap switch (16 words = 1024 bits), and well onto the heap.
+    const std::vector<unsigned> boundary_sizes = {1, 2, 63, 64, 65, 127, 128, 129, 1000, 1023, 1024, 1025, 1088, 2048, 3001};
+
+    auto members(const SVOBitset & b) -> std::vector<unsigned>
+    {
+        std::vector<unsigned> result;
+        for (auto v : b)
+            result.push_back(v);
+        return result;
+    }
+
+    auto random_set(unsigned size, double density, std::mt19937 & rand) -> std::pair<SVOBitset, std::set<unsigned>>
+    {
+        SVOBitset b(size, 0);
+        std::set<unsigned> reference;
+        std::bernoulli_distribution coin(density);
+        for (unsigned v = 0; v < size; ++v)
+            if (coin(rand)) {
+                b.set(v);
+                reference.insert(v);
+            }
+        return {b, reference};
+    }
+}
+
+TEST_CASE("SVOBitset iteration of empty sets")
+{
+    SVOBitset default_constructed;
+    CHECK(default_constructed.begin() == default_constructed.end());
+    CHECK(default_constructed.find_last() == SVOBitset::npos);
+
+    for (auto size : boundary_sizes) {
+        SVOBitset b(size, 0);
+        CHECK(b.begin() == b.end());
+        CHECK(members(b).empty());
+        CHECK(b.find_last() == SVOBitset::npos);
+    }
+}
+
+TEST_CASE("SVOBitset iteration at word and storage boundaries")
+{
+    for (auto size : boundary_sizes) {
+        SVOBitset b(size, 0);
+        std::vector<unsigned> expected;
+        for (unsigned v : {0u, 1u, 62u, 63u, 64u, 65u, 127u, 128u, 1023u, 1024u, size - 1})
+            if (v < size && (expected.empty() || expected.back() < v)) {
+                b.set(v);
+                expected.push_back(v);
+            }
+        CHECK(members(b) == expected);
+        CHECK(b.find_first() == expected.front());
+        CHECK(b.find_last() == expected.back());
+    }
+}
+
+TEST_CASE("SVOBitset iteration matches a reference set")
+{
+    std::mt19937 rand(2026);
+    for (auto size : boundary_sizes)
+        for (double density : {0.01, 0.1, 0.5, 0.9, 1.0}) {
+            auto [b, reference] = random_set(size, density, rand);
+            CHECK(members(b) == std::vector<unsigned>(reference.begin(), reference.end()));
+            CHECK(std::vector<unsigned>(b.begin(), b.end()) == std::vector<unsigned>(reference.begin(), reference.end()));
+            CHECK(std::ranges::distance(b) == std::ptrdiff_t(b.count()));
+            CHECK(b.find_first() == (reference.empty() ? SVOBitset::npos : *reference.begin()));
+            CHECK(b.find_last() == (reference.empty() ? SVOBitset::npos : *reference.rbegin()));
+        }
+}
+
+TEST_CASE("SVOBitset iterators are multi-pass")
+{
+    SVOBitset b(large_bits, 0);
+    b.set(3);
+    b.set(700);
+    b.set(1500);
+    auto i = b.begin();
+    auto j = i;
+    CHECK(*i++ == 3);
+    CHECK(*i == 700);
+    CHECK(*j == 3); // copies advance independently
+    CHECK(++j == i);
+    CHECK(std::ranges::next(b.begin(), 3) == b.end());
+}
+
+TEST_CASE("SVOBitset reset_if removes what the predicate selects, in order")
+{
+    std::mt19937 rand(1854);
+    for (auto size : boundary_sizes)
+        for (double density : {0.05, 0.5, 1.0}) {
+            auto [b, reference] = random_set(size, density, rand);
+
+            std::vector<unsigned> visited;
+            auto removed = b.reset_if([&](unsigned v) {
+                visited.push_back(v);
+                return v % 3 == 0 || v % 64 == 63;
+            });
+
+            // called once per member, in increasing order
+            CHECK(visited == std::vector<unsigned>(reference.begin(), reference.end()));
+
+            unsigned expected_removed = 0;
+            std::vector<unsigned> expected_kept;
+            for (auto v : reference)
+                if (v % 3 == 0 || v % 64 == 63)
+                    ++expected_removed;
+                else
+                    expected_kept.push_back(v);
+            CHECK(removed == expected_removed);
+            CHECK(members(b) == expected_kept);
+            CHECK(b.count() == expected_kept.size());
+        }
+}
+
+TEST_CASE("SVOBitset reset_below and reset_above")
+{
+    std::mt19937 rand(1066);
+    for (auto size : boundary_sizes) {
+        auto [full, reference] = random_set(size, 0.7, rand);
+        for (unsigned a : {0u, 1u, 63u, 64u, 65u, size / 2, size - 1, size, size + 1, 5000u}) {
+            SVOBitset below = full;
+            below.reset_below(a);
+            std::vector<unsigned> expected_below;
+            for (auto v : reference)
+                if (v >= a)
+                    expected_below.push_back(v);
+            CHECK(members(below) == expected_below);
+            CHECK(below.count() == expected_below.size());
+
+            SVOBitset above = full;
+            above.reset_above(a);
+            std::vector<unsigned> expected_above;
+            for (auto v : reference)
+                if (v <= a)
+                    expected_above.push_back(v);
+            CHECK(members(above) == expected_above);
+            CHECK(above.count() == expected_above.size());
+        }
+    }
 }
