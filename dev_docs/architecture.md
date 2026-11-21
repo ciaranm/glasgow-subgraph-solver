@@ -120,7 +120,11 @@ pattern into biconnected components.
   last of those declares its graph-level properties rather than inferring them, and only it has a
   writer; see [file-formats.md](file-formats.md).
 - **`SVOBitset`** (`innards/svo_bitset.hh`) is the small-vector-optimised bitset used everywhere for
-  domains and adjacency: inline storage for up to 16 64-bit words, heap beyond that.
+  domains and adjacency: inline storage for up to 16 64-bit words, heap beyond that. Walk its
+  members with range-for (increasing order, no copy needed); remove members chosen by a predicate
+  with `reset_if`, which visits them in the same order and so may log a proof step per removal.
+  The older copy-then-`find_first()`-and-`reset()` loop rescans from the first word for every member and
+  should not come back.
 - **`loooong`** (`gss/loooong.hh`) is a thin GMP `mpz_t` wrapper for solution counts, which overflow
   64 bits readily.
 - **`Watches`** (`innards/watches.hh`) is a generic two-watched-literal nogood store shared by the
