@@ -152,3 +152,25 @@ TEST_CASE("SVOBitset copy-assignment across the inline/heap boundary")
     // not be probed; count() == 1 confirms the large bit is gone.
     CHECK(target.count() == 1);
 }
+
+TEST_CASE("SVOBitset copy-assignment between heap bitsets of different sizes")
+{
+    // Assigning a larger heap bitset to a smaller one must reallocate to the larger size.
+    // It used to reallocate to the old (smaller) size and then copy the larger one's words,
+    // overflowing the buffer (caught by the sanitize build).
+    SVOBitset larger(4 * large_bits, 0);
+    larger.set(4 * large_bits - 1);
+    SVOBitset smaller(large_bits, 0);
+    smaller.set(3);
+
+    smaller = larger;
+    CHECK(smaller.test(4 * large_bits - 1));
+    CHECK_FALSE(smaller.test(3));
+    CHECK(smaller.count() == 1);
+
+    SVOBitset back(large_bits, 0);
+    back.set(7);
+    smaller = back;
+    CHECK(smaller.test(7));
+    CHECK(smaller.count() == 1);
+}

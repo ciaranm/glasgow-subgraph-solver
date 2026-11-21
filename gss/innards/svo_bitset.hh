@@ -87,6 +87,7 @@ namespace gss::innards
                 }
                 else if (n_words != other.n_words) {
                     delete[] _data.long_data;
+                    n_words = other.n_words;
                     _data.long_data = new BitWord[n_words];
                 }
 
