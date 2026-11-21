@@ -526,39 +526,22 @@ auto HomomorphismProofs::prove_exact_path_graphs(const ProcessedGraphsData & gra
                 auto n_p_q = graphs.pattern_graph_rows[p * max_graphs + 0];
                 n_p_q &= graphs.pattern_graph_rows[q * max_graphs + 0];
                 vector<int> between_p_and_q;
-                for (auto v = n_p_q.find_first(); v != decltype(n_p_q)::npos; v = n_p_q.find_first()) {
-                    n_p_q.reset(v);
+                for (auto v : n_p_q) {
                     between_p_and_q.push_back(int(v));
                     if (between_p_and_q.size() >= unsigned(g))
                         break;
                 }
 
                 for (unsigned t = 0; t < target_size; ++t) {
-                    vector<int> n_t, d_n_t;
+                    const auto & n_t_row = graphs.target_graph_rows[t * max_graphs + 0];
+                    const auto & nd_t = graphs.target_graph_rows[t * max_graphs + slot];
+                    vector<int> n_t(n_t_row.begin(), n_t_row.end()), d_n_t(nd_t.begin(), nd_t.end());
+
                     vector<pair<int, vector<int>>> two_away_from_t;
-                    auto n_t_row = graphs.target_graph_rows[t * max_graphs + 0];
-                    for (auto w = n_t_row.find_first(); w != decltype(n_t_row)::npos; w = n_t_row.find_first()) {
-                        n_t_row.reset(w);
-                        n_t.push_back(int(w));
-                    }
-
-                    auto nd_t = graphs.target_graph_rows[t * max_graphs + slot];
-                    for (auto w = nd_t.find_first(); w != decltype(nd_t)::npos; w = nd_t.find_first()) {
-                        nd_t.reset(w);
-                        d_n_t.push_back(int(w));
-                    }
-
-                    auto n2_t = graphs.target_graph_rows[t * max_graphs + exact_path_1_slot];
-                    for (auto w = n2_t.find_first(); w != decltype(n2_t)::npos; w = n2_t.find_first()) {
-                        n2_t.reset(w);
+                    for (auto w : graphs.target_graph_rows[t * max_graphs + exact_path_1_slot]) {
                         auto n_t_w = graphs.target_graph_rows[w * max_graphs + 0];
-                        n_t_w &= graphs.target_graph_rows[t * max_graphs + 0];
-                        vector<int> n_t_w_idx;
-                        for (auto x = n_t_w.find_first(); x != decltype(n_t_w)::npos; x = n_t_w.find_first()) {
-                            n_t_w.reset(x);
-                            n_t_w_idx.push_back(int(x));
-                        }
-                        two_away_from_t.emplace_back(int(w), n_t_w_idx);
+                        n_t_w &= n_t_row;
+                        two_away_from_t.emplace_back(int(w), vector<int>(n_t_w.begin(), n_t_w.end()));
                     }
 
                     int slot_i = int(slot), p_i = int(p), q_i = int(q), t_i = int(t);
@@ -731,20 +714,20 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
                     // find a path of length 3
                     n_p.reset(p);
                     n_p.reset(q);
-                    for (auto v = n_p.find_first(); v != decltype(n_p)::npos && ! path_from_p_to_q_1; v = n_p.find_first()) {
-                        n_p.reset(v);
-                        auto n_v = graphs.pattern_graph_rows[v * max_graphs + 0];
-                        n_v.reset(v);
-                        n_v.reset(p);
-                        n_v.reset(q);
-                        for (auto w = n_v.find_first(); w != decltype(n_v)::npos && ! path_from_p_to_q_1; w = n_v.find_first()) {
-                            n_v.reset(w);
-                            if (graphs.pattern_graph_rows[w * max_graphs + 0].test(q)) {
-                                path_from_p_to_q_1 = int(v);
-                                path_from_p_to_q_2 = int(w);
-                            }
+                    [&]() {
+                        for (auto v : n_p) {
+                            auto n_v = graphs.pattern_graph_rows[v * max_graphs + 0];
+                            n_v.reset(v);
+                            n_v.reset(p);
+                            n_v.reset(q);
+                            for (auto w : n_v)
+                                if (graphs.pattern_graph_rows[w * max_graphs + 0].test(q)) {
+                                    path_from_p_to_q_1 = int(v);
+                                    path_from_p_to_q_2 = int(w);
+                                    return;
+                                }
                         }
-                    }
+                    }();
                 }
 
                 if (! path_from_p_to_q_1)
@@ -756,20 +739,16 @@ auto HomomorphismProofs::prove_distance3_graphs(const ProcessedGraphsData & grap
                 set<int> d2_from_t_set, d3_from_t_set;
                 auto n_t = graphs.target_graph_rows[t * max_graphs + 0];
                 n_t.set(t);
-                for (auto v = n_t.find_first(); v != decltype(n_t)::npos; v = n_t.find_first()) {
-                    n_t.reset(v);
+                for (auto v : n_t) {
                     d1_from_t.push_back(int(v));
                     auto n_v = graphs.target_graph_rows[v * max_graphs + 0];
                     n_v.set(v);
-                    for (auto w = n_v.find_first(); w != decltype(n_v)::npos; w = n_v.find_first()) {
-                        n_v.reset(w);
+                    for (auto w : n_v) {
                         d2_from_t_set.insert(int(w));
                         auto n_w = graphs.target_graph_rows[w * max_graphs + 0];
                         n_w.set(w);
-                        for (auto x = n_w.find_first(); x != decltype(n_w)::npos; x = n_w.find_first()) {
-                            n_w.reset(x);
+                        for (auto x : n_w)
                             d3_from_t_set.insert(int(x));
-                        }
                     }
                 }
 
@@ -823,12 +802,8 @@ auto HomomorphismProofs::prove_extra_shape(const ProcessedGraphsData & graphs, u
                 continue;
 
             for (unsigned t = 0; t < target_size; ++t) {
-                vector<int> n_t;
-                auto n_t_row = graphs.target_graph_rows[t * max_graphs + slot];
-                for (auto v = n_t_row.find_first(); v != decltype(n_t_row)::npos; v = n_t_row.find_first()) {
-                    n_t_row.reset(v);
-                    n_t.push_back(int(v));
-                }
+                const auto & n_t_row = graphs.target_graph_rows[t * max_graphs + slot];
+                vector<int> n_t(n_t_row.begin(), n_t_row.end());
                 int slot_i = int(slot), p_i = int(p), q_i = int(q), t_i = int(t);
                 register_supplemental(std::tuple<long, long, long, long>{slot_i, p_i, q_i, t_i}, p_i, t_i,
                     [this, slot_i, p_i, q_i, t_i, n_t]() {
@@ -1090,9 +1065,7 @@ auto HomomorphismProofs::ensure_supplemental_adjacency(const ProcessedGraphsData
     auto from_label = adjacency.labels.at(std::tuple<long, long, long, long>{from_g, p, q, t});
     std::string adj_label = "@g" + std::to_string(g) + "adj" + _pattern_names[p] + "_" + _target_names[t] + "_" + _pattern_names[q];
     std::string line = adj_label + " ia 1 ~x" + _proof->variable_name(p, t);
-    auto row = graphs.target_graph_rows[t * max_graphs + g];
-    for (auto u = row.find_first(); u != decltype(row)::npos; u = row.find_first()) {
-        row.reset(u);
+    for (auto u : graphs.target_graph_rows[t * max_graphs + g]) {
         if (int(u) != t)
             line += " 1 x" + _proof->variable_name(q, int(u));
     }

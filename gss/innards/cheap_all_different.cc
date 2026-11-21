@@ -80,12 +80,7 @@ namespace
                 if (domains_so_far_popcount < neighbours_so_far) {
                     // hall violator, so we fail (after outputting a proof)
                     if constexpr (proof_) {
-                        vector<int> rhs;
-                        auto d = domains_so_far;
-                        for (auto v = d.find_first(); v != decltype(d)::npos; v = d.find_first()) {
-                            d.reset(v);
-                            rhs.push_back(v);
-                        }
+                        vector<int> rhs(domains_so_far.begin(), domains_so_far.end());
                         model->proofs()->emit_hall_set_or_violator(lhs, rhs);
                     }
                     return false;
@@ -97,12 +92,7 @@ namespace
                         hall_lhs.clear();
                         for (auto & l : lhs)
                             hall_lhs.push_back(l);
-                        hall_rhs.clear();
-                        auto d = domains_so_far;
-                        for (auto v = d.find_first(); v != decltype(d)::npos; v = d.find_first()) {
-                            d.reset(v);
-                            hall_rhs.push_back(v);
-                        }
+                        hall_rhs.assign(domains_so_far.begin(), domains_so_far.end());
                     }
                 }
                 domain_index = next[domain_index];

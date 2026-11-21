@@ -28,13 +28,13 @@ namespace gss::innards
             auto nv = graph_rows[v * max_graphs + 0];
             if (at_most)
                 nv.set(v);
-            for (auto c = nv.find_first(); c != decltype(nv)::npos; c = nv.find_first()) {
-                nv.reset(c);
+            for (auto c : nv) {
                 auto nc = graph_rows[c * max_graphs + 0];
                 if (at_most)
                     nc.set(c);
-                for (auto w = nc.find_first(); w != decltype(nc)::npos && (directed ? true : w <= v); w = nc.find_first()) {
-                    nc.reset(w);
+                for (auto w : nc) {
+                    if (! directed && w > v)
+                        break;
                     ++path_counts[v][w];
                 }
             }
@@ -70,15 +70,14 @@ namespace gss::innards
     {
         auto & graph_rows = pattern ? graphs.pattern_graph_rows : graphs.target_graph_rows;
 
+        // idx > 0, so the distance-3 row being built is never one of the rows being read
         for (unsigned v = 0; v < size; ++v) {
-            auto nv = graph_rows[v * max_graphs + 0];
+            const auto & nv = graph_rows[v * max_graphs + 0];
             graph_rows[v * max_graphs + idx] |= nv;
-            for (auto c = nv.find_first(); c != decltype(nv)::npos; c = nv.find_first()) {
-                nv.reset(c);
-                auto nc = graph_rows[c * max_graphs + 0];
+            for (auto c : nv) {
+                const auto & nc = graph_rows[c * max_graphs + 0];
                 graph_rows[v * max_graphs + idx] |= nc;
-                for (auto w = nc.find_first(); w != decltype(nc)::npos; w = nc.find_first()) {
-                    nc.reset(w);
+                for (auto w : nc) {
                     // v--c--w so v is within distance 3 of w's neighbours
                     graph_rows[v * max_graphs + idx] |= graph_rows[w * max_graphs + 0];
                 }
@@ -96,31 +95,30 @@ namespace gss::innards
         auto & graph_rows = pattern ? graphs.pattern_graph_rows : graphs.target_graph_rows;
 
         for (unsigned v = 0; v < size; ++v) {
-            auto nv = graph_rows[v * max_graphs + 0];
-            for (unsigned w = 0; w < v; ++w) {
-                if (nv.test(w)) {
-                    // are there two common neighbours with an edge between them?
-                    auto common_neighbours = graph_rows[w * max_graphs + 0];
-                    common_neighbours &= nv;
-                    common_neighbours.reset(v);
-                    common_neighbours.reset(w);
-                    auto count = common_neighbours.count();
-                    if (count >= 2) {
-                        bool done = false;
-                        auto cn1 = common_neighbours;
-                        for (auto x = cn1.find_first(); x != decltype(cn1)::npos && ! done; x = cn1.find_first()) {
-                            cn1.reset(x);
-                            auto cn2 = common_neighbours;
-                            for (auto y = cn2.find_first(); y != decltype(cn2)::npos && ! done; y = cn2.find_first()) {
-                                cn2.reset(y);
-                                if (v != w && v != x && v != y && w != x && w != y && graph_rows[x * max_graphs + 0].test(y)) {
-                                    graph_rows[v * max_graphs + idx].set(w);
-                                    graph_rows[w * max_graphs + idx].set(v);
-                                    done = true;
-                                }
-                            }
-                        }
-                    }
+            const auto & nv = graph_rows[v * max_graphs + 0];
+            for (auto w : nv) {
+                if (w >= v)
+                    break;
+
+                // are there two common neighbours with an edge between them?
+                auto common_neighbours = graph_rows[w * max_graphs + 0];
+                common_neighbours &= nv;
+                common_neighbours.reset(v);
+                common_neighbours.reset(w);
+                if (common_neighbours.count() < 2)
+                    continue;
+
+                auto has_edge_inside = [&]() -> bool {
+                    for (auto x : common_neighbours)
+                        for (auto y : common_neighbours)
+                            if (v != w && v != x && v != y && w != x && w != y && graph_rows[x * max_graphs + 0].test(y))
+                                return true;
+                    return false;
+                };
+
+                if (has_edge_inside()) {
+                    graph_rows[v * max_graphs + idx].set(w);
+                    graph_rows[w * max_graphs + idx].set(v);
                 }
             }
         }
