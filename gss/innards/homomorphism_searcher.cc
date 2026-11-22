@@ -373,7 +373,7 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const 
 }
 
 template <bool directed_, bool has_edge_labels_, bool induced_, bool track_removals_>
-auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void
+auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> bool
 {
     const auto & graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
 
@@ -410,16 +410,28 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
         }
     };
 
+    // Most domains are not adjacent to the newly assigned vertex in any graph pair, so nothing
+    // here touches them; remember whether anything did, so that only those get recounted.
+    bool restricted = false;
+    const auto restrict_to = [&](const SVOBitset & row) {
+        d.values &= row;
+        restricted = true;
+    };
+    const auto restrict_away_from = [&](const SVOBitset & row) {
+        d.values.intersect_with_complement(row);
+        restricted = true;
+    };
+
     if constexpr (! directed_) {
         // for the original graph pair, if we're adjacent...
         if (graph_pairs_to_consider & (1u << 0)) {
             // ...then we can only be mapped to adjacent vertices
-            d.values &= model.target_graph_row(0, current_assignment.target_vertex);
+            restrict_to(model.target_graph_row(0, current_assignment.target_vertex));
         }
         else {
             if constexpr (induced_) {
                 // ...otherwise we can only be mapped to adjacent vertices
-                d.values.intersect_with_complement(model.target_graph_row(0, current_assignment.target_vertex));
+                restrict_away_from(model.target_graph_row(0, current_assignment.target_vertex));
             }
         }
     }
@@ -427,12 +439,12 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
         // both forward and reverse edges to consider
         if (graph_pairs_to_consider & (1u << 0)) {
             // ...then we can only be mapped to adjacent vertices
-            d.values &= model.forward_target_graph_row(current_assignment.target_vertex);
+            restrict_to(model.forward_target_graph_row(current_assignment.target_vertex));
         }
         else {
             if constexpr (induced_) {
                 // ...otherwise we can only be mapped to adjacent vertices
-                d.values.intersect_with_complement(model.forward_target_graph_row(current_assignment.target_vertex));
+                restrict_away_from(model.forward_target_graph_row(current_assignment.target_vertex));
             }
         }
 
@@ -440,12 +452,12 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
 
         if (reverse_edge_graph_pairs_to_consider & (1u << 0)) {
             // ...then we can only be mapped to adjacent vertices
-            d.values &= model.reverse_target_graph_row(current_assignment.target_vertex);
+            restrict_to(model.reverse_target_graph_row(current_assignment.target_vertex));
         }
         else {
             if constexpr (induced_) {
                 // ...otherwise we can only be mapped to adjacent vertices
-                d.values.intersect_with_complement(model.reverse_target_graph_row(current_assignment.target_vertex));
+                restrict_away_from(model.reverse_target_graph_row(current_assignment.target_vertex));
             }
         }
     }
@@ -457,7 +469,7 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
         // if we're adjacent...
         if (graph_pairs_to_consider & (1u << g)) {
             // ...then we can only be mapped to adjacent vertices
-            d.values &= model.target_graph_row(g, current_assignment.target_vertex);
+            restrict_to(model.target_graph_row(g, current_assignment.target_vertex));
         }
 
         track(g, _filter_activations.search[g]);
@@ -510,6 +522,9 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & 
             model.proofs()->materialise_adjacency_for(int(d.v), int(c));
         }
     }
+
+    // The edge-label checks only run where a row has already been applied, so this covers them.
+    return restricted;
 }
 
 auto HomomorphismSearcher::both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool
@@ -531,47 +546,54 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
         if (d.fixed)
             continue;
 
-        // injectivity
+        // injectivity, keeping d.count exact: test-and-subtract rather than a branch, because
+        // whether the value is present is unpredictable
+        const auto remove_assigned_value = [&]() {
+            unsigned was_present = d.values.test(current_assignment.target_vertex);
+            d.values.reset(current_assignment.target_vertex);
+            d.count -= was_present;
+        };
         switch (params.injectivity) {
         case Injectivity::Injective:
-            d.values.reset(current_assignment.target_vertex);
+            remove_assigned_value();
             break;
         case Injectivity::LocallyInjective:
             if (both_in_the_neighbourhood_of_some_vertex(current_assignment.pattern_vertex, d.v))
-                d.values.reset(current_assignment.target_vertex);
+                remove_assigned_value();
             break;
         case Injectivity::NonInjective:
             break;
         }
 
         // adjacency
+        bool restricted = false;
         if (! model.has_edge_labels()) {
             if (params.induced) {
                 if (model.directed()) {
                     if (! _track_removals)
-                        propagate_adjacency_constraints<true, false, true, false>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<true, false, true, false>(d, current_assignment);
                     else
-                        propagate_adjacency_constraints<true, false, true, true>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<true, false, true, true>(d, current_assignment);
                 }
                 else {
                     if (! _track_removals)
-                        propagate_adjacency_constraints<false, false, true, false>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<false, false, true, false>(d, current_assignment);
                     else
-                        propagate_adjacency_constraints<false, false, true, true>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<false, false, true, true>(d, current_assignment);
                 }
             }
             else {
                 if (model.directed()) {
                     if (! _track_removals)
-                        propagate_adjacency_constraints<true, false, false, false>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<true, false, false, false>(d, current_assignment);
                     else
-                        propagate_adjacency_constraints<true, false, false, true>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<true, false, false, true>(d, current_assignment);
                 }
                 else {
                     if (! _track_removals)
-                        propagate_adjacency_constraints<false, false, false, false>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<false, false, false, false>(d, current_assignment);
                     else
-                        propagate_adjacency_constraints<false, false, false, true>(d, current_assignment);
+                        restricted = propagate_adjacency_constraints<false, false, false, true>(d, current_assignment);
                 }
             }
         }
@@ -579,20 +601,21 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
             // edge labels are always directed
             if (params.induced) {
                 if (! _track_removals)
-                    propagate_adjacency_constraints<true, true, true, false>(d, current_assignment);
+                    restricted = propagate_adjacency_constraints<true, true, true, false>(d, current_assignment);
                 else
-                    propagate_adjacency_constraints<true, true, true, true>(d, current_assignment);
+                    restricted = propagate_adjacency_constraints<true, true, true, true>(d, current_assignment);
             }
             else {
                 if (! _track_removals)
-                    propagate_adjacency_constraints<true, true, false, false>(d, current_assignment);
+                    restricted = propagate_adjacency_constraints<true, true, false, false>(d, current_assignment);
                 else
-                    propagate_adjacency_constraints<true, true, false, true>(d, current_assignment);
+                    restricted = propagate_adjacency_constraints<true, true, false, true>(d, current_assignment);
             }
         }
 
-        // we might have removed values
-        d.count = d.values.count();
+        // adjacency might have removed values
+        if (restricted)
+            d.count = d.values.count();
         if (0 == d.count)
             return false;
     }
