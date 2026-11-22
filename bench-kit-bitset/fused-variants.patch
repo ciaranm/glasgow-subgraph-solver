@@ -1,0 +1,260 @@
+diff --git a/gss/innards/homomorphism_searcher.cc b/gss/innards/homomorphism_searcher.cc
+index 167501d..9398594 100644
+--- a/gss/innards/homomorphism_searcher.cc
++++ b/gss/innards/homomorphism_searcher.cc
+@@ -2,6 +2,7 @@
+ #include <gss/innards/homomorphism_proofs.hh>
+ #include <gss/innards/homomorphism_searcher.hh>
+ 
++#include <array>
+ #include <optional>
+ 
+ using namespace gss;
+@@ -375,6 +376,8 @@ auto HomomorphismSearcher::find_branch_domain(const Domains & domains) -> const
+ template <bool directed_, bool has_edge_labels_, bool induced_, bool track_removals_>
+ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void
+ {
++    // On entry d.count is exact; on exit it is again.
++
+     const auto & graph_pairs_to_consider = model.pattern_adjacency_bits(current_assignment.pattern_vertex, d.v);
+ 
+     // Lazy supplemental proofs: every value this forward-check removes from dom(d.v) is an
+@@ -410,16 +413,40 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain &
+         }
+     };
+ 
++    // Without tracking, the rows are only collected here and then applied together below, so
++    // that the count can be computed along with the last of them rather than by another pass.
++    // With tracking, each is applied straight away, because track() needs the count after it.
++    constexpr unsigned max_rows = 2 + 8 * sizeof(HomomorphismModel::PatternAdjacencyBitsType);
++    [[maybe_unused]] std::array<const SVOBitset *, max_rows> rows{};
++    [[maybe_unused]] std::array<bool, max_rows> complements{};
++    [[maybe_unused]] unsigned n_rows = 0;
++    const auto restrict_to = [&](const SVOBitset & row) {
++        if constexpr (track_removals_)
++            d.values &= row;
++        else {
++            rows[n_rows] = &row;
++            complements[n_rows++] = false;
++        }
++    };
++    const auto restrict_away_from = [&](const SVOBitset & row) {
++        if constexpr (track_removals_)
++            d.values.intersect_with_complement(row);
++        else {
++            rows[n_rows] = &row;
++            complements[n_rows++] = true;
++        }
++    };
++
+     if constexpr (! directed_) {
+         // for the original graph pair, if we're adjacent...
+         if (graph_pairs_to_consider & (1u << 0)) {
+             // ...then we can only be mapped to adjacent vertices
+-            d.values &= model.target_graph_row(0, current_assignment.target_vertex);
++            restrict_to(model.target_graph_row(0, current_assignment.target_vertex));
+         }
+         else {
+             if constexpr (induced_) {
+                 // ...otherwise we can only be mapped to adjacent vertices
+-                d.values.intersect_with_complement(model.target_graph_row(0, current_assignment.target_vertex));
++                restrict_away_from(model.target_graph_row(0, current_assignment.target_vertex));
+             }
+         }
+     }
+@@ -427,12 +454,12 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain &
+         // both forward and reverse edges to consider
+         if (graph_pairs_to_consider & (1u << 0)) {
+             // ...then we can only be mapped to adjacent vertices
+-            d.values &= model.forward_target_graph_row(current_assignment.target_vertex);
++            restrict_to(model.forward_target_graph_row(current_assignment.target_vertex));
+         }
+         else {
+             if constexpr (induced_) {
+                 // ...otherwise we can only be mapped to adjacent vertices
+-                d.values.intersect_with_complement(model.forward_target_graph_row(current_assignment.target_vertex));
++                restrict_away_from(model.forward_target_graph_row(current_assignment.target_vertex));
+             }
+         }
+ 
+@@ -440,12 +467,12 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain &
+ 
+         if (reverse_edge_graph_pairs_to_consider & (1u << 0)) {
+             // ...then we can only be mapped to adjacent vertices
+-            d.values &= model.reverse_target_graph_row(current_assignment.target_vertex);
++            restrict_to(model.reverse_target_graph_row(current_assignment.target_vertex));
+         }
+         else {
+             if constexpr (induced_) {
+                 // ...otherwise we can only be mapped to adjacent vertices
+-                d.values.intersect_with_complement(model.reverse_target_graph_row(current_assignment.target_vertex));
++                restrict_away_from(model.reverse_target_graph_row(current_assignment.target_vertex));
+             }
+         }
+     }
+@@ -457,12 +484,39 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain &
+         // if we're adjacent...
+         if (graph_pairs_to_consider & (1u << g)) {
+             // ...then we can only be mapped to adjacent vertices
+-            d.values &= model.target_graph_row(g, current_assignment.target_vertex);
++            restrict_to(model.target_graph_row(g, current_assignment.target_vertex));
+         }
+ 
+         track(g, _filter_activations.search[g]);
+     }
+ 
++    if constexpr (track_removals_)
++        d.count = remaining;
++    else if (n_rows > 0) {
++#if GSS_COUNT_VARIANT == 1
++        for (unsigned r = 0; r < n_rows; ++r) {
++            if (complements[r])
++                d.values.intersect_with_complement(*rows[r]);
++            else
++                d.values &= *rows[r];
++        }
++        d.count = d.values.count();
++#elif GSS_COUNT_VARIANT == 2
++        for (unsigned r = 0; r + 1 < n_rows; ++r) {
++            if (complements[r])
++                d.values.intersect_with_complement(*rows[r]);
++            else
++                d.values &= *rows[r];
++        }
++        d.count = complements[n_rows - 1] ? d.values.intersect_with_complement_and_count(*rows[n_rows - 1])
++                                          : d.values.intersect_and_count(*rows[n_rows - 1]);
++#elif GSS_COUNT_VARIANT == 3
++        d.count = d.values.intersect_all_and_count(rows.data(), complements.data(), n_rows);
++#else
++#error "GSS_COUNT_VARIANT must be 1, 2 or 3"
++#endif
++    }
++
+     if constexpr (has_edge_labels_) {
+         // if we're adjacent in the original graph, additionally the edge labels need to match up
+         if (graph_pairs_to_consider & (1u << 0)) {
+@@ -491,13 +545,15 @@ auto HomomorphismSearcher::propagate_adjacency_constraints(HomomorphismDomain &
+                     d.values.reset(c);
+             }
+         }
+-    }
+ 
+-    if constexpr (has_edge_labels_ && track_removals_) {
+-        // no proof comment for this one: the edge-label check has never had one, and the
+-        // proof's propagated() line is indexed by graph pair, which this is not
+-        if (_record_filter_activations)
+-            _filter_activations.search_edge_labels += remaining - d.values.count();
++        auto after_labels = d.values.count();
++        if constexpr (track_removals_) {
++            // no proof comment for this one: the edge-label check has never had one, and the
++            // proof's propagated() line is indexed by graph pair, which this is not
++            if (_record_filter_activations)
++                _filter_activations.search_edge_labels += d.count - after_labels;
++        }
++        d.count = after_labels;
+     }
+ 
+     if (lazy_proof) {
+@@ -532,13 +588,19 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
+             continue;
+ 
+         // injectivity
++        const auto remove_assigned_value = [&]() {
++            if (d.values.test(current_assignment.target_vertex)) {
++                d.values.reset(current_assignment.target_vertex);
++                --d.count;
++            }
++        };
+         switch (params.injectivity) {
+         case Injectivity::Injective:
+-            d.values.reset(current_assignment.target_vertex);
++            remove_assigned_value();
+             break;
+         case Injectivity::LocallyInjective:
+             if (both_in_the_neighbourhood_of_some_vertex(current_assignment.pattern_vertex, d.v))
+-                d.values.reset(current_assignment.target_vertex);
++                remove_assigned_value();
+             break;
+         case Injectivity::NonInjective:
+             break;
+@@ -591,8 +653,7 @@ auto HomomorphismSearcher::propagate_simple_constraints(Domains & new_domains, c
+             }
+         }
+ 
+-        // we might have removed values
+-        d.count = d.values.count();
++        // we might have removed values; the count has been kept up to date
+         if (0 == d.count)
+             return false;
+     }
+diff --git a/gss/innards/svo_bitset.hh b/gss/innards/svo_bitset.hh
+index c857f98..fd71e18 100644
+--- a/gss/innards/svo_bitset.hh
++++ b/gss/innards/svo_bitset.hh
+@@ -196,6 +196,66 @@ namespace gss::innards
+             }
+         }
+ 
++        // *this &= other, returning the new count, in one pass over the words.
++        auto intersect_and_count(const SVOBitset & other) -> unsigned
++        {
++            unsigned result = 0;
++            if (! _is_long()) {
++                for (unsigned i = 0; i < svo_size; ++i) {
++                    _data.short_data[i] &= other._data.short_data[i];
++                    result += popcount(_data.short_data[i]);
++                }
++            }
++            else {
++                for (unsigned i = 0; i < n_words; ++i) {
++                    _data.long_data[i] &= other._data.long_data[i];
++                    result += popcount(_data.long_data[i]);
++                }
++            }
++            return result;
++        }
++
++        // intersect_with_complement(other), returning the new count, in one pass over the words.
++        auto intersect_with_complement_and_count(const SVOBitset & other) -> unsigned
++        {
++            unsigned result = 0;
++            if (! _is_long()) {
++                for (unsigned i = 0; i < svo_size; ++i) {
++                    _data.short_data[i] &= ~other._data.short_data[i];
++                    result += popcount(_data.short_data[i]);
++                }
++            }
++            else {
++                for (unsigned i = 0; i < n_words; ++i) {
++                    _data.long_data[i] &= ~other._data.long_data[i];
++                    result += popcount(_data.long_data[i]);
++                }
++            }
++            return result;
++        }
++
++        // Intersect with each of n sets, complementing those whose complement flag is set,
++        // and return the new count, all in one pass over the words.
++        auto intersect_all_and_count(const SVOBitset * const * others, const bool * complement, unsigned n) -> unsigned
++        {
++            BitWord masks[16];
++            for (unsigned j = 0; j < n; ++j)
++                masks[j] = complement[j] ? ~BitWord{0} : BitWord{0};
++            unsigned result = 0;
++            BitWord * b = (_is_long() ? _data.long_data : _data.short_data);
++            unsigned words = _is_long() ? n_words : svo_size;
++            for (unsigned i = 0; i < words; ++i) {
++                BitWord w = b[i];
++                for (unsigned j = 0; j < n; ++j) {
++                    const BitWord * o = (others[j]->_is_long() ? others[j]->_data.long_data : others[j]->_data.short_data);
++                    w &= o[i] ^ masks[j];
++                }
++                b[i] = w;
++                result += popcount(w);
++            }
++            return result;
++        }
++
+         auto count() const -> unsigned
+         {
+             unsigned result = 0;
