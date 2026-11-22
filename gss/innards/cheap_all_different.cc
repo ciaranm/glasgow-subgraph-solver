@@ -26,8 +26,8 @@ namespace
         // Any domain with a count greater than domains.size() is put
         // int the "count==domains.size()" bucket.
         // The "first" array is sized to be able to hold domains.size()+1
-        // elements
-        vector<int> first(target_size + 1, -1), next(target_size, -1);
+        // elements, and next is indexed by domain.
+        vector<int> first(domains.size() + 1, -1), next(domains.size(), -1);
 
         [[maybe_unused]] conditional_t<proof_, vector<int>, tuple<>> lhs, hall_lhs, hall_rhs;
 
@@ -45,6 +45,19 @@ namespace
         SVOBitset domains_so_far{target_size, 0}, hall{target_size, 0};
         unsigned neighbours_so_far = 0;
 
+        // Two ways to skip work that cannot change the outcome, the proof or any domain:
+        //
+        // - While no Hall set has been found, removing hall from a domain is a no-op, and its
+        //   count is already up to date, so skip both.
+        //
+        // - Once domains_so_far has at least domains.size() values, the rest of the union is
+        //   pointless. The union only grows and neighbours_so_far never exceeds domains.size(),
+        //   so no later domain can be a Hall violator, and a later Hall set can only happen at
+        //   the very last domain, when there is nothing left to remove it from. Dense domains
+        //   are visited last, so this usually stops the union as soon as it reaches one,
+        //   rather than OR-ing and counting every remaining domain over the whole target.
+        bool hall_is_empty = true, union_is_saturated = false;
+
         [[maybe_unused]] conditional_t<proof_, unsigned, tuple<>> last_outputted_hall_size{};
 
         for (unsigned i = 0; i <= domains.size(); ++i) {
@@ -60,8 +73,10 @@ namespace
                 if constexpr (proof_)
                     old_d_values_count = d.values.count();
 
-                d.values.intersect_with_complement(hall);
-                d.count = d.values.count();
+                if (! hall_is_empty) {
+                    d.values.intersect_with_complement(hall);
+                    d.count = d.values.count();
+                }
 
                 if constexpr (proof_)
                     if (last_outputted_hall_size != hall.count() && d.count != old_d_values_count) {
@@ -72,10 +87,17 @@ namespace
                 if (0 == d.count)
                     return false;
 
+                if (union_is_saturated) {
+                    domain_index = next[domain_index];
+                    continue;
+                }
+
                 domains_so_far |= d.values;
                 ++neighbours_so_far;
 
                 unsigned domains_so_far_popcount = domains_so_far.count();
+                if (domains_so_far_popcount >= domains.size())
+                    union_is_saturated = true;
 
                 if (domains_so_far_popcount < neighbours_so_far) {
                     // hall violator, so we fail (after outputting a proof)
@@ -93,6 +115,7 @@ namespace
                 else if (domains_so_far_popcount == neighbours_so_far) {
                     // equivalent to hall=domains_so_far
                     hall |= domains_so_far;
+                    hall_is_empty = false;
                     if constexpr (proof_) {
                         hall_lhs.clear();
                         for (auto & l : lhs)

@@ -135,13 +135,14 @@ auto HomomorphismSearcher::restarting_search(
     // pull out the remaining values in this domain for branching
     auto remaining = branch_domain->values;
 
-    vector<int> branch_v(model.target_size);
-
-    unsigned branch_v_end = 0;
+    // sized by the domain, not the target: this happens at every node
+    vector<int> branch_v;
+    branch_v.reserve(branch_domain->count);
     for (auto f_v = remaining.find_first(); f_v != decltype(remaining)::npos; f_v = remaining.find_first()) {
         remaining.reset(f_v);
-        branch_v[branch_v_end++] = f_v;
+        branch_v.push_back(int(f_v));
     }
+    unsigned branch_v_end = branch_v.size();
 
     switch (params.value_ordering_heuristic) {
     case ValueOrdering::None:
