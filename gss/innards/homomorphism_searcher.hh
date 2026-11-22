@@ -99,8 +99,10 @@ namespace gss::innards
 
         auto solution_in_proof_form(const HomomorphismAssignments & assignments) const -> std::vector<std::pair<NamedVertex, NamedVertex>>;
 
+        // Filters d.values by adjacency to the new assignment. Leaves d.count alone, and returns
+        // whether it touched d.values at all, which is when the caller needs to recount.
         template <bool directed_, bool has_edge_labels_, bool induced_, bool track_removals_>
-        auto propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> void;
+        auto propagate_adjacency_constraints(HomomorphismDomain & d, const HomomorphismAssignment & current_assignment) -> bool;
 
         auto both_in_the_neighbourhood_of_some_vertex(unsigned v, unsigned w) -> bool;
 
