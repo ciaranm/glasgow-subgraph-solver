@@ -9,6 +9,7 @@
 #                              so set CXX_GCC=g++-15 or similar)
 #        JOBS=n      parallel build jobs (default: all cores)
 #        ARMS="..."  subset of arms to build/run (default: all fourteen)
+#        (works with macOS /bin/bash 3.2, hence ${prefix[@]+...} for a possibly empty array)
 #        SMOKE=1     quick check: three short instances, one rep, separate results file
 #
 # Runs one solver at a time, single-threaded, pinned where possible. Writes
@@ -123,11 +124,11 @@ run_one() { # arm cfg name pat tgt rep
     tmp=$(mktemp -d)
     if ((perf_ok)); then
         env -i PATH=/usr/bin:/bin PAD=$pad GLIBC_TUNABLES=glibc.malloc.mmap_threshold=33554432:glibc.malloc.trim_threshold=4294967295 \
-            "${prefix[@]}" perf stat -x, -e instructions:u,cycles:u -o $tmp/perf \
+            ${prefix[@]+"${prefix[@]}"} perf stat -x, -e instructions:u,cycles:u -o $tmp/perf \
             "$work/bin/$arm" "${args[@]}" --timeout 300 "$inst/$pat" "$inst/$tgt" > $tmp/out 2>&1
     else
         env -i PATH=/usr/bin:/bin PAD=$pad GLIBC_TUNABLES=glibc.malloc.mmap_threshold=33554432:glibc.malloc.trim_threshold=4294967295 \
-            "${prefix[@]}" "$work/bin/$arm" "${args[@]}" --timeout 300 "$inst/$pat" "$inst/$tgt" > $tmp/out 2>&1
+            ${prefix[@]+"${prefix[@]}"} "$work/bin/$arm" "${args[@]}" --timeout 300 "$inst/$pat" "$inst/$tgt" > $tmp/out 2>&1
     fi
     local rc=$?
     if ((perf_ok)); then ins=$(awk -F, '/instructions/ {print $1}' $tmp/perf); cyc=$(awk -F, '/cycles/ {print $1}' $tmp/perf); fi
