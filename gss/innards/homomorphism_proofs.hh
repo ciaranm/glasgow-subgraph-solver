@@ -83,6 +83,15 @@ namespace gss::innards
         // block of already-eliminated cells; need_elimination fills any that are still missing.
         std::map<std::pair<int, int>, long> _eliminations;
 
+        // State for the pattern-is-a-clique shortcut (see prepare_clique_shortcut): the "t is
+        // used" variable names, the line saying a used t has some pattern vertex mapped to it,
+        // and, per target vertex a once first needed, the k lines "p -> a means no
+        // non-neighbour of a is used".
+        std::vector<std::string> _clique_used_names;
+        std::vector<long> _clique_used_implies_mapped;
+        std::map<int, std::vector<long>> _clique_neighbourhood_lines;
+        auto clique_shortcut_non_edge(const InputGraph & pattern, const InputGraph & target, int a, int b) -> std::string;
+
         // Ensure p->t is eliminated (as a scratch unit at the root level), for the NDS
         // pigeonhole to cite; a no-op if it already is.
         auto need_elimination(int p, int t) -> void;
@@ -264,6 +273,20 @@ namespace gss::innards
         // extension over tt's neighbourhood to certify the bound.
         auto prove_no_clique(const ProcessedGraphsData & graphs, unsigned max_graphs, unsigned pattern_size,
             unsigned target_size, const HomomorphismParams & params, unsigned g, int p, int tt) -> void;
+
+        // The pattern is a simple clique, so the solver hands the problem to the clique
+        // solver, run in decision mode on the target's (|pattern|-1)-core. Set the proof up so
+        // that the clique solver's own proof checks against this model: introduce, for each
+        // target vertex t, a variable "t is used", reified as exactly the number of pattern
+        // vertices mapped to t (which is zero or one, by injectivity, or because two adjacent
+        // pattern vertices cannot share a loopless image); rule out each vertex peeled off the
+        // core, in removal_order, by a degree pigeonhole; derive the clique objective "at least
+        // |pattern| core vertices are used"; and register a derivation of the non-edge "t and u
+        // are not both used", for the clique solver to call on demand. The clique solver's
+        // vertex i is core[i]. Every pattern vertex is adjacent to every other, so p -> t forces
+        // every other pattern vertex into N(t), which is what all of this rests on.
+        auto prepare_clique_shortcut(const InputGraph & pattern, const InputGraph & target,
+            const std::vector<int> & removal_order, const std::vector<int> & core) -> void;
     };
 }
 

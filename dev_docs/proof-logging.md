@@ -41,7 +41,6 @@ Proof logging for `glasgow_subgraph_solver` is currently incompatible with a num
 | Requires | Because |
 | --- | --- |
 | a single thread (no `--parallel`, `--threads 1`) | proof logging is not thread-safe yet |
-| `--no-clique-detection` | the clique-detection shortcut is not yet logged |
 | no less-than / occurs-less symmetry constraints | not yet logged |
 | unlabelled graphs (no vertex or edge labels) | labels are not yet encoded |
 | not `--staged` together with `--count-solutions` | the stage transition is a restart, and an enumeration proof cannot yet survive one (same restriction as counting with restarts) |
@@ -99,6 +98,51 @@ $ veripb myproof.opb myproof.pbp
 Clique and maximum-common-subgraph proof logging also exist (`CliqueParams::proof_options`,
 `CommonSubgraphParams::proof_options`), and the common-subgraph reduction extends a clique proof
 internally.
+
+### The clique-detection shortcut
+
+When the pattern is a simple clique K_k, `CliqueShortcutStep` peels the target down to its
+(k-1)-core (repeatedly removing any vertex with fewer than k-1 neighbours left, with or without a
+proof, so the search is the same either way) and hands the core to the clique solver in decision
+mode. Its proof still checks against the unchanged homomorphism OPB.
+`HomomorphismProofs::prepare_clique_shortcut` sets this up before the clique solver starts:
+
+- For each target vertex t, a fresh variable `used_t` (prefix extended if it would collide with an
+  assignment variable), reified by two `red` steps as *exactly* the number of pattern vertices
+  mapped to t: `~used_t + sum_p x_p_t >= 1`, and `used_t + sum_p ~x_p_t >= k`. The second needs
+  "at most one pattern vertex on t". Under full injectivity that is `@inj`. Otherwise the shortcut
+  only runs on a loopless target, and it is derived: each pair `~x_p_t \/ ~x_q_t` is RUP from
+  `@adj` (p and q are adjacent, and t is not its own neighbour) and `@am1`, then the usual
+  pairwise-to-at-most-one `pol`, so k^2/2 lines per target vertex.
+- Each peeled vertex t, in removal order: for each pattern vertex p, a `pol` of the `@adj_p_t_q`
+  and the second reification line of every neighbour of t, after which `~x_p_t` is a RUP (p -> t
+  needs k-1 used neighbours, and fewer than that are left), then `~used_t`. These RUPs are hinted
+  (`@am1_p`, the `~used` units of neighbours already peeled, and `@inj_t` if t has a loop).
+- The clique objective `sum_{t in core} used_t >= k`, as one `pol` of every `@al1`, every second
+  reification line and every peeled vertex's `~used_t`.
+- The clique solver's non-edge clauses `~used_a \/ ~used_b` are not in the model, so they are
+  derived on first use (`Proof::ensure_non_edges`), at level 0 so no `wiplvl` takes them away. A
+  colour bound asks for the pairs inside its colour classes. Just before the clique solver branches
+  on v it asks for the pairs between v and every candidate the branch rules out, because the
+  backtrack nogood from that branch is a RUP that needs them. A non-edge comes from k
+  "neighbourhood" lines for one endpoint a, derived once and reused for every b:
+  `k ~x_p_a + sum_{b not in N[a]} ~used_b >= |{b not in N[a]}|`. Each is one `pol` of the
+  first reification lines of those b, `@adj_p_a_q + @am1_q` for every other q, `@am1_p`, and
+  literal axioms for the terms that do not cancel. Given those lines, `used_b` falsifies every
+  `x_p_a`, which falsifies `used_a`, so the clause is RUP, hinted with exactly those k + 1 lines.
+  (Unhinted, each of these RUPs propagated over a database that grows with every neighbourhood
+  line, and checking went quadratic: 182 s rather than 19 s on one LV instance.)
+
+The cost to watch is the neighbourhood lines: each names every non-neighbour of a, so a vertex
+costs about k * n, and on a large sparse target whose core is most of the graph that is roughly
+k * n^2 overall. That is the price of the clique proof's non-edge clauses, which the standalone
+clique model simply lists. The peeling is what keeps the common case, a large sparse target with
+a small or empty core, cheap.
+
+The clique solver's own colour bounds and backtracks then run over the `used_t` variables exactly
+as in a standalone clique proof. Its `solx` and conclusion are suppressed
+(`CliqueParams::proof_concluded_by_caller`): the shortcut logs the mapping it found as a `solx`
+over the assignment variables, or concludes `UNSAT` if the search was complete.
 
 ## Conclusions
 

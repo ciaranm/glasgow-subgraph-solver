@@ -63,9 +63,10 @@ if(VERIPB_EXECUTABLE)
                 ${CMAKE_CURRENT_BINARY_DIR} ${name} -- ${ARGN})
     endfunction()
 
-    # The subgraph solver always needs --no-clique-detection for proof logging. SUB_MIN
-    # is the minimal proof-compatible combination (also no supplemental graphs / NDS),
-    # used where a test isn't specifically exercising those features.
+    # Most subgraph tests turn off clique detection, which would otherwise hand any clique
+    # pattern to the clique solver and so skip what the test is about. SUB_MIN is the
+    # minimal combination (also no supplemental graphs / NDS), used where a test isn't
+    # specifically exercising those features.
     set(SUB glasgow_subgraph_solver --no-clique-detection)
     set(SUB_MIN ${SUB} --no-supplementals --no-nds)
 
@@ -163,6 +164,41 @@ if(VERIPB_EXECUTABLE)
     # verbose proof comments (show_domains / propagated).
     gss_add_proof_test(proof_verbose ${SUB_MIN} --verbose-proofs
         ${GSS_INSTANCES}/trident.csv ${GSS_INSTANCES}/longtrident.csv)
+
+    # --- The clique-detection shortcut ---
+    # A clique pattern goes to the clique solver, whose proof runs over "target vertex is
+    # used" variables tied to the assignment variables (prepare_clique_shortcut). K3 into
+    # K3,3 is refuted by the root colour bound; under non-injective and locally injective
+    # mappings the "at most one pattern vertex per target" the reification needs is not in
+    # the model and has to be derived. The two clique_branching targets make the clique
+    # solver branch, so the backtrack nogoods need the non-edges derived before each branch
+    # (Proof::clique_branching_on); both fail without that. large has a self-loop.
+    gss_add_proof_test(proof_clique_shortcut_unsat glasgow_subgraph_solver
+        --format lad ${GSS_INSTANCES}/triangle.lad ${GSS_INSTANCES}/k33.lad)
+    gss_add_proof_test(proof_clique_shortcut_noninjective glasgow_subgraph_solver --noninjective
+        --format lad ${GSS_INSTANCES}/triangle.lad ${GSS_INSTANCES}/k33.lad)
+    gss_add_proof_test(proof_clique_shortcut_locally_injective glasgow_subgraph_solver --locally-injective
+        --format lad ${GSS_INSTANCES}/triangle.lad ${GSS_INSTANCES}/k33.lad)
+    gss_add_proof_test(proof_clique_shortcut_induced glasgow_subgraph_solver --induced
+        --format lad ${GSS_INSTANCES}/triangle.lad ${GSS_INSTANCES}/k33.lad)
+    gss_add_proof_test(proof_clique_shortcut_sat glasgow_subgraph_solver
+        --format lad ${GSS_INSTANCES}/triangle.lad ${GSS_INSTANCES}/k4.lad)
+    gss_add_proof_test(proof_clique_shortcut_loopy glasgow_subgraph_solver
+        --format lad ${GSS_INSTANCES}/k4.lad ${GSS_INSTANCES}/large)
+    # Peeling the target to its (k-1)-core before the clique solver: clique_peel has a chain
+    # of low-degree vertices to remove one after another, so each removal leans on the
+    # earlier ones, and clique_peel_loopy has loops on removed vertices, which leave a stray
+    # term the injectivity constraint has to cancel.
+    gss_add_proof_test(proof_clique_shortcut_peel glasgow_subgraph_solver
+        --format lad ${GSS_INSTANCES}/k4.lad ${GSS_INSTANCES}/clique_peel.lad)
+    gss_add_proof_test(proof_clique_shortcut_peel_noninjective glasgow_subgraph_solver --noninjective
+        --format lad ${GSS_INSTANCES}/k4.lad ${GSS_INSTANCES}/clique_peel.lad)
+    gss_add_proof_test(proof_clique_shortcut_peel_loopy glasgow_subgraph_solver
+        --format lad ${GSS_INSTANCES}/triangle.lad ${GSS_INSTANCES}/clique_peel_loopy.lad)
+    gss_add_proof_test(proof_clique_shortcut_branching_unsat glasgow_subgraph_solver
+        --format lad ${GSS_INSTANCES}/k5.lad ${GSS_INSTANCES}/clique_branching_unsat.lad)
+    gss_add_proof_test(proof_clique_shortcut_branching_sat glasgow_subgraph_solver
+        --format lad ${GSS_INSTANCES}/k4.lad ${GSS_INSTANCES}/clique_branching_sat.lad)
 
     # --- Clique and common-subgraph solver proofs (optimisation, BOUNDS) ---
     gss_add_proof_test(proof_clique glasgow_clique_solver ${GSS_INSTANCES}/clique.clq)

@@ -33,7 +33,6 @@ apart matters:
 | threads without restarts | Threaded search requires restarts |
 | proof logging with threads | Proof logging cannot yet be used with threads |
 | proof logging with `--staged --count-solutions` | …with staged counting |
-| proof logging with clique detection | …with clique detection, use `--no-clique-detection` |
 | proof logging with less-constraints | …with less-constraints |
 | proof logging on a labelled pattern | …on labelled graphs |
 | proof logging, counting, with restarts | …when counting with restarts, use `--restarts none` |
@@ -57,7 +56,7 @@ place to look. `has_loops` means *either* graph has a self-loop.
 | whole-instance degree sequence | fully injective | |
 | clique-size constraints (`--cliques`) | fully injective, **or** no loops | #91 |
 | …on supplementals | as above, and not non-injective | #91 |
-| clique detection (`--clique-detection`) | not counting, no proof, and fully injective **or** a loopless target | #94 |
+| clique detection (`--clique-detection`) | not counting, and fully injective **or** a loopless target | #94 |
 | nogood recording | `--staged`, or the restart schedule might restart | nothing consults a nogood without a restart |
 
 Two conditions recur, and it is worth seeing why they are the same argument twice. Both the

@@ -8,6 +8,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -1113,4 +1114,212 @@ auto HomomorphismProofs::forget_transient_supplemental_adjacencies() -> void
         adjacency.ids.erase(key);
     }
     _pending_transient_adjacencies.clear();
+}
+
+auto HomomorphismProofs::prepare_clique_shortcut(const InputGraph & pattern, const InputGraph & target,
+    const vector<int> & removal_order, const vector<int> & core) -> void
+{
+    int k = pattern.size(), n = target.size();
+
+    _proof->emit_proof_directive("% the pattern is a clique, so we are solving clique on the target");
+
+    // Without injectivity, "at most one pattern vertex maps to t" is not in the model, but it
+    // follows from adjacency when t has no loop: two adjacent pattern vertices on t would need
+    // t to be its own neighbour. The clique shortcut only runs without injectivity when the
+    // target is loopless. Nothing cites these lines: the second red below needs one of them
+    // (or @inj_t) to be in the database when VeriPB checks it.
+    if (! _injective) {
+        if (target.loopy())
+            throw ProofError{"Oops, there's a bug: clique shortcut without injectivity on a loopy target"};
+
+        for (int t = 0; t < n; ++t) {
+            if (k < 2)
+                continue;
+            map<pair<int, int>, long> pairwise;
+            for (int p = 0; p < k; ++p)
+                for (int q = p + 1; q < k; ++q) {
+                    auto id = _proof->emit_proof_line("rup 1 ~x" + _proof->variable_name(p, t) + " 1 ~x" + _proof->variable_name(q, t) + " >= 1 ;");
+                    pairwise.emplace(pair{p, q}, id);
+                    pairwise.emplace(pair{q, p}, id);
+                }
+
+            if (k > 2) {
+                // the usual at-most-one from pairwise: grow it a pattern vertex at a time
+                string pol = "pol " + std::to_string(pairwise.at(pair{0, 1}));
+                for (int i = 2; i < k; ++i) {
+                    pol += " " + std::to_string(i) + " *";
+                    for (int j = 0; j < i; ++j)
+                        pol += " " + std::to_string(pairwise.at(pair{i, j})) + " +";
+                    pol += " " + std::to_string(i + 1) + " d";
+                }
+                _proof->emit_proof_line(pol + " ;");
+            }
+        }
+    }
+
+    // Names for the "t is used" variables. Anything that cannot collide with an assignment
+    // variable will do; vertex names are arbitrary strings, so check rather than hope.
+    set<string> taken;
+    for (int p = 0; p < k; ++p)
+        for (int t = 0; t < n; ++t)
+            taken.insert(_proof->variable_name(p, t));
+    string prefix = "used_";
+    auto collides = [&]() {
+        for (int t = 0; t < n; ++t)
+            if (taken.contains(prefix + _target_names[t]))
+                return true;
+        return false;
+    };
+    while (collides())
+        prefix += "_";
+
+    _clique_used_names.clear();
+    _clique_used_implies_mapped.clear();
+    _clique_neighbourhood_lines.clear();
+    vector<long> used_at_least_mapped;
+    for (int t = 0; t < n; ++t) {
+        auto used = prefix + _target_names[t];
+        _clique_used_names.push_back(used);
+
+        // used_t -> some pattern vertex maps to t
+        string line = "red 1 ~x" + used;
+        for (int p = 0; p < k; ++p)
+            line += " 1 x" + _proof->variable_name(p, t);
+        line += " >= 1 : x" + used + " -> 0 ;";
+        _clique_used_implies_mapped.push_back(_proof->emit_proof_line(line));
+
+        // used_t >= the number of pattern vertices mapped to t, which is at most one
+        line = "red 1 x" + used;
+        for (int p = 0; p < k; ++p)
+            line += " 1 ~x" + _proof->variable_name(p, t);
+        line += " >= " + std::to_string(k) + " : x" + used + " -> 1 ;";
+        used_at_least_mapped.push_back(_proof->emit_proof_line(line));
+    }
+
+    // Peel off the vertices outside the core, in the order they were removed. When t went, it
+    // had fewer than k-1 neighbours not already gone, but p -> t needs the other k-1 pattern
+    // vertices on distinct neighbours of t. Summing the adjacency constraints from p -> t with
+    // "each neighbour w counts the pattern vertices on it" for every w gives
+    //     (k-1) ~x_p_t + sum_w used_w + sum_w ~x_p_w >= k-1 + |N(t)|,
+    // where the ~x_p_w are all true once p -> t, and the used_w of a vertex already gone are
+    // false, so that p -> t is RUP-refuted. (A loop on t leaves an x_q_t term from each
+    // adjacency constraint, but the shortcut only allows a loopy target under injectivity, and
+    // @inj_t falsifies those during the RUP, so it is one of the hints.) Then used_t has no
+    // pattern vertex to come from.
+    if (! removal_order.empty())
+        _proof->emit_proof_directive("% peeling the target down to its " + std::to_string(k - 1) + "-core");
+    vector<vector<int>> neighbours(n);
+    if (! removal_order.empty())
+        target.for_each_edge([&](int f, int t, std::string_view) {
+            if (f != t)
+                neighbours[f].push_back(t);
+        });
+    // Every RUP here is hinted: an unhinted RUP propagates over the whole database, and there
+    // are k+1 of these for each vertex peeled off, which on a large sparse target is most of it.
+    vector<long> not_used;
+    map<int, long> not_used_line;
+    for (auto & t : removal_order) {
+        vector<long> not_mapped;
+        for (int p = 0; p < k; ++p) {
+            string pol = "pol";
+            bool first = true;
+            auto add = [&](const string & term) {
+                pol += " " + term + (first ? "" : " +");
+                first = false;
+            };
+            for (int q = 0; q < k; ++q)
+                if (q != p)
+                    add(_adjacency.labels.at(std::tuple<long, long, long, long>{0, p, q, t}));
+            for (auto & w : neighbours[t])
+                add(std::to_string(used_at_least_mapped[w]));
+            string hints = _proof->at_most_one_value_label(p);
+            if (target.adjacent(t, t))
+                hints += " " + _proof->injectivity_label(t);
+            if (! first)
+                hints += " " + std::to_string(_proof->emit_proof_line(pol + " ;"));
+            for (auto & w : neighbours[t])
+                if (auto l = not_used_line.find(w); l != not_used_line.end())
+                    hints += " " + std::to_string(l->second);
+            not_mapped.push_back(_proof->emit_proof_line("rup 1 ~x" + _proof->variable_name(p, t) + " >= 1 : " + hints + " ;"));
+        }
+        string hints = std::to_string(_clique_used_implies_mapped[t]);
+        for (auto & l : not_mapped)
+            hints += " " + std::to_string(l);
+        auto line = _proof->emit_proof_line("rup 1 ~x" + _clique_used_names[t] + " >= 1 : " + hints + " ;");
+        not_used.push_back(line);
+        not_used_line.emplace(t, line);
+    }
+
+    // every pattern vertex maps somewhere, and each target vertex counts the pattern vertices
+    // mapped to it, so at least k target vertices are used, none of them outside the core
+    string objective = "pol";
+    bool first = true;
+    auto add = [&](const string & term) {
+        objective += " " + term + (first ? "" : " +");
+        first = false;
+    };
+    for (int p = 0; p < k; ++p)
+        add(_proof->at_least_one_value_label(p));
+    for (int t = 0; t < n; ++t)
+        add(std::to_string(used_at_least_mapped[t]));
+    for (auto & l : not_used)
+        add(std::to_string(l));
+    auto objective_line = _proof->emit_proof_line(objective + " ;");
+
+    vector<string> core_names;
+    for (auto & t : core)
+        core_names.push_back(_clique_used_names[t]);
+    _proof->create_clique_encoding_for_hom(core_names, objective_line,
+        [this, &pattern, &target, core](int a, int b) { return clique_shortcut_non_edge(pattern, target, core[a], core[b]); });
+}
+
+auto HomomorphismProofs::clique_shortcut_non_edge(const InputGraph & pattern, const InputGraph & target, int a, int b) -> string
+{
+    // The clause comes by RUP from either endpoint's neighbourhood lines, so reuse whichever
+    // endpoint already has them.
+    if (! _clique_neighbourhood_lines.contains(a) && _clique_neighbourhood_lines.contains(b))
+        std::swap(a, b);
+
+    if (! _clique_neighbourhood_lines.contains(a)) {
+        int k = pattern.size(), n = target.size();
+
+        // For each pattern vertex p, "p -> a means no non-neighbour of a is used":
+        //     k ~x_p_a + sum over non-neighbours b of a of ~used_b >= (number of them).
+        // Each used_b needs some pattern vertex on b. p itself is not (at most one value),
+        // and nor is any other q, because p -> a puts q in N(a) (adjacency, plus at most one
+        // value). Summing those, the terms that do not mention a non-neighbour of a cancel
+        // out up to the literal axioms added at the end.
+        vector<long> lines;
+        for (int p = 0; p < k; ++p) {
+            vector<string> terms;
+            for (int u = 0; u < n; ++u)
+                if (u != a && ! target.adjacent(a, u))
+                    terms.push_back(std::to_string(_clique_used_implies_mapped[u]));
+            for (int q = 0; q < k; ++q)
+                if (q != p) {
+                    terms.push_back(_adjacency.labels.at(std::tuple<long, long, long, long>{0, p, q, a}));
+                    terms.push_back(_proof->at_most_one_value_label(q));
+                    if (! target.adjacent(a, a))
+                        terms.push_back("x" + _proof->variable_name(q, a));
+                }
+            terms.push_back(_proof->at_most_one_value_label(p));
+            for (int u = 0; u < n; ++u)
+                if (u != a && target.adjacent(a, u))
+                    terms.push_back("x" + _proof->variable_name(p, u));
+
+            string pol = "pol " + terms.at(0);
+            for (unsigned i = 1; i < terms.size(); ++i)
+                pol += " " + terms[i] + " +";
+            lines.push_back(_proof->emit_proof_line(pol + " ;"));
+        }
+        _clique_neighbourhood_lines.emplace(a, move(lines));
+    }
+
+    // used_a and used_b: used_b falsifies every x_p_a by a neighbourhood line, and then used_a
+    // has nowhere to come from. Hinted, because an unhinted RUP propagates over the whole
+    // database, which grows with every neighbourhood line, and checking went quadratic.
+    string hints = std::to_string(_clique_used_implies_mapped[a]);
+    for (auto & l : _clique_neighbourhood_lines.at(a))
+        hints += " " + std::to_string(l);
+    return std::to_string(_proof->emit_proof_line("rup 1 ~x" + _clique_used_names[a] + " 1 ~x" + _clique_used_names[b] + " >= 1 : " + hints + " ;"));
 }

@@ -83,6 +83,11 @@ namespace gss
 
         /// If logging proofs, adjust the objective if solving MCS
         std::optional<int> adjust_objective_for_mcs = std::nullopt;
+
+        /// If extending a proof, leave logging the solution and the conclusion to the
+        /// caller (for the homomorphism solver's pattern-is-a-clique shortcut, whose
+        /// solution has to be logged in terms of its own variables)
+        bool proof_concluded_by_caller = false;
     };
 
     struct CliqueResult

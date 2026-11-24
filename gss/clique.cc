@@ -711,7 +711,7 @@ namespace
 
                         if ((params.decide && incumbent.value >= *params.decide) ||
                             (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
-                            if (proof)
+                            if (proof && ! params.proof_concluded_by_caller)
                                 proof->post_solution(unpermute(c));
 
                             return SearchResult::DecidedTrue;
@@ -746,9 +746,16 @@ namespace
                 c.push_back(v);
 
                 if (params.decide || params.stop_after_finding) {
+                    // Deciding, the incumbent starts one short of the target, so c beating
+                    // it means c is a big enough clique. Without this update the test below
+                    // never saw c, and the search carried on past a clique that answered the
+                    // question, logging a backtrack nogood that rules it out, which is false.
+                    if (params.decide)
+                        incumbent.update(c, find_nodes, prove_nodes);
+
                     if ((params.decide && incumbent.value >= *params.decide) ||
                         (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
-                        if (proof)
+                        if (proof && ! params.proof_concluded_by_caller)
                             proof->post_solution(unpermute(c));
 
                         return SearchResult::DecidedTrue;
@@ -766,6 +773,21 @@ namespace
                 // filter p to contain vertices adjacent to v
                 SVOBitset new_p = p;
                 new_p &= adj[v];
+
+                // the backtrack from this branch is a RUP that leans on the non-edges
+                // between v and every candidate it rules out, which a proof that derives
+                // its non-edges on demand has to have derived by then
+                if (proof && proof->has_lazy_non_edges()) {
+                    SVOBitset ruled_out = p;
+                    ruled_out.intersect_with_complement(adj[v]);
+                    ruled_out.reset(v);
+                    vector<int> non_neighbours;
+                    for (auto w = ruled_out.find_first(); w != decltype(ruled_out)::npos; w = ruled_out.find_first()) {
+                        ruled_out.reset(w);
+                        non_neighbours.push_back(order[w]);
+                    }
+                    proof->clique_branching_on(order[v], non_neighbours);
+                }
 
                 if (params.restarts_schedule->might_restart())
                     watches.propagate(
@@ -898,7 +920,10 @@ namespace
             if (params.restarts_schedule->might_restart())
                 result.extra_stats.emplace_back("restarts = " + to_string(number_of_restarts));
 
-            if (proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
+            if (params.proof_concluded_by_caller) {
+                // nothing to do: the caller logs the solution and the conclusion
+            }
+            else if (proof && params.decide && incumbent.c.empty() && ! params.proof_is_for_hom)
                 proof->finish_unsat_proof();
             else if (proof && ! params.decide && params.adjust_objective_for_mcs)
                 proof->finish_optimisation_proof(*params.adjust_objective_for_mcs - incumbent.c.size());
