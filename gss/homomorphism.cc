@@ -19,6 +19,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string_view>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -43,6 +44,7 @@ using std::shared_ptr;
 using std::size_t;
 using std::sort;
 using std::string;
+using std::string_view;
 using std::thread;
 using std::to_string;
 using std::unique_lock;
@@ -592,21 +594,103 @@ namespace
             clique_params.start_time = params.start_time;
             clique_params.decide = make_optional(pattern.size());
             clique_params.restarts_schedule = make_unique<NoRestartsSchedule>();
-            auto clique_result = solve_clique_problem(target, clique_params);
 
-            // now translate the result back into what we expect
-            HomomorphismResult result;
-            int v = 0;
-            for (auto & m : clique_result.clique) {
-                result.mapping.emplace(v++, m);
-                // the clique solver can find a bigger clique than we ask for
-                if (v >= pattern.size())
-                    break;
+            // The empty pattern has the empty mapping, which is all a proof needs to say. (The
+            // clique solver is no help here: deciding 0 underflows its unsigned incumbent.)
+            if (ctx.proof && 0 == pattern.size()) {
+                ctx.proof->post_solution(vector<pair<NamedVertex, NamedVertex>>{});
+                ctx.proof->finish_sat_proof();
+                HomomorphismResult result;
+                result.complete = true;
+                ctx.result = move(result);
+                return StepOutcome::Concluded;
             }
-            result.nodes = clique_result.nodes;
-            result.extra_stats = move(clique_result.extra_stats);
+
+            // Only the (k-1)-core of the target can hold a K_k, so peel off every vertex with
+            // fewer than k-1 neighbours left, repeatedly, and give the clique solver what remains.
+            // This is cheap, and it is what keeps a proof small on a large sparse target, where
+            // the root colour bound would otherwise range over every vertex. It is done with or
+            // without a proof, so that the search is the same either way.
+            int k = pattern.size();
+            vector<vector<int>> neighbours(target.size());
+            target.for_each_edge([&](int f, int t, string_view) {
+                if (f != t)
+                    neighbours[f].push_back(t);
+            });
+            vector<int> degree(target.size()), removal_order;
+            vector<bool> removed(target.size(), false);
+            for (int t = 0; t < target.size(); ++t) {
+                degree[t] = neighbours[t].size();
+                if (degree[t] < k - 1) {
+                    removed[t] = true;
+                    removal_order.push_back(t);
+                }
+            }
+            for (unsigned i = 0; i < removal_order.size(); ++i)
+                for (auto & u : neighbours[removal_order[i]])
+                    if (! removed[u] && --degree[u] < k - 1) {
+                        removed[u] = true;
+                        removal_order.push_back(u);
+                    }
+
+            vector<int> core, core_index(target.size(), -1);
+            for (int t = 0; t < target.size(); ++t)
+                if (! removed[t]) {
+                    core_index[t] = core.size();
+                    core.push_back(t);
+                }
+
+            // The clique solver's proof runs over "target vertex t is used" variables, which
+            // the proofs layer ties to the assignment variables, so it checks against the
+            // unchanged homomorphism model. We log the solution and conclusion ourselves.
+            if (ctx.proof) {
+                ctx.hom_proofs->prepare_clique_shortcut(pattern, target, removal_order, core);
+                clique_params.extend_proof = ctx.proof;
+                clique_params.proof_concluded_by_caller = true;
+            }
+
+            HomomorphismResult result;
+            if (int(core.size()) >= k) {
+                InputGraph core_graph(core.size(), false, false);
+                for (unsigned i = 0; i < core.size(); ++i)
+                    for (auto & u : neighbours[core[i]])
+                        if (core_index[u] > int(i))
+                            core_graph.add_edge(i, core_index[u]);
+
+                auto clique_result = solve_clique_problem(core_graph, clique_params);
+
+                // now translate the result back into what we expect
+                int v = 0;
+                for (auto & m : clique_result.clique) {
+                    result.mapping.emplace(v++, core[m]);
+                    // the clique solver can find a bigger clique than we ask for
+                    if (v >= pattern.size())
+                        break;
+                }
+                result.nodes = clique_result.nodes;
+                result.extra_stats = move(clique_result.extra_stats);
+                result.complete = clique_result.complete;
+            }
+            else
+                // too few vertices survive to hold the pattern, and the proof's objective says so
+                result.complete = true;
+
             result.extra_stats.emplace_back("used_clique_solver = true");
-            result.complete = clique_result.complete;
+            result.extra_stats.emplace_back("clique_core_size = " + to_string(core.size()));
+
+            if (ctx.proof) {
+                if (! result.mapping.empty()) {
+                    vector<pair<NamedVertex, NamedVertex>> solution;
+                    for (auto & [p, t] : result.mapping)
+                        solution.emplace_back(ctx.hom_proofs->pattern_vertex(p), ctx.hom_proofs->target_vertex(t));
+                    ctx.proof->post_solution(solution);
+                    ctx.proof->finish_sat_proof();
+                }
+                else if (result.complete)
+                    ctx.proof->finish_unsat_proof();
+                else
+                    ctx.proof->finish_unknown_proof();
+            }
 
             ctx.result = move(result);
             return StepOutcome::Concluded;
@@ -714,8 +798,6 @@ auto gss::solve_homomorphism_problem(
             // the transition restart fires mid-enumeration; the enumeration proof cannot yet
             // survive a restart (same restriction as counting with restarts, below)
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with staged counting, drop --staged or --count-solutions"};
-        if (params.clique_detection)
-            throw UnsupportedConfiguration{"Proof logging cannot yet be used with clique detection, use --no-clique-detection"};
         if (! params.pattern_less_constraints.empty() || ! params.target_occur_less_constraints.empty())
             throw UnsupportedConfiguration{"Proof logging cannot yet be used with less-constraints"};
         if (pattern.has_vertex_labels() || pattern.has_edge_labels())

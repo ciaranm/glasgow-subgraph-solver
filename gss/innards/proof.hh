@@ -198,6 +198,22 @@ namespace gss::innards
         auto create_clique_nonedge(int v, int w) -> void;
         auto not_connected_in_underlying_graph(const std::vector<int> &, int) -> void;
 
+        // pattern-is-a-clique to clique: the clique solver runs over one binary variable per
+        // target vertex ("some pattern vertex maps here"), which the homomorphism layer has
+        // already introduced and tied to the assignment variables, together with the objective
+        // line it derived. The non-edge clauses are not in the model, so they are derived on
+        // first use, through non_edge, at the top level; non_edge returns the new line's
+        // label.
+        auto create_clique_encoding_for_hom(const std::vector<std::string> & variable_names, long objective_line,
+            std::function<auto(int, int)->std::string> non_edge) -> void;
+        [[nodiscard]] auto has_lazy_non_edges() const -> bool;
+        // The clique solver is about to branch on v, leaving every vertex of non_neighbours
+        // out of the child's candidates: the backtrack from that child is a RUP that needs
+        // each of those non-edges, so make sure they exist.
+        auto clique_branching_on(int v, const std::vector<int> & non_neighbours) -> void;
+        // Derive each of these non-edges that is not there yet (a no-op unless they are lazy).
+        auto ensure_non_edges(const std::vector<std::pair<int, int>> & pairs) -> void;
+
         // enumeration
         auto post_solution(const std::vector<std::pair<NamedVertex, NamedVertex>> & decisions) -> void;
         auto post_solution(const std::vector<int> & solution) -> void;

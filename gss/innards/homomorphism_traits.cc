@@ -97,6 +97,6 @@ auto gss::innards::can_use_clique(const HomomorphismParams & params, bool target
     // local injectivity does force the images apart, since any two clique vertices are both
     // neighbours of a third. Only K_2 actually needs excluding, which is not worth a special
     // case.
-    return (! params.count_solutions) && params.clique_detection && (! params.proof_options) &&
+    return (! params.count_solutions) && params.clique_detection &&
         (params.injectivity == Injectivity::Injective || ! target_has_loops);
 }

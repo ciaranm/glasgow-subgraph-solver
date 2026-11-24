@@ -88,6 +88,9 @@ struct Proof::Imp
     map<pair<pair<NamedVertex, NamedVertex>, pair<NamedVertex, NamedVertex>>, long> clique_for_hom_non_edge_constraints;
 
     vector<pair<int, int>> zero_in_proof_objectives;
+
+    // set when the non-edge constraints are derived on demand rather than being in the model
+    function<auto(int, int)->string> lazy_non_edge;
 };
 
 Proof::Proof(const ProofOptions & options) :
@@ -612,6 +615,25 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs, const vector<CliqueCon
         return;
     }
 
+    if (_imp->lazy_non_edge) {
+        vector<pair<int, int>> needed;
+        auto all_pairs = [&](const vector<int> & s) {
+            for (unsigned i = 0; i < s.size(); ++i)
+                for (unsigned j = 0; j < i; ++j)
+                    needed.emplace_back(s[i], s[j]);
+        };
+        for (auto & cc : ccs)
+            all_pairs(cc);
+        for (auto & cf : conflicts) {
+            all_pairs(cf.independent_set);
+            all_pairs(cf.class1);
+            all_pairs(cf.class2);
+            for (auto & u : cf.non_neighbours)
+                needed.emplace_back(cf.filtered_vertex, u);
+        }
+        ensure_non_edges(needed);
+    }
+
     // "at most one of s", as a reverse polish subexpression. A single vertex needs no
     // derivation at all, just the literal axiom saying its variable is at most one; a
     // pair is exactly the non-edge constraint; anything longer is built up a vertex at a
@@ -623,11 +645,11 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs, const vector<CliqueCon
         if (1 == s.size())
             r << "~x" << _imp->binary_variable_mappings[s[0]];
         else {
-            r << _imp->non_edge_constraints[pair{s[0], s[1]}];
+            r << _imp->non_edge_constraints.at(pair{s[0], s[1]});
             for (unsigned i = 2; i < s.size(); ++i) {
                 r << " " << i << " *";
                 for (unsigned j = 0; j < i; ++j)
-                    r << " " << _imp->non_edge_constraints[pair{s[i], s[j]}] << " +";
+                    r << " " << _imp->non_edge_constraints.at(pair{s[i], s[j]}) << " +";
                 r << " " << (i + 1) << " d";
             }
         }
@@ -654,7 +676,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs, const vector<CliqueCon
         else {
             bool first = true;
             for (auto & u : cf.non_neighbours) {
-                r << " " << _imp->non_edge_constraints[pair{cf.filtered_vertex, u}];
+                r << " " << _imp->non_edge_constraints.at(pair{cf.filtered_vertex, u});
                 if (! first)
                     r << " +";
                 first = false;
@@ -708,6 +730,15 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs, const vector<CliqueCon
 
 auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
 {
+    if (_imp->lazy_non_edge && ! _imp->doing_hom_colour_proof) {
+        vector<pair<int, int>> needed;
+        for (auto & cc : ccs)
+            for (unsigned i = 0; i < cc.size(); ++i)
+                for (unsigned j = 0; j < i; ++j)
+                    needed.emplace_back(cc[i], cc[j]);
+        ensure_non_edges(needed);
+    }
+
     *_imp->proof_stream << "% bound, ccs";
     for (auto & cc : ccs) {
         *_imp->proof_stream << " [";
@@ -754,7 +785,7 @@ auto Proof::colour_bound(const vector<vector<int>> & ccs) -> void
             });
         }
         else
-            do_one_cc(cc, [&](int a, int b) -> string { return _imp->non_edge_constraints[pair{a, b}]; });
+            do_one_cc(cc, [&](int a, int b) -> string { return _imp->non_edge_constraints.at(pair{a, b}); });
     }
 
     *_imp->proof_stream << " " << _imp->objective_line;
@@ -1017,6 +1048,52 @@ auto Proof::create_clique_nonedge(int v, int w) -> void
     ++_imp->proof_line;
     _imp->non_edge_constraints.emplace(pair{v, w}, to_string(_imp->proof_line));
     _imp->non_edge_constraints.emplace(pair{w, v}, to_string(_imp->proof_line));
+}
+
+auto Proof::create_clique_encoding_for_hom(const vector<string> & variable_names, long objective_line,
+    function<auto(int, int)->string> non_edge) -> void
+{
+    _imp->clique_encoding = true;
+    for (unsigned i = 0; i < variable_names.size(); ++i)
+        _imp->binary_variable_mappings.emplace(i, variable_names[i]);
+    _imp->objective_line = objective_line;
+    _imp->lazy_non_edge = move(non_edge);
+}
+
+auto Proof::has_lazy_non_edges() const -> bool
+{
+    return bool(_imp->lazy_non_edge);
+}
+
+auto Proof::clique_branching_on(int v, const vector<int> & non_neighbours) -> void
+{
+    vector<pair<int, int>> needed;
+    for (auto & w : non_neighbours)
+        needed.emplace_back(v, w);
+    ensure_non_edges(needed);
+}
+
+auto Proof::ensure_non_edges(const vector<pair<int, int>> & pairs) -> void
+{
+    bool switched_level = false;
+    for (auto & [a, b] : pairs) {
+        if (_imp->non_edge_constraints.contains(pair{a, b}))
+            continue;
+
+        // a non-edge is true of the whole problem, so it goes at the top level, where the
+        // wiplvl that tidies up a search subtree will not take it away
+        if (! switched_level && 0 != _imp->active_level) {
+            *_imp->proof_stream << "setlvl 0;\n";
+            switched_level = true;
+        }
+
+        auto label = _imp->lazy_non_edge(a, b);
+        _imp->non_edge_constraints.emplace(pair{a, b}, label);
+        _imp->non_edge_constraints.emplace(pair{b, a}, label);
+    }
+
+    if (switched_level)
+        *_imp->proof_stream << "setlvl " << _imp->active_level << ";\n";
 }
 
 auto Proof::super_extra_verbose() const -> bool

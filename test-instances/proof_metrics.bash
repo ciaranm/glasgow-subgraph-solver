@@ -33,7 +33,7 @@ inst="$2"
 workdir="$3"
 out="${4:-}"
 
-# Proof logging always needs --no-clique-detection. SUB_MIN additionally turns off the
+# Clique detection is off so a clique pattern still measures the search. SUB_MIN additionally turns off the
 # supplemental graphs and NDS (the leanest proof); the other rows turn individual
 # techniques back on so their emission is measured in isolation.
 common="--no-clique-detection"
