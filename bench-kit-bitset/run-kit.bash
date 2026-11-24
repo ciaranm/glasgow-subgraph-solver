@@ -131,7 +131,7 @@ run_one() { # arm cfg name pat tgt rep
             ${prefix[@]+"${prefix[@]}"} "$work/bin/$arm" "${args[@]}" --timeout 300 "$inst/$pat" "$inst/$tgt" > $tmp/out 2>&1
     fi
     local rc=$?
-    if ((perf_ok)); then ins=$(awk -F, '/instructions/ {print $1}' $tmp/perf); cyc=$(awk -F, '/cycles/ {print $1}' $tmp/perf); fi
+    if ((perf_ok)); then ins=$(awk -F, '/instructions/ && $1 ~ /^[0-9]+$/ {print $1}' $tmp/perf); cyc=$(awk -F, '/cycles/ && $1 ~ /^[0-9]+$/ {print $1}' $tmp/perf); fi
     local rt=$(awk '/^runtime = / {print $3}' $tmp/out) nodes=$(awk '/^nodes = / {print $3}' $tmp/out) st=$(awk '/^status = / {print $3}' $tmp/out)
     echo "$arm $cfg $name $rep ${#pad} ${ins:-NA} ${cyc:-NA} ${rt:-NA} ${nodes:-NA} ${st:-NA} $rc" >> "$out"
     rm -rf $tmp
