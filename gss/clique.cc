@@ -746,6 +746,13 @@ namespace
                 c.push_back(v);
 
                 if (params.decide || params.stop_after_finding) {
+                    // Deciding, the incumbent starts one short of the target, so c beating
+                    // it means c is a big enough clique. Without this update the test below
+                    // never saw c, and the search carried on past a clique that answered the
+                    // question, logging a backtrack nogood that rules it out, which is false.
+                    if (params.decide)
+                        incumbent.update(c, find_nodes, prove_nodes);
+
                     if ((params.decide && incumbent.value >= *params.decide) ||
                         (params.stop_after_finding && incumbent.value >= *params.stop_after_finding)) {
                         if (proof)
